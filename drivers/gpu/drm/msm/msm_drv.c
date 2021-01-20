@@ -9,6 +9,7 @@
 #include <linux/kthread.h>
 #include <linux/uaccess.h>
 #include <uapi/linux/sched/types.h>
+#include <soc/qcom/boot_stats.h>
 
 #include <drm/drm_drv.h>
 #include <drm/drm_file.h>
@@ -553,6 +554,8 @@ static int msm_drm_init(struct device *dev, struct drm_driver *drv)
 		goto err_msm_uninit;
 
 	drm_kms_helper_poll_init(ddev);
+
+	place_marker("M - DISPLAY Driver Ready");
 
 	return 0;
 
