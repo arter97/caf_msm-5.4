@@ -21,6 +21,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/sched.h>
 #include <linux/clkdev.h>
+#include <linux/completion.h>
 
 #include "clk.h"
 
@@ -3515,6 +3516,22 @@ static const struct file_operations clk_state_fops = {
 };
 #endif
 
+static DECLARE_COMPLETION(clk_debug_init_start);
+
+static int __init clk_debug_init_sync_start(void)
+{
+	complete(&clk_debug_init_start);
+	return 0;
+}
+late_initcall(clk_debug_init_sync_start);
+
+static int __init clk_debug_init_wait_start(void)
+{
+	wait_for_completion(&clk_debug_init_start);
+	return 0;
+}
+early_init(clk_debug_init_wait_start, EARLY_SUBSYS_6, EARLY_INIT_LEVEL3);
+
 /**
  * clk_debug_init - lazily populate the debugfs clk directory
  *
@@ -3556,7 +3573,32 @@ static int __init clk_debug_init(void)
 
 	return 0;
 }
-late_initcall(clk_debug_init);
+early_late_initcall(clk_debug_init, EARLY_SUBSYS_6, EARLY_INIT_LEVEL3);
+
+static DECLARE_COMPLETION(clk_debug_init_end);
+static bool is_clk_debug_sync;
+
+static int __init clk_debug_init_sync_end(void)
+{
+	complete(&clk_debug_init_end);
+	return 0;
+}
+early_init(clk_debug_init_sync_end, EARLY_SUBSYS_6, EARLY_INIT_LEVEL3);
+
+static int __init clk_debug_sync(char *p)
+{
+	is_clk_debug_sync = true;
+	return 0;
+}
+early_param("clk_debug_sync", clk_debug_sync);
+
+static int __init clk_debug_init_wait_end(void)
+{
+	if (is_early_userspace && is_clk_debug_sync)
+		wait_for_completion(&clk_debug_init_end);
+	return 0;
+}
+late_initcall(clk_debug_init_wait_end);
 #else
 static inline void clk_debug_register(struct clk_core *core) { }
 static inline void clk_debug_reparent(struct clk_core *core,

@@ -233,5 +233,6 @@ extern bool cpu_mitigations_auto_nosmt(void);
 void idle_notifier_register(struct notifier_block *n);
 void idle_notifier_unregister(struct notifier_block *n);
 void idle_notifier_call_chain(unsigned long val);
+extern unsigned int logical_bootcpu_id;
 
 #endif /* _LINUX_CPU_H_ */
