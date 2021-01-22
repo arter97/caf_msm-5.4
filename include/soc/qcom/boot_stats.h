@@ -35,7 +35,7 @@ static inline int boot_marker_enabled(void) { return 1; }
 void place_marker(const char *name);
 void destroy_marker(const char *name);
 void measure_wake_up_time(void);
-static inline uint64_t get_sleep_exit_time(void) { return 0; }
+uint64_t get_sleep_exit_time(void);
 #else
 static inline void place_marker(char *name) { };
 static inline void destroy_marker(const char *name) { };

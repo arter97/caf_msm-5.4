@@ -21,6 +21,7 @@
 #include <linux/mm.h>
 #include <asm/arch_timer.h>
 #include <soc/qcom/boot_stats.h>
+#include <linux/suspend.h>
 
 #define MAX_STRING_LEN 256
 #define BOOT_MARKER_MAX_LEN 50
@@ -36,6 +37,28 @@ struct boot_marker {
 
 static struct dentry *dent_bkpi, *dent_bkpi_status, *dent_mpm_timer;
 static struct boot_marker boot_marker_list;
+
+/**
+ * boot_kpi_pm_notifier() - PM notifier callback function.
+ * @nb:		Pointer to the notifier block.
+ * @event:	Suspend state event from PM module.
+ * @unused:	Null pointer from PM module.
+ *
+ * This function is register as callback function to get notifications
+ * from the PM module on the system suspend state.
+ */
+static int boot_kpi_pm_notifier(struct notifier_block *nb,
+				  unsigned long event, void *unused)
+{
+	if (event == PM_POST_SUSPEND)
+		measure_wake_up_time();
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block boot_kpi_pm_nb = {
+	.notifier_call = boot_kpi_pm_notifier,
+};
 
 static void _destroy_boot_marker(const char *name)
 {
@@ -157,7 +180,8 @@ void measure_wake_up_time(void)
 		wake_up_time = current_time - deep_sleep_exit_time;
 		wake_up_time = get_time_in_msec(wake_up_time);
 		pr_debug("Current= %llu, wakeup=%llu, kpi=%llu msec\n",
-			current_time, deep_sleep_exit_time, wake_up_time);
+				current_time, deep_sleep_exit_time,
+				wake_up_time);
 		snprintf(wakeup_marker, sizeof(wakeup_marker),
 				"M - STR Wakeup : %llu ms", wake_up_time);
 		destroy_marker("M - STR Wakeup");
@@ -268,6 +292,7 @@ static const struct file_operations fops_mpm_timer = {
 
 static int __init init_bootkpi(void)
 {
+	int ret;
 	dent_bkpi = debugfs_create_dir("bootkpi", NULL);
 	if (IS_ERR_OR_NULL(dent_bkpi))
 		return -ENODEV;
@@ -298,6 +323,10 @@ static int __init init_bootkpi(void)
 	spin_lock_init(&boot_marker_list.slock);
 	boot_stats_init();
 	set_bootloader_stats(false);
+
+	ret = register_pm_notifier(&boot_kpi_pm_nb);
+	if (ret)
+		pr_err("boot_marker: power state notif error\n");
 	return 0;
 }
 early_subsys_initcall(init_bootkpi, EARLY_SUBSYS_PLATFORM, EARLY_INIT_LEVEL0);
@@ -307,6 +336,7 @@ static void __exit exit_bootkpi(void)
 	debugfs_remove_recursive(dent_bkpi);
 	boot_marker_cleanup();
 	boot_stats_exit();
+	unregister_pm_notifier(&boot_kpi_pm_nb);
 }
 module_exit(exit_bootkpi);
 
