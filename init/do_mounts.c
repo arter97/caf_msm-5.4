@@ -390,7 +390,7 @@ static int __init do_mount_root(char *name, char *fs, int flags, void *data)
 
 	place_marker("M - DRIVER F/S Init");
 	err = ksys_mount((char __user *)name, (char __user *)"/root",
-			(char __user *)fs, (char __user *)flags, (char __user *)data);
+			(char __user *)fs, flags, (void __user *)data);
 	if (err)
 		return err;
 
