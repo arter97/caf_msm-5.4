@@ -24,7 +24,7 @@
 #include <linux/nfs_fs_sb.h>
 #include <linux/nfs_mount.h>
 #include <uapi/linux/mount.h>
-
+#include <soc/qcom/boot_stats.h>
 #include "do_mounts.h"
 
 int __initdata rd_doload;	/* 1 = load RAM disk, 0 = don't load */
@@ -386,7 +386,11 @@ static void __init get_fs_names(char *page)
 static int __init do_mount_root(char *name, char *fs, int flags, void *data)
 {
 	struct super_block *s;
-	int err = ksys_mount(name, "/root", fs, flags, data);
+	int err;
+
+	place_marker("M - DRIVER F/S Init");
+	err = ksys_mount((char __user *)name, (char __user *)"/root",
+			(char __user *)fs, (char __user *)flags, (char __user *)data);
 	if (err)
 		return err;
 
@@ -398,6 +402,7 @@ static int __init do_mount_root(char *name, char *fs, int flags, void *data)
 	       s->s_type->name,
 	       sb_rdonly(s) ? " readonly" : "",
 	       MAJOR(ROOT_DEV), MINOR(ROOT_DEV));
+	place_marker("M - DRIVER F/S Ready");
 	return 0;
 }
 
