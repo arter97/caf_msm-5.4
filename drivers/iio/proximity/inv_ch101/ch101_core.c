@@ -496,8 +496,7 @@ static int ch101_push_to_buffer(void *input_data)
 		ret = iio_push_to_buffers_with_timestamp(indio_dev, buf,
 						starting_ts);
 
-		pr_info(TAG "push tobuffer=%d, size=%d\n", i,
-			(int)(pbuf-buf));
+	/*pr_info(TAG "push tobuffer=%d, size=%d\n", i, (int)(pbuf-buf)); */
 	}
 out:
 	mutex_unlock(&data->lock);
@@ -976,7 +975,7 @@ int ch101_core_probe(struct i2c_client *client, struct regmap *regmap,
 
 	dev = &client->dev;
 
-	dev_info(dev, "%s: Start v.1.60 s: %d", __func__, sizeof(*data));
+	dev_info(dev, "%s: Start v.1.63 s: %d", __func__, sizeof(*data));
 
 	if (ch101_store.i2c_client == NULL) {
 		ch101_store.i2c_client = client;

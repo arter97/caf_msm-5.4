@@ -653,15 +653,31 @@ int chdrv_group_hw_trigger(struct ch_group_t *grp_ptr)
 
 	for (dev_num = 0; dev_num < ch_get_num_ports(grp_ptr); dev_num++) {
 		dev_ptr = ch_get_dev_ptr(grp_ptr, dev_num);
-		if (ch_sensor_is_connected(dev_ptr))
+		if (ch_sensor_is_connected(dev_ptr) && (dev_num < 3) &&
+			(ch_get_mode(dev_ptr) == CH_MODE_TRIGGERED_RX_ONLY))
+			ch_err |= chdrv_hw_trigger_up(dev_ptr);
+	}
+
+	for (dev_num = 0; dev_num < ch_get_num_ports(grp_ptr); dev_num++) {
+		dev_ptr = ch_get_dev_ptr(grp_ptr, dev_num);
+		if (ch_sensor_is_connected(dev_ptr) && ((dev_num >= 3) ||
+			(ch_get_mode(dev_ptr) == CH_MODE_TRIGGERED_TX_RX)))
 			ch_err |= chdrv_hw_trigger_up(dev_ptr);
 	}
 
 	chbsp_delay_us(5); // Pulse needs to be a minimum of 800ns long
+	/* we need to trigger TX_RX mode first in CH101. */
+	for (dev_num = 0; dev_num < ch_get_num_ports(grp_ptr); dev_num++) {
+		dev_ptr = ch_get_dev_ptr(grp_ptr, dev_num);
+		if (ch_sensor_is_connected(dev_ptr) && (dev_num < 3) &&
+			(ch_get_mode(dev_ptr) == CH_MODE_TRIGGERED_RX_ONLY))
+			ch_err |= chdrv_hw_trigger_down(dev_ptr);
+	}
 
 	for (dev_num = 0; dev_num < ch_get_num_ports(grp_ptr); dev_num++) {
 		dev_ptr = ch_get_dev_ptr(grp_ptr, dev_num);
-		if (ch_sensor_is_connected(dev_ptr))
+		if (ch_sensor_is_connected(dev_ptr) && ((dev_num >= 3) ||
+			(ch_get_mode(dev_ptr) == CH_MODE_TRIGGERED_TX_RX)))
 			ch_err |= chdrv_hw_trigger_down(dev_ptr);
 	}
 	// Delay a bit before re-enabling pin interrupt to avoid
@@ -700,7 +716,7 @@ int chdrv_hw_trigger_up(struct ch_dev_t *dev_ptr)
 		// Disable pin interrupt before triggering pulse
 		chbsp_io_interrupt_disable(dev_ptr);
 		// Generate pulse
-		printf("%s: Generate pulse - Start", __func__);
+		printf("%s: Generate pulse - Start %p", __func__, dev_ptr);
 		chbsp_set_io_dir_out(dev_ptr);
 		chbsp_io_set(dev_ptr);
 
@@ -715,7 +731,7 @@ int chdrv_hw_trigger_down(struct ch_dev_t *dev_ptr)
 	if (!ch_err) {
 		chbsp_io_clear(dev_ptr);
 		chbsp_set_io_dir_in(dev_ptr);
-		printf("%s: Generate pulse - End", __func__);
+		printf("%s: Generate pulse - End %p", __func__, dev_ptr);
 	}
 	return ch_err;
 }
