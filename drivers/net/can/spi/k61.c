@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -41,6 +41,7 @@
 #define K61_CLOCK			120000000
 #define K61_MAX_CHANNELS		1
 #define K61_FW_QUERY_RETRY_COUNT	3
+#define K61_BUFFER_CMD_RETRY	3
 
 struct k61_can {
 	struct net_device	*netdev;
@@ -108,6 +109,8 @@ struct spi_miso { /* TLV for MISO line */
 #define IOCTL_REMOVE_FRAME_FILTER	(SIOCDEVPRIVATE + 3)
 #define IOCTL_DISABLE_BUFFERING		(SIOCDEVPRIVATE + 5)
 #define IOCTL_DISABLE_ALL_BUFFERING	(SIOCDEVPRIVATE + 6)
+
+static u8 resend_buffer_release_flag;
 
 struct can_fw_resp {
 	u8 maj;
@@ -261,6 +264,17 @@ static void k61_process_response(struct k61_can *priv_data,
 
 		dev_info(&priv_data->spidev->dev, "fw %d.%d.%d",
 			 fw_resp->maj, fw_resp->min, fw_resp->ver);
+		if (fw_resp->maj > 1)
+			resend_buffer_release_flag = 1;
+		else if (fw_resp->maj == 1) {
+			if (fw_resp->min > 0)
+				resend_buffer_release_flag = 1;
+			else if (fw_resp->ver >= 9)
+				resend_buffer_release_flag = 1;
+			else
+				resend_buffer_release_flag = 0;
+		} else
+			resend_buffer_release_flag = 0;
 	} else if (resp->cmd == CMD_UPDATE_TIME_INFO) {
 		struct can_time_info *time_data =
 		     (struct can_time_info *)resp->data;
@@ -279,6 +293,9 @@ static void k61_process_rx(struct k61_can *priv_data, char *rx_buf)
 {
 	struct spi_miso *resp;
 	int length_processed = 0, actual_length = priv_data->xfer_length;
+	if (rx_buf[0] == CMD_CAN_RELEASE_BUFFER) {
+		dev_info(&priv_data->spidev->dev, "CAN release buffer ack received\n");
+	}
 
 	while (length_processed < actual_length) {
 		int length_left = actual_length - length_processed;
@@ -622,8 +639,21 @@ static int k61_send_release_can_buffer_cmd(struct net_device *netdev)
 	req->len = 0;
 	req->seq = atomic_inc_return(&priv_data->msg_seq);
 
+	if (resend_buffer_release_flag) {
+		LOGDI("release buffer resend flag set\n");
+		priv_data->wait_cmd = CMD_CAN_RELEASE_BUFFER;
+		priv_data->cmd_result = -1;
+		reinit_completion(&priv_data->response_completion);
+	}
+
 	ret = k61_do_spi_transaction(priv_data);
 	mutex_unlock(&priv_data->spi_lock);
+
+	if (ret == 0 && resend_buffer_release_flag) {
+		wait_for_completion_interruptible_timeout(
+				&priv_data->response_completion, 0.001 * HZ);
+		ret = priv_data->cmd_result;
+	}
 	return ret;
 }
 
@@ -761,6 +791,7 @@ static int k61_netdev_do_ioctl(struct net_device *netdev,
 	struct k61_can *priv_data;
 	struct k61_netdev_privdata *netdev_priv_data;
 	int ret = -EINVAL;
+	int retry = 0;
 
 	netdev_priv_data = netdev_priv(netdev);
 	priv_data = netdev_priv_data->k61_can;
@@ -779,7 +810,14 @@ static int k61_netdev_do_ioctl(struct net_device *netdev,
 		ret = k61_remove_all_buffering(netdev);
 		break;
 	case IOCTL_RELEASE_CAN_BUFFER:
-		ret = k61_send_release_can_buffer_cmd(netdev);
+		while ((ret != 0) && (retry < K61_BUFFER_CMD_RETRY)) {
+			dev_info(&priv_data->spidev->dev,
+				 "K61 BUFFER RELEASE CMD %d\n", retry);
+			ret = k61_send_release_can_buffer_cmd(netdev);
+			retry++;
+		}
+		if (ret)
+			dev_info(&priv_data->spidev->dev, "K61 BUFFER RELEASE FAILED\n");
 		break;
 	}
 	return ret;
