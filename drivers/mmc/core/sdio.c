@@ -974,6 +974,14 @@ static void mmc_sdio_detect(struct mmc_host *host)
 		}
 	}
 
+	/*
+	 * If host->ios.power_mode is MMC_POWER_OFF, do not detect card,
+	 * some card driver called mmc_power_save_host() in probe function,
+	 * and mmc_power_restore_host() later.
+	 */
+	if (host->ios.power_mode == MMC_POWER_OFF)
+		return;
+
 	mmc_claim_host(host);
 
 	/*
