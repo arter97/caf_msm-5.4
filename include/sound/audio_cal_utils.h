@@ -9,6 +9,8 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef _AUDIO_CAL_UTILS_H
 #define _AUDIO_CAL_UTILS_H
@@ -38,6 +40,7 @@ struct cal_block_data {
 	void			*cal_info;
 	struct list_head	list;
 	struct cal_data		cal_data;
+	bool			cal_stale;
 	struct mem_map_data	map_data;
 	int32_t			buffer_number;
 };
@@ -99,4 +102,10 @@ size_t get_user_cal_type_size(int32_t cal_type);
 
 /* Version of the cal type*/
 int32_t cal_utils_get_cal_type_version(void *cal_type_data);
+
+void cal_utils_mark_cal_used(struct cal_block_data *cal_block);
+
+bool cal_utils_is_cal_stale(struct cal_block_data *cal_block);
+
+int cal_utils_init(void);
 #endif

@@ -9,6 +9,9 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _DEV_DEP_H
@@ -65,5 +68,23 @@ struct dts_eagle_param_desc {
 	int32_t offset;
 	uint32_t device;
 } __packed;
+
+#define HWDEP_FE_BASE                   3000 /*unique base for FE hw dep nodes*/
+struct snd_pcm_mmap_fd {
+	int32_t dir;
+	int32_t fd;
+	int32_t size;
+	int32_t actual_size;
+};
+
+struct snd_pcm_prsnt_position {
+	uint64_t timestamp;
+	uint64_t frames;
+	int32_t clock_id;
+};
+
+#define SNDRV_PCM_IOCTL_MMAP_DATA_FD    _IOWR('U', 0xd2, struct snd_pcm_mmap_fd)
+#define SNDRV_PCM_IOCTL_DSP_POSITION\
+			_IOWR('U', 0xd3, struct snd_pcm_prsnt_position)
 
 #endif
