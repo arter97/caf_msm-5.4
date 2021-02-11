@@ -1,7 +1,7 @@
 /* include/linux/msm_audio.h
  *
  * Copyright (C) 2008 Google, Inc.
- * Copyright (c) 2012, 2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012, 2014, 2021 The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -24,56 +24,56 @@
 
 #define AUDIO_IOCTL_MAGIC 'a'
 
-#define AUDIO_START        _IOW(AUDIO_IOCTL_MAGIC, 0, unsigned)
-#define AUDIO_STOP         _IOW(AUDIO_IOCTL_MAGIC, 1, unsigned)
-#define AUDIO_FLUSH        _IOW(AUDIO_IOCTL_MAGIC, 2, unsigned)
+#define AUDIO_START        _IOW(AUDIO_IOCTL_MAGIC, 0, unsigned int)
+#define AUDIO_STOP         _IOW(AUDIO_IOCTL_MAGIC, 1, unsigned int)
+#define AUDIO_FLUSH        _IOW(AUDIO_IOCTL_MAGIC, 2, unsigned int)
 #define AUDIO_GET_CONFIG   _IOR(AUDIO_IOCTL_MAGIC, 3, \
 		struct msm_audio_config)
 #define AUDIO_SET_CONFIG   _IOW(AUDIO_IOCTL_MAGIC, 4, \
 		struct msm_audio_config)
 #define AUDIO_GET_STATS    _IOR(AUDIO_IOCTL_MAGIC, 5, \
 		struct msm_audio_stats)
-#define AUDIO_ENABLE_AUDPP _IOW(AUDIO_IOCTL_MAGIC, 6, unsigned)
-#define AUDIO_SET_ADRC     _IOW(AUDIO_IOCTL_MAGIC, 7, unsigned)
-#define AUDIO_SET_EQ       _IOW(AUDIO_IOCTL_MAGIC, 8, unsigned)
-#define AUDIO_SET_RX_IIR   _IOW(AUDIO_IOCTL_MAGIC, 9, unsigned)
-#define AUDIO_SET_VOLUME   _IOW(AUDIO_IOCTL_MAGIC, 10, unsigned)
-#define AUDIO_PAUSE        _IOW(AUDIO_IOCTL_MAGIC, 11, unsigned)
-#define AUDIO_PLAY_DTMF    _IOW(AUDIO_IOCTL_MAGIC, 12, unsigned)
+#define AUDIO_ENABLE_AUDPP _IOW(AUDIO_IOCTL_MAGIC, 6, unsigned int)
+#define AUDIO_SET_ADRC     _IOW(AUDIO_IOCTL_MAGIC, 7, unsigned int)
+#define AUDIO_SET_EQ       _IOW(AUDIO_IOCTL_MAGIC, 8, unsigned int)
+#define AUDIO_SET_RX_IIR   _IOW(AUDIO_IOCTL_MAGIC, 9, unsigned int)
+#define AUDIO_SET_VOLUME   _IOW(AUDIO_IOCTL_MAGIC, 10, unsigned int)
+#define AUDIO_PAUSE        _IOW(AUDIO_IOCTL_MAGIC, 11, unsigned int)
+#define AUDIO_PLAY_DTMF    _IOW(AUDIO_IOCTL_MAGIC, 12, unsigned int)
 #define AUDIO_GET_EVENT    _IOR(AUDIO_IOCTL_MAGIC, 13, \
 		struct msm_audio_event)
-#define AUDIO_ABORT_GET_EVENT _IOW(AUDIO_IOCTL_MAGIC, 14, unsigned)
-#define AUDIO_REGISTER_PMEM _IOW(AUDIO_IOCTL_MAGIC, 15, unsigned)
-#define AUDIO_DEREGISTER_PMEM _IOW(AUDIO_IOCTL_MAGIC, 16, unsigned)
+#define AUDIO_ABORT_GET_EVENT _IOW(AUDIO_IOCTL_MAGIC, 14, unsigned int)
+#define AUDIO_REGISTER_PMEM _IOW(AUDIO_IOCTL_MAGIC, 15, unsigned int)
+#define AUDIO_DEREGISTER_PMEM _IOW(AUDIO_IOCTL_MAGIC, 16, unsigned int)
 #define AUDIO_ASYNC_WRITE _IOW(AUDIO_IOCTL_MAGIC, 17, \
 		struct msm_audio_aio_buf)
 #define AUDIO_ASYNC_READ _IOW(AUDIO_IOCTL_MAGIC, 18, \
 		struct msm_audio_aio_buf)
 #define AUDIO_SET_INCALL _IOW(AUDIO_IOCTL_MAGIC, 19, struct msm_voicerec_mode)
-#define AUDIO_GET_NUM_SND_DEVICE _IOR(AUDIO_IOCTL_MAGIC, 20, unsigned)
+#define AUDIO_GET_NUM_SND_DEVICE _IOR(AUDIO_IOCTL_MAGIC, 20, unsigned int)
 #define AUDIO_GET_SND_DEVICES _IOWR(AUDIO_IOCTL_MAGIC, 21, \
 				struct msm_snd_device_list)
-#define AUDIO_ENABLE_SND_DEVICE _IOW(AUDIO_IOCTL_MAGIC, 22, unsigned)
-#define AUDIO_DISABLE_SND_DEVICE _IOW(AUDIO_IOCTL_MAGIC, 23, unsigned)
+#define AUDIO_ENABLE_SND_DEVICE _IOW(AUDIO_IOCTL_MAGIC, 22, unsigned int)
+#define AUDIO_DISABLE_SND_DEVICE _IOW(AUDIO_IOCTL_MAGIC, 23, unsigned int)
 #define AUDIO_ROUTE_STREAM _IOW(AUDIO_IOCTL_MAGIC, 24, \
 				struct msm_audio_route_config)
-#define AUDIO_GET_PCM_CONFIG _IOR(AUDIO_IOCTL_MAGIC, 30, unsigned)
-#define AUDIO_SET_PCM_CONFIG _IOW(AUDIO_IOCTL_MAGIC, 31, unsigned)
-#define AUDIO_SWITCH_DEVICE  _IOW(AUDIO_IOCTL_MAGIC, 32, unsigned)
-#define AUDIO_SET_MUTE       _IOW(AUDIO_IOCTL_MAGIC, 33, unsigned)
-#define AUDIO_UPDATE_ACDB    _IOW(AUDIO_IOCTL_MAGIC, 34, unsigned)
-#define AUDIO_START_VOICE    _IOW(AUDIO_IOCTL_MAGIC, 35, unsigned)
-#define AUDIO_STOP_VOICE     _IOW(AUDIO_IOCTL_MAGIC, 36, unsigned)
-#define AUDIO_REINIT_ACDB    _IOW(AUDIO_IOCTL_MAGIC, 39, unsigned)
+#define AUDIO_GET_PCM_CONFIG _IOR(AUDIO_IOCTL_MAGIC, 30, unsigned int)
+#define AUDIO_SET_PCM_CONFIG _IOW(AUDIO_IOCTL_MAGIC, 31, unsigned int)
+#define AUDIO_SWITCH_DEVICE  _IOW(AUDIO_IOCTL_MAGIC, 32, unsigned int)
+#define AUDIO_SET_MUTE       _IOW(AUDIO_IOCTL_MAGIC, 33, unsigned int)
+#define AUDIO_UPDATE_ACDB    _IOW(AUDIO_IOCTL_MAGIC, 34, unsigned int)
+#define AUDIO_START_VOICE    _IOW(AUDIO_IOCTL_MAGIC, 35, unsigned int)
+#define AUDIO_STOP_VOICE     _IOW(AUDIO_IOCTL_MAGIC, 36, unsigned int)
+#define AUDIO_REINIT_ACDB    _IOW(AUDIO_IOCTL_MAGIC, 39, unsigned int)
 #define AUDIO_OUTPORT_FLUSH  _IOW(AUDIO_IOCTL_MAGIC, 40, unsigned short)
 #define AUDIO_SET_ERR_THRESHOLD_VALUE _IOW(AUDIO_IOCTL_MAGIC, 41, \
 					unsigned short)
 #define AUDIO_GET_BITSTREAM_ERROR_INFO _IOR(AUDIO_IOCTL_MAGIC, 42, \
 			       struct msm_audio_bitstream_error_info)
 
-#define AUDIO_SET_SRS_TRUMEDIA_PARAM _IOW(AUDIO_IOCTL_MAGIC, 43, unsigned)
+#define AUDIO_SET_SRS_TRUMEDIA_PARAM _IOW(AUDIO_IOCTL_MAGIC, 43, unsigned int)
 
-/* Qualcomm extensions */
+/* Qualcomm technologies inc extensions */
 #define AUDIO_SET_STREAM_CONFIG   _IOW(AUDIO_IOCTL_MAGIC, 80, \
 				struct msm_audio_stream_config)
 #define AUDIO_GET_STREAM_CONFIG   _IOR(AUDIO_IOCTL_MAGIC, 81, \
@@ -81,16 +81,16 @@
 #define AUDIO_GET_SESSION_ID _IOR(AUDIO_IOCTL_MAGIC, 82, unsigned short)
 #define AUDIO_GET_STREAM_INFO   _IOR(AUDIO_IOCTL_MAGIC, 83, \
 			       struct msm_audio_bitstream_info)
-#define AUDIO_SET_PAN       _IOW(AUDIO_IOCTL_MAGIC, 84, unsigned)
-#define AUDIO_SET_QCONCERT_PLUS       _IOW(AUDIO_IOCTL_MAGIC, 85, unsigned)
-#define AUDIO_SET_MBADRC       _IOW(AUDIO_IOCTL_MAGIC, 86, unsigned)
+#define AUDIO_SET_PAN       _IOW(AUDIO_IOCTL_MAGIC, 84, unsigned int)
+#define AUDIO_SET_QCONCERT_PLUS       _IOW(AUDIO_IOCTL_MAGIC, 85, unsigned int)
+#define AUDIO_SET_MBADRC       _IOW(AUDIO_IOCTL_MAGIC, 86, unsigned int)
 #define AUDIO_SET_VOLUME_PATH   _IOW(AUDIO_IOCTL_MAGIC, 87, \
 				     struct msm_vol_info)
-#define AUDIO_SET_MAX_VOL_ALL _IOW(AUDIO_IOCTL_MAGIC, 88, unsigned)
-#define AUDIO_ENABLE_AUDPRE  _IOW(AUDIO_IOCTL_MAGIC, 89, unsigned)
-#define AUDIO_SET_AGC        _IOW(AUDIO_IOCTL_MAGIC, 90, unsigned)
-#define AUDIO_SET_NS         _IOW(AUDIO_IOCTL_MAGIC, 91, unsigned)
-#define AUDIO_SET_TX_IIR     _IOW(AUDIO_IOCTL_MAGIC, 92, unsigned)
+#define AUDIO_SET_MAX_VOL_ALL _IOW(AUDIO_IOCTL_MAGIC, 88, unsigned int)
+#define AUDIO_ENABLE_AUDPRE  _IOW(AUDIO_IOCTL_MAGIC, 89, unsigned int)
+#define AUDIO_SET_AGC        _IOW(AUDIO_IOCTL_MAGIC, 90, unsigned int)
+#define AUDIO_SET_NS         _IOW(AUDIO_IOCTL_MAGIC, 91, unsigned int)
+#define AUDIO_SET_TX_IIR     _IOW(AUDIO_IOCTL_MAGIC, 92, unsigned int)
 #define AUDIO_GET_BUF_CFG    _IOW(AUDIO_IOCTL_MAGIC, 93, \
 					struct msm_audio_buf_cfg)
 #define AUDIO_SET_BUF_CFG    _IOW(AUDIO_IOCTL_MAGIC, 94, \
@@ -114,8 +114,8 @@
 #define AUDIO_EFFECTS_READ _IOWR(AUDIO_IOCTL_MAGIC, 103, void *)
 #define AUDIO_EFFECTS_SET_PP_PARAMS _IOW(AUDIO_IOCTL_MAGIC, 104, void *)
 
-#define AUDIO_PM_AWAKE      _IOW(AUDIO_IOCTL_MAGIC, 105, unsigned)
-#define AUDIO_PM_RELAX      _IOW(AUDIO_IOCTL_MAGIC, 106, unsigned)
+#define AUDIO_PM_AWAKE      _IOW(AUDIO_IOCTL_MAGIC, 105, unsigned int)
+#define AUDIO_PM_RELAX      _IOW(AUDIO_IOCTL_MAGIC, 106, unsigned int)
 
 #define	AUDIO_MAX_COMMON_IOCTL_NUM	107
 
@@ -184,7 +184,7 @@ struct msm_audio_stream_config {
 	uint32_t buffer_count;
 };
 
-struct msm_audio_buf_cfg{
+struct msm_audio_buf_cfg {
 	uint32_t meta_info_enable;
 	uint32_t frames_per_buf;
 };
@@ -285,7 +285,7 @@ struct msm_cad_volume_config {
 
 /* Returns the number of SND endpoints supported. */
 
-#define SND_GET_NUM_ENDPOINTS _IOR(SND_IOCTL_MAGIC, 4, unsigned *)
+#define SND_GET_NUM_ENDPOINTS _IOR(SND_IOCTL_MAGIC, 4, unsigned int *)
 
 struct msm_snd_endpoint {
 	int id; /* input and output */
@@ -302,12 +302,12 @@ struct msm_snd_endpoint {
 #define SND_GET_ENDPOINT _IOWR(SND_IOCTL_MAGIC, 5, struct msm_snd_endpoint *)
 
 
-#define SND_AVC_CTL _IOW(SND_IOCTL_MAGIC, 6, unsigned *)
-#define SND_AGC_CTL _IOW(SND_IOCTL_MAGIC, 7, unsigned *)
+#define SND_AVC_CTL _IOW(SND_IOCTL_MAGIC, 6, unsigned int *)
+#define SND_AGC_CTL _IOW(SND_IOCTL_MAGIC, 7, unsigned int *)
 
 /*return the number of CAD endpoints supported. */
 
-#define CAD_GET_NUM_ENDPOINTS _IOR(SND_IOCTL_MAGIC, 4, unsigned *)
+#define CAD_GET_NUM_ENDPOINTS _IOR(SND_IOCTL_MAGIC, 4, unsigned int *)
 
 struct msm_cad_endpoint {
 	int id; /* input and output */
@@ -327,7 +327,8 @@ struct msm_audio_pcm_config {
 	uint32_t pcm_feedback;	/* 0 - disable > 0 - enable */
 	uint32_t buffer_count;	/* Number of buffers to allocate */
 	uint32_t buffer_size;	/* Size of buffer for capturing of
-				   PCM samples */
+				 * PCM samples
+				 */
 };
 
 #define AUDIO_EVENT_SUSPEND 0
@@ -458,6 +459,41 @@ struct msm_hwacc_effects_config {
 	__u32 meta_mode_enabled;
 	__u32 overwrite_topology;
 	__s32 topology;
+};
+
+#define ADSP_STREAM_PP_EVENT				0
+#define ADSP_STREAM_ENCDEC_EVENT			1
+#define ADSP_STREAM_IEC_61937_FMT_UPDATE_EVENT		2
+#define ADSP_STREAM_EVENT_MAX				3
+#define ADSP_ADM_SERVICE_ID 3
+
+struct msm_adsp_event_data {
+	__u32 event_type;
+	__u32 payload_len;
+	__u8 payload[0];
+};
+
+struct module_info {
+	__u32             module_id;
+	__u32             instance_id;
+	__u32             be_id;
+	__u32             fe_id;
+};
+
+struct msm_adm_event_data {
+	__u32 event_type;
+	__u32 payload_length;
+	struct module_info mod_info;
+	__u8 payload[0];
+};
+
+struct msm_adm_ack {
+	__u32 param_size;
+	__u32 token;
+	__u32 status;
+	__u32 module_id;
+	__u32 instance_id;
+	__u32 adm_token;
 };
 
 #endif

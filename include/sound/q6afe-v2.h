@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, 2021 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -24,6 +24,10 @@
 #define MSM_AFE_4CHANNELS   4
 #define MSM_AFE_6CHANNELS   6
 #define MSM_AFE_8CHANNELS   8
+#define MSM_AFE_10CHANNELS   10
+#define MSM_AFE_12CHANNELS   12
+#define MSM_AFE_14CHANNELS   14
+#define MSM_AFE_16CHANNELS   16
 
 #define MSM_AFE_I2S_FORMAT_LPCM		0
 #define MSM_AFE_I2S_FORMAT_COMPR		1
@@ -37,10 +41,26 @@
 #define RT_PROXY_DAI_001_TX	0xF0
 #define RT_PROXY_DAI_002_RX	0xF1
 #define RT_PROXY_DAI_002_TX	0xE1
+#define RT_PROXY_DAI_003_RX	0xE2
+#define RT_PROXY_DAI_003_TX	0xF2
 #define VIRTUAL_ID_TO_PORTID(val) ((val & 0xF) | 0x2000)
+#define PORTID_TO_IDX(val)	((val & 0xF) >> 1)
+#define NUM_PROXY_PORTS	2
 
 #define AFE_CLK_VERSION_V1    1
 #define AFE_CLK_VERSION_V2    2
+
+#define AFE_API_VERSION_SUPPORT_SPV3	2
+#define AFE_API_VERSION_V3		3
+/* for VAD and Island mode */
+#define AFE_API_VERSION_V4		4
+/* for VAD enable */
+#define AFE_API_VERSION_V6		6
+/* for external mclk dynamic switch */
+#define AFE_API_VERSION_V8		8
+#define AFE_API_VERSION_V9		9
+
+typedef int (*routing_cb)(int port);
 
 enum {
 	/* IDX 0->4 */
@@ -100,7 +120,7 @@ enum {
 	/* IDX 45->49 */
 	IDX_SLIMBUS_6_RX,
 	IDX_SLIMBUS_6_TX,
-	IDX_SPDIF_RX,
+	IDX_PRIMARY_SPDIF_RX,
 	IDX_GLOBAL_CFG,
 	IDX_AUDIO_PORT_ID_I2S_RX,
 	/* IDX 50->53 */
@@ -108,7 +128,7 @@ enum {
 	IDX_AFE_PORT_ID_QUINARY_MI2S_RX,
 	IDX_AFE_PORT_ID_QUINARY_MI2S_TX,
 	IDX_AFE_PORT_ID_SENARY_MI2S_TX,
-	/* IDX 54-> 118 */
+	/* IDX 54->117 */
 	IDX_AFE_PORT_ID_PRIMARY_TDM_RX_0,
 	IDX_AFE_PORT_ID_PRIMARY_TDM_TX_0,
 	IDX_AFE_PORT_ID_PRIMARY_TDM_RX_1,
@@ -173,7 +193,96 @@ enum {
 	IDX_AFE_PORT_ID_QUATERNARY_TDM_TX_6,
 	IDX_AFE_PORT_ID_QUATERNARY_TDM_RX_7,
 	IDX_AFE_PORT_ID_QUATERNARY_TDM_TX_7,
+	/* IDX 118->121 */
+	IDX_SLIMBUS_7_RX,
+	IDX_SLIMBUS_7_TX,
+	IDX_SLIMBUS_8_RX,
+	IDX_SLIMBUS_8_TX,
+	/* IDX 122-> 123 */
+	IDX_AFE_PORT_ID_USB_RX,
+	IDX_AFE_PORT_ID_USB_TX,
+	/* IDX 124 */
+	IDX_DISPLAY_PORT_RX,
+	/* IDX 125-> 128 */
+	IDX_AFE_PORT_ID_TERTIARY_PCM_RX,
+	IDX_AFE_PORT_ID_TERTIARY_PCM_TX,
+	IDX_AFE_PORT_ID_QUATERNARY_PCM_RX,
+	IDX_AFE_PORT_ID_QUATERNARY_PCM_TX,
+	/* IDX 129-> 142 */
+	IDX_AFE_PORT_ID_INT0_MI2S_RX,
+	IDX_AFE_PORT_ID_INT0_MI2S_TX,
+	IDX_AFE_PORT_ID_INT1_MI2S_RX,
+	IDX_AFE_PORT_ID_INT1_MI2S_TX,
+	IDX_AFE_PORT_ID_INT2_MI2S_RX,
+	IDX_AFE_PORT_ID_INT2_MI2S_TX,
+	IDX_AFE_PORT_ID_INT3_MI2S_RX,
+	IDX_AFE_PORT_ID_INT3_MI2S_TX,
+	IDX_AFE_PORT_ID_INT4_MI2S_RX,
+	IDX_AFE_PORT_ID_INT4_MI2S_TX,
+	IDX_AFE_PORT_ID_INT5_MI2S_RX,
+	IDX_AFE_PORT_ID_INT5_MI2S_TX,
+	IDX_AFE_PORT_ID_INT6_MI2S_RX,
+	IDX_AFE_PORT_ID_INT6_MI2S_TX,
+	/* IDX 143-> 160 */
+	IDX_AFE_PORT_ID_QUINARY_PCM_RX,
+	IDX_AFE_PORT_ID_QUINARY_PCM_TX,
+	IDX_AFE_PORT_ID_QUINARY_TDM_RX_0,
+	IDX_AFE_PORT_ID_QUINARY_TDM_TX_0,
+	IDX_AFE_PORT_ID_QUINARY_TDM_RX_1,
+	IDX_AFE_PORT_ID_QUINARY_TDM_TX_1,
+	IDX_AFE_PORT_ID_QUINARY_TDM_RX_2,
+	IDX_AFE_PORT_ID_QUINARY_TDM_TX_2,
+	IDX_AFE_PORT_ID_QUINARY_TDM_RX_3,
+	IDX_AFE_PORT_ID_QUINARY_TDM_TX_3,
+	IDX_AFE_PORT_ID_QUINARY_TDM_RX_4,
+	IDX_AFE_PORT_ID_QUINARY_TDM_TX_4,
+	IDX_AFE_PORT_ID_QUINARY_TDM_RX_5,
+	IDX_AFE_PORT_ID_QUINARY_TDM_TX_5,
+	IDX_AFE_PORT_ID_QUINARY_TDM_RX_6,
+	IDX_AFE_PORT_ID_QUINARY_TDM_TX_6,
+	IDX_AFE_PORT_ID_QUINARY_TDM_RX_7,
+	IDX_AFE_PORT_ID_QUINARY_TDM_TX_7,
+	/* IDX 161 to 181 */
+	IDX_AFE_PORT_ID_WSA_CODEC_DMA_RX_0,
+	IDX_AFE_PORT_ID_WSA_CODEC_DMA_TX_0,
+	IDX_AFE_PORT_ID_WSA_CODEC_DMA_RX_1,
+	IDX_AFE_PORT_ID_WSA_CODEC_DMA_TX_1,
+	IDX_AFE_PORT_ID_WSA_CODEC_DMA_TX_2,
+	IDX_AFE_PORT_ID_VA_CODEC_DMA_TX_0,
+	IDX_AFE_PORT_ID_VA_CODEC_DMA_TX_1,
+	IDX_AFE_PORT_ID_RX_CODEC_DMA_RX_0,
+	IDX_AFE_PORT_ID_TX_CODEC_DMA_TX_0,
+	IDX_AFE_PORT_ID_RX_CODEC_DMA_RX_1,
+	IDX_AFE_PORT_ID_TX_CODEC_DMA_TX_1,
+	IDX_AFE_PORT_ID_RX_CODEC_DMA_RX_2,
+	IDX_AFE_PORT_ID_TX_CODEC_DMA_TX_2,
+	IDX_AFE_PORT_ID_RX_CODEC_DMA_RX_3,
+	IDX_AFE_PORT_ID_TX_CODEC_DMA_TX_3,
+	IDX_AFE_PORT_ID_RX_CODEC_DMA_RX_4,
+	IDX_AFE_PORT_ID_TX_CODEC_DMA_TX_4,
+	IDX_AFE_PORT_ID_RX_CODEC_DMA_RX_5,
+	IDX_AFE_PORT_ID_TX_CODEC_DMA_TX_5,
+	IDX_AFE_PORT_ID_RX_CODEC_DMA_RX_6,
+	IDX_AFE_PORT_ID_RX_CODEC_DMA_RX_7,
+	/* IDX 182 to 184 */
+	IDX_SECONDARY_SPDIF_RX,
+	IDX_PRIMARY_SPDIF_TX,
+	IDX_SECONDARY_SPDIF_TX,
+	/* IDX 185 to 186 */
+	IDX_SLIMBUS_9_RX,
+	IDX_SLIMBUS_9_TX,
+	/* IDX 187 -> 189 */
+	IDX_AFE_PORT_ID_SENARY_PCM_RX,
+	IDX_AFE_PORT_ID_SENARY_PCM_TX,
 	IDX_AFE_LOOPBACK_TX,
+	/* IDX 190-> 192 */
+	IDX_AFE_PORT_ID_PRIMARY_META_MI2S_RX,
+	IDX_AFE_PORT_ID_SECONDARY_META_MI2S_RX,
+	IDX_HDMI_RX_MS,
+	/* IDX 193 */
+	IDX_VOICE2_RECORD_RX,
+	/* IDX 194 */
+	IDX_RT_PROXY_PORT_002_RX,
 	AFE_MAX_PORTS
 };
 
@@ -190,10 +299,33 @@ enum afe_cal_mode {
 	AFE_CAL_MODE_NONE,
 };
 
-enum lpass_clk_ver {
-	LPASS_CLK_VER_1,
-	LPASS_CLK_VER_2,
+enum afe_vad_cfg_type {
+	AFE_VAD_ENABLE = 0x00,
+	AFE_VAD_PREROLL,
 };
+
+struct vad_config {
+	u32 is_enable;
+	u32 pre_roll;
+};
+
+enum afe_mclk_src_id {
+	MCLK_SRC_INT = 0x00,
+	MCLK_SRC_EXT_0 = 0x01,
+	MCLK_SRC_MAX,
+};
+
+enum afe_mclk_freq {
+	MCLK_FREQ_MIN = 0,
+	MCLK_FREQ_11P2896_MHZ = MCLK_FREQ_MIN,
+	MCLK_FREQ_12P288_MHZ,
+	MCLK_FREQ_16P384_MHZ,
+	MCLK_FREQ_22P5792_MHZ,
+	MCLK_FREQ_24P576_MHZ,
+	MCLK_FREQ_MAX,
+};
+
+#define Q6AFE_EXT_MCLK_FREQ_DEFAULT 0
 
 struct afe_audio_buffer {
 	dma_addr_t phys;
@@ -236,16 +368,18 @@ struct aanc_data {
 	uint16_t aanc_tx_port;
 	uint32_t aanc_rx_port_sample_rate;
 	uint32_t aanc_tx_port_sample_rate;
+	int level;
 };
 
 int afe_open(u16 port_id, union afe_port_config *afe_config, int rate);
 int afe_close(int port_id);
-enum lpass_clk_ver afe_get_lpass_clk_ver(void);
 int afe_loopback(u16 enable, u16 rx_port, u16 tx_port);
-int afe_sidetone(u16 tx_port_id, u16 rx_port_id, u16 enable, uint16_t gain);
+int afe_sidetone_enable(u16 tx_port_id, u16 rx_port_id, bool enable);
+int afe_set_display_stream(u16 rx_port_id, u32 stream_idx, u32 ctl_idx);
 int afe_loopback_gain(u16 port_id, u16 volume);
 int afe_validate_port(u16 port_id);
 int afe_get_port_index(u16 port_id);
+int afe_get_port_id(u16 port_idx);
 int afe_get_topology(int port_id);
 int afe_start_pseudo_port(u16 port_id);
 int afe_stop_pseudo_port(u16 port_id);
@@ -262,17 +396,31 @@ int afe_dtmf_generate_rx(int64_t duration_in_ms,
 			 uint16_t high_freq,
 			 uint16_t low_freq, uint16_t gain);
 int afe_register_get_events(u16 port_id,
-		void (*cb) (uint32_t opcode,
+		void (*cb)(uint32_t opcode,
 		uint32_t token, uint32_t *payload, void *priv),
 		void *private_data);
 int afe_unregister_get_events(u16 port_id);
 int afe_rt_proxy_port_write(phys_addr_t buf_addr_p,
 			u32 mem_map_handle, int bytes);
 int afe_rt_proxy_port_read(phys_addr_t buf_addr_p,
-			u32 mem_map_handle, int bytes);
+			u32 mem_map_handle, u16 port_id, int bytes);
 void afe_set_cal_mode(u16 port_id, enum afe_cal_mode afe_cal_mode);
+void afe_set_vad_cfg(u32 vad_enable, u32 preroll_config,
+		     u32 port_id);
+void afe_set_island_mode_cfg(u16 port_id, u32 enable_flag);
+void afe_get_island_mode_cfg(u16 port_id, u32 *enable_flag);
 int afe_port_start(u16 port_id, union afe_port_config *afe_config,
 	u32 rate);
+int afe_set_tws_channel_mode(u16 port_id, u32 channel_mode);
+int afe_port_start_v2(u16 port_id, union afe_port_config *afe_config,
+		      u32 rate, u16 afe_in_channels, u16 afe_in_bit_width,
+		      struct afe_enc_config *enc_config,
+		      struct afe_dec_config *dec_config);
+int afe_port_start_v3(u16 port_id, union afe_port_config *afe_config,
+		      u32 rate, u16 afe_in_channels, u16 afe_in_bit_width,
+		      struct afe_enc_config *enc_config,
+		      struct afe_dec_config *dec_config,
+		      struct afe_ttp_config *ttp_config);
 int afe_spk_prot_feed_back_cfg(int src_port, int dst_port,
 	int l_ch, int r_ch, u32 enable);
 int afe_spk_prot_get_calib_data(struct afe_spkr_prot_get_vi_calib *calib);
@@ -314,6 +462,11 @@ int afe_send_spdif_ch_status_cfg(struct afe_param_id_spdif_ch_status_cfg
 int afe_spdif_port_start(u16 port_id, struct afe_spdif_port_config *spdif_port,
 		u32 rate);
 
+int afe_spdif_reg_event_cfg(u16 port_id, u16 reg_flag,
+		void (*cb)(uint32_t opcode,
+		uint32_t token, uint32_t *payload, void *priv),
+		void *private_data);
+
 int afe_turn_onoff_hw_mad(u16 mad_type, u16 mad_enable);
 int afe_port_set_mad_type(u16 port_id, enum afe_mad_type mad_type);
 enum afe_mad_type afe_port_get_mad_type(u16 port_id);
@@ -323,10 +476,12 @@ void afe_clear_config(enum afe_config_type config);
 bool afe_has_config(enum afe_config_type config);
 
 void afe_set_aanc_info(struct aanc_data *aanc_info);
+int afe_set_aanc_noise_level(int val);
 int afe_port_group_set_param(u16 group_id,
 	union afe_port_group_config *afe_group_config);
 int afe_port_group_enable(u16 group_id,
-	union afe_port_group_config *afe_group_config, u16 enable);
+	union afe_port_group_config *afe_group_config, u16 enable,
+	struct afe_param_id_tdm_lane_cfg *lane_cfg);
 int afe_unmap_rtac_block(uint32_t *mem_map_handle);
 int afe_map_rtac_block(struct rtac_cal_block_data *cal_block);
 int afe_send_slot_mapping_cfg(
@@ -336,5 +491,84 @@ int afe_send_custom_tdm_header_cfg(
 	struct afe_param_id_custom_tdm_header_cfg *custom_tdm_header_cfg,
 	u16 port_id);
 int afe_tdm_port_start(u16 port_id, struct afe_tdm_port_config *tdm_port,
-		u32 rate, u16 num_groups);
+		       u32 rate, u16 num_groups);
+void afe_set_routing_callback(routing_cb cb);
+int afe_get_av_dev_drift(struct afe_param_id_dev_timing_stats *timing_stats,
+		u16 port);
+int afe_get_sp_rx_tmax_xmax_logging_data(
+		struct afe_sp_rx_tmax_xmax_logging_param *xt_logging,
+		u16 port_id);
+int afe_cal_init_hwdep(void *card);
+int afe_send_port_island_mode(u16 port_id);
+int afe_send_port_vad_cfg_params(u16 port_id);
+int afe_send_cmd_wakeup_register(void *handle, bool enable);
+void afe_register_wakeup_irq_callback(
+	void (*afe_cb_wakeup_irq)(void *handle));
+int afe_get_doa_tracking_mon(u16 port_id,
+	struct doa_tracking_mon_param *doa_tracking_data);
+int afe_set_pll_clk_drift(u16 port_id, int32_t set_clk_drift,
+			  uint32_t clk_reset);
+int afe_set_clk_id(u16 port_id, uint32_t clk_id);
+
+int afe_set_mclk_src_cfg(u16 port_id, uint32_t mclk_src_id, uint32_t mclk_freq);
+
+typedef int (*afe_enable_mclk_and_get_info_cb_func) (void *private_data,
+			uint32_t enable, uint32_t mclk_freq,
+			struct afe_param_id_clock_set_v2_t *dyn_mclk_cfg);
+
+int afe_register_ext_mclk_cb(afe_enable_mclk_and_get_info_cb_func fn1,
+				void *private_data);
+void afe_unregister_ext_mclk_cb(void);
+
+#define AFE_LPASS_CORE_HW_BLOCK_ID_NONE                        0
+#define AFE_LPASS_CORE_HW_BLOCK_ID_AVTIMER                     2
+#define AFE_LPASS_CORE_HW_MACRO_BLOCK                          3
+
+/* Handles audio-video timer (avtimer) and BTSC vote requests from clients.
+ */
+#define AFE_CMD_REMOTE_LPASS_CORE_HW_VOTE_REQUEST            0x000100f4
+
+struct afe_cmd_remote_lpass_core_hw_vote_request {
+	struct apr_hdr hdr;
+	uint32_t  hw_block_id;
+	/* ID of the hardware block. */
+	char client_name[8];
+	/* Name of the client. */
+} __packed;
+
+#define AFE_CMD_RSP_REMOTE_LPASS_CORE_HW_VOTE_REQUEST        0x000100f5
+
+struct afe_cmd_rsp_remote_lpass_core_hw_vote_request {
+	uint32_t client_handle;
+	/**< Handle of the client. */
+} __packed;
+
+#define AFE_CMD_REMOTE_LPASS_CORE_HW_DEVOTE_REQUEST            0x000100f6
+
+struct afe_cmd_remote_lpass_core_hw_devote_request {
+	struct apr_hdr hdr;
+	uint32_t  hw_block_id;
+	/**< ID of the hardware block.*/
+
+	uint32_t client_handle;
+	/**< Handle of the client.*/
+} __packed;
+
+int afe_vote_lpass_core_hw(uint32_t hw_block_id, char *client_name,
+			uint32_t *client_handle);
+int afe_unvote_lpass_core_hw(uint32_t hw_block_id, uint32_t client_handle);
+int afe_get_spk_initial_cal(void);
+void afe_get_spk_r0(int *spk_r0);
+void afe_get_spk_t0(int *spk_t0);
+int afe_get_spk_v_vali_flag(void);
+void afe_get_spk_v_vali_sts(int *spk_v_vali_sts);
+void afe_set_spk_initial_cal(int initial_cal);
+void afe_set_spk_v_vali_flag(int v_vali_flag);
+void q6common_update_instance_id_support(bool supported);
+bool q6common_is_instance_id_supported(void);
+int q6common_pack_pp_params(u8 *dest, struct param_hdr_v3 *v3_hdr,
+			    u8 *param_data, u32 *total_size);
+int q6common_pack_pp_params_v2(u8 *dest, struct param_hdr_v3 *v3_hdr,
+			    u8 *param_data, u32 *total_size,
+			    bool iid_supported);
 #endif /* __Q6AFE_V2_H__ */
