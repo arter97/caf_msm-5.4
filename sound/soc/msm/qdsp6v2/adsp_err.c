@@ -9,6 +9,9 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/errno.h>
@@ -63,7 +66,7 @@
 /* Unexpected error code. */
 #define ADSP_ERR_MAX_STR      "ADSP_ERR_MAX"
 
-#ifdef CONFIG_SND_SOC_QDSP_DEBUG
+#if IS_ENABLED(CONFIG_SND_SOC_QDSP_DEBUG)
 static bool adsp_err_panic;
 
 #ifdef CONFIG_DEBUG_FS
@@ -101,7 +104,7 @@ static struct adsp_err_code adsp_err_code_info[ADSP_ERR_MAX+1] = {
 	{ 0, ADSP_EOK_STR},
 	{ -ENOTRECOVERABLE, ADSP_EFAILED_STR},
 	{ -EINVAL, ADSP_EBADPARAM_STR},
-	{ -ENOSYS, ADSP_EUNSUPPORTED_STR},
+	{ -EOPNOTSUPP, ADSP_EUNSUPPORTED_STR},
 	{ -ENOPROTOOPT, ADSP_EVERSION_STR},
 	{ -ENOTRECOVERABLE, ADSP_EUNEXPECTED_STR},
 	{ -ENOTRECOVERABLE, ADSP_EPANIC_STR},
@@ -123,7 +126,7 @@ static struct adsp_err_code adsp_err_code_info[ADSP_ERR_MAX+1] = {
 	{ -EADV, ADSP_ERR_MAX_STR},
 };
 
-#ifdef CONFIG_SND_SOC_QDSP_DEBUG
+#if IS_ENABLED(CONFIG_SND_SOC_QDSP_DEBUG)
 static inline void adsp_err_check_panic(u32 adsp_error)
 {
 	if (adsp_err_panic && adsp_error != ADSP_EALREADY)
@@ -151,13 +154,13 @@ char *adsp_err_get_err_str(u32 adsp_error)
 		return adsp_err_code_info[adsp_error].adsp_err_str;
 }
 
-#if defined(CONFIG_SND_SOC_QDSP_DEBUG) && defined(CONFIG_DEBUG_FS)
+#if IS_ENABLED(CONFIG_SND_SOC_QDSP_DEBUG) && defined(CONFIG_DEBUG_FS)
 static int __init adsp_err_init(void)
 {
 
 
 	debugfs_adsp_err = debugfs_create_file("msm_adsp_audio_debug",
-					       S_IFREG | S_IRUGO, NULL, NULL,
+					       S_IFREG | 0444, NULL, NULL,
 					       &adsp_err_debug_ops);
 
 	return 0;
@@ -165,3 +168,8 @@ static int __init adsp_err_init(void)
 
 device_initcall(adsp_err_init);
 #endif
+
+void adsp_err_exit(void)
+{
+	return;
+}

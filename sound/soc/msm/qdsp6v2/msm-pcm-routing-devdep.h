@@ -7,6 +7,9 @@
 * but WITHOUT ANY WARRANTY; without even the implied warranty of
 * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 * GNU General Public License for more details.
+*
+* Changes from Qualcomm Innovation Center are provided under the following license:
+* Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
 */
 
 #ifndef _MSM_PCM_ROUTING_DEVDEP_H_
@@ -28,7 +31,6 @@ static inline int msm_pcm_routing_hwdep_new(struct snd_soc_pcm_runtime *runtime,
 
 static inline void msm_pcm_routing_hwdep_free(struct snd_pcm *pcm)
 {
-	return;
 }
 #endif
 #endif

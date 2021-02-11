@@ -9,6 +9,8 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/slab.h>
 #include <linux/fs.h>
@@ -18,7 +20,7 @@
 #include <linux/mutex.h>
 #include <sound/audio_cal_utils.h>
 
-static DEFINE_MUTEX(destroy_cal_lock);
+struct mutex cal_lock;
 
 static int unmap_memory(struct cal_type_data *cal_type,
 			struct cal_block_data *cal_block);
@@ -26,6 +28,7 @@ static int unmap_memory(struct cal_type_data *cal_type,
 size_t get_cal_info_size(int32_t cal_type)
 {
 	size_t size = 0;
+	size_t size1 = 0, size2 = 0;
 
 	switch (cal_type) {
 	case CVP_VOC_RX_TOPOLOGY_CAL_TYPE:
@@ -56,6 +59,7 @@ size_t get_cal_info_size(int32_t cal_type)
 		size = sizeof(struct audio_cal_info_voc_col);
 		break;
 	case ADM_TOPOLOGY_CAL_TYPE:
+	case ADM_LSM_TOPOLOGY_CAL_TYPE:
 		size = sizeof(struct audio_cal_info_adm_top);
 		break;
 	case ADM_CUST_TOPOLOGY_CAL_TYPE:
@@ -63,6 +67,8 @@ size_t get_cal_info_size(int32_t cal_type)
 		size = 0;
 		break;
 	case ADM_AUDPROC_CAL_TYPE:
+	case ADM_LSM_AUDPROC_CAL_TYPE:
+	case ADM_LSM_AUDPROC_PERSISTENT_CAL_TYPE:
 		size = sizeof(struct audio_cal_info_audproc);
 		break;
 	case ADM_AUDVOL_CAL_TYPE:
@@ -79,6 +85,7 @@ size_t get_cal_info_size(int32_t cal_type)
 		size = sizeof(struct audio_cal_info_audstrm);
 		break;
 	case AFE_TOPOLOGY_CAL_TYPE:
+	case AFE_LSM_TOPOLOGY_CAL_TYPE:
 		size = sizeof(struct audio_cal_info_afe_top);
 		break;
 	case AFE_CUST_TOPOLOGY_CAL_TYPE:
@@ -88,6 +95,7 @@ size_t get_cal_info_size(int32_t cal_type)
 		size = sizeof(struct audio_cal_info_afe);
 		break;
 	case AFE_COMMON_TX_CAL_TYPE:
+	case AFE_LSM_TX_CAL_TYPE:
 		size = sizeof(struct audio_cal_info_afe);
 		break;
 	case AFE_FB_SPKR_PROT_CAL_TYPE:
@@ -98,8 +106,11 @@ size_t get_cal_info_size(int32_t cal_type)
 		 * Since get and set parameter structures are different in size
 		 * use the maximum size of get and set parameter structure
 		 */
-		size = max(sizeof(struct audio_cal_info_sp_th_vi_ftm_cfg),
+		size1 = max(sizeof(struct audio_cal_info_sp_th_vi_ftm_cfg),
 			   sizeof(struct audio_cal_info_sp_th_vi_param));
+		size2 = max(sizeof(struct audio_cal_info_sp_th_vi_v_vali_cfg),
+			   sizeof(struct audio_cal_info_sp_th_vi_v_vali_param));
+		size = max(size1, size2);
 		break;
 	case AFE_FB_SPKR_PROT_EX_VI_CAL_TYPE:
 		/*
@@ -120,6 +131,9 @@ size_t get_cal_info_size(int32_t cal_type)
 		break;
 	case AFE_SIDETONE_CAL_TYPE:
 		size = sizeof(struct audio_cal_info_sidetone);
+		break;
+	case AFE_SIDETONE_IIR_CAL_TYPE:
+		size = sizeof(struct audio_cal_info_sidetone_iir);
 		break;
 	case LSM_CUST_TOPOLOGY_CAL_TYPE:
 		size = 0;
@@ -199,6 +213,7 @@ size_t get_user_cal_type_size(int32_t cal_type)
 		size = sizeof(struct audio_cal_type_voc_col);
 		break;
 	case ADM_TOPOLOGY_CAL_TYPE:
+	case ADM_LSM_TOPOLOGY_CAL_TYPE:
 		size = sizeof(struct audio_cal_type_adm_top);
 		break;
 	case ADM_CUST_TOPOLOGY_CAL_TYPE:
@@ -206,6 +221,8 @@ size_t get_user_cal_type_size(int32_t cal_type)
 		size = sizeof(struct audio_cal_type_basic);
 		break;
 	case ADM_AUDPROC_CAL_TYPE:
+	case ADM_LSM_AUDPROC_CAL_TYPE:
+	case ADM_LSM_AUDPROC_PERSISTENT_CAL_TYPE:
 		size = sizeof(struct audio_cal_type_audproc);
 		break;
 	case ADM_AUDVOL_CAL_TYPE:
@@ -222,6 +239,7 @@ size_t get_user_cal_type_size(int32_t cal_type)
 		size = sizeof(struct audio_cal_type_audstrm);
 		break;
 	case AFE_TOPOLOGY_CAL_TYPE:
+	case AFE_LSM_TOPOLOGY_CAL_TYPE:
 		size = sizeof(struct audio_cal_type_afe_top);
 		break;
 	case AFE_CUST_TOPOLOGY_CAL_TYPE:
@@ -231,6 +249,7 @@ size_t get_user_cal_type_size(int32_t cal_type)
 		size = sizeof(struct audio_cal_type_afe);
 		break;
 	case AFE_COMMON_TX_CAL_TYPE:
+	case AFE_LSM_TX_CAL_TYPE:
 		size = sizeof(struct audio_cal_type_afe);
 		break;
 	case AFE_FB_SPKR_PROT_CAL_TYPE:
@@ -263,6 +282,9 @@ size_t get_user_cal_type_size(int32_t cal_type)
 		break;
 	case AFE_SIDETONE_CAL_TYPE:
 		size = sizeof(struct audio_cal_type_sidetone);
+		break;
+	case AFE_SIDETONE_IIR_CAL_TYPE:
+		size = sizeof(struct audio_cal_type_sidetone_iir);
 		break;
 	case LSM_CUST_TOPOLOGY_CAL_TYPE:
 		size = sizeof(struct audio_cal_type_basic);
@@ -341,10 +363,9 @@ static struct cal_type_data *create_cal_type_data(
 	}
 
 	cal_type = kmalloc(sizeof(*cal_type), GFP_KERNEL);
-	if (cal_type == NULL) {
-		pr_err("%s: could not allocate cal_type!\n", __func__);
+	if (cal_type == NULL)
 		goto done;
-	}
+
 	INIT_LIST_HEAD(&cal_type->cal_blocks);
 	mutex_init(&cal_type->lock);
 	memcpy(&cal_type->info, info,
@@ -353,12 +374,22 @@ done:
 	return cal_type;
 }
 
+/**
+ * cal_utils_create_cal_types
+ *
+ * @num_cal_types: number of types
+ * @cal_type: pointer to the cal types pointer
+ * @info: pointer to info
+ *
+ * Returns 0 on success, EINVAL otherwise
+ */
 int cal_utils_create_cal_types(int num_cal_types,
 			struct cal_type_data **cal_type,
 			struct cal_type_info *info)
 {
-	int				ret = 0;
-	int				i;
+	int ret = 0;
+	int i;
+
 	pr_debug("%s\n", __func__);
 
 	if (cal_type == NULL) {
@@ -407,6 +438,7 @@ int cal_utils_create_cal_types(int num_cal_types,
 done:
 	return ret;
 }
+EXPORT_SYMBOL(cal_utils_create_cal_types);
 
 static void delete_cal_block(struct cal_block_data *cal_block)
 {
@@ -433,11 +465,10 @@ done:
 
 static void destroy_all_cal_blocks(struct cal_type_data *cal_type)
 {
-	int				ret = 0;
-	struct list_head		*ptr, *next;
-	struct cal_block_data		*cal_block;
+	int ret = 0;
+	struct list_head *ptr, *next;
+	struct cal_block_data *cal_block;
 
-	mutex_lock(&destroy_cal_lock);
 	list_for_each_safe(ptr, next,
 		&cal_type->cal_blocks) {
 
@@ -454,9 +485,6 @@ static void destroy_all_cal_blocks(struct cal_type_data *cal_type)
 		delete_cal_block(cal_block);
 		cal_block = NULL;
 	}
-	mutex_unlock(&destroy_cal_lock);
-
-	return;
 }
 
 static void destroy_cal_type_data(struct cal_type_data *cal_type)
@@ -471,10 +499,19 @@ done:
 	return;
 }
 
+/**
+ * cal_utils_destroy_cal_types -
+ *        Destroys cal types and deregister from cal info
+ *
+ * @num_cal_types: number of cal types
+ * @cal_type: cal type pointer with cal info
+ *
+ */
 void cal_utils_destroy_cal_types(int num_cal_types,
 			struct cal_type_data **cal_type)
 {
-	int				i;
+	int i;
+
 	pr_debug("%s\n", __func__);
 
 	if (cal_type == NULL) {
@@ -487,17 +524,23 @@ void cal_utils_destroy_cal_types(int num_cal_types,
 		goto done;
 	}
 
-	mutex_lock(&destroy_cal_lock);
 	for (i = 0; i < num_cal_types; i++) {
 		audio_cal_deregister(1, &cal_type[i]->info.reg);
 		destroy_cal_type_data(cal_type[i]);
 		cal_type[i] = NULL;
 	}
-	mutex_unlock(&destroy_cal_lock);
 done:
 	return;
 }
+EXPORT_SYMBOL(cal_utils_destroy_cal_types);
 
+/**
+ * cal_utils_get_only_cal_block
+ *
+ * @cal_type: pointer to the cal type
+ *
+ * Returns cal_block structure
+ */
 struct cal_block_data *cal_utils_get_only_cal_block(
 			struct cal_type_data *cal_type)
 {
@@ -517,7 +560,16 @@ struct cal_block_data *cal_utils_get_only_cal_block(
 done:
 	return cal_block;
 }
+EXPORT_SYMBOL(cal_utils_get_only_cal_block);
 
+/**
+ * cal_utils_get_only_cal_block
+ *
+ * @cal_block: pointer to cal block struct
+ * @user_data: pointer to user data
+ *
+ * Returns true on match
+ */
 bool cal_utils_match_buf_num(struct cal_block_data *cal_block,
 					void *user_data)
 {
@@ -529,6 +581,7 @@ bool cal_utils_match_buf_num(struct cal_block_data *cal_block,
 
 	return ret;
 }
+EXPORT_SYMBOL(cal_utils_match_buf_num);
 
 static struct cal_block_data *get_matching_cal_block(
 					struct cal_type_data *cal_type,
@@ -595,10 +648,8 @@ static struct cal_block_data *create_cal_block(struct cal_type_data *cal_type,
 
 	cal_block = kzalloc(sizeof(*cal_block),
 		GFP_KERNEL);
-	if (cal_block == NULL) {
-		pr_err("%s: could not allocate cal_block!\n", __func__);
+	if (cal_block == NULL)
 		goto done;
-	}
 
 	INIT_LIST_HEAD(&cal_block->list);
 
@@ -654,9 +705,10 @@ err:
 void cal_utils_clear_cal_block_q6maps(int num_cal_types,
 					struct cal_type_data **cal_type)
 {
-	int				i = 0;
-	struct list_head		*ptr, *next;
-	struct cal_block_data		*cal_block;
+	int i = 0;
+	struct list_head *ptr, *next;
+	struct cal_block_data *cal_block;
+
 	pr_debug("%s\n", __func__);
 
 	if (cal_type == NULL) {
@@ -669,22 +721,21 @@ void cal_utils_clear_cal_block_q6maps(int num_cal_types,
 		goto done;
 	}
 
-	mutex_lock(&destroy_cal_lock);
 	for (; i < num_cal_types; i++) {
 		if (cal_type[i] == NULL)
 			continue;
 
+		mutex_lock(&cal_type[i]->lock);
 		list_for_each_safe(ptr, next,
 			&cal_type[i]->cal_blocks) {
 
 			cal_block = list_entry(ptr,
 				struct cal_block_data, list);
 
-			if (cal_block != NULL)
-				cal_block->map_data.q6map_handle = 0;
+			cal_block->map_data.q6map_handle = 0;
 		}
+		mutex_unlock(&cal_type[i]->lock);
 	}
-	mutex_unlock(&destroy_cal_lock);
 done:
 	return;
 }
@@ -762,13 +813,25 @@ done:
 	return ret;
 }
 
+/**
+ * cal_utils_alloc_cal
+ *
+ * @data_size: size of data to allocate
+ * @data: data pointer
+ * @cal_type: pointer to the cal type
+ * @client_info_size: client info size
+ * @client_info: pointer to client info
+ *
+ * Returns 0 on success, appropriate error code otherwise
+ */
 int cal_utils_alloc_cal(size_t data_size, void *data,
 			struct cal_type_data *cal_type,
 			size_t client_info_size, void *client_info)
 {
-	int				ret = 0;
-	struct cal_block_data		*cal_block;
-	struct audio_cal_type_alloc	*alloc_data = data;
+	int ret = 0;
+	struct cal_block_data *cal_block;
+	struct audio_cal_type_alloc *alloc_data = data;
+
 	pr_debug("%s\n", __func__);
 
 	if (cal_type == NULL) {
@@ -829,13 +892,24 @@ err:
 done:
 	return ret;
 }
+EXPORT_SYMBOL(cal_utils_alloc_cal);
 
+/**
+ * cal_utils_dealloc_cal
+ *
+ * @data_size: size of data to allocate
+ * @data: data pointer
+ * @cal_type: pointer to the cal type
+ *
+ * Returns 0 on success, appropriate error code otherwise
+ */
 int cal_utils_dealloc_cal(size_t data_size, void *data,
 			struct cal_type_data *cal_type)
 {
-	int				ret = 0;
-	struct cal_block_data		*cal_block;
-	struct audio_cal_type_dealloc	*dealloc_data = data;
+	int ret = 0;
+	struct cal_block_data *cal_block;
+	struct audio_cal_type_dealloc *dealloc_data = data;
+
 	pr_debug("%s\n", __func__);
 
 
@@ -882,20 +956,35 @@ int cal_utils_dealloc_cal(size_t data_size, void *data,
 	if (ret < 0)
 		goto err;
 
+	mutex_lock(&cal_lock);
 	delete_cal_block(cal_block);
+	mutex_unlock(&cal_lock);
 err:
 	mutex_unlock(&cal_type->lock);
 done:
 	return ret;
 }
+EXPORT_SYMBOL(cal_utils_dealloc_cal);
 
+/**
+ * cal_utils_set_cal
+ *
+ * @data_size: size of data to allocate
+ * @data: data pointer
+ * @cal_type: pointer to the cal type
+ * @client_info_size: client info size
+ * @client_info: pointer to client info
+ *
+ * Returns 0 on success, appropriate error code otherwise
+ */
 int cal_utils_set_cal(size_t data_size, void *data,
 			struct cal_type_data *cal_type,
 			size_t client_info_size, void *client_info)
 {
 	int ret = 0;
-	struct cal_block_data		*cal_block;
-	struct audio_cal_type_basic	*basic_data = data;
+	struct cal_block_data *cal_block;
+	struct audio_cal_type_basic *basic_data = data;
+
 	pr_debug("%s\n", __func__);
 
 	if (cal_type == NULL) {
@@ -962,8 +1051,54 @@ int cal_utils_set_cal(size_t data_size, void *data,
 		((uint8_t *)data + sizeof(struct audio_cal_type_basic)),
 		data_size - sizeof(struct audio_cal_type_basic));
 
+	/* reset buffer stale flag */
+	cal_block->cal_stale = false;
+
 err:
 	mutex_unlock(&cal_type->lock);
 done:
 	return ret;
 }
+EXPORT_SYMBOL(cal_utils_set_cal);
+
+/**
+ * cal_utils_mark_cal_used
+ *
+ * @cal_block: pointer to cal block
+ */
+void cal_utils_mark_cal_used(struct cal_block_data *cal_block)
+{
+	if (cal_block)
+		cal_block->cal_stale = true;
+}
+EXPORT_SYMBOL(cal_utils_mark_cal_used);
+
+int __init cal_utils_init(void)
+{
+	mutex_init(&cal_lock);
+	return 0;
+}
+/**
+ * cal_utils_is_cal_stale
+ *
+ * @cal_block: pointer to cal block
+ *
+ * Returns true if cal block is stale, false otherwise
+ */
+bool cal_utils_is_cal_stale(struct cal_block_data *cal_block)
+{
+	bool ret = false;
+
+	mutex_lock(&cal_lock);
+	if (!cal_block) {
+		pr_err("%s: cal_block is Null", __func__);
+		goto unlock;
+	}
+	if (cal_block->cal_stale)
+	    ret = true;
+
+unlock:
+	mutex_unlock(&cal_lock);
+	return ret;
+}
+EXPORT_SYMBOL(cal_utils_is_cal_stale);
