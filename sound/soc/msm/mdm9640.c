@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, 2021 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -152,8 +152,9 @@ static int mdm_mi2s_clk_ctl(struct snd_soc_pcm_runtime *rtd, bool enable,
 {
 	struct snd_soc_card *card = rtd->card;
 	struct mdm_machine_data *pdata = snd_soc_card_get_drvdata(card);
-	struct afe_clk_cfg *lpass_clk = NULL;
+	struct afe_clk_set *lpass_clk = NULL;
 	int ret = 0;
+	int bit_clk_freq = (rate * 2 * NO_OF_BITS_PER_SAMPLE);
 
 	if (pdata == NULL) {
 		pr_err("%s:platform data is null\n", __func__);
@@ -167,44 +168,43 @@ static int mdm_mi2s_clk_ctl(struct snd_soc_pcm_runtime *rtd, bool enable,
 		goto done;
 	}
 	memcpy(lpass_clk, &lpass_default, sizeof(struct afe_clk_cfg));
-	pr_debug("%s enable = %x\n", __func__, enable);
 
 	if (enable) {
 		if (atomic_read(&pdata->prim_clk_usrs) == 0) {
-			lpass_clk->clk_val2 = pdata->mclk_freq;
-			lpass_clk->clk_val1 = (rate * 2 *
-							NO_OF_BITS_PER_SAMPLE);
-
-			lpass_clk->clk_set_mode = Q6AFE_LPASS_MODE_BOTH_VALID;
+			lpass_clk->clk_id = Q6AFE_LPASS_CLK_ID_MCLK_3;
+			lpass_clk->clk_freq_in_hz = pdata->mclk_freq;
+			lpass_clk->enable = 1;
+			ret = afe_set_lpass_clock_v2(
+				AFE_PORT_ID_PRIMARY_MI2S_RX, lpass_clk);
+			if (ret < 0)
+				pr_err("%s:afe set mclk failed\n", __func__);
+			else
+				atomic_inc(&pdata->prim_clk_usrs);
 		} else {
-			lpass_clk->clk_val1 = (rate * 2	*
-							NO_OF_BITS_PER_SAMPLE);
-
-			lpass_clk->clk_set_mode = Q6AFE_LPASS_MODE_CLK1_VALID;
+			lpass_clk->enable = 1;
 		}
-		ret = afe_set_lpass_clock(MI2S_RX, lpass_clk);
-		if (ret < 0)
-			pr_err("%s:afe_set_lpass_clock failed\n", __func__);
-		else
-			atomic_inc(&pdata->prim_clk_usrs);
+		lpass_clk->clk_freq_in_hz = bit_clk_freq;
 	} else {
 		if (atomic_read(&pdata->prim_clk_usrs) > 0)
 			atomic_dec(&pdata->prim_clk_usrs);
 
 		if (atomic_read(&pdata->prim_clk_usrs) == 0) {
-			lpass_clk->clk_val2 = Q6AFE_LPASS_OSR_CLK_DISABLE;
-			lpass_clk->clk_set_mode = Q6AFE_LPASS_MODE_BOTH_VALID;
+			lpass_clk->clk_id = Q6AFE_LPASS_CLK_ID_MCLK_3;
+			lpass_clk->enable = 0;
+			ret = afe_set_lpass_clock_v2(
+				AFE_PORT_ID_PRIMARY_MI2S_RX, lpass_clk);
 		} else {
-			lpass_clk->clk_set_mode = Q6AFE_LPASS_MODE_CLK1_VALID;
+			lpass_clk->enable = 0;
 		}
-		lpass_clk->clk_val1 = Q6AFE_LPASS_IBIT_CLK_DISABLE;
-		ret = afe_set_lpass_clock(MI2S_RX, lpass_clk);
-		if (ret < 0)
-			pr_err("%s:afe_set_lpass_clock failed\n", __func__);
 	}
-	pr_debug("%s clk 1 = %x clk2 = %x mode = %x\n",
-		 __func__, lpass_clk->clk_val1, lpass_clk->clk_val2,
-		 lpass_clk->clk_set_mode);
+	lpass_clk->clk_id = Q6AFE_LPASS_CLK_ID_PRI_MI2S_IBIT;
+	ret = afe_set_lpass_clock_v2(AFE_PORT_ID_PRIMARY_MI2S_RX,
+						lpass_clk);
+	if (ret < 0)
+		pr_err("%s:afe_set_lpass_clock_v2 failed\n", __func__);
+
+	pr_debug("%s: enable = %d bit_clk  = %x mclk = %x\n",
+		 __func__, enable, bit_clk_freq, pdata->mclk_freq);
 
 	kfree(lpass_clk);
 	clk_users = atomic_read(&pdata->prim_clk_usrs);
@@ -333,8 +333,9 @@ static int mdm_sec_mi2s_clk_ctl(struct snd_soc_pcm_runtime *rtd, bool enable,
 {
 	struct snd_soc_card *card = rtd->card;
 	struct mdm_machine_data *pdata = snd_soc_card_get_drvdata(card);
-	struct afe_clk_cfg *lpass_clk = NULL;
+	struct afe_clk_set *lpass_clk = NULL;
 	int ret = 0;
+	int bit_clk_freq = (rate * 2 * NO_OF_BITS_PER_SAMPLE);
 
 	if (pdata == NULL) {
 		pr_err("%s:platform data is null\n", __func__);
@@ -348,44 +349,44 @@ static int mdm_sec_mi2s_clk_ctl(struct snd_soc_pcm_runtime *rtd, bool enable,
 		goto done;
 	}
 	memcpy(lpass_clk, &lpass_default, sizeof(struct afe_clk_cfg));
-	pr_debug("%s enable = %x\n", __func__, enable);
+	pr_err("%s enable = %x\n", __func__, enable);
 
 	if (enable) {
 		if (atomic_read(&pdata->sec_clk_usrs) == 0) {
-			lpass_clk->clk_val2 = pdata->mclk_freq;
-			lpass_clk->clk_val1 = (rate * 2 *
-							NO_OF_BITS_PER_SAMPLE);
-
-			lpass_clk->clk_set_mode = Q6AFE_LPASS_MODE_BOTH_VALID;
+			lpass_clk->clk_id = Q6AFE_LPASS_CLK_ID_MCLK_3;
+			lpass_clk->clk_freq_in_hz = pdata->mclk_freq;
+			lpass_clk->enable = 1;
+			ret = afe_set_lpass_clock_v2(
+				AFE_PORT_ID_SECONDARY_MI2S_RX, lpass_clk);
+			if (ret < 0)
+				pr_err("%s:afe set mclk failed\n", __func__);
+			else
+				atomic_inc(&pdata->sec_clk_usrs);
 		} else {
-			lpass_clk->clk_val1 = (rate * 2 *
-							NO_OF_BITS_PER_SAMPLE);
-
-			lpass_clk->clk_set_mode = Q6AFE_LPASS_MODE_CLK1_VALID;
+			lpass_clk->enable = 1;
 		}
-		ret = afe_set_lpass_clock(SECONDARY_I2S_RX, lpass_clk);
-		if (ret < 0)
-			pr_err("%s:afe_set_lpass_clock failed\n", __func__);
-		else
-			atomic_inc(&pdata->sec_clk_usrs);
+		lpass_clk->clk_freq_in_hz = bit_clk_freq;
 	} else {
 		if (atomic_read(&pdata->sec_clk_usrs) > 0)
 			atomic_dec(&pdata->sec_clk_usrs);
 
 		if (atomic_read(&pdata->sec_clk_usrs) == 0) {
-			lpass_clk->clk_val2 = Q6AFE_LPASS_OSR_CLK_DISABLE;
-			lpass_clk->clk_set_mode = Q6AFE_LPASS_MODE_BOTH_VALID;
+			lpass_clk->clk_id = Q6AFE_LPASS_CLK_ID_MCLK_3;
+			lpass_clk->enable = 0;
+			ret = afe_set_lpass_clock_v2(
+				AFE_PORT_ID_SECONDARY_MI2S_RX, lpass_clk);
 		} else {
-			lpass_clk->clk_set_mode = Q6AFE_LPASS_MODE_CLK1_VALID;
+			lpass_clk->enable = 0;
 		}
-		lpass_clk->clk_val1 = Q6AFE_LPASS_IBIT_CLK_DISABLE;
-		ret = afe_set_lpass_clock(SECONDARY_I2S_RX, lpass_clk);
-		if (ret < 0)
-			pr_err("%s:afe_set_lpass_clock failed\n", __func__);
 	}
-	pr_debug("%s clk 1 = %x clk2 = %x mode = %x\n",
-		 __func__, lpass_clk->clk_val1, lpass_clk->clk_val2,
-		 lpass_clk->clk_set_mode);
+	lpass_clk->clk_id = Q6AFE_LPASS_CLK_ID_SEC_MI2S_IBIT;
+	ret = afe_set_lpass_clock_v2(AFE_PORT_ID_SECONDARY_MI2S_RX,
+						lpass_clk);
+		if (ret < 0)
+		pr_err("%s:afe_set_lpass_clock_v2 failed\n", __func__);
+
+	pr_debug("%s:enable = %d bit_clk  = %x mclk = %x\n",
+		 __func__, enable, bit_clk_freq, pdata->mclk_freq);
 
 	kfree(lpass_clk);
 done:
@@ -750,7 +751,7 @@ static int mdm_enable_codec_ext_clk(struct snd_soc_codec *codec,
 	struct snd_soc_card *card = codec->component.card;
 	struct mdm_machine_data *pdata =
 			snd_soc_card_get_drvdata(card);
-	struct afe_clk_cfg *lpass_clk = NULL;
+	struct afe_clk_set *lpass_clk = NULL;
 
 	pr_debug("%s enable %d  codec name %s\n",
 		 __func__, enable, codec->component.name);
@@ -763,11 +764,13 @@ static int mdm_enable_codec_ext_clk(struct snd_soc_codec *codec,
 	memcpy(lpass_clk, &lpass_default, sizeof(struct afe_clk_cfg));
 	if (enable) {
 		if (atomic_read(&pdata->prim_clk_usrs) == 0) {
-			lpass_clk->clk_val2 = pdata->mclk_freq;
-			lpass_clk->clk_set_mode = Q6AFE_LPASS_MODE_CLK2_VALID;
-			ret = afe_set_lpass_clock(MI2S_RX, lpass_clk);
+			lpass_clk->clk_id = Q6AFE_LPASS_CLK_ID_MCLK_3;
+			lpass_clk->clk_freq_in_hz = pdata->mclk_freq;
+			lpass_clk->enable = enable;
+			ret = afe_set_lpass_clock_v2(
+				AFE_PORT_ID_PRIMARY_MI2S_RX, lpass_clk);
 			if (ret < 0) {
-				pr_err("%s afe_set_lpass_clock failed\n",
+				pr_err("%s afe_set_lpass_clock_v2 failed\n",
 				       __func__);
 
 				goto err;
@@ -779,11 +782,12 @@ static int mdm_enable_codec_ext_clk(struct snd_soc_codec *codec,
 		if (atomic_read(&pdata->prim_clk_usrs) > 0)
 			atomic_dec(&pdata->prim_clk_usrs);
 		if (atomic_read(&pdata->prim_clk_usrs) == 0) {
-			lpass_clk->clk_set_mode = Q6AFE_LPASS_MODE_CLK2_VALID;
-			lpass_clk->clk_val2 = Q6AFE_LPASS_OSR_CLK_DISABLE;
-			ret = afe_set_lpass_clock(MI2S_RX, lpass_clk);
+			lpass_clk->clk_id = Q6AFE_LPASS_CLK_ID_MCLK_3;
+			lpass_clk->enable = enable;
+			ret = afe_set_lpass_clock_v2(
+				AFE_PORT_ID_PRIMARY_MI2S_RX, lpass_clk);
 			if (ret < 0) {
-				pr_err("%s afe_set_lpass_clock failed\n",
+				pr_err("%s afe_set_lpass_clock_v2 failed\n",
 				       __func__);
 
 				goto err;
@@ -791,8 +795,7 @@ static int mdm_enable_codec_ext_clk(struct snd_soc_codec *codec,
 		}
 		tomtom_mclk_enable(codec, 0, dapm);
 	}
-	pr_debug("%s clk2 %x mode %x\n",  __func__, lpass_clk->clk_val2,
-		 lpass_clk->clk_set_mode);
+	pr_debug("%s clk %x\n",  __func__, pdata->mclk_freq);
 err:
 	mutex_unlock(&cdc_mclk_mutex);
 	kfree(lpass_clk);
