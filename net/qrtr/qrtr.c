@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015, Sony Mobile Communications Inc.
- * Copyright (c) 2013, 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013, 2018-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/kthread.h>
 #include <linux/module.h>
@@ -21,7 +22,9 @@
 #include <soc/qcom/boot_stats.h>
 
 #include "qrtr.h"
-
+#if IS_ENABLED(CONFIG_QRTR_BPF_FILTER)
+#include "bpf_service.h"
+#endif
 #define QRTR_LOG_PAGE_CNT 4
 #define QRTR_INFO(ctx, x, ...)				\
 	ipc_log_string(ctx, x, ##__VA_ARGS__)
@@ -1943,6 +1946,11 @@ static int qrtr_recvmsg(struct socket *sock, struct msghdr *msg,
 	struct qrtr_cb *cb;
 	int copied, rc;
 
+#if IS_ENABLED(CONFIG_QRTR_BPF_FILTER)
+	struct qrtr_sock *ipc = qrtr_sk(sock->sk);
+	struct qrtr_ctrl_pkt pkt = {0,};
+	u32 type;
+#endif
 	if (sock_flag(sk, SOCK_ZAPPED)) {
 		pr_err("%s: Invalid addr error\n", __func__);
 		return -EADDRNOTAVAIL;
@@ -1968,6 +1976,41 @@ static int qrtr_recvmsg(struct socket *sock, struct msghdr *msg,
 	}
 	rc = copied;
 
+#if IS_ENABLED(CONFIG_QRTR_BPF_FILTER)
+	if (ipc->us.sq_port == QRTR_PORT_CTRL) {
+		/**
+		 * Load control packet from skb here to know the packet type
+		 * information as packet type on "cb" will be invalid for
+		 * local service.
+		 */
+		skb_copy_bits(skb, 0, &pkt, sizeof(pkt));
+		type = le32_to_cpu(pkt.cmd);
+		/**
+		 * add/remove service information to/from service lookup table
+		 * if the control packet is delivering to QRTR_PORT_CTRL
+		 */
+		if (type == QRTR_TYPE_NEW_SERVER) {
+			/**
+			 * Populate port address on control packet from "cb"
+			 * only for local service because port id will be 0
+			 * while sending NEW_SERVER control packet from local
+			 * service.
+			 */
+			if (le32_to_cpu(pkt.server.node) == qrtr_local_nid)
+				pkt.server.port = cpu_to_le32(cb->src_port);
+			qrtr_service_add(&pkt);
+		} else if (type == QRTR_TYPE_DEL_SERVER) {
+			/* Remove this server from lookup table */
+			qrtr_service_remove(&pkt);
+		} else if (type == QRTR_TYPE_BYE) {
+			/**
+			 * Remove all servers under this node from lookup
+			 * table
+			 */
+			qrtr_service_node_remove(cb->src_node);
+		}
+	}
+#endif
 	if (addr) {
 		/* There is an anonymous 2-byte hole after sq_family,
 		 * make sure to clear it.
