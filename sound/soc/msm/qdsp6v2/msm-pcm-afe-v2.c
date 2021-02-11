@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, 2021, The Linux Foundation. All rights reserved.
 *
 * This program is free software; you can redistribute it and/or modify
 * it under the terms of the GNU General Public License version 2 and
@@ -32,6 +32,7 @@
 #include <asm/dma.h>
 #include "msm-pcm-afe-v2.h"
 
+#define TIMEOUT_MS	1000
 #define MIN_PLAYBACK_PERIOD_SIZE (128 * 2)
 #define MAX_PLAYBACK_PERIOD_SIZE (128 * 2 * 2 * 6)
 #define MIN_PLAYBACK_NUM_PERIODS (4)
@@ -129,6 +130,8 @@ static enum hrtimer_restart afe_hrtimer_rec_callback(struct hrtimer *hrt)
 		container_of(hrt, struct pcm_afe_info, hrt);
 	struct snd_pcm_substream *substream = prtd->substream;
 	struct snd_pcm_runtime *runtime = substream->runtime;
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_dai *dai = rtd->cpu_dai;
 	u32 mem_map_handle = 0;
 	int ret;
 
@@ -143,7 +146,7 @@ static enum hrtimer_restart afe_hrtimer_rec_callback(struct hrtimer *hrt)
 		ret = afe_rt_proxy_port_read(
 		(prtd->dma_addr + (prtd->dsp_cnt
 		* snd_pcm_lib_period_bytes(prtd->substream))), mem_map_handle,
-		snd_pcm_lib_period_bytes(prtd->substream));
+		dai->id, snd_pcm_lib_period_bytes(prtd->substream));
 		if (ret < 0) {
 			pr_err("%s: AFE port read fails: %d\n", __func__, ret);
 			prtd->start = 0;
@@ -164,7 +167,7 @@ static void pcm_afe_process_tx_pkt(uint32_t opcode,
 		 void *priv)
 {
 	struct pcm_afe_info *prtd = priv;
-	unsigned long dsp_flags;
+	unsigned long dsp_flags = 0;
 	struct snd_pcm_substream *substream = NULL;
 	struct snd_pcm_runtime *runtime = NULL;
 	uint16_t event;
@@ -258,9 +261,11 @@ static void pcm_afe_process_rx_pkt(uint32_t opcode,
 		 void *priv)
 {
 	struct pcm_afe_info *prtd = priv;
-	unsigned long dsp_flags;
+	unsigned long dsp_flags = 0;
 	struct snd_pcm_substream *substream = NULL;
 	struct snd_pcm_runtime *runtime = NULL;
+	struct snd_soc_pcm_runtime * rtd = NULL;
+	struct snd_soc_dai *dai = NULL;
 	uint16_t event;
 	uint64_t period_bytes;
 	uint64_t bytes_one_sec;
@@ -270,6 +275,8 @@ static void pcm_afe_process_rx_pkt(uint32_t opcode,
 		return;
 	substream =  prtd->substream;
 	runtime = substream->runtime;
+	rtd = substream->private_data;
+	dai = rtd->cpu_dai;
 	pr_debug("%s\n", __func__);
 	spin_lock_irqsave(&prtd->dsp_lock, dsp_flags);
 	switch (opcode) {
@@ -292,7 +299,7 @@ static void pcm_afe_process_rx_pkt(uint32_t opcode,
 					prtd->substream)) * 1000));
 				bytes_one_sec = (runtime->rate *
 						runtime->channels * 2);
-				bytes_one_sec = div_u64(bytes_one_sec , 1000);
+				bytes_one_sec = div_u64(bytes_one_sec, 1000);
 				prtd->poll_time =
 					div_u64(period_bytes, bytes_one_sec);
 				pr_debug("prtd->poll_time : %d\n",
@@ -308,7 +315,7 @@ static void pcm_afe_process_rx_pkt(uint32_t opcode,
 					(prtd->dsp_cnt *
 					snd_pcm_lib_period_bytes(
 						prtd->substream))),
-					mem_map_handle,
+					mem_map_handle, dai->id,
 					snd_pcm_lib_period_bytes(
 						prtd->substream));
 				prtd->dsp_cnt++;
@@ -426,11 +433,9 @@ static int msm_afe_open(struct snd_pcm_substream *substream)
 	int ret = 0;
 
 	prtd = kzalloc(sizeof(struct pcm_afe_info), GFP_KERNEL);
-	if (prtd == NULL) {
-		pr_err("Failed to allocate memory for msm_audio\n");
+	if (prtd == NULL)
 		return -ENOMEM;
-	} else
-		pr_debug("prtd %pK\n", prtd);
+	pr_debug("prtd %pK\n", prtd);
 
 	mutex_init(&prtd->lock);
 	spin_lock_init(&prtd->dsp_lock);
@@ -491,20 +496,20 @@ static int msm_afe_open(struct snd_pcm_substream *substream)
 }
 
 static int msm_afe_playback_copy(struct snd_pcm_substream *substream,
-				int channel, snd_pcm_uframes_t hwoff,
-				void __user *buf, snd_pcm_uframes_t frames)
+				int channel, unsigned long hwoff,
+				void __user *buf, unsigned long fbytes)
 {
 	int ret = 0;
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct pcm_afe_info *prtd = runtime->private_data;
-	char *hwbuf = runtime->dma_area + frames_to_bytes(runtime, hwoff);
+	char *hwbuf = runtime->dma_area + hwoff;
 	u32 mem_map_handle = 0;
 
 	pr_debug("%s : appl_ptr 0x%lx hw_ptr 0x%lx dest_to_copy 0x%pK\n",
 		__func__,
 		runtime->control->appl_ptr, runtime->status->hw_ptr, hwbuf);
 
-	if (copy_from_user(hwbuf, buf, frames_to_bytes(runtime, frames))) {
+	if (copy_from_user(hwbuf, buf, fbytes)) {
 		pr_err("%s :Failed to copy audio from user buffer\n",
 			__func__);
 
@@ -544,13 +549,16 @@ fail:
 }
 
 static int msm_afe_capture_copy(struct snd_pcm_substream *substream,
-				int channel, snd_pcm_uframes_t hwoff,
-				void __user *buf, snd_pcm_uframes_t frames)
+				int channel, unsigned long hwoff,
+				void __user *buf, unsigned long fbytes)
 {
 	int ret = 0;
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct pcm_afe_info *prtd = runtime->private_data;
-	char *hwbuf = runtime->dma_area + frames_to_bytes(runtime, hwoff);
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_dai *dai = rtd->cpu_dai;
+
+	char *hwbuf = runtime->dma_area + hwoff;
 	u32 mem_map_handle = 0;
 
 	if (!prtd->mmap_flag) {
@@ -568,7 +576,7 @@ static int msm_afe_capture_copy(struct snd_pcm_substream *substream,
 		ret = afe_rt_proxy_port_read((prtd->dma_addr +
 				(prtd->dsp_cnt *
 				snd_pcm_lib_period_bytes(prtd->substream))),
-				mem_map_handle,
+				mem_map_handle, dai->id,
 				snd_pcm_lib_period_bytes(prtd->substream));
 
 		if (ret) {
@@ -579,7 +587,8 @@ static int msm_afe_capture_copy(struct snd_pcm_substream *substream,
 
 		prtd->dsp_cnt++;
 		ret = wait_event_timeout(prtd->read_wait,
-				atomic_read(&prtd->rec_bytes_avail), 5 * HZ);
+				atomic_read(&prtd->rec_bytes_avail),
+				msecs_to_jiffies(TIMEOUT_MS));
 		if (ret < 0) {
 			pr_err("%s: wait_event_timeout failed\n", __func__);
 
@@ -592,7 +601,7 @@ static int msm_afe_capture_copy(struct snd_pcm_substream *substream,
 			__func__, runtime->control->appl_ptr,
 			runtime->status->hw_ptr, hwbuf);
 
-	if (copy_to_user(buf, hwbuf, frames_to_bytes(runtime, frames))) {
+	if (copy_to_user(buf, hwbuf, fbytes)) {
 		pr_err("%s: copy to user failed\n", __func__);
 
 		goto fail;
@@ -604,8 +613,8 @@ fail:
 }
 
 static int msm_afe_copy(struct snd_pcm_substream *substream, int channel,
-			snd_pcm_uframes_t hwoff, void __user *buf,
-			snd_pcm_uframes_t frames)
+			unsigned long hwoff, void __user *buf,
+			unsigned long fbytes)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct pcm_afe_info *prtd = runtime->private_data;
@@ -620,10 +629,10 @@ static int msm_afe_copy(struct snd_pcm_substream *substream, int channel,
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
 		ret = msm_afe_playback_copy(substream, channel, hwoff,
-					buf, frames);
+					buf, fbytes);
 	else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
 		ret = msm_afe_capture_copy(substream, channel, hwoff,
-					buf, frames);
+					buf, fbytes);
 	return ret;
 }
 
@@ -841,7 +850,7 @@ static snd_pcm_uframes_t msm_afe_pointer(struct snd_pcm_substream *substream)
 	return bytes_to_frames(runtime, (prtd->pcm_irq_pos));
 }
 
-static struct snd_pcm_ops msm_afe_ops = {
+static const struct snd_pcm_ops msm_afe_ops = {
 	.open           = msm_afe_open,
 	.copy           = msm_afe_copy,
 	.hw_params	= msm_afe_hw_params,
@@ -901,6 +910,7 @@ static struct platform_driver msm_afe_driver = {
 		.name = "msm-pcm-afe",
 		.owner = THIS_MODULE,
 		.of_match_table = msm_pcm_afe_dt_match,
+		.suppress_bind_attrs = true,
 	},
 	.probe = msm_afe_probe,
 	.remove = msm_afe_remove,

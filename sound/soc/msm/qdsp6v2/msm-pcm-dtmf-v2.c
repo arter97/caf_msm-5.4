@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014, 2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -21,10 +21,12 @@
 #include <sound/soc.h>
 #include <sound/pcm.h>
 #include <sound/q6afe-v2.h>
+#include "q6voice.h"
 
 #include "msm-pcm-q6-v2.h"
 #include "msm-pcm-routing-v2.h"
-#include "q6voice.h"
+
+#define DTMF_MAX_DURATION 65535
 
 enum {
 	DTMF_IN_RX,
@@ -100,8 +102,10 @@ static int msm_dtmf_rx_generate_put(struct snd_kcontrol *kcontrol,
 	int64_t duration = ucontrol->value.integer.value[2];
 	uint16_t gain = ucontrol->value.integer.value[3];
 
-	pr_debug("%s: low_freq=%d high_freq=%d duration=%d gain=%d\n",
-		 __func__, low_freq, high_freq, (int)duration, gain);
+	pr_debug("%s: low_freq=%d high_freq=%d duration=%lld gain=%d\n",
+		 __func__, low_freq, high_freq, duration, gain);
+	if (duration == DTMF_MAX_DURATION)
+		duration = -1;
 	afe_dtmf_generate_rx(duration, high_freq, low_freq, gain);
 	return 0;
 }
@@ -154,7 +158,7 @@ static int msm_dtmf_detect_volte_rx_get(struct snd_kcontrol *kcontrol,
 
 static struct snd_kcontrol_new msm_dtmf_controls[] = {
 	SOC_SINGLE_MULTI_EXT("DTMF_Generate Rx Low High Duration Gain",
-			     SND_SOC_NOPM, 0, 5000, 0, 4,
+			     SND_SOC_NOPM, 0, 65535, 0, 4,
 			     msm_dtmf_rx_generate_get,
 			     msm_dtmf_rx_generate_put),
 	SOC_SINGLE_EXT("DTMF_Detect Rx Voice enable", SND_SOC_NOPM, 0, 1, 0,
@@ -217,24 +221,21 @@ static void dtmf_rx_detected_cb(uint8_t *pkt,
 }
 
 static int msm_pcm_capture_copy(struct snd_pcm_substream *substream,
-				int channel, snd_pcm_uframes_t hwoff,
-				void __user *buf, snd_pcm_uframes_t frames)
+				int channel, unsigned long hwoff,
+				void __user *buf, unsigned long fbytes)
 {
 	int ret = 0;
-	int count = 0;
 	struct dtmf_buf_node *buf_node = NULL;
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct dtmf_drv_info *prtd = runtime->private_data;
-	unsigned long dsp_flags;
-
-	count = frames_to_bytes(runtime, frames);
+	unsigned long dsp_flags = 0;
 
 	ret = wait_event_interruptible_timeout(prtd->out_wait,
 				(!list_empty(&prtd->out_queue)),
 				1 * HZ);
 
 	if (ret > 0) {
-		if (count <= DTMF_PKT_SIZE) {
+		if (fbytes <= DTMF_PKT_SIZE) {
 			spin_lock_irqsave(&prtd->dsp_lock, dsp_flags);
 			buf_node = list_first_entry(&prtd->out_queue,
 					struct dtmf_buf_node, list);
@@ -242,9 +243,9 @@ static int msm_pcm_capture_copy(struct snd_pcm_substream *substream,
 			spin_unlock_irqrestore(&prtd->dsp_lock, dsp_flags);
 			ret = copy_to_user(buf,
 					   &buf_node->dtmf_det_pkt,
-					   count);
+					   fbytes);
 			if (ret) {
-				pr_err("%s: Copy to user retuned %d\n",
+				pr_err("%s: Copy to user returned %d\n",
 					__func__, ret);
 				ret = -EFAULT;
 			}
@@ -254,8 +255,8 @@ static int msm_pcm_capture_copy(struct snd_pcm_substream *substream,
 			spin_unlock_irqrestore(&prtd->dsp_lock, dsp_flags);
 
 		} else {
-			pr_err("%s: Read count %d > DTMF_PKT_SIZE\n",
-				__func__, count);
+			pr_err("%s: Read count %lu > DTMF_PKT_SIZE\n",
+				__func__, fbytes);
 			ret = -ENOMEM;
 		}
 	} else if (ret == 0) {
@@ -269,13 +270,14 @@ static int msm_pcm_capture_copy(struct snd_pcm_substream *substream,
 }
 
 static int msm_pcm_copy(struct snd_pcm_substream *substream, int a,
-	 snd_pcm_uframes_t hwoff, void __user *buf, snd_pcm_uframes_t frames)
+	 unsigned long hwoff, void __user *buf, unsigned long fbytes)
 {
 	int ret = 0;
+
 	pr_debug("%s() DTMF\n", __func__);
 
 	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
-		ret = msm_pcm_capture_copy(substream, a, hwoff, buf, frames);
+		ret = msm_pcm_capture_copy(substream, a, hwoff, buf, fbytes);
 
 	return ret;
 }
@@ -290,7 +292,6 @@ static int msm_pcm_open(struct snd_pcm_substream *substream)
 		prtd = kzalloc(sizeof(struct dtmf_drv_info), GFP_KERNEL);
 
 		if (prtd == NULL) {
-			pr_err("Failed to allocate memory for msm_audio\n");
 			ret = -ENOMEM;
 			goto done;
 		}
@@ -327,7 +328,7 @@ static int msm_pcm_close(struct snd_pcm_substream *substream)
 	struct snd_pcm_substream *c_substream;
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct dtmf_drv_info *prtd = runtime->private_data;
-	unsigned long dsp_flags;
+	unsigned long dsp_flags = 0;
 
 	pr_debug("%s() DTMF\n", __func__);
 
@@ -463,7 +464,7 @@ static int msm_pcm_prepare(struct snd_pcm_substream *substream)
 		msm_pcm_capture_prepare(substream);
 
 		if (runtime->format != FORMAT_S16_LE) {
-			pr_err("format:%u doesnt match %d\n",
+			pr_err("format:%u doesn't match %d\n",
 			       (uint32_t)runtime->format, FORMAT_S16_LE);
 			mutex_unlock(&prtd->lock);
 			return -EINVAL;
@@ -522,9 +523,9 @@ static snd_pcm_uframes_t msm_pcm_pointer(struct snd_pcm_substream *substream)
 	return ret;
 }
 
-static struct snd_pcm_ops msm_pcm_ops = {
+static const struct snd_pcm_ops msm_pcm_ops = {
 	.open           = msm_pcm_open,
-	.copy		= msm_pcm_copy,
+	.copy	= msm_pcm_copy,
 	.hw_params	= msm_pcm_hw_params,
 	.close          = msm_pcm_close,
 	.prepare        = msm_pcm_prepare,
@@ -575,6 +576,7 @@ static struct platform_driver msm_pcm_driver = {
 		.name = "msm-pcm-dtmf",
 		.owner = THIS_MODULE,
 		.of_match_table = msm_pcm_dtmf_dt_match,
+		.suppress_bind_attrs = true,
 	},
 	.probe = msm_pcm_probe,
 	.remove = msm_pcm_remove,

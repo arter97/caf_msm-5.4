@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, 2016 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014, 2016, 2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -39,9 +39,10 @@ static struct audio_cal_info	audio_cal;
 static bool callbacks_are_equal(struct audio_cal_callbacks *callback1,
 				struct audio_cal_callbacks *callback2)
 {
-	bool				ret = true;
-	struct audio_cal_callbacks	*call1 = callback1;
-	struct audio_cal_callbacks	*call2 = callback2;
+	bool ret = true;
+	struct audio_cal_callbacks *call1 = callback1;
+	struct audio_cal_callbacks *call2 = callback2;
+
 	pr_debug("%s\n", __func__);
 
 	if ((call1 == NULL) && (call2 == NULL))
@@ -61,10 +62,11 @@ static bool callbacks_are_equal(struct audio_cal_callbacks *callback1,
 int audio_cal_deregister(int num_cal_types,
 			 struct audio_cal_reg *reg_data)
 {
-	int				ret = 0;
-	int				i = 0;
-	struct list_head		*ptr, *next;
-	struct audio_cal_client_info	*client_info_node = NULL;
+	int ret = 0;
+	int i = 0;
+	struct list_head *ptr, *next;
+	struct audio_cal_client_info *client_info_node = NULL;
+
 	pr_debug("%s\n", __func__);
 
 	if (reg_data == NULL) {
@@ -114,10 +116,11 @@ done:
 int audio_cal_register(int num_cal_types,
 			 struct audio_cal_reg *reg_data)
 {
-	int				ret = 0;
-	int				i = 0;
-	struct audio_cal_client_info	*client_info_node = NULL;
-	struct audio_cal_callbacks	*callback_node = NULL;
+	int ret = 0;
+	int i = 0;
+	struct audio_cal_client_info *client_info_node = NULL;
+	struct audio_cal_callbacks *callback_node = NULL;
+
 	pr_debug("%s\n", __func__);
 
 	if (reg_data == NULL) {
@@ -144,8 +147,6 @@ int audio_cal_register(int num_cal_types,
 		client_info_node = kmalloc(sizeof(*client_info_node),
 			GFP_KERNEL);
 		if (client_info_node == NULL) {
-			pr_err("%s: could not allocated client_info_node!\n",
-				__func__);
 			ret = -ENOMEM;
 			goto err;
 		}
@@ -154,8 +155,6 @@ int audio_cal_register(int num_cal_types,
 		callback_node = kmalloc(sizeof(*callback_node),
 			GFP_KERNEL);
 		if (callback_node == NULL) {
-			pr_err("%s: could not allocated callback_node!\n",
-				__func__);
 			ret = -ENOMEM;
 			goto err;
 		}
@@ -179,10 +178,11 @@ err:
 static int call_allocs(int32_t cal_type,
 				size_t cal_type_size, void *data)
 {
-	int				ret = 0;
-	int				ret2 = 0;
-	struct list_head		*ptr, *next;
-	struct audio_cal_client_info	*client_info_node = NULL;
+	int ret = 0;
+	int ret2 = 0;
+	struct list_head *ptr, *next;
+	struct audio_cal_client_info *client_info_node = NULL;
+
 	pr_debug("%s\n", __func__);
 
 	list_for_each_safe(ptr, next,
@@ -207,10 +207,11 @@ static int call_allocs(int32_t cal_type,
 static int call_deallocs(int32_t cal_type,
 				size_t cal_type_size, void *data)
 {
-	int				ret = 0;
-	int				ret2 = 0;
-	struct list_head		*ptr, *next;
-	struct audio_cal_client_info	*client_info_node = NULL;
+	int ret = 0;
+	int ret2 = 0;
+	struct list_head *ptr, *next;
+	struct audio_cal_client_info *client_info_node = NULL;
+
 	pr_debug("%s cal type %d\n", __func__, cal_type);
 
 	list_for_each_safe(ptr, next,
@@ -235,10 +236,11 @@ static int call_deallocs(int32_t cal_type,
 static int call_pre_cals(int32_t cal_type,
 				size_t cal_type_size, void *data)
 {
-	int				ret = 0;
-	int				ret2 = 0;
-	struct list_head		*ptr, *next;
-	struct audio_cal_client_info	*client_info_node = NULL;
+	int ret = 0;
+	int ret2 = 0;
+	struct list_head *ptr, *next;
+	struct audio_cal_client_info *client_info_node = NULL;
+
 	pr_debug("%s cal type %d\n", __func__, cal_type);
 
 	list_for_each_safe(ptr, next,
@@ -263,10 +265,11 @@ static int call_pre_cals(int32_t cal_type,
 static int call_post_cals(int32_t cal_type,
 				size_t cal_type_size, void *data)
 {
-	int				ret = 0;
-	int				ret2 = 0;
-	struct list_head		*ptr, *next;
-	struct audio_cal_client_info	*client_info_node = NULL;
+	int ret = 0;
+	int ret2 = 0;
+	struct list_head *ptr, *next;
+	struct audio_cal_client_info *client_info_node = NULL;
+
 	pr_debug("%s cal type %d\n", __func__, cal_type);
 
 	list_for_each_safe(ptr, next,
@@ -291,11 +294,12 @@ static int call_post_cals(int32_t cal_type,
 static int call_set_cals(int32_t cal_type,
 				size_t cal_type_size, void *data)
 {
-	int				ret = 0;
-	int				ret2 = 0;
-	struct list_head		*ptr, *next;
-	struct audio_cal_client_info	*client_info_node = NULL;
-	pr_debug("%s cal type %d\n", __func__, cal_type);
+	int ret = 0;
+	int ret2 = 0;
+	struct list_head *ptr, *next;
+	struct audio_cal_client_info *client_info_node = NULL;
+
+	pr_err("%s cal type %d\n", __func__, cal_type);
 
 	list_for_each_safe(ptr, next,
 			&audio_cal.client_info[cal_type]) {
@@ -310,6 +314,7 @@ static int call_set_cals(int32_t cal_type,
 			set_cal(cal_type, cal_type_size, data);
 		if (ret2 < 0) {
 			pr_err("%s: set_cal failed!\n", __func__);
+			pr_err("%d: set_cal failed!\n", cal_type);
 			ret = ret2;
 		}
 	}
@@ -319,10 +324,11 @@ static int call_set_cals(int32_t cal_type,
 static int call_get_cals(int32_t cal_type,
 				size_t cal_type_size, void *data)
 {
-	int				ret = 0;
-	int				ret2 = 0;
-	struct list_head		*ptr, *next;
-	struct audio_cal_client_info	*client_info_node = NULL;
+	int ret = 0;
+	int ret2 = 0;
+	struct list_head *ptr, *next;
+	struct audio_cal_client_info *client_info_node = NULL;
+
 	pr_debug("%s cal type %d\n", __func__, cal_type);
 
 	list_for_each_safe(ptr, next,
@@ -347,6 +353,7 @@ static int call_get_cals(int32_t cal_type,
 static int audio_cal_open(struct inode *inode, struct file *f)
 {
 	int ret = 0;
+
 	pr_debug("%s\n", __func__);
 
 	mutex_lock(&audio_cal.common_lock);
@@ -358,8 +365,9 @@ static int audio_cal_open(struct inode *inode, struct file *f)
 
 static void dealloc_all_clients(void)
 {
-	int				i = 0;
-	struct audio_cal_type_dealloc	dealloc_data;
+	int i = 0;
+	struct audio_cal_type_dealloc dealloc_data;
+
 	pr_debug("%s\n", __func__);
 
 	dealloc_data.cal_hdr.version = VERSION_0_0;
@@ -373,6 +381,7 @@ static void dealloc_all_clients(void)
 static int audio_cal_release(struct inode *inode, struct file *f)
 {
 	int ret = 0;
+
 	pr_debug("%s\n", __func__);
 
 	mutex_lock(&audio_cal.common_lock);
@@ -389,9 +398,10 @@ static int audio_cal_release(struct inode *inode, struct file *f)
 static long audio_cal_shared_ioctl(struct file *file, unsigned int cmd,
 							void __user *arg)
 {
-	int				ret = 0;
-	int32_t				size;
-	struct audio_cal_basic		*data = NULL;
+	int ret = 0;
+	int32_t size;
+	struct audio_cal_basic *data = NULL;
+
 	pr_debug("%s\n", __func__);
 
 	switch (cmd) {
@@ -423,8 +433,6 @@ static long audio_cal_shared_ioctl(struct file *file, unsigned int cmd,
 
 	data = kmalloc(size, GFP_KERNEL);
 	if (data == NULL) {
-		pr_err("%s: Could not allocate memory of size %d for ioctl\n",
-			__func__, size);
 		ret = -ENOMEM;
 		goto done;
 	} else if (copy_from_user(data, (void *)arg, size)) {
@@ -589,8 +597,10 @@ struct miscdevice audio_cal_misc = {
 static int __init audio_cal_init(void)
 {
 	int i = 0;
+
 	pr_debug("%s\n", __func__);
 
+	cal_utils_init();
 	memset(&audio_cal, 0, sizeof(audio_cal));
 	mutex_init(&audio_cal.common_lock);
 	for (; i < MAX_CAL_TYPES; i++) {
@@ -603,9 +613,9 @@ static int __init audio_cal_init(void)
 
 static void __exit audio_cal_exit(void)
 {
-	int				i = 0;
-	struct list_head		*ptr, *next;
-	struct audio_cal_client_info	*client_info_node;
+	int i = 0;
+	struct list_head *ptr, *next;
+	struct audio_cal_client_info *client_info_node;
 
 	for (; i < MAX_CAL_TYPES; i++) {
 		list_for_each_safe(ptr, next,
@@ -619,6 +629,7 @@ static void __exit audio_cal_exit(void)
 			client_info_node = NULL;
 		}
 	}
+	misc_deregister(&audio_cal_misc);
 }
 
 subsys_initcall(audio_cal_init);

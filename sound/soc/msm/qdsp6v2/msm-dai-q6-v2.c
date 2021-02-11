@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2018, 2021 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -27,15 +27,55 @@
 #include <sound/q6afe-v2.h>
 #include <sound/msm-dai-q6-v2.h>
 #include <sound/pcm_params.h>
+#include <sound/q6core.h>
 
 #define MSM_DAI_PRI_AUXPCM_DT_DEV_ID 1
 #define MSM_DAI_SEC_AUXPCM_DT_DEV_ID 2
+#define MSM_DAI_TERT_AUXPCM_DT_DEV_ID 3
+#define MSM_DAI_QUAT_AUXPCM_DT_DEV_ID 4
+#define MSM_DAI_QUIN_AUXPCM_DT_DEV_ID 5
+
+#define MSM_DAI_TWS_CHANNEL_MODE_ONE 1
+#define MSM_DAI_TWS_CHANNEL_MODE_TWO 2
 
 #define spdif_clock_value(rate) (2*rate*32*2)
 #define CHANNEL_STATUS_SIZE 24
 #define CHANNEL_STATUS_MASK_INIT 0x0
 #define CHANNEL_STATUS_MASK 0x4
+#define PREEMPH_MASK 0x38
+#define PREEMPH_SHIFT 3
+#define GET_PREEMPH(b) ((b & PREEMPH_MASK) >> PREEMPH_SHIFT)
 #define AFE_API_VERSION_CLOCK_SET 1
+#define MSM_DAI_SYSFS_ENTRY_MAX_LEN 64
+
+#define DAI_FORMATS_S16_S24_S32_LE (SNDRV_PCM_FMTBIT_S16_LE | \
+				    SNDRV_PCM_FMTBIT_S24_LE | \
+				    SNDRV_PCM_FMTBIT_S32_LE)
+
+static int msm_mi2s_get_port_id(u32 mi2s_id, int stream, u16 *port_id);
+
+enum {
+	ENC_FMT_NONE,
+	DEC_FMT_NONE = ENC_FMT_NONE,
+	ENC_FMT_SBC = ASM_MEDIA_FMT_SBC,
+	DEC_FMT_SBC = ASM_MEDIA_FMT_SBC,
+	ENC_FMT_AAC_V2 = ASM_MEDIA_FMT_AAC_V2,
+	DEC_FMT_AAC_V2 = ASM_MEDIA_FMT_AAC_V2,
+	ENC_FMT_APTX = ASM_MEDIA_FMT_APTX,
+	DEC_FMT_APTX = ASM_MEDIA_FMT_APTX,
+	ENC_FMT_APTX_HD = ASM_MEDIA_FMT_APTX_HD,
+	DEC_FMT_APTX_HD = ASM_MEDIA_FMT_APTX_HD,
+	ENC_FMT_CELT = ASM_MEDIA_FMT_CELT,
+	ENC_FMT_LDAC = ASM_MEDIA_FMT_LDAC,
+	ENC_FMT_APTX_ADAPTIVE = ASM_MEDIA_FMT_APTX_ADAPTIVE,
+	DEC_FMT_APTX_ADAPTIVE = ASM_MEDIA_FMT_APTX_ADAPTIVE,
+	DEC_FMT_MP3 = ASM_MEDIA_FMT_MP3,
+};
+
+enum {
+	SPKR_1,
+	SPKR_2,
+};
 
 static const struct afe_clk_set lpass_clk_set_default = {
 	AFE_API_VERSION_CLOCK_SET,
@@ -158,6 +198,7 @@ struct msm_dai_q6_dai_data {
 	u32 bitwidth;
 	u32 cal_mode;
 	union afe_port_config port_config;
+	u16 vi_feed_mono;
 };
 
 struct msm_dai_q6_spdif_dai_data {
@@ -165,7 +206,15 @@ struct msm_dai_q6_spdif_dai_data {
 	u32 rate;
 	u32 channels;
 	u32 bitwidth;
+	u16 port_id;
 	struct afe_spdif_port_config spdif_port;
+	struct afe_event_fmt_update fmt_event;
+	struct kobject *kobj;
+};
+
+struct msm_dai_q6_spdif_event_msg {
+	struct afe_port_mod_evt_rsp_hdr  evt_hdr;
+	struct afe_event_fmt_update      fmt_event;
 };
 
 struct msm_dai_q6_mi2s_dai_config {
@@ -174,8 +223,30 @@ struct msm_dai_q6_mi2s_dai_config {
 };
 
 struct msm_dai_q6_mi2s_dai_data {
+	u32 is_island_dai;
 	struct msm_dai_q6_mi2s_dai_config tx_dai;
 	struct msm_dai_q6_mi2s_dai_config rx_dai;
+};
+
+struct msm_dai_q6_meta_mi2s_dai_data {
+	DECLARE_BITMAP(status_mask, STATUS_MAX);
+	u16 num_member_ports;
+	u16 member_port_id[MAX_NUM_I2S_META_PORT_MEMBER_PORTS];
+	u16 channel_mode[MAX_NUM_I2S_META_PORT_MEMBER_PORTS];
+	u32 rate;
+	u32 channels;
+	u32 bitwidth;
+	union afe_port_config port_config;
+};
+
+struct msm_dai_q6_cdc_dma_dai_data {
+	DECLARE_BITMAP(status_mask, STATUS_MAX);
+	DECLARE_BITMAP(hwfree_status, STATUS_MAX);
+	u32 rate;
+	u32 channels;
+	u32 bitwidth;
+	u32 is_island_dai;
+	union afe_port_config port_config;
 };
 
 struct msm_dai_q6_auxpcm_dai_data {
@@ -185,13 +256,11 @@ struct msm_dai_q6_auxpcm_dai_data {
 	u16 rx_pid; /* AUXPCM RX AFE port ID */
 	u16 tx_pid; /* AUXPCM TX AFE port ID */
 	u16 afe_clk_ver;
+	u32 is_island_dai;
 	struct afe_clk_cfg clk_cfg; /* hold LPASS clock configuration */
 	struct afe_clk_set clk_set; /* hold LPASS clock configuration */
 	struct msm_dai_q6_dai_data bdai_data; /* incoporate base DAI data */
 };
-
-static union afe_port_group_config group_cfg_tx;
-static union afe_port_group_config group_cfg_rx;
 
 struct msm_dai_q6_tdm_dai_data {
 	DECLARE_BITMAP(status_mask, STATUS_MAX);
@@ -199,45 +268,67 @@ struct msm_dai_q6_tdm_dai_data {
 	u32 channels;
 	u32 bitwidth;
 	u32 num_group_ports;
-	bool afe_ebit_unsupported;
-	bool sec_port_enable;
+	u32 is_island_dai;
 	struct afe_clk_set clk_set; /* hold LPASS clock config. */
 	union afe_port_group_config group_cfg; /* hold tdm group config */
 	struct afe_tdm_port_config port_cfg; /* hold tdm config */
+	struct afe_param_id_tdm_lane_cfg lane_cfg; /* hold tdm lane config */
 };
-
-static bool afe_ebit_unsupported;
-static bool tdm_sec_port_enable;
 
 /* MI2S format field for AFE_PORT_CMD_I2S_CONFIG command
  *  0: linear PCM
  *  1: non-linear PCM
  *  2: PCM data in IEC 60968 container
  *  3: compressed data in IEC 60958 container
+ *  9: DSD over PCM (DoP) with marker byte
  */
 static const char *const mi2s_format[] = {
 	"LPCM",
 	"Compr",
 	"LPCM-60958",
-	"Compr-60958"
+	"Compr-60958",
+	"NA4",
+	"NA5",
+	"NA6",
+	"NA7",
+	"NA8",
+	"DSD_DOP_W_MARKER",
+	"NATIVE_DSD_DATA"
+};
+
+static const char *const mi2s_vi_feed_mono[] = {
+	"Left",
+	"Right",
 };
 
 static const struct soc_enum mi2s_config_enum[] = {
-	SOC_ENUM_SINGLE_EXT(4, mi2s_format),
+	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(mi2s_format), mi2s_format),
+	SOC_ENUM_SINGLE_EXT(2, mi2s_vi_feed_mono),
+};
+
+static const char *const cdc_dma_format[] = {
+	"UNPACKED",
+	"PACKED_16B",
+};
+
+static const struct soc_enum cdc_dma_config_enum[] = {
+	SOC_ENUM_SINGLE_EXT(2, cdc_dma_format),
 };
 
 static const char *const sb_format[] = {
 	"UNPACKED",
 	"PACKED_16B",
+	"DSD_DOP",
 };
 
 static const struct soc_enum sb_config_enum[] = {
-	SOC_ENUM_SINGLE_EXT(2, sb_format),
+	SOC_ENUM_SINGLE_EXT(3, sb_format),
 };
 
 static const char *const tdm_data_format[] = {
 	"LPCM",
 	"Compr",
+	"Gen Compr"
 };
 
 static const char *const tdm_header_type[] = {
@@ -254,6 +345,11 @@ static const struct soc_enum tdm_config_enum[] = {
 static DEFINE_MUTEX(tdm_mutex);
 
 static atomic_t tdm_group_ref[IDX_GROUP_TDM_MAX];
+
+static struct afe_param_id_tdm_lane_cfg tdm_lane_cfg = {
+	AFE_GROUP_DEVICE_ID_QUINARY_TDM_RX,
+	0x0,
+};
 
 /* cache of group cfg per parent node */
 static struct afe_param_id_group_device_tdm_cfg tdm_group_cfg = {
@@ -276,7 +372,7 @@ static struct afe_param_id_group_device_tdm_cfg tdm_group_cfg = {
 	0xFF,
 };
 
-static u32 num_tdm_group_ports[IDX_GROUP_TDM_MAX];
+static u32 num_tdm_group_ports;
 
 static struct afe_clk_set tdm_clk_set = {
 	AFE_API_VERSION_CLOCK_SET,
@@ -286,6 +382,29 @@ static struct afe_clk_set tdm_clk_set = {
 	Q6AFE_LPASS_CLK_ROOT_DEFAULT,
 	0,
 };
+
+static int msm_dai_q6_get_tdm_clk_ref(u16 id)
+{
+	switch (id) {
+	case IDX_GROUP_PRIMARY_TDM_RX:
+	case IDX_GROUP_PRIMARY_TDM_TX:
+		return atomic_read(&tdm_group_ref[IDX_GROUP_PRIMARY_TDM_RX]) +
+			atomic_read(&tdm_group_ref[IDX_GROUP_PRIMARY_TDM_TX]);
+	case IDX_GROUP_SECONDARY_TDM_RX:
+	case IDX_GROUP_SECONDARY_TDM_TX:
+		return atomic_read(&tdm_group_ref[IDX_GROUP_SECONDARY_TDM_RX]) +
+			atomic_read(&tdm_group_ref[IDX_GROUP_SECONDARY_TDM_TX]);
+	case IDX_GROUP_TERTIARY_TDM_RX:
+	case IDX_GROUP_TERTIARY_TDM_TX:
+		return atomic_read(&tdm_group_ref[IDX_GROUP_TERTIARY_TDM_RX]) +
+			atomic_read(&tdm_group_ref[IDX_GROUP_TERTIARY_TDM_TX]);
+	case IDX_GROUP_QUATERNARY_TDM_RX:
+	case IDX_GROUP_QUATERNARY_TDM_TX:
+		return atomic_read(&tdm_group_ref[IDX_GROUP_QUATERNARY_TDM_RX]) +
+			atomic_read(&tdm_group_ref[IDX_GROUP_QUATERNARY_TDM_TX]);
+	default: return -EINVAL;
+	}
+}
 
 int msm_dai_q6_get_group_idx(u16 id)
 {
@@ -548,7 +667,7 @@ static int msm_dai_q6_dai_add_route(struct snd_soc_dai *dai)
 		return -EINVAL;
 	}
 	dapm = snd_soc_component_get_dapm(dai->component);
-	memset(&intercon, 0 , sizeof(intercon));
+	memset(&intercon, 0, sizeof(intercon));
 	if (dai->driver->playback.stream_name &&
 		dai->driver->playback.aif_name) {
 		dev_dbg(dai->dev, "%s: add route for widget %s",
@@ -764,18 +883,17 @@ static void msm_dai_q6_auxpcm_shutdown(struct snd_pcm_substream *substream,
 			__func__, dai->id);
 
 	rc = afe_close(aux_dai_data->rx_pid); /* can block */
-	if (IS_ERR_VALUE(rc))
+	if (rc < 0)
 		dev_err(dai->dev, "fail to close PCM_RX  AFE port\n");
 
 	rc = afe_close(aux_dai_data->tx_pid);
-	if (IS_ERR_VALUE(rc))
+	if (rc < 0)
 		dev_err(dai->dev, "fail to close AUX PCM TX port\n");
 
 	msm_dai_q6_auxpcm_set_clk(aux_dai_data, aux_dai_data->rx_pid, false);
 	msm_dai_q6_auxpcm_set_clk(aux_dai_data, aux_dai_data->tx_pid, false);
 exit:
 	mutex_unlock(&aux_dai_data->rlock);
-	return;
 }
 
 static int msm_dai_q6_auxpcm_prepare(struct snd_pcm_substream *substream,
@@ -820,7 +938,7 @@ static int msm_dai_q6_auxpcm_prepare(struct snd_pcm_substream *substream,
 			__func__, dai->id);
 
 	rc = afe_q6_interface_prepare();
-	if (IS_ERR_VALUE(rc)) {
+	if (rc < 0) {
 		dev_err(dai->dev, "fail to open AFE APR\n");
 		goto fail;
 	}
@@ -956,10 +1074,10 @@ static int msm_dai_q6_dai_auxpcm_remove(struct snd_soc_dai *dai)
 	if (test_bit(STATUS_TX_PORT, aux_dai_data->auxpcm_port_status) ||
 	    test_bit(STATUS_RX_PORT, aux_dai_data->auxpcm_port_status)) {
 		rc = afe_close(aux_dai_data->rx_pid); /* can block */
-		if (IS_ERR_VALUE(rc))
+		if (rc < 0)
 			dev_err(dai->dev, "fail to close AUXPCM RX AFE port\n");
 		rc = afe_close(aux_dai_data->tx_pid);
-		if (IS_ERR_VALUE(rc))
+		if (rc < 0)
 			dev_err(dai->dev, "fail to close AUXPCM TX AFE port\n");
 		clear_bit(STATUS_TX_PORT, aux_dai_data->auxpcm_port_status);
 		clear_bit(STATUS_RX_PORT, aux_dai_data->auxpcm_port_status);
@@ -969,9 +1087,112 @@ static int msm_dai_q6_dai_auxpcm_remove(struct snd_soc_dai *dai)
 	return 0;
 }
 
+static int msm_dai_q6_island_mode_put(struct snd_kcontrol *kcontrol,
+				      struct snd_ctl_elem_value *ucontrol)
+{
+	int value = ucontrol->value.integer.value[0];
+	u16 port_id = (u16)kcontrol->private_value;
+
+	pr_debug("%s: island mode = %d\n", __func__, value);
+
+	afe_set_island_mode_cfg(port_id, value);
+	return 0;
+}
+
+static int msm_dai_q6_island_mode_get(struct snd_kcontrol *kcontrol,
+				      struct snd_ctl_elem_value *ucontrol)
+{
+	int value;
+	u16 port_id = (u16)kcontrol->private_value;
+
+	afe_get_island_mode_cfg(port_id, &value);
+	ucontrol->value.integer.value[0] = value;
+	return 0;
+}
+
+static void island_mx_ctl_private_free(struct snd_kcontrol *kcontrol)
+{
+	struct snd_kcontrol_new *knew = snd_kcontrol_chip(kcontrol);
+
+	kfree(knew);
+}
+
+static int msm_dai_q6_add_island_mx_ctls(struct snd_card *card,
+				      const char *dai_name,
+				      int dai_id, void *dai_data)
+{
+	const char *mx_ctl_name = "TX island";
+	char *mixer_str = NULL;
+	int dai_str_len = 0, ctl_len = 0;
+	int rc = 0;
+	struct snd_kcontrol_new *knew = NULL;
+	struct snd_kcontrol *kctl = NULL;
+
+	dai_str_len = strlen(dai_name) + 1;
+
+	/* Add island related mixer controls */
+	ctl_len = dai_str_len + strlen(mx_ctl_name) + 1;
+	mixer_str = kzalloc(ctl_len, GFP_KERNEL);
+	if (!mixer_str)
+		return -ENOMEM;
+
+	snprintf(mixer_str, ctl_len, "%s %s", dai_name, mx_ctl_name);
+
+	knew = kzalloc(sizeof(struct snd_kcontrol_new), GFP_KERNEL);
+	if (!knew) {
+		kfree(mixer_str);
+		return -ENOMEM;
+	}
+	knew->iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	knew->info = snd_ctl_boolean_mono_info;
+	knew->get = msm_dai_q6_island_mode_get;
+	knew->put = msm_dai_q6_island_mode_put;
+	knew->name = mixer_str;
+	knew->private_value = dai_id;
+	kctl = snd_ctl_new1(knew, knew);
+	if (!kctl) {
+		kfree(knew);
+		kfree(mixer_str);
+		return -ENOMEM;
+	}
+	kctl->private_free = island_mx_ctl_private_free;
+	rc = snd_ctl_add(card, kctl);
+	if (rc < 0)
+		pr_err("%s: err add config ctl, DAI = %s\n",
+			__func__, dai_name);
+	kfree(mixer_str);
+
+	return rc;
+}
+
+/*
+ * For single CPU DAI registration, the dai id needs to be
+ * set explicitly in the dai probe as ASoC does not read
+ * the cpu->driver->id field rather it assigns the dai id
+ * from the device name that is in the form %s.%d. This dai
+ * id should be assigned to back-end AFE port id and used
+ * during dai prepare. For multiple dai registration, it
+ * is not required to call this function, however the dai->
+ * driver->id field must be defined and set to corresponding
+ * AFE Port id.
+ */
+static inline void msm_dai_q6_set_dai_id(struct snd_soc_dai *dai)
+{
+	if (!dai->driver) {
+		dev_err(dai->dev, "DAI driver is not set\n");
+		return;
+	}
+	if (!dai->driver->id) {
+		dev_dbg(dai->dev, "DAI driver id is not set\n");
+		return;
+	}
+	dai->id = dai->driver->id;
+}
+
 static int msm_dai_q6_aux_pcm_probe(struct snd_soc_dai *dai)
 {
 	int rc = 0;
+	struct msm_dai_q6_auxpcm_dai_data *dai_data = NULL;
 
 	if (!dai) {
 		pr_err("%s: Invalid params dai\n", __func__);
@@ -981,11 +1202,16 @@ static int msm_dai_q6_aux_pcm_probe(struct snd_soc_dai *dai)
 		pr_err("%s: Invalid params dai dev\n", __func__);
 		return -EINVAL;
 	}
-	if (!dai->driver->id) {
-		dev_warn(dai->dev, "DAI driver id is not set\n");
-		return -EINVAL;
-	}
-	dai->id = dai->driver->id;
+
+	msm_dai_q6_set_dai_id(dai);
+	dai_data = dev_get_drvdata(dai->dev);
+
+	if (dai_data->is_island_dai)
+		rc = msm_dai_q6_add_island_mx_ctls(
+						dai->component->card->snd_card,
+						dai->name, dai_data->tx_pid,
+						(void *)dai_data);
+
 	rc = msm_dai_q6_dai_add_route(dai);
 	return rc;
 }
@@ -1025,6 +1251,7 @@ static struct snd_soc_dai_driver msm_dai_q6_aux_pcm_dai[] = {
 			.rate_min = 8000,
 		},
 		.id = MSM_DAI_PRI_AUXPCM_DT_DEV_ID,
+		.name = "Pri AUX PCM",
 		.ops = &msm_dai_q6_auxpcm_ops,
 		.probe = msm_dai_q6_aux_pcm_probe,
 		.remove = msm_dai_q6_dai_auxpcm_remove,
@@ -1051,10 +1278,11 @@ static struct snd_soc_dai_driver msm_dai_q6_aux_pcm_dai[] = {
 			.rate_min = 8000,
 		},
 		.id = MSM_DAI_SEC_AUXPCM_DT_DEV_ID,
+		.name = "Sec AUX PCM",
 		.ops = &msm_dai_q6_auxpcm_ops,
 		.probe = msm_dai_q6_aux_pcm_probe,
 		.remove = msm_dai_q6_dai_auxpcm_remove,
-	}
+	},
 };
 
 static int msm_dai_q6_spdif_format_put(struct snd_kcontrol *kcontrol,
@@ -1063,6 +1291,7 @@ static int msm_dai_q6_spdif_format_put(struct snd_kcontrol *kcontrol,
 
 	struct msm_dai_q6_spdif_dai_data *dai_data = kcontrol->private_data;
 	int value = ucontrol->value.integer.value[0];
+
 	dai_data->spdif_port.cfg.data_format = value;
 	pr_debug("%s: value = %d\n", __func__, value);
 	return 0;
@@ -1073,8 +1302,32 @@ static int msm_dai_q6_spdif_format_get(struct snd_kcontrol *kcontrol,
 {
 
 	struct msm_dai_q6_spdif_dai_data *dai_data = kcontrol->private_data;
+
 	ucontrol->value.integer.value[0] =
 		dai_data->spdif_port.cfg.data_format;
+	return 0;
+}
+
+static int msm_dai_q6_spdif_source_put(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+
+	struct msm_dai_q6_spdif_dai_data *dai_data = kcontrol->private_data;
+	int value = ucontrol->value.integer.value[0];
+
+	dai_data->spdif_port.cfg.src_sel = value;
+	pr_debug("%s: value = %d\n", __func__, value);
+	return 0;
+}
+
+static int msm_dai_q6_spdif_source_get(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+
+	struct msm_dai_q6_spdif_dai_data *dai_data = kcontrol->private_data;
+
+	ucontrol->value.integer.value[0] =
+		dai_data->spdif_port.cfg.src_sel;
 	return 0;
 }
 
@@ -1083,8 +1336,17 @@ static const char * const spdif_format[] = {
 	"Compr"
 };
 
-static const struct soc_enum spdif_config_enum[] = {
-	SOC_ENUM_SINGLE_EXT(2, spdif_format),
+static const char * const spdif_source[] = {
+	"Optical", "EXT-ARC", "Coaxial", "VT-ARC"
+};
+
+static const struct soc_enum spdif_rx_config_enum[] = {
+	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(spdif_format), spdif_format),
+};
+
+static const struct soc_enum spdif_tx_config_enum[] = {
+	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(spdif_source), spdif_source),
+	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(spdif_format), spdif_format),
 };
 
 static int msm_dai_q6_spdif_chstatus_put(struct snd_kcontrol *kcontrol,
@@ -1108,7 +1370,7 @@ static int msm_dai_q6_spdif_chstatus_put(struct snd_kcontrol *kcontrol,
 				__func__);
 		ret = afe_send_spdif_ch_status_cfg(
 				&dai_data->spdif_port.ch_status,
-				AFE_PORT_ID_SPDIF_RX);
+				dai_data->port_id);
 	}
 	return ret;
 }
@@ -1118,6 +1380,7 @@ static int msm_dai_q6_spdif_chstatus_get(struct snd_kcontrol *kcontrol,
 {
 
 	struct msm_dai_q6_spdif_dai_data *dai_data = kcontrol->private_data;
+
 	memcpy(ucontrol->value.iec958.status,
 			dai_data->spdif_port.ch_status.status_bits,
 			CHANNEL_STATUS_SIZE);
@@ -1132,7 +1395,8 @@ static int msm_dai_q6_spdif_chstatus_info(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-static const struct snd_kcontrol_new spdif_config_controls[] = {
+static const struct snd_kcontrol_new spdif_rx_config_controls[] = {
+	/* Primary SPDIF output */
 	{
 		.access = (SNDRV_CTL_ELEM_ACCESS_READWRITE |
 				SNDRV_CTL_ELEM_ACCESS_INACTIVE),
@@ -1142,11 +1406,80 @@ static const struct snd_kcontrol_new spdif_config_controls[] = {
 		.get    =   msm_dai_q6_spdif_chstatus_get,
 		.put    =   msm_dai_q6_spdif_chstatus_put,
 	},
-	SOC_ENUM_EXT("SPDIF RX Format", spdif_config_enum[0],
+	SOC_ENUM_EXT("PRI SPDIF RX Format", spdif_rx_config_enum[0],
+			msm_dai_q6_spdif_format_get,
+			msm_dai_q6_spdif_format_put),
+	/* Secondary SPDIF output */
+	{
+		.access = (SNDRV_CTL_ELEM_ACCESS_READWRITE |
+				SNDRV_CTL_ELEM_ACCESS_INACTIVE),
+		.iface  =   SNDRV_CTL_ELEM_IFACE_PCM,
+		.name   =   SNDRV_CTL_NAME_IEC958("SEC", PLAYBACK, PCM_STREAM),
+		.info   =   msm_dai_q6_spdif_chstatus_info,
+		.get    =   msm_dai_q6_spdif_chstatus_get,
+		.put    =   msm_dai_q6_spdif_chstatus_put,
+	},
+	SOC_ENUM_EXT("SEC SPDIF RX Format", spdif_rx_config_enum[0],
 			msm_dai_q6_spdif_format_get,
 			msm_dai_q6_spdif_format_put)
 };
 
+static const struct snd_kcontrol_new spdif_tx_config_controls[] = {
+	SOC_ENUM_EXT("PRI SPDIF TX Source", spdif_tx_config_enum[0],
+			msm_dai_q6_spdif_source_get,
+			msm_dai_q6_spdif_source_put),
+	SOC_ENUM_EXT("PRI SPDIF TX Format", spdif_tx_config_enum[1],
+			msm_dai_q6_spdif_format_get,
+			msm_dai_q6_spdif_format_put),
+	SOC_ENUM_EXT("SEC SPDIF TX Source", spdif_tx_config_enum[0],
+			msm_dai_q6_spdif_source_get,
+			msm_dai_q6_spdif_source_put),
+	SOC_ENUM_EXT("SEC SPDIF TX Format", spdif_tx_config_enum[1],
+			msm_dai_q6_spdif_format_get,
+			msm_dai_q6_spdif_format_put)
+};
+
+static void msm_dai_q6_spdif_process_event(uint32_t opcode, uint32_t token,
+		uint32_t *payload, void *private_data)
+{
+	struct msm_dai_q6_spdif_event_msg *evt;
+	struct msm_dai_q6_spdif_dai_data *dai_data;
+	int preemph_old = 0;
+	int preemph_new = 0;
+
+	evt = (struct msm_dai_q6_spdif_event_msg *)payload;
+	dai_data = (struct msm_dai_q6_spdif_dai_data *)private_data;
+
+	preemph_old = GET_PREEMPH(dai_data->fmt_event.channel_status[0]);
+	preemph_new = GET_PREEMPH(evt->fmt_event.channel_status[0]);
+
+	pr_debug("%s: old state %d, fmt %d, rate %d, preemph %d\n",
+			__func__, dai_data->fmt_event.status,
+			dai_data->fmt_event.data_format,
+			dai_data->fmt_event.sample_rate,
+			preemph_old);
+	pr_debug("%s: new state %d, fmt %d, rate %d, preemph %d\n",
+			__func__, evt->fmt_event.status,
+			evt->fmt_event.data_format,
+			evt->fmt_event.sample_rate,
+			preemph_new);
+
+	dai_data->fmt_event.status = evt->fmt_event.status;
+	dai_data->fmt_event.data_format = evt->fmt_event.data_format;
+	dai_data->fmt_event.sample_rate = evt->fmt_event.sample_rate;
+	dai_data->fmt_event.channel_status[0] =
+		evt->fmt_event.channel_status[0];
+	dai_data->fmt_event.channel_status[1] =
+		evt->fmt_event.channel_status[1];
+	dai_data->fmt_event.channel_status[2] =
+		evt->fmt_event.channel_status[2];
+	dai_data->fmt_event.channel_status[3] =
+		evt->fmt_event.channel_status[3];
+	dai_data->fmt_event.channel_status[4] =
+		evt->fmt_event.channel_status[4];
+	dai_data->fmt_event.channel_status[5] =
+		evt->fmt_event.channel_status[5];
+}
 
 static int msm_dai_q6_spdif_hw_params(struct snd_pcm_substream *substream,
 		struct snd_pcm_hw_params *params,
@@ -1154,7 +1487,6 @@ static int msm_dai_q6_spdif_hw_params(struct snd_pcm_substream *substream,
 {
 	struct msm_dai_q6_spdif_dai_data *dai_data = dev_get_drvdata(dai->dev);
 
-	dai->id = AFE_PORT_ID_SPDIF_RX;
 	dai_data->channels = params_channels(params);
 	dai_data->spdif_port.cfg.num_channels = dai_data->channels;
 	switch (params_format(params)) {
@@ -1175,7 +1507,7 @@ static int msm_dai_q6_spdif_hw_params(struct snd_pcm_substream *substream,
 	dai_data->bitwidth = dai_data->spdif_port.cfg.bit_width;
 	dai_data->spdif_port.cfg.sample_rate = dai_data->rate;
 	dai_data->spdif_port.cfg.spdif_cfg_minor_version =
-		AFE_API_VERSION_SPDIF_CONFIG;
+		AFE_API_VERSION_SPDIF_CONFIG_V2;
 	dev_dbg(dai->dev, " channel %d sample rate %d bit width %d\n",
 			dai_data->channels, dai_data->rate,
 			dai_data->spdif_port.cfg.bit_width);
@@ -1196,9 +1528,10 @@ static void msm_dai_q6_spdif_shutdown(struct snd_pcm_substream *substream,
 	}
 
 	rc = afe_close(dai->id);
-
-	if (IS_ERR_VALUE(rc))
+	if (rc < 0)
 		dev_err(dai->dev, "fail to close AFE port\n");
+
+	dai_data->fmt_event.status = 0; /* report invalid line state */
 
 	pr_debug("%s: dai_data->status_mask = %ld\n", __func__,
 			*dai_data->status_mask);
@@ -1206,21 +1539,25 @@ static void msm_dai_q6_spdif_shutdown(struct snd_pcm_substream *substream,
 	clear_bit(STATUS_PORT_STARTED, dai_data->status_mask);
 }
 
-
 static int msm_dai_q6_spdif_prepare(struct snd_pcm_substream *substream,
 		struct snd_soc_dai *dai)
 {
 	struct msm_dai_q6_spdif_dai_data *dai_data = dev_get_drvdata(dai->dev);
 	int rc = 0;
 
-	if (IS_ERR_VALUE(rc)) {
-		dev_err(dai->dev, "%s: clk_config failed", __func__);
-		return rc;
-	}
 	if (!test_bit(STATUS_PORT_STARTED, dai_data->status_mask)) {
+		rc = afe_spdif_reg_event_cfg(dai->id,
+				AFE_MODULE_REGISTER_EVENT_FLAG,
+				msm_dai_q6_spdif_process_event,
+				dai_data);
+		if (rc < 0)
+			dev_err(dai->dev,
+				"fail to register event for port 0x%x\n",
+				dai->id);
+
 		rc = afe_spdif_port_start(dai->id, &dai_data->spdif_port,
 				dai_data->rate);
-		if (IS_ERR_VALUE(rc))
+		if (rc < 0)
 			dev_err(dai->dev, "fail to open AFE port 0x%x\n",
 					dai->id);
 		else
@@ -1231,10 +1568,128 @@ static int msm_dai_q6_spdif_prepare(struct snd_pcm_substream *substream,
 	return rc;
 }
 
+static ssize_t msm_dai_q6_spdif_sysfs_rda_audio_state(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	ssize_t ret;
+	struct msm_dai_q6_spdif_dai_data *dai_data = dev_get_drvdata(dev);
+
+	if (!dai_data) {
+		pr_err("%s: invalid input\n", __func__);
+		return -EINVAL;
+	}
+
+	ret = snprintf(buf, MSM_DAI_SYSFS_ENTRY_MAX_LEN, "%d\n",
+		dai_data->fmt_event.status);
+	pr_debug("%s: '%d'\n", __func__, dai_data->fmt_event.status);
+
+	return ret;
+}
+
+static ssize_t msm_dai_q6_spdif_sysfs_rda_audio_format(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	ssize_t ret;
+	struct msm_dai_q6_spdif_dai_data *dai_data = dev_get_drvdata(dev);
+
+	if (!dai_data) {
+		pr_err("%s: invalid input\n", __func__);
+		return -EINVAL;
+	}
+
+	ret = snprintf(buf, MSM_DAI_SYSFS_ENTRY_MAX_LEN, "%d\n",
+		dai_data->fmt_event.data_format);
+	pr_debug("%s: '%d'\n", __func__, dai_data->fmt_event.data_format);
+
+	return ret;
+}
+
+static ssize_t msm_dai_q6_spdif_sysfs_rda_audio_rate(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	ssize_t ret;
+	struct msm_dai_q6_spdif_dai_data *dai_data = dev_get_drvdata(dev);
+
+	if (!dai_data) {
+		pr_err("%s: invalid input\n", __func__);
+		return -EINVAL;
+	}
+
+	ret = snprintf(buf, MSM_DAI_SYSFS_ENTRY_MAX_LEN, "%d\n",
+		dai_data->fmt_event.sample_rate);
+	pr_debug("%s: '%d'\n", __func__, dai_data->fmt_event.sample_rate);
+
+	return ret;
+}
+
+static ssize_t msm_dai_q6_spdif_sysfs_rda_audio_preemph(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	ssize_t ret;
+	struct msm_dai_q6_spdif_dai_data *dai_data = dev_get_drvdata(dev);
+	int preemph = 0;
+
+	if (!dai_data) {
+		pr_err("%s: invalid input\n", __func__);
+		return -EINVAL;
+	}
+
+	preemph = GET_PREEMPH(dai_data->fmt_event.channel_status[0]);
+
+	ret = snprintf(buf, MSM_DAI_SYSFS_ENTRY_MAX_LEN, "%d\n", preemph);
+	pr_debug("%s: '%d'\n", __func__, preemph);
+
+	return ret;
+}
+
+static DEVICE_ATTR(audio_state, 0444, msm_dai_q6_spdif_sysfs_rda_audio_state,
+	NULL);
+static DEVICE_ATTR(audio_format, 0444, msm_dai_q6_spdif_sysfs_rda_audio_format,
+	NULL);
+static DEVICE_ATTR(audio_rate, 0444, msm_dai_q6_spdif_sysfs_rda_audio_rate,
+	NULL);
+static DEVICE_ATTR(audio_preemph, 0444,
+	msm_dai_q6_spdif_sysfs_rda_audio_preemph, NULL);
+
+static struct attribute *msm_dai_q6_spdif_fs_attrs[] = {
+	&dev_attr_audio_state.attr,
+	&dev_attr_audio_format.attr,
+	&dev_attr_audio_rate.attr,
+	&dev_attr_audio_preemph.attr,
+	NULL,
+};
+static struct attribute_group msm_dai_q6_spdif_fs_attrs_group = {
+	.attrs = msm_dai_q6_spdif_fs_attrs,
+};
+
+static int msm_dai_q6_spdif_sysfs_create(struct snd_soc_dai *dai,
+	struct msm_dai_q6_spdif_dai_data *dai_data)
+{
+	int rc;
+
+	rc = sysfs_create_group(&dai->dev->kobj,
+		&msm_dai_q6_spdif_fs_attrs_group);
+	if (rc) {
+		pr_err("%s: failed, rc=%d\n", __func__, rc);
+		return rc;
+	}
+	dai_data->kobj = &dai->dev->kobj;
+
+	return 0;
+}
+
+static void msm_dai_q6_spdif_sysfs_remove(struct snd_soc_dai *dai,
+	struct msm_dai_q6_spdif_dai_data *dai_data)
+{
+	if (dai_data->kobj)
+		sysfs_remove_group(dai_data->kobj,
+			&msm_dai_q6_spdif_fs_attrs_group);
+	dai_data->kobj = NULL;
+}
+
 static int msm_dai_q6_spdif_dai_probe(struct snd_soc_dai *dai)
 {
 	struct msm_dai_q6_spdif_dai_data *dai_data;
-	const struct snd_kcontrol_new *kcontrol;
 	int rc = 0;
 	struct snd_soc_dapm_route intercon;
 	struct snd_soc_dapm_context *dapm;
@@ -1243,23 +1698,62 @@ static int msm_dai_q6_spdif_dai_probe(struct snd_soc_dai *dai)
 		pr_err("%s: dai not found!!\n", __func__);
 		return -EINVAL;
 	}
+	if (!dai->dev) {
+		pr_err("%s: Invalid params dai dev\n", __func__);
+		return -EINVAL;
+	}
+
 	dai_data = kzalloc(sizeof(struct msm_dai_q6_spdif_dai_data),
 			GFP_KERNEL);
 
-	if (!dai_data) {
-		dev_err(dai->dev, "DAI-%d: fail to allocate dai data\n",
-				AFE_PORT_ID_SPDIF_RX);
-		rc = -ENOMEM;
-	} else
+	if (!dai_data)
+		return -ENOMEM;
+	else
 		dev_set_drvdata(dai->dev, dai_data);
 
-	kcontrol = &spdif_config_controls[1];
+	msm_dai_q6_set_dai_id(dai);
+	dai_data->port_id = dai->id;
+
+	switch (dai->id) {
+	case AFE_PORT_ID_PRIMARY_SPDIF_RX:
+		rc = snd_ctl_add(dai->component->card->snd_card,
+				 snd_ctl_new1(&spdif_rx_config_controls[1],
+				 dai_data));
+		break;
+	case AFE_PORT_ID_SECONDARY_SPDIF_RX:
+		rc = snd_ctl_add(dai->component->card->snd_card,
+				 snd_ctl_new1(&spdif_rx_config_controls[3],
+				 dai_data));
+		break;
+	case AFE_PORT_ID_PRIMARY_SPDIF_TX:
+		rc = msm_dai_q6_spdif_sysfs_create(dai, dai_data);
+
+		rc = snd_ctl_add(dai->component->card->snd_card,
+				snd_ctl_new1(&spdif_tx_config_controls[0],
+				dai_data));
+		rc = snd_ctl_add(dai->component->card->snd_card,
+				snd_ctl_new1(&spdif_tx_config_controls[1],
+				dai_data));
+		break;
+	case AFE_PORT_ID_SECONDARY_SPDIF_TX:
+		rc = msm_dai_q6_spdif_sysfs_create(dai, dai_data);
+
+		rc = snd_ctl_add(dai->component->card->snd_card,
+				snd_ctl_new1(&spdif_tx_config_controls[2],
+				dai_data));
+		rc = snd_ctl_add(dai->component->card->snd_card,
+				snd_ctl_new1(&spdif_tx_config_controls[3],
+				dai_data));
+		break;
+	}
+	if (rc < 0)
+		dev_err(dai->dev,
+			"%s: err add config ctl, DAI = %s\n",
+			__func__, dai->name);
+
 	dapm = snd_soc_component_get_dapm(dai->component);
 
-	rc = snd_ctl_add(dai->card->snd_card,
-			snd_ctl_new1(kcontrol, dai_data));
-
-	memset(&intercon, 0 , sizeof(intercon));
+	memset(&intercon, 0, sizeof(intercon));
 	if (!rc && dai && dai->driver) {
 		if (dai->driver->playback.stream_name &&
 				dai->driver->playback.aif_name) {
@@ -1294,13 +1788,24 @@ static int msm_dai_q6_spdif_dai_remove(struct snd_soc_dai *dai)
 
 	/* If AFE port is still up, close it */
 	if (test_bit(STATUS_PORT_STARTED, dai_data->status_mask)) {
-		rc = afe_close(dai->id); /* can block */
+		rc = afe_spdif_reg_event_cfg(dai->id,
+				AFE_MODULE_DEREGISTER_EVENT_FLAG,
+				NULL,
+				dai_data);
+		if (rc < 0)
+			dev_err(dai->dev,
+				"fail to deregister event for port 0x%x\n",
+				dai->id);
 
-		if (IS_ERR_VALUE(rc))
+		rc = afe_close(dai->id); /* can block */
+		if (rc < 0)
 			dev_err(dai->dev, "fail to close AFE port\n");
 
 		clear_bit(STATUS_PORT_STARTED, dai_data->status_mask);
 	}
+
+	msm_dai_q6_spdif_sysfs_remove(dai, dai_data);
+
 	kfree(dai_data);
 
 	return 0;
@@ -1313,21 +1818,106 @@ static struct snd_soc_dai_ops msm_dai_q6_spdif_ops = {
 	.shutdown	= msm_dai_q6_spdif_shutdown,
 };
 
-static struct snd_soc_dai_driver msm_dai_q6_spdif_spdif_rx_dai = {
-	.playback = {
-		.stream_name = "SPDIF Playback",
-		.aif_name = "SPDIF_RX",
-		.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
-			SNDRV_PCM_RATE_16000,
-		.formats = SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE,
-		.channels_min = 1,
-		.channels_max = 4,
-		.rate_min = 8000,
-		.rate_max = 48000,
+static struct snd_soc_dai_driver msm_dai_q6_spdif_spdif_rx_dai[] = {
+	{
+		.playback = {
+			.stream_name = "Primary SPDIF Playback",
+			.aif_name = "PRI_SPDIF_RX",
+			.rates = SNDRV_PCM_RATE_32000 |
+				 SNDRV_PCM_RATE_44100 |
+				 SNDRV_PCM_RATE_48000 |
+				 SNDRV_PCM_RATE_88200 |
+				 SNDRV_PCM_RATE_96000 |
+				 SNDRV_PCM_RATE_176400 |
+				 SNDRV_PCM_RATE_192000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE,
+			.channels_min = 1,
+			.channels_max = 2,
+			.rate_min = 32000,
+			.rate_max = 192000,
+		},
+		.name = "PRI_SPDIF_RX",
+		.ops = &msm_dai_q6_spdif_ops,
+		.id = AFE_PORT_ID_PRIMARY_SPDIF_RX,
+		.probe = msm_dai_q6_spdif_dai_probe,
+		.remove = msm_dai_q6_spdif_dai_remove,
 	},
-	.ops = &msm_dai_q6_spdif_ops,
-	.probe = msm_dai_q6_spdif_dai_probe,
-	.remove = msm_dai_q6_spdif_dai_remove,
+	{
+		.playback = {
+			.stream_name = "Secondary SPDIF Playback",
+			.aif_name = "SEC_SPDIF_RX",
+			.rates = SNDRV_PCM_RATE_32000 |
+				 SNDRV_PCM_RATE_44100 |
+				 SNDRV_PCM_RATE_48000 |
+				 SNDRV_PCM_RATE_88200 |
+				 SNDRV_PCM_RATE_96000 |
+				 SNDRV_PCM_RATE_176400 |
+				 SNDRV_PCM_RATE_192000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE,
+			.channels_min = 1,
+			.channels_max = 2,
+			.rate_min = 32000,
+			.rate_max = 192000,
+		},
+		.name = "SEC_SPDIF_RX",
+		.ops = &msm_dai_q6_spdif_ops,
+		.id = AFE_PORT_ID_SECONDARY_SPDIF_RX,
+		.probe = msm_dai_q6_spdif_dai_probe,
+		.remove = msm_dai_q6_spdif_dai_remove,
+	},
+};
+
+static struct snd_soc_dai_driver msm_dai_q6_spdif_spdif_tx_dai[] = {
+	{
+		.capture = {
+			.stream_name = "Primary SPDIF Capture",
+			.aif_name = "PRI_SPDIF_TX",
+			.rates = SNDRV_PCM_RATE_32000 |
+				 SNDRV_PCM_RATE_44100 |
+				 SNDRV_PCM_RATE_48000 |
+				 SNDRV_PCM_RATE_88200 |
+				 SNDRV_PCM_RATE_96000 |
+				 SNDRV_PCM_RATE_176400 |
+				 SNDRV_PCM_RATE_192000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE,
+			.channels_min = 1,
+			.channels_max = 2,
+			.rate_min = 32000,
+			.rate_max = 192000,
+		},
+		.name = "PRI_SPDIF_TX",
+		.ops = &msm_dai_q6_spdif_ops,
+		.id = AFE_PORT_ID_PRIMARY_SPDIF_TX,
+		.probe = msm_dai_q6_spdif_dai_probe,
+		.remove = msm_dai_q6_spdif_dai_remove,
+	},
+	{
+		.capture = {
+			.stream_name = "Secondary SPDIF Capture",
+			.aif_name = "SEC_SPDIF_TX",
+			.rates = SNDRV_PCM_RATE_32000 |
+				 SNDRV_PCM_RATE_44100 |
+				 SNDRV_PCM_RATE_48000 |
+				 SNDRV_PCM_RATE_88200 |
+				 SNDRV_PCM_RATE_96000 |
+				 SNDRV_PCM_RATE_176400 |
+				 SNDRV_PCM_RATE_192000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE,
+			.channels_min = 1,
+			.channels_max = 2,
+			.rate_min = 32000,
+			.rate_max = 192000,
+		},
+		.name = "SEC_SPDIF_TX",
+		.ops = &msm_dai_q6_spdif_ops,
+		.id = AFE_PORT_ID_SECONDARY_SPDIF_TX,
+		.probe = msm_dai_q6_spdif_dai_probe,
+		.remove = msm_dai_q6_spdif_dai_remove,
+	},
 };
 
 static const struct snd_soc_component_driver msm_dai_spdif_q6_component = {
@@ -1344,7 +1934,7 @@ static int msm_dai_q6_prepare(struct snd_pcm_substream *substream,
 		rc = afe_port_start(dai->id, &dai_data->port_config,
 					dai_data->rate);
 
-		if (IS_ERR_VALUE(rc))
+		if (rc < 0)
 			dev_err(dai->dev, "fail to open AFE port 0x%x\n",
 				dai->id);
 		else
@@ -1401,7 +1991,7 @@ static int msm_dai_q6_cdc_hw_params(struct snd_pcm_hw_params *params,
 	return 0;
 }
 
-static u8 num_of_bits_set(u8 sd_line_mask)
+static u16 num_of_bits_set(u16 sd_line_mask)
 {
 	u8 num_bits_set = 0;
 
@@ -1477,6 +2067,22 @@ static int msm_dai_q6_slim_bus_hw_params(struct snd_pcm_hw_params *params,
 	dai_data->port_config.slim_sch.sample_rate = dai_data->rate;
 	dai_data->port_config.slim_sch.num_channels = dai_data->channels;
 
+	switch (dai->id) {
+	case SLIMBUS_7_RX:
+	case SLIMBUS_7_TX:
+	case SLIMBUS_8_RX:
+	case SLIMBUS_8_TX:
+	case SLIMBUS_9_RX:
+	case SLIMBUS_9_TX:
+		dai_data->port_config.slim_sch.slimbus_dev_id =
+			AFE_SLIMBUS_DEVICE_2;
+		break;
+	default:
+		dai_data->port_config.slim_sch.slimbus_dev_id =
+			AFE_SLIMBUS_DEVICE_1;
+		break;
+	}
+
 	dev_dbg(dai->dev, "%s:slimbus_dev_id[%hu] bit_wd[%hu] format[%hu]\n"
 		"num_channel %hu  shared_ch_mapping[0]  %hu\n"
 		"slave_port_mapping[1]  %hu slave_port_mapping[2]  %hu\n"
@@ -1542,7 +2148,7 @@ static int msm_dai_q6_afe_rtproxy_hw_params(struct snd_pcm_hw_params *params,
 	return 0;
 }
 
-static int msm_dai_q6_psuedo_port_hw_params(struct snd_pcm_hw_params *params,
+static int msm_dai_q6_pseudo_port_hw_params(struct snd_pcm_hw_params *params,
 				    struct snd_soc_dai *dai, int stream)
 {
 	struct msm_dai_q6_dai_data *dai_data = dev_get_drvdata(dai->dev);
@@ -1598,6 +2204,9 @@ static int msm_dai_q6_hw_params(struct snd_pcm_substream *substream,
 	case SLIMBUS_4_RX:
 	case SLIMBUS_5_RX:
 	case SLIMBUS_6_RX:
+	case SLIMBUS_7_RX:
+	case SLIMBUS_8_RX:
+	case SLIMBUS_9_RX:
 	case SLIMBUS_0_TX:
 	case SLIMBUS_1_TX:
 	case SLIMBUS_2_TX:
@@ -1605,6 +2214,9 @@ static int msm_dai_q6_hw_params(struct snd_pcm_substream *substream,
 	case SLIMBUS_4_TX:
 	case SLIMBUS_5_TX:
 	case SLIMBUS_6_TX:
+	case SLIMBUS_7_TX:
+	case SLIMBUS_8_TX:
+	case SLIMBUS_9_TX:
 		rc = msm_dai_q6_slim_bus_hw_params(params, dai,
 				substream->stream);
 		break;
@@ -1619,13 +2231,17 @@ static int msm_dai_q6_hw_params(struct snd_pcm_substream *substream,
 	case RT_PROXY_DAI_001_RX:
 	case RT_PROXY_DAI_002_TX:
 	case RT_PROXY_DAI_002_RX:
+	case RT_PROXY_DAI_003_TX:
+	case RT_PROXY_DAI_003_RX:
 		rc = msm_dai_q6_afe_rtproxy_hw_params(params, dai);
 		break;
 	case VOICE_PLAYBACK_TX:
+	case VOICE_PLAYBACK_DL_TX:
 	case VOICE2_PLAYBACK_TX:
 	case VOICE_RECORD_RX:
+	case VOICE2_RECORD_RX:
 	case VOICE_RECORD_TX:
-		rc = msm_dai_q6_psuedo_port_hw_params(params,
+		rc = msm_dai_q6_pseudo_port_hw_params(params,
 						dai, substream->stream);
 		break;
 	default:
@@ -1646,8 +2262,7 @@ static void msm_dai_q6_shutdown(struct snd_pcm_substream *substream,
 	if (test_bit(STATUS_PORT_STARTED, dai_data->status_mask)) {
 		pr_debug("%s: stop pseudo port:%d\n", __func__,  dai->id);
 		rc = afe_close(dai->id); /* can block */
-
-		if (IS_ERR_VALUE(rc))
+		if (rc < 0)
 			dev_err(dai->dev, "fail to close AFE port\n");
 		pr_debug("%s: dai_data->status_mask = %ld\n", __func__,
 			*dai_data->status_mask);
@@ -1715,6 +2330,9 @@ static int msm_dai_q6_set_channel_map(struct snd_soc_dai *dai,
 	case SLIMBUS_4_RX:
 	case SLIMBUS_5_RX:
 	case SLIMBUS_6_RX:
+	case SLIMBUS_7_RX:
+	case SLIMBUS_8_RX:
+	case SLIMBUS_9_RX:
 		/*
 		 * channel number to be between 128 and 255.
 		 * For RX port use channel numbers
@@ -1750,6 +2368,9 @@ static int msm_dai_q6_set_channel_map(struct snd_soc_dai *dai,
 	case SLIMBUS_4_TX:
 	case SLIMBUS_5_TX:
 	case SLIMBUS_6_TX:
+	case SLIMBUS_7_TX:
+	case SLIMBUS_8_TX:
+	case SLIMBUS_9_TX:
 		/*
 		 * channel number to be between 128 and 255.
 		 * For TX port use channel numbers
@@ -1785,6 +2406,18 @@ static int msm_dai_q6_set_channel_map(struct snd_soc_dai *dai,
 	return rc;
 }
 
+/* all ports with excursion logging requirement can use this digital_mute api */
+static int msm_dai_q6_spk_digital_mute(struct snd_soc_dai *dai,
+				       int mute)
+{
+	int port_id = dai->id;
+
+	if (mute)
+		//afe_get_sp_xt_logging_data(port_id);
+
+	return 0;
+}
+
 static struct snd_soc_dai_ops msm_dai_q6_ops = {
 	.prepare	= msm_dai_q6_prepare,
 	.hw_params	= msm_dai_q6_hw_params,
@@ -1793,26 +2426,14 @@ static struct snd_soc_dai_ops msm_dai_q6_ops = {
 	.set_channel_map = msm_dai_q6_set_channel_map,
 };
 
-/*
- * For single CPU DAI registration, the dai id needs to be
- * set explicitly in the dai probe as ASoC does not read
- * the cpu->driver->id field rather it assigns the dai id
- * from the device name that is in the form %s.%d. This dai
- * id should be assigned to back-end AFE port id and used
- * during dai prepare. For multiple dai registration, it
- * is not required to call this function, however the dai->
- * driver->id field must be defined and set to corresponding
- * AFE Port id.
- */
-static inline void msm_dai_q6_set_dai_id(struct snd_soc_dai *dai)
-{
-	if (!dai->driver->id) {
-		dev_warn(dai->dev, "DAI driver id is not set\n");
-		return;
-	}
-	dai->id = dai->driver->id;
-	return;
-}
+static struct snd_soc_dai_ops msm_dai_slimbus_0_rx_ops = {
+	.prepare	= msm_dai_q6_prepare,
+	.hw_params	= msm_dai_q6_hw_params,
+	.shutdown	= msm_dai_q6_shutdown,
+	.set_fmt	= msm_dai_q6_set_fmt,
+	.set_channel_map = msm_dai_q6_set_channel_map,
+	.digital_mute = msm_dai_q6_spk_digital_mute,
+};
 
 static int msm_dai_q6_cal_info_put(struct snd_kcontrol *kcontrol,
 				    struct snd_ctl_elem_value *ucontrol)
@@ -1876,6 +2497,10 @@ static const struct soc_enum rt_proxy_1_rx_enum =
 	SOC_ENUM_SINGLE(RT_PROXY_PORT_001_RX, 0, ARRAY_SIZE(afe_cal_mode_text),
 			afe_cal_mode_text);
 
+static const struct soc_enum rt_proxy_2_rx_enum =
+	SOC_ENUM_SINGLE(RT_PROXY_PORT_002_RX, 0, ARRAY_SIZE(afe_cal_mode_text),
+			afe_cal_mode_text);
+
 static const struct soc_enum rt_proxy_1_tx_enum =
 	SOC_ENUM_SINGLE(RT_PROXY_PORT_001_TX, 0, ARRAY_SIZE(afe_cal_mode_text),
 			afe_cal_mode_text);
@@ -1886,7 +2511,10 @@ static const struct snd_kcontrol_new sb_config_controls[] = {
 		     msm_dai_q6_sb_format_put),
 	SOC_ENUM_EXT("SLIM_2_RX SetCalMode", slim_2_rx_enum,
 		     msm_dai_q6_cal_info_get,
-		     msm_dai_q6_cal_info_put)
+		     msm_dai_q6_cal_info_put),
+	SOC_ENUM_EXT("SLIM_2_RX Format", sb_config_enum[0],
+		     msm_dai_q6_sb_format_get,
+		     msm_dai_q6_sb_format_put)
 };
 
 static const struct snd_kcontrol_new rt_proxy_config_controls[] = {
@@ -1894,6 +2522,9 @@ static const struct snd_kcontrol_new rt_proxy_config_controls[] = {
 		     msm_dai_q6_cal_info_get,
 		     msm_dai_q6_cal_info_put),
 	SOC_ENUM_EXT("RT_PROXY_1_TX SetCalMode", rt_proxy_1_tx_enum,
+		     msm_dai_q6_cal_info_get,
+		     msm_dai_q6_cal_info_put),
+	SOC_ENUM_EXT("RT_PROXY_2_RX SetCalMode", rt_proxy_2_rx_enum,
 		     msm_dai_q6_cal_info_get,
 		     msm_dai_q6_cal_info_put),
 };
@@ -1914,38 +2545,44 @@ static int msm_dai_q6_dai_probe(struct snd_soc_dai *dai)
 
 	dai_data = kzalloc(sizeof(struct msm_dai_q6_dai_data), GFP_KERNEL);
 
-	if (!dai_data) {
-		dev_err(dai->dev, "DAI-%d: fail to allocate dai data\n",
-		dai->id);
-		rc = -ENOMEM;
-	} else
+	if (!dai_data)
+		return -ENOMEM;
+	else
 		dev_set_drvdata(dai->dev, dai_data);
 
 	msm_dai_q6_set_dai_id(dai);
 
 	switch (dai->id) {
 	case SLIMBUS_4_TX:
-		rc = snd_ctl_add(dai->card->snd_card,
+		rc = snd_ctl_add(dai->component->card->snd_card,
 				 snd_ctl_new1(&sb_config_controls[0],
 				 dai_data));
 		break;
 	case SLIMBUS_2_RX:
-		rc = snd_ctl_add(dai->card->snd_card,
+		rc = snd_ctl_add(dai->component->card->snd_card,
 				 snd_ctl_new1(&sb_config_controls[1],
+				 dai_data));
+		rc = snd_ctl_add(dai->component->card->snd_card,
+				 snd_ctl_new1(&sb_config_controls[2],
 				 dai_data));
 		break;
 	case RT_PROXY_DAI_001_RX:
-		rc = snd_ctl_add(dai->card->snd_card,
+		rc = snd_ctl_add(dai->component->card->snd_card,
 				 snd_ctl_new1(&rt_proxy_config_controls[0],
 				 dai_data));
 		break;
 	case RT_PROXY_DAI_001_TX:
-		rc = snd_ctl_add(dai->card->snd_card,
+		rc = snd_ctl_add(dai->component->card->snd_card,
 				 snd_ctl_new1(&rt_proxy_config_controls[1],
 				 dai_data));
 		break;
+	case RT_PROXY_DAI_003_RX:
+		rc = snd_ctl_add(dai->component->card->snd_card,
+				 snd_ctl_new1(&rt_proxy_config_controls[2],
+				 dai_data));
+		break;
 	}
-	if (IS_ERR_VALUE(rc))
+	if (rc < 0)
 		dev_err(dai->dev, "%s: err add config ctl, DAI = %s\n",
 			__func__, dai->name);
 
@@ -1964,8 +2601,7 @@ static int msm_dai_q6_dai_remove(struct snd_soc_dai *dai)
 	if (test_bit(STATUS_PORT_STARTED, dai_data->status_mask)) {
 		pr_debug("%s: stop pseudo port:%d\n", __func__,  dai->id);
 		rc = afe_close(dai->id); /* can block */
-
-		if (IS_ERR_VALUE(rc))
+		if (rc < 0)
 			dev_err(dai->dev, "fail to close AFE port\n");
 		clear_bit(STATUS_PORT_STARTED, dai_data->status_mask);
 	}
@@ -1981,7 +2617,8 @@ static struct snd_soc_dai_driver msm_dai_q6_afe_rx_dai[] = {
 			.aif_name = "PCM_RX",
 			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
 			SNDRV_PCM_RATE_16000,
-			.formats = SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+			SNDRV_PCM_FMTBIT_S24_LE,
 			.channels_min = 1,
 			.channels_max = 2,
 			.rate_min =     8000,
@@ -1997,7 +2634,8 @@ static struct snd_soc_dai_driver msm_dai_q6_afe_rx_dai[] = {
 			 .stream_name = "AFE-PROXY RX",
 			 .rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
 			 SNDRV_PCM_RATE_16000,
-			 .formats = SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE,
+			 .formats = SNDRV_PCM_FMTBIT_S16_LE |
+			 SNDRV_PCM_FMTBIT_S24_LE,
 			 .channels_min = 1,
 			 .channels_max = 2,
 			 .rate_min =     8000,
@@ -2005,6 +2643,48 @@ static struct snd_soc_dai_driver msm_dai_q6_afe_rx_dai[] = {
 		},
 		.ops = &msm_dai_q6_ops,
 		.id = RT_PROXY_DAI_002_RX,
+		.probe = msm_dai_q6_dai_probe,
+		.remove = msm_dai_q6_dai_remove,
+	},
+	{
+		.playback = {
+			.stream_name = "AFE Playback1",
+			.aif_name = "PCM_RX1",
+			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
+			SNDRV_PCM_RATE_16000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+			SNDRV_PCM_FMTBIT_S24_LE,
+			.channels_min = 1,
+			.channels_max = 2,
+			.rate_min =     8000,
+			.rate_max =	48000,
+		},
+		.ops = &msm_dai_q6_ops,
+		.id = RT_PROXY_DAI_003_RX,
+		.probe = msm_dai_q6_dai_probe,
+		.remove = msm_dai_q6_dai_remove,
+	},
+};
+
+static struct snd_soc_dai_driver msm_dai_q6_afe_lb_tx_dai[] = {
+	{
+		.capture = {
+			.stream_name = "AFE Loopback Capture",
+			.aif_name = "AFE_LOOPBACK_TX",
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 |
+			 SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_22050 |
+			 SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 |
+			 SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_96000 |
+			 SNDRV_PCM_RATE_192000,
+			.formats = (SNDRV_PCM_FMTBIT_S16_LE |
+			SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_S24_3LE |
+			SNDRV_PCM_FMTBIT_S32_LE ),
+			.channels_min = 1,
+			.channels_max = 8,
+			.rate_min =     8000,
+			.rate_max =     192000,
+		},
+		.id = AFE_LOOPBACK_TX,
 		.probe = msm_dai_q6_dai_probe,
 		.remove = msm_dai_q6_dai_remove,
 	},
@@ -2021,7 +2701,7 @@ static struct snd_soc_dai_driver msm_dai_q6_afe_tx_dai[] = {
 			.channels_min = 1,
 			.channels_max = 8,
 			.rate_min =     8000,
-			.rate_max =	48000,
+			.rate_max =     48000,
 		},
 		.ops = &msm_dai_q6_ops,
 		.id = RT_PROXY_DAI_002_TX,
@@ -2037,20 +2717,16 @@ static struct snd_soc_dai_driver msm_dai_q6_afe_tx_dai[] = {
 			.channels_min = 1,
 			.channels_max = 8,
 			.rate_min =     8000,
-			.rate_max =	48000,
+			.rate_max =     48000,
 		},
 		.ops = &msm_dai_q6_ops,
 		.id = RT_PROXY_DAI_001_TX,
 		.probe = msm_dai_q6_dai_probe,
 		.remove = msm_dai_q6_dai_remove,
 	},
-};
-
-static struct snd_soc_dai_driver msm_dai_q6_afe_lb_tx_dai[] = {
 	{
 		.capture = {
-			.stream_name = "AFE Loopback Capture",
-			.aif_name = "AFE_LOOPBACK_TX",
+			.stream_name = "AFE-PROXY TX1",
 			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
 			SNDRV_PCM_RATE_16000,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE,
@@ -2059,7 +2735,8 @@ static struct snd_soc_dai_driver msm_dai_q6_afe_lb_tx_dai[] = {
 			.rate_min =     8000,
 			.rate_max =     48000,
 		},
-		.id = AFE_LOOPBACK_TX,
+		.ops = &msm_dai_q6_ops,
+		.id = RT_PROXY_DAI_003_TX,
 		.probe = msm_dai_q6_dai_probe,
 		.remove = msm_dai_q6_dai_remove,
 	},
@@ -2187,6 +2864,23 @@ static struct snd_soc_dai_driver msm_dai_q6_voc_playback_dai[] = {
 		.probe = msm_dai_q6_dai_probe,
 		.remove = msm_dai_q6_dai_remove,
 	},
+	{
+		.playback = {
+			.stream_name = "Voice Downlink Playback",
+			.aif_name = "VOICE_PLAYBACK_DL_TX",
+			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
+				 SNDRV_PCM_RATE_16000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE,
+			.channels_min = 1,
+			.channels_max = 2,
+			.rate_min =     8000,
+			.rate_max =     48000,
+		},
+		.ops = &msm_dai_q6_ops,
+		.id = VOICE_PLAYBACK_DL_TX,
+		.probe = msm_dai_q6_dai_probe,
+		.remove = msm_dai_q6_dai_remove,
+	},
 };
 
 static struct snd_soc_dai_driver msm_dai_q6_incall_record_dai[] = {
@@ -2224,7 +2918,26 @@ static struct snd_soc_dai_driver msm_dai_q6_incall_record_dai[] = {
 		.probe = msm_dai_q6_dai_probe,
 		.remove = msm_dai_q6_dai_remove,
 	},
+	{
+		.capture = {
+			.stream_name = "Voice2 Downlink Capture",
+			.aif_name = "INCALL2_RECORD_RX",
+			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
+			SNDRV_PCM_RATE_16000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE,
+			.channels_min = 1,
+			.channels_max = 2,
+			.rate_min =     8000,
+			.rate_max =     48000,
+		},
+		.ops = &msm_dai_q6_ops,
+		.id = VOICE2_RECORD_RX,
+		.probe = msm_dai_q6_dai_probe,
+		.remove = msm_dai_q6_dai_remove,
+	},
+
 };
+
 
 static int msm_auxpcm_dev_probe(struct platform_device *pdev)
 {
@@ -2239,11 +2952,14 @@ static int msm_auxpcm_dev_probe(struct platform_device *pdev)
 
 	dai_data = kzalloc(sizeof(struct msm_dai_q6_auxpcm_dai_data),
 			   GFP_KERNEL);
-	if (!dai_data) {
-		dev_err(&pdev->dev,
-			"Failed to allocate memory for auxpcm DAI data\n");
+	if (!dai_data)
 		return -ENOMEM;
-	}
+
+	rc = of_property_read_u32(pdev->dev.of_node,
+				    "qcom,msm-dai-is-island-supported",
+				    &dai_data->is_island_dai);
+	if (rc)
+		dev_dbg(&pdev->dev, "island supported entry not found\n");
 
 	auxpcm_pdata = kzalloc(sizeof(struct msm_dai_auxpcm_pdata),
 				GFP_KERNEL);
@@ -2416,16 +3132,26 @@ static int msm_auxpcm_dev_probe(struct platform_device *pdev)
 		goto fail_nodev_intf;
 	}
 
-	if (!strncmp(intf_name, "primary", sizeof("primary"))) {
+	if (!strcmp(intf_name, "primary")) {
 		dai_data->rx_pid = AFE_PORT_ID_PRIMARY_PCM_RX;
 		dai_data->tx_pid = AFE_PORT_ID_PRIMARY_PCM_TX;
 		pdev->id = MSM_DAI_PRI_AUXPCM_DT_DEV_ID;
 		i = 0;
-	} else if (!strncmp(intf_name, "secondary", sizeof("secondary"))) {
+	} else if (!strcmp(intf_name, "secondary")) {
 		dai_data->rx_pid = AFE_PORT_ID_SECONDARY_PCM_RX;
 		dai_data->tx_pid = AFE_PORT_ID_SECONDARY_PCM_TX;
 		pdev->id = MSM_DAI_SEC_AUXPCM_DT_DEV_ID;
 		i = 1;
+	} else if (!strcmp(intf_name, "tertiary")) {
+		dai_data->rx_pid = AFE_PORT_ID_TERTIARY_PCM_RX;
+		dai_data->tx_pid = AFE_PORT_ID_TERTIARY_PCM_TX;
+		pdev->id = MSM_DAI_TERT_AUXPCM_DT_DEV_ID;
+		i = 2;
+	} else if (!strcmp(intf_name, "quaternary")) {
+		dai_data->rx_pid = AFE_PORT_ID_QUATERNARY_PCM_RX;
+		dai_data->tx_pid = AFE_PORT_ID_QUATERNARY_PCM_TX;
+		pdev->id = MSM_DAI_QUAT_AUXPCM_DT_DEV_ID;
+		i = 3;
 	} else {
 		dev_err(&pdev->dev, "%s: invalid DT intf name %s\n",
 			__func__, intf_name);
@@ -2484,7 +3210,7 @@ static int msm_auxpcm_dev_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static struct of_device_id msm_auxpcm_dev_dt_match[] = {
+static const struct of_device_id msm_auxpcm_dev_dt_match[] = {
 	{ .compatible = "qcom,msm-auxpcm-dev", },
 	{}
 };
@@ -2497,6 +3223,7 @@ static struct platform_driver msm_auxpcm_dev_driver = {
 		.name = "msm-auxpcm-dev",
 		.owner = THIS_MODULE,
 		.of_match_table = msm_auxpcm_dev_dt_match,
+		.suppress_bind_attrs = true,
 	},
 };
 
@@ -2505,17 +3232,14 @@ static struct snd_soc_dai_driver msm_dai_q6_slimbus_rx_dai[] = {
 		.playback = {
 			.stream_name = "Slimbus Playback",
 			.aif_name = "SLIMBUS_0_RX",
-			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
-			SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_96000 |
-			SNDRV_PCM_RATE_192000,
-			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+			.rates = SNDRV_PCM_RATE_8000_384000,
+			.formats = DAI_FORMATS_S16_S24_S32_LE,
 			.channels_min = 1,
 			.channels_max = 8,
 			.rate_min = 8000,
-			.rate_max = 192000,
+			.rate_max = 384000,
 		},
-		.ops = &msm_dai_q6_ops,
+		.ops = &msm_dai_slimbus_0_rx_ops,
 		.id = SLIMBUS_0_RX,
 		.probe = msm_dai_q6_dai_probe,
 		.remove = msm_dai_q6_dai_remove,
@@ -2524,15 +3248,12 @@ static struct snd_soc_dai_driver msm_dai_q6_slimbus_rx_dai[] = {
 		.playback = {
 			.stream_name = "Slimbus1 Playback",
 			.aif_name = "SLIMBUS_1_RX",
-			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-			SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_96000 |
-			SNDRV_PCM_RATE_192000,
-			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+			.rates = SNDRV_PCM_RATE_8000_384000,
+			.formats = DAI_FORMATS_S16_S24_S32_LE,
 			.channels_min = 1,
 			.channels_max = 2,
 			.rate_min = 8000,
-			.rate_max = 192000,
+			.rate_max = 384000,
 		},
 		.ops = &msm_dai_q6_ops,
 		.id = SLIMBUS_1_RX,
@@ -2543,15 +3264,12 @@ static struct snd_soc_dai_driver msm_dai_q6_slimbus_rx_dai[] = {
 		.playback = {
 			.stream_name = "Slimbus2 Playback",
 			.aif_name = "SLIMBUS_2_RX",
-			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
-			SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_96000 |
-			SNDRV_PCM_RATE_192000,
-			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+			.rates = SNDRV_PCM_RATE_8000_384000,
+			.formats = DAI_FORMATS_S16_S24_S32_LE,
 			.channels_min = 1,
 			.channels_max = 8,
 			.rate_min = 8000,
-			.rate_max = 192000,
+			.rate_max = 384000,
 		},
 		.ops = &msm_dai_q6_ops,
 		.id = SLIMBUS_2_RX,
@@ -2562,15 +3280,12 @@ static struct snd_soc_dai_driver msm_dai_q6_slimbus_rx_dai[] = {
 		.playback = {
 			.stream_name = "Slimbus3 Playback",
 			.aif_name = "SLIMBUS_3_RX",
-			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-			SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_96000 |
-			SNDRV_PCM_RATE_192000,
-			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+			.rates = SNDRV_PCM_RATE_8000_384000,
+			.formats = DAI_FORMATS_S16_S24_S32_LE,
 			.channels_min = 1,
 			.channels_max = 2,
 			.rate_min = 8000,
-			.rate_max = 192000,
+			.rate_max = 384000,
 		},
 		.ops = &msm_dai_q6_ops,
 		.id = SLIMBUS_3_RX,
@@ -2581,15 +3296,12 @@ static struct snd_soc_dai_driver msm_dai_q6_slimbus_rx_dai[] = {
 		.playback = {
 			.stream_name = "Slimbus4 Playback",
 			.aif_name = "SLIMBUS_4_RX",
-			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-			SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_96000 |
-			SNDRV_PCM_RATE_192000,
-			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+			.rates = SNDRV_PCM_RATE_8000_384000,
+			.formats = DAI_FORMATS_S16_S24_S32_LE,
 			.channels_min = 1,
 			.channels_max = 2,
 			.rate_min = 8000,
-			.rate_max = 192000,
+			.rate_max = 384000,
 		},
 		.ops = &msm_dai_q6_ops,
 		.id = SLIMBUS_4_RX,
@@ -2600,15 +3312,12 @@ static struct snd_soc_dai_driver msm_dai_q6_slimbus_rx_dai[] = {
 		.playback = {
 			.stream_name = "Slimbus6 Playback",
 			.aif_name = "SLIMBUS_6_RX",
-			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-			SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_96000 |
-			SNDRV_PCM_RATE_192000,
-			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-			 SNDRV_PCM_FMTBIT_S24_LE,
+			.rates = SNDRV_PCM_RATE_8000_384000,
+			.formats = DAI_FORMATS_S16_S24_S32_LE,
 			.channels_min = 1,
 			.channels_max = 2,
 			.rate_min = 8000,
-			.rate_max = 192000,
+			.rate_max = 384000,
 		},
 		.ops = &msm_dai_q6_ops,
 		.id = SLIMBUS_6_RX,
@@ -2619,18 +3328,63 @@ static struct snd_soc_dai_driver msm_dai_q6_slimbus_rx_dai[] = {
 		.playback = {
 			.stream_name = "Slimbus5 Playback",
 			.aif_name = "SLIMBUS_5_RX",
-			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-			SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_96000 |
-			SNDRV_PCM_RATE_192000 | SNDRV_PCM_RATE_44100,
-			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+			.rates = SNDRV_PCM_RATE_8000_384000,
+			.formats = DAI_FORMATS_S16_S24_S32_LE,
 			.channels_min = 1,
 			.channels_max = 2,
 			.rate_min = 8000,
-			.rate_max = 192000,
+			.rate_max = 384000,
 		},
 		.ops = &msm_dai_q6_ops,
 		.id = SLIMBUS_5_RX,
+		.probe = msm_dai_q6_dai_probe,
+		.remove = msm_dai_q6_dai_remove,
+	},
+	{
+		.playback = {
+			.stream_name = "Slimbus7 Playback",
+			.aif_name = "SLIMBUS_7_RX",
+			.rates = SNDRV_PCM_RATE_8000_384000,
+			.formats = DAI_FORMATS_S16_S24_S32_LE,
+			.channels_min = 1,
+			.channels_max = 8,
+			.rate_min = 8000,
+			.rate_max = 384000,
+		},
+		.ops = &msm_dai_q6_ops,
+		.id = SLIMBUS_7_RX,
+		.probe = msm_dai_q6_dai_probe,
+		.remove = msm_dai_q6_dai_remove,
+	},
+	{
+		.playback = {
+			.stream_name = "Slimbus8 Playback",
+			.aif_name = "SLIMBUS_8_RX",
+			.rates = SNDRV_PCM_RATE_8000_384000,
+			.formats = DAI_FORMATS_S16_S24_S32_LE,
+			.channels_min = 1,
+			.channels_max = 8,
+			.rate_min = 8000,
+			.rate_max = 384000,
+		},
+		.ops = &msm_dai_q6_ops,
+		.id = SLIMBUS_8_RX,
+		.probe = msm_dai_q6_dai_probe,
+		.remove = msm_dai_q6_dai_remove,
+	},
+	{
+		.playback = {
+			.stream_name = "Slimbus9 Playback",
+			.aif_name = "SLIMBUS_9_RX",
+			.rates = SNDRV_PCM_RATE_8000_384000,
+			.formats = DAI_FORMATS_S16_S24_S32_LE,
+			.channels_min = 1,
+			.channels_max = 8,
+			.rate_min = 8000,
+			.rate_max = 384000,
+		},
+		.ops = &msm_dai_q6_ops,
+		.id = SLIMBUS_9_RX,
 		.probe = msm_dai_q6_dai_probe,
 		.remove = msm_dai_q6_dai_remove,
 	},
@@ -2773,6 +3527,67 @@ static struct snd_soc_dai_driver msm_dai_q6_slimbus_tx_dai[] = {
 		.probe = msm_dai_q6_dai_probe,
 		.remove = msm_dai_q6_dai_remove,
 	},
+	{
+		.capture = {
+			.stream_name = "Slimbus7 Capture",
+			.aif_name = "SLIMBUS_7_TX",
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
+			SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_96000 |
+			SNDRV_PCM_RATE_192000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
+			.channels_min = 1,
+			.channels_max = 8,
+			.rate_min = 8000,
+			.rate_max = 192000,
+		},
+		.ops = &msm_dai_q6_ops,
+		.id = SLIMBUS_7_TX,
+		.probe = msm_dai_q6_dai_probe,
+		.remove = msm_dai_q6_dai_remove,
+	},
+	{
+		.capture = {
+			.stream_name = "Slimbus8 Capture",
+			.aif_name = "SLIMBUS_8_TX",
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
+			SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_96000 |
+			SNDRV_PCM_RATE_192000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
+			.channels_min = 1,
+			.channels_max = 8,
+			.rate_min = 8000,
+			.rate_max = 192000,
+		},
+		.ops = &msm_dai_q6_ops,
+		.id = SLIMBUS_8_TX,
+		.probe = msm_dai_q6_dai_probe,
+		.remove = msm_dai_q6_dai_remove,
+	},
+	{
+		.capture = {
+			.stream_name = "Slimbus9 Capture",
+			.aif_name = "SLIMBUS_9_TX",
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
+			SNDRV_PCM_RATE_44100 | SNDRV_PCM_RATE_48000 |
+			SNDRV_PCM_RATE_88200 | SNDRV_PCM_RATE_96000 |
+			SNDRV_PCM_RATE_192000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
+			.channels_min = 1,
+			.channels_max = 8,
+			.rate_min = 8000,
+			.rate_max = 192000,
+		},
+		.ops = &msm_dai_q6_ops,
+		.id = SLIMBUS_9_TX,
+		.probe = msm_dai_q6_dai_probe,
+		.remove = msm_dai_q6_dai_remove,
+	},
 };
 
 static int msm_dai_q6_mi2s_format_put(struct snd_kcontrol *kcontrol,
@@ -2780,6 +3595,7 @@ static int msm_dai_q6_mi2s_format_put(struct snd_kcontrol *kcontrol,
 {
 	struct msm_dai_q6_dai_data *dai_data = kcontrol->private_data;
 	int value = ucontrol->value.integer.value[0];
+
 	dai_data->port_config.i2s.data_format = value;
 	pr_debug("%s: value = %d, channel = %d, line = %d\n",
 		 __func__, value, dai_data->port_config.i2s.mono_stereo,
@@ -2791,8 +3607,29 @@ static int msm_dai_q6_mi2s_format_get(struct snd_kcontrol *kcontrol,
 				      struct snd_ctl_elem_value *ucontrol)
 {
 	struct msm_dai_q6_dai_data *dai_data = kcontrol->private_data;
+
 	ucontrol->value.integer.value[0] =
 		dai_data->port_config.i2s.data_format;
+	return 0;
+}
+
+static int msm_dai_q6_mi2s_vi_feed_mono_put(struct snd_kcontrol *kcontrol,
+				      struct snd_ctl_elem_value *ucontrol)
+{
+	struct msm_dai_q6_dai_data *dai_data = kcontrol->private_data;
+	int value = ucontrol->value.integer.value[0];
+
+	dai_data->vi_feed_mono = value;
+	pr_debug("%s: value = %d\n", __func__, value);
+	return 0;
+}
+
+static int msm_dai_q6_mi2s_vi_feed_mono_get(struct snd_kcontrol *kcontrol,
+				      struct snd_ctl_elem_value *ucontrol)
+{
+	struct msm_dai_q6_dai_data *dai_data = kcontrol->private_data;
+
+	ucontrol->value.integer.value[0] = dai_data->vi_feed_mono;
 	return 0;
 }
 
@@ -2830,6 +3667,15 @@ static const struct snd_kcontrol_new mi2s_config_controls[] = {
 	SOC_ENUM_EXT("SENARY MI2S TX Format", mi2s_config_enum[0],
 		     msm_dai_q6_mi2s_format_get,
 		     msm_dai_q6_mi2s_format_put),
+	SOC_ENUM_EXT("INT5 MI2S TX Format", mi2s_config_enum[0],
+		     msm_dai_q6_mi2s_format_get,
+		     msm_dai_q6_mi2s_format_put),
+};
+
+static const struct snd_kcontrol_new mi2s_vi_feed_controls[] = {
+	SOC_ENUM_EXT("INT5 MI2S VI MONO", mi2s_config_enum[1],
+		     msm_dai_q6_mi2s_vi_feed_mono_get,
+		     msm_dai_q6_mi2s_vi_feed_mono_put),
 };
 
 static int msm_dai_q6_dai_mi2s_probe(struct snd_soc_dai *dai)
@@ -2841,6 +3687,8 @@ static int msm_dai_q6_dai_mi2s_probe(struct snd_soc_dai *dai)
 	struct snd_kcontrol *kcontrol = NULL;
 	int rc = 0;
 	const struct snd_kcontrol_new *ctrl = NULL;
+	const struct snd_kcontrol_new *vi_feed_ctrl = NULL;
+	u16 dai_id = 0;
 
 	dai->id = mi2s_pdata->intf_id;
 
@@ -2860,9 +3708,8 @@ static int msm_dai_q6_dai_mi2s_probe(struct snd_soc_dai *dai)
 	if (ctrl) {
 		kcontrol = snd_ctl_new1(ctrl,
 					&mi2s_dai_data->rx_dai.mi2s_dai_data);
-		rc = snd_ctl_add(dai->card->snd_card, kcontrol);
-
-		if (IS_ERR_VALUE(rc)) {
+		rc = snd_ctl_add(dai->component->card->snd_card, kcontrol);
+		if (rc < 0) {
 			dev_err(dai->dev, "%s: err add RX fmt ctl DAI = %s\n",
 				__func__, dai->name);
 			goto rtn;
@@ -2872,31 +3719,57 @@ static int msm_dai_q6_dai_mi2s_probe(struct snd_soc_dai *dai)
 	ctrl = NULL;
 	if (mi2s_dai_data->tx_dai.mi2s_dai_data.port_config.i2s.channel_mode) {
 		if (dai->id == MSM_PRIM_MI2S)
-			ctrl = &mi2s_config_controls[4];
-		if (dai->id == MSM_SEC_MI2S)
 			ctrl = &mi2s_config_controls[5];
-		if (dai->id == MSM_TERT_MI2S)
+		if (dai->id == MSM_SEC_MI2S)
 			ctrl = &mi2s_config_controls[6];
-		if (dai->id == MSM_QUAT_MI2S)
+		if (dai->id == MSM_TERT_MI2S)
 			ctrl = &mi2s_config_controls[7];
+		if (dai->id == MSM_QUAT_MI2S)
+			ctrl = &mi2s_config_controls[8];
 		if (dai->id == MSM_QUIN_MI2S)
 			ctrl = &mi2s_config_controls[9];
 		if (dai->id == MSM_SENARY_MI2S)
 			ctrl = &mi2s_config_controls[10];
+		if (dai->id == MSM_INT5_MI2S)
+			ctrl = &mi2s_config_controls[11];
 	}
 
 	if (ctrl) {
-		rc = snd_ctl_add(dai->card->snd_card,
+		rc = snd_ctl_add(dai->component->card->snd_card,
 				snd_ctl_new1(ctrl,
 				&mi2s_dai_data->tx_dai.mi2s_dai_data));
-
-		if (IS_ERR_VALUE(rc)) {
+		if (rc < 0) {
 			if (kcontrol)
-				snd_ctl_remove(dai->card->snd_card, kcontrol);
+				snd_ctl_remove(dai->component->card->snd_card,
+						kcontrol);
 			dev_err(dai->dev, "%s: err add TX fmt ctl DAI = %s\n",
 				__func__, dai->name);
 		}
 	}
+
+	if (dai->id == MSM_INT5_MI2S)
+		vi_feed_ctrl = &mi2s_vi_feed_controls[0];
+
+	if (vi_feed_ctrl) {
+		rc = snd_ctl_add(dai->component->card->snd_card,
+				snd_ctl_new1(vi_feed_ctrl,
+				&mi2s_dai_data->tx_dai.mi2s_dai_data));
+
+		if (rc < 0) {
+			dev_err(dai->dev, "%s: err add TX vi feed channel ctl DAI = %s\n",
+				__func__, dai->name);
+		}
+	}
+
+	if (mi2s_dai_data->is_island_dai) {
+		msm_mi2s_get_port_id(dai->id, SNDRV_PCM_STREAM_CAPTURE,
+				     &dai_id);
+		rc = msm_dai_q6_add_island_mx_ctls(
+						dai->component->card->snd_card,
+						dai->name, dai_id,
+						(void *)mi2s_dai_data);
+	}
+
 	rc = msm_dai_q6_dai_add_route(dai);
 rtn:
 	return rc;
@@ -2913,7 +3786,7 @@ static int msm_dai_q6_dai_mi2s_remove(struct snd_soc_dai *dai)
 	if (test_bit(STATUS_PORT_STARTED,
 		     mi2s_dai_data->rx_dai.mi2s_dai_data.status_mask)) {
 		rc = afe_close(MI2S_RX); /* can block */
-		if (IS_ERR_VALUE(rc))
+		if (rc < 0)
 			dev_err(dai->dev, "fail to close MI2S_RX port\n");
 		clear_bit(STATUS_PORT_STARTED,
 			  mi2s_dai_data->rx_dai.mi2s_dai_data.status_mask);
@@ -2921,12 +3794,11 @@ static int msm_dai_q6_dai_mi2s_remove(struct snd_soc_dai *dai)
 	if (test_bit(STATUS_PORT_STARTED,
 		     mi2s_dai_data->tx_dai.mi2s_dai_data.status_mask)) {
 		rc = afe_close(MI2S_TX); /* can block */
-		if (IS_ERR_VALUE(rc))
+		if (rc < 0)
 			dev_err(dai->dev, "fail to close MI2S_TX port\n");
 		clear_bit(STATUS_PORT_STARTED,
 			  mi2s_dai_data->tx_dai.mi2s_dai_data.status_mask);
 	}
-	kfree(mi2s_dai_data);
 	return 0;
 }
 
@@ -2936,7 +3808,6 @@ static int msm_dai_q6_mi2s_startup(struct snd_pcm_substream *substream,
 
 	return 0;
 }
-
 
 static int msm_mi2s_get_port_id(u32 mi2s_id, int stream, u16 *port_id)
 {
@@ -2963,12 +3834,32 @@ static int msm_mi2s_get_port_id(u32 mi2s_id, int stream, u16 *port_id)
 		case MSM_QUIN_MI2S:
 			*port_id = AFE_PORT_ID_QUINARY_MI2S_RX;
 			break;
-		break;
+		case MSM_INT0_MI2S:
+			*port_id = AFE_PORT_ID_INT0_MI2S_RX;
+			break;
+		case MSM_INT1_MI2S:
+			*port_id = AFE_PORT_ID_INT1_MI2S_RX;
+			break;
+		case MSM_INT2_MI2S:
+			*port_id = AFE_PORT_ID_INT2_MI2S_RX;
+			break;
+		case MSM_INT3_MI2S:
+			*port_id = AFE_PORT_ID_INT3_MI2S_RX;
+			break;
+		case MSM_INT4_MI2S:
+			*port_id = AFE_PORT_ID_INT4_MI2S_RX;
+			break;
+		case MSM_INT5_MI2S:
+			*port_id = AFE_PORT_ID_INT5_MI2S_RX;
+			break;
+		case MSM_INT6_MI2S:
+			*port_id = AFE_PORT_ID_INT6_MI2S_RX;
+			break;
 		default:
 			pr_err("%s: playback err id 0x%x\n",
 				__func__, mi2s_id);
 			ret = -1;
-		break;
+			break;
 		}
 	break;
 	case SNDRV_PCM_STREAM_CAPTURE:
@@ -2991,10 +3882,31 @@ static int msm_mi2s_get_port_id(u32 mi2s_id, int stream, u16 *port_id)
 		case MSM_SENARY_MI2S:
 			*port_id = AFE_PORT_ID_SENARY_MI2S_TX;
 			break;
+		case MSM_INT0_MI2S:
+			*port_id = AFE_PORT_ID_INT0_MI2S_TX;
+			break;
+		case MSM_INT1_MI2S:
+			*port_id = AFE_PORT_ID_INT1_MI2S_TX;
+			break;
+		case MSM_INT2_MI2S:
+			*port_id = AFE_PORT_ID_INT2_MI2S_TX;
+			break;
+		case MSM_INT3_MI2S:
+			*port_id = AFE_PORT_ID_INT3_MI2S_TX;
+			break;
+		case MSM_INT4_MI2S:
+			*port_id = AFE_PORT_ID_INT4_MI2S_TX;
+			break;
+		case MSM_INT5_MI2S:
+			*port_id = AFE_PORT_ID_INT5_MI2S_TX;
+			break;
+		case MSM_INT6_MI2S:
+			*port_id = AFE_PORT_ID_INT6_MI2S_TX;
+			break;
 		default:
 			pr_err("%s: capture err id 0x%x\n", __func__, mi2s_id);
 			ret = -1;
-		break;
+			break;
 		}
 	break;
 	default:
@@ -3035,8 +3947,7 @@ static int msm_dai_q6_mi2s_prepare(struct snd_pcm_substream *substream,
 		 */
 		rc = afe_port_start(port_id, &dai_data->port_config,
 				    dai_data->rate);
-
-		if (IS_ERR_VALUE(rc))
+		if (rc < 0)
 			dev_err(dai->dev, "fail to open AFE port 0x%x\n",
 				dai->id);
 		else
@@ -3065,11 +3976,68 @@ static int msm_dai_q6_mi2s_hw_params(struct snd_pcm_substream *substream,
 
 	dai_data->channels = params_channels(params);
 	switch (dai_data->channels) {
+	case 15:
+	case 16:
+		switch (mi2s_dai_config->pdata_mi2s_lines) {
+		case AFE_PORT_I2S_16CHS:
+			dai_data->port_config.i2s.channel_mode
+				= AFE_PORT_I2S_16CHS;
+			break;
+		default:
+			goto error_invalid_data;
+		};
+		break;
+	case 13:
+	case 14:
+		switch (mi2s_dai_config->pdata_mi2s_lines) {
+		case AFE_PORT_I2S_14CHS:
+		case AFE_PORT_I2S_16CHS:
+			dai_data->port_config.i2s.channel_mode
+				= AFE_PORT_I2S_14CHS;
+			break;
+		default:
+			goto error_invalid_data;
+		};
+		break;
+	case 11:
+	case 12:
+		switch (mi2s_dai_config->pdata_mi2s_lines) {
+		case AFE_PORT_I2S_12CHS:
+		case AFE_PORT_I2S_14CHS:
+		case AFE_PORT_I2S_16CHS:
+			dai_data->port_config.i2s.channel_mode
+				= AFE_PORT_I2S_12CHS;
+			break;
+		default:
+			goto error_invalid_data;
+		};
+		break;
+	case 9:
+	case 10:
+		switch (mi2s_dai_config->pdata_mi2s_lines) {
+		case AFE_PORT_I2S_10CHS:
+		case AFE_PORT_I2S_12CHS:
+		case AFE_PORT_I2S_14CHS:
+		case AFE_PORT_I2S_16CHS:
+			dai_data->port_config.i2s.channel_mode
+				= AFE_PORT_I2S_10CHS;
+			break;
+		default:
+			goto error_invalid_data;
+		};
+		break;
 	case 8:
 	case 7:
 		if (mi2s_dai_config->pdata_mi2s_lines < AFE_PORT_I2S_8CHS)
 			goto error_invalid_data;
-		dai_data->port_config.i2s.channel_mode = AFE_PORT_I2S_8CHS;
+		else
+			if (mi2s_dai_config->pdata_mi2s_lines
+					== AFE_PORT_I2S_8CHS_2)
+				dai_data->port_config.i2s.channel_mode =
+						AFE_PORT_I2S_8CHS_2;
+			else
+				dai_data->port_config.i2s.channel_mode =
+						AFE_PORT_I2S_8CHS;
 		break;
 	case 6:
 	case 5:
@@ -3079,14 +4047,33 @@ static int msm_dai_q6_mi2s_hw_params(struct snd_pcm_substream *substream,
 		break;
 	case 4:
 	case 3:
-		if (mi2s_dai_config->pdata_mi2s_lines < AFE_PORT_I2S_QUAD01)
+		switch (mi2s_dai_config->pdata_mi2s_lines) {
+		case AFE_PORT_I2S_SD0:
+		case AFE_PORT_I2S_SD1:
+		case AFE_PORT_I2S_SD2:
+		case AFE_PORT_I2S_SD3:
+		case AFE_PORT_I2S_SD4:
+		case AFE_PORT_I2S_SD5:
+		case AFE_PORT_I2S_SD6:
+		case AFE_PORT_I2S_SD7:
 			goto error_invalid_data;
-		if (mi2s_dai_config->pdata_mi2s_lines == AFE_PORT_I2S_QUAD23)
+			break;
+		case AFE_PORT_I2S_QUAD01:
+		case AFE_PORT_I2S_QUAD23:
+		case AFE_PORT_I2S_QUAD45:
+		case AFE_PORT_I2S_QUAD67:
 			dai_data->port_config.i2s.channel_mode =
 				mi2s_dai_config->pdata_mi2s_lines;
-		else
+			break;
+		case AFE_PORT_I2S_8CHS_2:
+			dai_data->port_config.i2s.channel_mode =
+					AFE_PORT_I2S_QUAD45;
+			break;
+		default:
 			dai_data->port_config.i2s.channel_mode =
 					AFE_PORT_I2S_QUAD01;
+			break;
+		};
 		break;
 	case 2:
 	case 1:
@@ -3097,18 +4084,38 @@ static int msm_dai_q6_mi2s_hw_params(struct snd_pcm_substream *substream,
 		case AFE_PORT_I2S_SD1:
 		case AFE_PORT_I2S_SD2:
 		case AFE_PORT_I2S_SD3:
+		case AFE_PORT_I2S_SD4:
+		case AFE_PORT_I2S_SD5:
+		case AFE_PORT_I2S_SD6:
+		case AFE_PORT_I2S_SD7:
 			dai_data->port_config.i2s.channel_mode =
 				mi2s_dai_config->pdata_mi2s_lines;
 			break;
 		case AFE_PORT_I2S_QUAD01:
 		case AFE_PORT_I2S_6CHS:
 		case AFE_PORT_I2S_8CHS:
-			dai_data->port_config.i2s.channel_mode =
-						AFE_PORT_I2S_SD0;
+		case AFE_PORT_I2S_10CHS:
+		case AFE_PORT_I2S_12CHS:
+		case AFE_PORT_I2S_14CHS:
+		case AFE_PORT_I2S_16CHS:
+			if (dai_data->vi_feed_mono == SPKR_1)
+				dai_data->port_config.i2s.channel_mode =
+							AFE_PORT_I2S_SD0;
+			else
+				dai_data->port_config.i2s.channel_mode =
+							AFE_PORT_I2S_SD1;
 			break;
 		case AFE_PORT_I2S_QUAD23:
 			dai_data->port_config.i2s.channel_mode =
 						AFE_PORT_I2S_SD2;
+			break;
+		case AFE_PORT_I2S_QUAD45:
+			dai_data->port_config.i2s.channel_mode =
+						AFE_PORT_I2S_SD4;
+			break;
+		case AFE_PORT_I2S_QUAD67:
+			dai_data->port_config.i2s.channel_mode =
+						AFE_PORT_I2S_SD6;
 			break;
 		}
 		if (dai_data->channels == 2)
@@ -3205,6 +4212,7 @@ static int msm_dai_q6_mi2s_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 
 	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
 	case SND_SOC_DAIFMT_CBS_CFS:
+	case SND_SOC_DAIFMT_CBM_CFS:
 		mi2s_dai_data->rx_dai.mi2s_dai_data.port_config.i2s.ws_src = 1;
 		mi2s_dai_data->tx_dai.mi2s_dai_data.port_config.i2s.ws_src = 1;
 		break;
@@ -3261,7 +4269,7 @@ static void msm_dai_q6_mi2s_shutdown(struct snd_pcm_substream *substream,
 
 	if (test_bit(STATUS_PORT_STARTED, dai_data->status_mask)) {
 		rc = afe_close(port_id);
-		if (IS_ERR_VALUE(rc))
+		if (rc < 0)
 			dev_err(dai->dev, "fail to close AFE port\n");
 		clear_bit(STATUS_PORT_STARTED, dai_data->status_mask);
 	}
@@ -3284,29 +4292,33 @@ static struct snd_soc_dai_driver msm_dai_q6_mi2s_dai[] = {
 		.playback = {
 			.stream_name = "Primary MI2S Playback",
 			.aif_name = "PRI_MI2S_RX",
-			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
-			SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_96000 |
-			SNDRV_PCM_RATE_192000,
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 |
+				SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_22050 |
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 |
+				SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_88200 |
+				SNDRV_PCM_RATE_96000 | SNDRV_PCM_RATE_176400 |
+				SNDRV_PCM_RATE_192000 | SNDRV_PCM_RATE_352800 |
+				SNDRV_PCM_RATE_384000,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
 				SNDRV_PCM_FMTBIT_S24_LE |
 				SNDRV_PCM_FMTBIT_S24_3LE,
 			.rate_min =     8000,
-			.rate_max =     192000,
+			.rate_max =     384000,
 		},
 		.capture = {
 			.stream_name = "Primary MI2S Capture",
 			.aif_name = "PRI_MI2S_TX",
-			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
-			SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_96000 |
-			SNDRV_PCM_RATE_192000,
-			.formats = (SNDRV_PCM_FMTBIT_S16_LE |
-				    SNDRV_PCM_FMTBIT_S24_LE |
-				    SNDRV_PCM_FMTBIT_S24_3LE |
-				    SNDRV_PCM_FMTBIT_S32_LE),
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 |
+				 SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_22050 |
+				 SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 |
+				 SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_96000 |
+				 SNDRV_PCM_RATE_192000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE,
 			.rate_min =     8000,
 			.rate_max =     192000,
 		},
 		.ops = &msm_dai_q6_mi2s_ops,
+		.name = "Primary MI2S",
 		.id = MSM_PRIM_MI2S,
 		.probe = msm_dai_q6_dai_mi2s_probe,
 		.remove = msm_dai_q6_dai_mi2s_remove,
@@ -3315,9 +4327,11 @@ static struct snd_soc_dai_driver msm_dai_q6_mi2s_dai[] = {
 		.playback = {
 			.stream_name = "Secondary MI2S Playback",
 			.aif_name = "SEC_MI2S_RX",
-			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
-			SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_96000 |
-			SNDRV_PCM_RATE_192000,
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 |
+				 SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_22050 |
+				 SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 |
+				 SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_96000 |
+				 SNDRV_PCM_RATE_192000,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE,
 			.rate_min =     8000,
 			.rate_max =     192000,
@@ -3325,17 +4339,17 @@ static struct snd_soc_dai_driver msm_dai_q6_mi2s_dai[] = {
 		.capture = {
 			.stream_name = "Secondary MI2S Capture",
 			.aif_name = "SEC_MI2S_TX",
-			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
-			SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_96000 |
-			SNDRV_PCM_RATE_192000,
-			.formats = (SNDRV_PCM_FMTBIT_S16_LE |
-				    SNDRV_PCM_FMTBIT_S24_LE |
-				    SNDRV_PCM_FMTBIT_S24_3LE |
-				    SNDRV_PCM_FMTBIT_S32_LE),
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 |
+				 SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_22050 |
+				 SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 |
+				 SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_96000 |
+				 SNDRV_PCM_RATE_192000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE,
 			.rate_min =     8000,
 			.rate_max =     192000,
 		},
 		.ops = &msm_dai_q6_mi2s_ops,
+		.name = "Secondary MI2S",
 		.id = MSM_SEC_MI2S,
 		.probe = msm_dai_q6_dai_mi2s_probe,
 		.remove = msm_dai_q6_dai_mi2s_remove,
@@ -3344,26 +4358,29 @@ static struct snd_soc_dai_driver msm_dai_q6_mi2s_dai[] = {
 		.playback = {
 			.stream_name = "Tertiary MI2S Playback",
 			.aif_name = "TERT_MI2S_RX",
-			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
-			SNDRV_PCM_RATE_16000,
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 |
+				 SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_22050 |
+				 SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 |
+				 SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_96000 |
+				 SNDRV_PCM_RATE_192000,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE,
 			.rate_min =     8000,
-			.rate_max =     48000,
+			.rate_max =     192000,
 		},
 		.capture = {
 			.stream_name = "Tertiary MI2S Capture",
 			.aif_name = "TERT_MI2S_TX",
-			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
-			SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_96000 |
-			SNDRV_PCM_RATE_192000,
-			.formats = (SNDRV_PCM_FMTBIT_S16_LE |
-				    SNDRV_PCM_FMTBIT_S24_LE |
-				    SNDRV_PCM_FMTBIT_S24_3LE |
-				    SNDRV_PCM_FMTBIT_S32_LE),
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 |
+				 SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_22050 |
+				 SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 |
+				 SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_96000 |
+				 SNDRV_PCM_RATE_192000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE,
 			.rate_min =     8000,
 			.rate_max =     192000,
 		},
 		.ops = &msm_dai_q6_mi2s_ops,
+		.name = "Tertiary MI2S",
 		.id = MSM_TERT_MI2S,
 		.probe = msm_dai_q6_dai_mi2s_probe,
 		.remove = msm_dai_q6_dai_mi2s_remove,
@@ -3372,9 +4389,11 @@ static struct snd_soc_dai_driver msm_dai_q6_mi2s_dai[] = {
 		.playback = {
 			.stream_name = "Quaternary MI2S Playback",
 			.aif_name = "QUAT_MI2S_RX",
-			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
-			SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_96000 |
-			SNDRV_PCM_RATE_192000,
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 |
+				 SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_22050 |
+				 SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 |
+				 SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_96000 |
+				 SNDRV_PCM_RATE_192000,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE,
 			.rate_min =     8000,
 			.rate_max =     192000,
@@ -3382,32 +4401,20 @@ static struct snd_soc_dai_driver msm_dai_q6_mi2s_dai[] = {
 		.capture = {
 			.stream_name = "Quaternary MI2S Capture",
 			.aif_name = "QUAT_MI2S_TX",
-			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
-			SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_96000 |
-			SNDRV_PCM_RATE_192000,
-			.formats = (SNDRV_PCM_FMTBIT_S16_LE |
-				    SNDRV_PCM_FMTBIT_S24_LE |
-				    SNDRV_PCM_FMTBIT_S24_3LE |
-				    SNDRV_PCM_FMTBIT_S32_LE),
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 |
+				 SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_22050 |
+				 SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 |
+				 SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_96000 |
+				 SNDRV_PCM_RATE_192000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE,
 			.rate_min =     8000,
 			.rate_max =     192000,
 		},
 		.ops = &msm_dai_q6_mi2s_ops,
+		.name = "Quaternary MI2S",
 		.id = MSM_QUAT_MI2S,
 		.probe = msm_dai_q6_dai_mi2s_probe,
 		.remove = msm_dai_q6_dai_mi2s_remove,
-	},
-	{
-		.playback = {
-			.stream_name = "Secondary MI2S Playback SD1",
-			.aif_name = "SEC_MI2S_RX_SD1",
-			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
-			SNDRV_PCM_RATE_16000,
-			.formats = SNDRV_PCM_FMTBIT_S16_LE,
-			.rate_min =     8000,
-			.rate_max =     48000,
-		},
-		.id = MSM_SEC_MI2S_SD1,
 	},
 	{
 		.playback = {
@@ -3424,36 +4431,233 @@ static struct snd_soc_dai_driver msm_dai_q6_mi2s_dai[] = {
 			.stream_name = "Quinary MI2S Capture",
 			.aif_name = "QUIN_MI2S_TX",
 			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
-			SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_96000 |
-			SNDRV_PCM_RATE_192000,
-			.formats = (SNDRV_PCM_FMTBIT_S16_LE |
-				    SNDRV_PCM_FMTBIT_S24_LE |
-				    SNDRV_PCM_FMTBIT_S24_3LE |
-				    SNDRV_PCM_FMTBIT_S32_LE),
+			SNDRV_PCM_RATE_16000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE,
 			.rate_min =     8000,
-			.rate_max =     192000,
+			.rate_max =     48000,
 		},
 		.ops = &msm_dai_q6_mi2s_ops,
+		.name = "Quinary MI2S",
 		.id = MSM_QUIN_MI2S,
 		.probe = msm_dai_q6_dai_mi2s_probe,
 		.remove = msm_dai_q6_dai_mi2s_remove,
+	},
+	{
+		.playback = {
+			.stream_name = "Secondary MI2S Playback SD1",
+			.aif_name = "SEC_MI2S_RX_SD1",
+			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
+			SNDRV_PCM_RATE_16000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE,
+			.rate_min =     8000,
+			.rate_max =     48000,
+		},
+		.id = MSM_SEC_MI2S_SD1,
 	},
 	{
 		.capture = {
 			.stream_name = "Senary_mi2s Capture",
 			.aif_name = "SENARY_TX",
 			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
-			SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_96000 |
-			SNDRV_PCM_RATE_192000,
-			.formats = (SNDRV_PCM_FMTBIT_S16_LE |
-				    SNDRV_PCM_FMTBIT_S24_LE |
-				    SNDRV_PCM_FMTBIT_S24_3LE |
-				    SNDRV_PCM_FMTBIT_S32_LE),
+			SNDRV_PCM_RATE_16000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE,
+			.rate_min =     8000,
+			.rate_max =     48000,
+		},
+		.ops = &msm_dai_q6_mi2s_ops,
+		.name = "Senary MI2S",
+		.id = MSM_SENARY_MI2S,
+		.probe = msm_dai_q6_dai_mi2s_probe,
+		.remove = msm_dai_q6_dai_mi2s_remove,
+	},
+	{
+		.playback = {
+			.stream_name = "INT0 MI2S Playback",
+			.aif_name = "INT0_MI2S_RX",
+			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
+			SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_44100 |
+			SNDRV_PCM_RATE_96000 | SNDRV_PCM_RATE_192000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				SNDRV_PCM_FMTBIT_S24_LE |
+				SNDRV_PCM_FMTBIT_S24_3LE,
 			.rate_min =     8000,
 			.rate_max =     192000,
 		},
+		.capture = {
+			.stream_name = "INT0 MI2S Capture",
+			.aif_name = "INT0_MI2S_TX",
+			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
+			SNDRV_PCM_RATE_16000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE,
+			.rate_min =     8000,
+			.rate_max =     48000,
+		},
 		.ops = &msm_dai_q6_mi2s_ops,
-		.id = MSM_SENARY_MI2S,
+		.name = "INT0 MI2S",
+		.id = MSM_INT0_MI2S,
+		.probe = msm_dai_q6_dai_mi2s_probe,
+		.remove = msm_dai_q6_dai_mi2s_remove,
+	},
+	{
+		.playback = {
+			.stream_name = "INT1 MI2S Playback",
+			.aif_name = "INT1_MI2S_RX",
+			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
+			SNDRV_PCM_RATE_16000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				SNDRV_PCM_FMTBIT_S24_LE |
+				SNDRV_PCM_FMTBIT_S24_3LE,
+			.rate_min =     8000,
+			.rate_max =     48000,
+		},
+		.capture = {
+			.stream_name = "INT1 MI2S Capture",
+			.aif_name = "INT1_MI2S_TX",
+			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
+			SNDRV_PCM_RATE_16000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE,
+			.rate_min =     8000,
+			.rate_max =     48000,
+		},
+		.ops = &msm_dai_q6_mi2s_ops,
+		.name = "INT1 MI2S",
+		.id = MSM_INT1_MI2S,
+		.probe = msm_dai_q6_dai_mi2s_probe,
+		.remove = msm_dai_q6_dai_mi2s_remove,
+	},
+	{
+		.playback = {
+			.stream_name = "INT2 MI2S Playback",
+			.aif_name = "INT2_MI2S_RX",
+			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
+			SNDRV_PCM_RATE_16000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				SNDRV_PCM_FMTBIT_S24_LE |
+				SNDRV_PCM_FMTBIT_S24_3LE,
+			.rate_min =     8000,
+			.rate_max =     48000,
+		},
+		.capture = {
+			.stream_name = "INT2 MI2S Capture",
+			.aif_name = "INT2_MI2S_TX",
+			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
+			SNDRV_PCM_RATE_16000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE,
+			.rate_min =     8000,
+			.rate_max =     48000,
+		},
+		.ops = &msm_dai_q6_mi2s_ops,
+		.name = "INT2 MI2S",
+		.id = MSM_INT2_MI2S,
+		.probe = msm_dai_q6_dai_mi2s_probe,
+		.remove = msm_dai_q6_dai_mi2s_remove,
+	},
+	{
+		.playback = {
+			.stream_name = "INT3 MI2S Playback",
+			.aif_name = "INT3_MI2S_RX",
+			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
+			SNDRV_PCM_RATE_16000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				SNDRV_PCM_FMTBIT_S24_LE |
+				SNDRV_PCM_FMTBIT_S24_3LE,
+			.rate_min =     8000,
+			.rate_max =     48000,
+		},
+		.capture = {
+			.stream_name = "INT3 MI2S Capture",
+			.aif_name = "INT3_MI2S_TX",
+			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
+			SNDRV_PCM_RATE_16000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE,
+			.rate_min =     8000,
+			.rate_max =     48000,
+		},
+		.ops = &msm_dai_q6_mi2s_ops,
+		.name = "INT3 MI2S",
+		.id = MSM_INT3_MI2S,
+		.probe = msm_dai_q6_dai_mi2s_probe,
+		.remove = msm_dai_q6_dai_mi2s_remove,
+	},
+	{
+		.playback = {
+			.stream_name = "INT4 MI2S Playback",
+			.aif_name = "INT4_MI2S_RX",
+			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
+			SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_96000 |
+			SNDRV_PCM_RATE_192000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				SNDRV_PCM_FMTBIT_S24_LE |
+				SNDRV_PCM_FMTBIT_S24_3LE,
+			.rate_min =     8000,
+			.rate_max =     192000,
+		},
+		.capture = {
+			.stream_name = "INT4 MI2S Capture",
+			.aif_name = "INT4_MI2S_TX",
+			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
+			SNDRV_PCM_RATE_16000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE,
+			.rate_min =     8000,
+			.rate_max =     48000,
+		},
+		.ops = &msm_dai_q6_mi2s_ops,
+		.name = "INT4 MI2S",
+		.id = MSM_INT4_MI2S,
+		.probe = msm_dai_q6_dai_mi2s_probe,
+		.remove = msm_dai_q6_dai_mi2s_remove,
+	},
+	{
+		.playback = {
+			.stream_name = "INT5 MI2S Playback",
+			.aif_name = "INT5_MI2S_RX",
+			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
+			SNDRV_PCM_RATE_16000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				SNDRV_PCM_FMTBIT_S24_LE |
+				SNDRV_PCM_FMTBIT_S24_3LE,
+			.rate_min =     8000,
+			.rate_max =     48000,
+		},
+		.capture = {
+			.stream_name = "INT5 MI2S Capture",
+			.aif_name = "INT5_MI2S_TX",
+			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
+			SNDRV_PCM_RATE_16000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE,
+			.rate_min =     8000,
+			.rate_max =     48000,
+		},
+		.ops = &msm_dai_q6_mi2s_ops,
+		.name = "INT5 MI2S",
+		.id = MSM_INT5_MI2S,
+		.probe = msm_dai_q6_dai_mi2s_probe,
+		.remove = msm_dai_q6_dai_mi2s_remove,
+	},
+	{
+		.playback = {
+			.stream_name = "INT6 MI2S Playback",
+			.aif_name = "INT6_MI2S_RX",
+			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
+			SNDRV_PCM_RATE_16000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				SNDRV_PCM_FMTBIT_S24_LE |
+				SNDRV_PCM_FMTBIT_S24_3LE,
+			.rate_min =     8000,
+			.rate_max =     48000,
+		},
+		.capture = {
+			.stream_name = "INT6 MI2S Capture",
+			.aif_name = "INT6_MI2S_TX",
+			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
+			SNDRV_PCM_RATE_16000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE,
+			.rate_min =     8000,
+			.rate_max =     48000,
+		},
+		.ops = &msm_dai_q6_mi2s_ops,
+		.name = "INT6 MI2S",
+		.id = MSM_INT6_MI2S,
 		.probe = msm_dai_q6_dai_mi2s_probe,
 		.remove = msm_dai_q6_dai_mi2s_remove,
 	},
@@ -3484,6 +4688,18 @@ static int msm_dai_q6_mi2s_get_lineconfig(u16 sd_lines, u16 *config_ptr,
 		case MSM_MI2S_SD3:
 			*config_ptr = AFE_PORT_I2S_SD3;
 			break;
+		case MSM_MI2S_SD4:
+			*config_ptr = AFE_PORT_I2S_SD4;
+			break;
+		case MSM_MI2S_SD5:
+			*config_ptr = AFE_PORT_I2S_SD5;
+			break;
+		case MSM_MI2S_SD6:
+			*config_ptr = AFE_PORT_I2S_SD6;
+			break;
+		case MSM_MI2S_SD7:
+			*config_ptr = AFE_PORT_I2S_SD7;
+			break;
 		default:
 			pr_err("%s: invalid SD lines %d\n",
 				   __func__, sd_lines);
@@ -3497,6 +4713,12 @@ static int msm_dai_q6_mi2s_get_lineconfig(u16 sd_lines, u16 *config_ptr,
 			break;
 		case MSM_MI2S_SD2 | MSM_MI2S_SD3:
 			*config_ptr = AFE_PORT_I2S_QUAD23;
+			break;
+		case MSM_MI2S_SD4 | MSM_MI2S_SD5:
+			*config_ptr = AFE_PORT_I2S_QUAD45;
+			break;
+		case MSM_MI2S_SD6 | MSM_MI2S_SD7:
+			*config_ptr = AFE_PORT_I2S_QUAD67;
 			break;
 		default:
 			pr_err("%s: invalid SD lines %d\n",
@@ -3520,6 +4742,57 @@ static int msm_dai_q6_mi2s_get_lineconfig(u16 sd_lines, u16 *config_ptr,
 		case MSM_MI2S_SD0 | MSM_MI2S_SD1 | MSM_MI2S_SD2 | MSM_MI2S_SD3:
 			*config_ptr = AFE_PORT_I2S_8CHS;
 			break;
+		case MSM_MI2S_SD4 | MSM_MI2S_SD5 | MSM_MI2S_SD6 | MSM_MI2S_SD7:
+			*config_ptr = AFE_PORT_I2S_8CHS_2;
+			break;
+		default:
+			pr_err("%s: invalid SD lines %d\n",
+				   __func__, sd_lines);
+			goto error_invalid_data;
+		}
+		break;
+	case 5:
+		switch (sd_lines) {
+		case MSM_MI2S_SD0 | MSM_MI2S_SD1 | MSM_MI2S_SD2
+		   | MSM_MI2S_SD3 | MSM_MI2S_SD4:
+			*config_ptr = AFE_PORT_I2S_10CHS;
+			break;
+		default:
+			pr_err("%s: invalid SD lines %d\n",
+				   __func__, sd_lines);
+			goto error_invalid_data;
+		}
+		break;
+	case 6:
+		switch (sd_lines) {
+		case MSM_MI2S_SD0 | MSM_MI2S_SD1 | MSM_MI2S_SD2
+		   | MSM_MI2S_SD3 | MSM_MI2S_SD4 | MSM_MI2S_SD5:
+			*config_ptr = AFE_PORT_I2S_12CHS;
+			break;
+		default:
+			pr_err("%s: invalid SD lines %d\n",
+				   __func__, sd_lines);
+			goto error_invalid_data;
+		}
+		break;
+	case 7:
+		switch (sd_lines) {
+		case MSM_MI2S_SD0 | MSM_MI2S_SD1 | MSM_MI2S_SD2 | MSM_MI2S_SD3
+		   | MSM_MI2S_SD4 | MSM_MI2S_SD5 | MSM_MI2S_SD6:
+			*config_ptr = AFE_PORT_I2S_14CHS;
+			break;
+		default:
+			pr_err("%s: invalid SD lines %d\n",
+				   __func__, sd_lines);
+			goto error_invalid_data;
+		}
+		break;
+	case 8:
+		switch (sd_lines) {
+		case MSM_MI2S_SD0 | MSM_MI2S_SD1 | MSM_MI2S_SD2 | MSM_MI2S_SD3
+		   | MSM_MI2S_SD4 | MSM_MI2S_SD5 | MSM_MI2S_SD6 | MSM_MI2S_SD7:
+			*config_ptr = AFE_PORT_I2S_16CHS;
+			break;
 		default:
 			pr_err("%s: invalid SD lines %d\n",
 				   __func__, sd_lines);
@@ -3536,6 +4809,42 @@ static int msm_dai_q6_mi2s_get_lineconfig(u16 sd_lines, u16 *config_ptr,
 error_invalid_data:
 	pr_err("%s: invalid data\n", __func__);
 	return -EINVAL;
+}
+
+static u16 msm_dai_q6_mi2s_get_num_channels(u16 config)
+{
+	switch (config) {
+	case AFE_PORT_I2S_SD0:
+	case AFE_PORT_I2S_SD1:
+	case AFE_PORT_I2S_SD2:
+	case AFE_PORT_I2S_SD3:
+	case AFE_PORT_I2S_SD4:
+	case AFE_PORT_I2S_SD5:
+	case AFE_PORT_I2S_SD6:
+	case AFE_PORT_I2S_SD7:
+		return 2;
+	case AFE_PORT_I2S_QUAD01:
+	case AFE_PORT_I2S_QUAD23:
+	case AFE_PORT_I2S_QUAD45:
+	case AFE_PORT_I2S_QUAD67:
+		return 4;
+	case AFE_PORT_I2S_6CHS:
+		return 6;
+	case AFE_PORT_I2S_8CHS:
+	case AFE_PORT_I2S_8CHS_2:
+		return 8;
+	case AFE_PORT_I2S_10CHS:
+		return 10;
+	case AFE_PORT_I2S_12CHS:
+		return 12;
+	case AFE_PORT_I2S_14CHS:
+		return 14;
+	case AFE_PORT_I2S_16CHS:
+		return 16;
+	default:
+		pr_err("%s: invalid config\n", __func__);
+		return 0;
+	}
 }
 
 static int msm_dai_q6_mi2s_platform_data_validation(
@@ -3555,8 +4864,7 @@ static int msm_dai_q6_mi2s_platform_data_validation(
 
 	rc = msm_dai_q6_mi2s_get_lineconfig(mi2s_pdata->rx_sd_lines,
 					    &sd_line, &ch_cnt);
-
-	if (IS_ERR_VALUE(rc)) {
+	if (rc < 0) {
 		dev_err(&pdev->dev, "invalid MI2S RX sd line config\n");
 		goto rtn;
 	}
@@ -3573,8 +4881,7 @@ static int msm_dai_q6_mi2s_platform_data_validation(
 	}
 	rc = msm_dai_q6_mi2s_get_lineconfig(mi2s_pdata->tx_sd_lines,
 					    &sd_line, &ch_cnt);
-
-	if (IS_ERR_VALUE(rc)) {
+	if (rc < 0) {
 		dev_err(&pdev->dev, "invalid MI2S TX sd line config\n");
 		goto rtn;
 	}
@@ -3637,7 +4944,6 @@ static int msm_dai_q6_mi2s_dev_probe(struct platform_device *pdev)
 
 	mi2s_pdata = kzalloc(sizeof(struct msm_mi2s_pdata), GFP_KERNEL);
 	if (!mi2s_pdata) {
-		dev_err(&pdev->dev, "fail to allocate mi2s_pdata data\n");
 		rc = -ENOMEM;
 		goto rtn;
 	}
@@ -3666,23 +4972,27 @@ static int msm_dai_q6_mi2s_dev_probe(struct platform_device *pdev)
 	dai_data = kzalloc(sizeof(struct msm_dai_q6_mi2s_dai_data),
 			   GFP_KERNEL);
 	if (!dai_data) {
-		dev_err(&pdev->dev, "fail to allocate dai data\n");
 		rc = -ENOMEM;
 		goto free_pdata;
 	} else
 		dev_set_drvdata(&pdev->dev, dai_data);
 
+	rc = of_property_read_u32(pdev->dev.of_node,
+				    "qcom,msm-dai-is-island-supported",
+				    &dai_data->is_island_dai);
+	if (rc)
+		dev_dbg(&pdev->dev, "island supported entry not found\n");
+
 	pdev->dev.platform_data = mi2s_pdata;
 
 	rc = msm_dai_q6_mi2s_platform_data_validation(pdev,
 			&msm_dai_q6_mi2s_dai[mi2s_intf]);
-	if (IS_ERR_VALUE(rc))
+	if (rc < 0)
 		goto free_dai_data;
 
 	rc = snd_soc_register_component(&pdev->dev, &msm_q6_mi2s_dai_component,
 	&msm_dai_q6_mi2s_dai[mi2s_intf], 1);
-
-	if (IS_ERR_VALUE(rc))
+	if (rc < 0)
 		goto err_register;
 	return 0;
 
@@ -3745,17 +5055,27 @@ static int msm_dai_q6_dev_probe(struct platform_device *pdev)
 		goto register_slim_playback;
 	case SLIMBUS_6_RX:
 		strlcpy(stream_name, "Slimbus6 Playback", 80);
+		goto register_slim_playback;
+	case SLIMBUS_7_RX:
+		strlcpy(stream_name, "Slimbus7 Playback", sizeof(stream_name));
+		goto register_slim_playback;
+	case SLIMBUS_8_RX:
+		strlcpy(stream_name, "Slimbus8 Playback", sizeof(stream_name));
+		goto register_slim_playback;
+	case SLIMBUS_9_RX:
+		strlcpy(stream_name, "Slimbus9 Playback", sizeof(stream_name));
+		goto register_slim_playback;
 register_slim_playback:
 		rc = -ENODEV;
-		len = strnlen(stream_name , 80);
+		len = strnlen(stream_name, 80);
 		for (i = 0; i < ARRAY_SIZE(msm_dai_q6_slimbus_rx_dai); i++) {
 			if (msm_dai_q6_slimbus_rx_dai[i].playback.stream_name &&
-				!strncmp(stream_name,
-				msm_dai_q6_slimbus_rx_dai[i] \
-				.playback.stream_name,
-				len)) {
+				!strcmp(stream_name,
+				msm_dai_q6_slimbus_rx_dai[i]
+				.playback.stream_name)) {
 				rc = snd_soc_register_component(&pdev->dev,
-				&msm_dai_q6_component, &msm_dai_q6_slimbus_rx_dai[i], 1);
+				&msm_dai_q6_component,
+				&msm_dai_q6_slimbus_rx_dai[i], 1);
 				break;
 			}
 		}
@@ -3783,17 +5103,27 @@ register_slim_playback:
 		goto register_slim_capture;
 	case SLIMBUS_6_TX:
 		strlcpy(stream_name, "Slimbus6 Capture", 80);
+		goto register_slim_capture;
+	case SLIMBUS_7_TX:
+		strlcpy(stream_name, "Slimbus7 Capture", sizeof(stream_name));
+		goto register_slim_capture;
+	case SLIMBUS_8_TX:
+		strlcpy(stream_name, "Slimbus8 Capture", sizeof(stream_name));
+		goto register_slim_capture;
+	case SLIMBUS_9_TX:
+		strlcpy(stream_name, "Slimbus9 Capture", sizeof(stream_name));
+		goto register_slim_capture;
 register_slim_capture:
 		rc = -ENODEV;
-		len = strnlen(stream_name , 80);
+		len = strnlen(stream_name, 80);
 		for (i = 0; i < ARRAY_SIZE(msm_dai_q6_slimbus_tx_dai); i++) {
 			if (msm_dai_q6_slimbus_tx_dai[i].capture.stream_name &&
-				!strncmp(stream_name,
-				msm_dai_q6_slimbus_tx_dai[i] \
-				.capture.stream_name,
-				len)) {
+				!strcmp(stream_name,
+				msm_dai_q6_slimbus_tx_dai[i]
+				.capture.stream_name)) {
 				rc = snd_soc_register_component(&pdev->dev,
-				&msm_dai_q6_component, &msm_dai_q6_slimbus_tx_dai[i], 1);
+				&msm_dai_q6_component,
+				&msm_dai_q6_slimbus_tx_dai[i], 1);
 				break;
 			}
 		}
@@ -3808,40 +5138,43 @@ register_slim_capture:
 						1);
 		break;
 	case INT_BT_SCO_RX:
-		rc = snd_soc_register_component(&pdev->dev, &msm_dai_q6_component,
-		&msm_dai_q6_bt_sco_rx_dai, 1);
+		rc = snd_soc_register_component(&pdev->dev,
+			&msm_dai_q6_component, &msm_dai_q6_bt_sco_rx_dai, 1);
 		break;
 	case INT_BT_SCO_TX:
-		rc = snd_soc_register_component(&pdev->dev, &msm_dai_q6_component,
-		&msm_dai_q6_bt_sco_tx_dai, 1);
+		rc = snd_soc_register_component(&pdev->dev,
+			&msm_dai_q6_component, &msm_dai_q6_bt_sco_tx_dai, 1);
 		break;
 	case INT_BT_A2DP_RX:
 		rc = snd_soc_register_component(&pdev->dev,
-		&msm_dai_q6_component, &msm_dai_q6_bt_a2dp_rx_dai, 1);
+			&msm_dai_q6_component, &msm_dai_q6_bt_a2dp_rx_dai, 1);
 		break;
 	case INT_FM_RX:
-		rc = snd_soc_register_component(&pdev->dev, &msm_dai_q6_component,
-		&msm_dai_q6_fm_rx_dai, 1);
+		rc = snd_soc_register_component(&pdev->dev,
+			&msm_dai_q6_component, &msm_dai_q6_fm_rx_dai, 1);
 		break;
 	case INT_FM_TX:
-		rc = snd_soc_register_component(&pdev->dev, &msm_dai_q6_component,
-										&msm_dai_q6_fm_tx_dai, 1);
+		rc = snd_soc_register_component(&pdev->dev,
+			&msm_dai_q6_component, &msm_dai_q6_fm_tx_dai, 1);
 		break;
 	case RT_PROXY_DAI_001_RX:
 		strlcpy(stream_name, "AFE Playback", 80);
+		goto register_afe_playback;
+	case RT_PROXY_DAI_003_RX:
+		strlcpy(stream_name, "AFE Playback1", 80);
 		goto register_afe_playback;
 	case RT_PROXY_DAI_002_RX:
 		strlcpy(stream_name, "AFE-PROXY RX", 80);
 register_afe_playback:
 		rc = -ENODEV;
-		len = strnlen(stream_name , 80);
+		len = strnlen(stream_name, 80);
 		for (i = 0; i < ARRAY_SIZE(msm_dai_q6_afe_rx_dai); i++) {
 			if (msm_dai_q6_afe_rx_dai[i].playback.stream_name &&
-				!strncmp(stream_name,
-				msm_dai_q6_afe_rx_dai[i].playback.stream_name,
-				len)) {
+			    !strcmp(stream_name,
+			    msm_dai_q6_afe_rx_dai[i].playback.stream_name)) {
 				rc = snd_soc_register_component(&pdev->dev,
-				&msm_dai_q6_component, &msm_dai_q6_afe_rx_dai[i], 1);
+					&msm_dai_q6_component,
+					&msm_dai_q6_afe_rx_dai[i], 1);
 				break;
 			}
 		}
@@ -3852,18 +5185,21 @@ register_afe_playback:
 	case RT_PROXY_DAI_001_TX:
 		strlcpy(stream_name, "AFE-PROXY TX", 80);
 		goto register_afe_capture;
+	case RT_PROXY_DAI_003_TX:
+		strlcpy(stream_name, "AFE-PROXY TX1", 80);
+		goto register_afe_capture;
 	case RT_PROXY_DAI_002_TX:
 		strlcpy(stream_name, "AFE Capture", 80);
 register_afe_capture:
 		rc = -ENODEV;
-		len = strnlen(stream_name , 80);
+		len = strnlen(stream_name, 80);
 		for (i = 0; i < ARRAY_SIZE(msm_dai_q6_afe_tx_dai); i++) {
 			if (msm_dai_q6_afe_tx_dai[i].capture.stream_name &&
-				!strncmp(stream_name,
-				msm_dai_q6_afe_tx_dai[i].capture.stream_name,
-				len)) {
+				!strcmp(stream_name,
+				msm_dai_q6_afe_tx_dai[i].capture.stream_name)) {
 				rc = snd_soc_register_component(&pdev->dev,
-				&msm_dai_q6_component, &msm_dai_q6_afe_tx_dai[i], 1);
+					&msm_dai_q6_component,
+					&msm_dai_q6_afe_tx_dai[i], 1);
 				break;
 			}
 		}
@@ -3871,6 +5207,9 @@ register_afe_capture:
 			pr_err("%s: Device not found stream name %s\n",
 			__func__, stream_name);
 		break;
+	case VOICE_PLAYBACK_DL_TX:
+		strlcpy(stream_name, "Voice Downlink Playback", 80);
+		goto register_voice_playback;
 	case VOICE_PLAYBACK_TX:
 		strlcpy(stream_name, "Voice Farend Playback", 80);
 		goto register_voice_playback;
@@ -3878,7 +5217,7 @@ register_afe_capture:
 		strlcpy(stream_name, "Voice2 Farend Playback", 80);
 register_voice_playback:
 		rc = -ENODEV;
-		len = strnlen(stream_name , 80);
+		len = strnlen(stream_name, 80);
 		for (i = 0; i < ARRAY_SIZE(msm_dai_q6_voc_playback_dai); i++) {
 			if (msm_dai_q6_voc_playback_dai[i].playback.stream_name
 			    && !strcmp(stream_name,
@@ -3896,18 +5235,22 @@ register_voice_playback:
 	case VOICE_RECORD_RX:
 		strlcpy(stream_name, "Voice Downlink Capture", 80);
 		goto register_uplink_capture;
+	case VOICE2_RECORD_RX:
+		strlcpy(stream_name, "Voice2 Downlink Capture", 80);
+		goto register_uplink_capture;
 	case VOICE_RECORD_TX:
 		strlcpy(stream_name, "Voice Uplink Capture", 80);
 register_uplink_capture:
 		rc = -ENODEV;
-		len = strnlen(stream_name , 80);
+		len = strnlen(stream_name, 80);
 		for (i = 0; i < ARRAY_SIZE(msm_dai_q6_incall_record_dai); i++) {
-			if (msm_dai_q6_incall_record_dai[i].capture.stream_name &&
-				!strncmp(stream_name,
-				msm_dai_q6_incall_record_dai[i].capture.stream_name,
-				len)) {
+			if (msm_dai_q6_incall_record_dai[i].capture.stream_name
+			    && !strcmp(stream_name,
+			    msm_dai_q6_incall_record_dai[i].
+			    capture.stream_name)) {
 				rc = snd_soc_register_component(&pdev->dev,
-				&msm_dai_q6_component, &msm_dai_q6_incall_record_dai[i], 1);
+					&msm_dai_q6_component,
+					&msm_dai_q6_incall_record_dai[i], 1);
 				break;
 			}
 		}
@@ -3943,12 +5286,14 @@ static struct platform_driver msm_dai_q6_dev = {
 		.name = "msm-dai-q6-dev",
 		.owner = THIS_MODULE,
 		.of_match_table = msm_dai_q6_dev_dt_match,
+		.suppress_bind_attrs = true,
 	},
 };
 
 static int msm_dai_q6_probe(struct platform_device *pdev)
 {
 	int rc;
+
 	pr_debug("%s: dev name %s, id:%d\n", __func__,
 		 dev_name(&pdev->dev), pdev->id);
 	rc = of_platform_populate(pdev->dev.of_node, NULL, NULL, &pdev->dev);
@@ -3963,6 +5308,7 @@ static int msm_dai_q6_probe(struct platform_device *pdev)
 
 static int msm_dai_q6_remove(struct platform_device *pdev)
 {
+	of_platform_depopulate(&pdev->dev);
 	return 0;
 }
 
@@ -3978,12 +5324,14 @@ static struct platform_driver msm_dai_q6 = {
 		.name = "msm-dai-q6",
 		.owner = THIS_MODULE,
 		.of_match_table = msm_dai_q6_dt_match,
+		.suppress_bind_attrs = true,
 	},
 };
 
 static int msm_dai_mi2s_q6_probe(struct platform_device *pdev)
 {
 	int rc;
+
 	rc = of_platform_populate(pdev->dev.of_node, NULL, NULL, &pdev->dev);
 	if (rc) {
 		dev_err(&pdev->dev, "%s: failed to add child nodes, rc=%d\n",
@@ -4012,6 +5360,7 @@ static struct platform_driver msm_dai_mi2s_q6 = {
 		.name = "msm-dai-mi2s",
 		.owner = THIS_MODULE,
 		.of_match_table = msm_dai_mi2s_dt_match,
+		.suppress_bind_attrs = true,
 	},
 };
 
@@ -4029,21 +5378,55 @@ static struct platform_driver msm_dai_q6_mi2s_driver = {
 		.name = "msm-dai-q6-mi2s",
 		.owner = THIS_MODULE,
 		.of_match_table = msm_dai_q6_mi2s_dev_dt_match,
+		.suppress_bind_attrs = true,
 	},
 };
 
+
 static int msm_dai_q6_spdif_dev_probe(struct platform_device *pdev)
 {
-	int rc;
+	int rc, id;
+	const char *q6_dev_id = "qcom,msm-dai-q6-dev-id";
 
-	pdev->id = AFE_PORT_ID_SPDIF_RX;
+	rc = of_property_read_u32(pdev->dev.of_node, q6_dev_id, &id);
+	if (rc) {
+		dev_err(&pdev->dev,
+			"%s: missing %s in dt node\n", __func__, q6_dev_id);
+		return rc;
+	}
+
+	pdev->id = id;
 
 	pr_debug("%s: dev name %s, id:%d\n", __func__,
 			dev_name(&pdev->dev), pdev->id);
 
-	rc = snd_soc_register_component(&pdev->dev,
+	switch (pdev->id) {
+	case AFE_PORT_ID_PRIMARY_SPDIF_RX:
+		rc = snd_soc_register_component(&pdev->dev,
 			&msm_dai_spdif_q6_component,
-			&msm_dai_q6_spdif_spdif_rx_dai, 1);
+			&msm_dai_q6_spdif_spdif_rx_dai[0], 1);
+		break;
+	case AFE_PORT_ID_SECONDARY_SPDIF_RX:
+		rc = snd_soc_register_component(&pdev->dev,
+			&msm_dai_spdif_q6_component,
+			&msm_dai_q6_spdif_spdif_rx_dai[1], 1);
+		break;
+	case AFE_PORT_ID_PRIMARY_SPDIF_TX:
+		rc = snd_soc_register_component(&pdev->dev,
+			&msm_dai_spdif_q6_component,
+			&msm_dai_q6_spdif_spdif_tx_dai[0], 1);
+		break;
+	case AFE_PORT_ID_SECONDARY_SPDIF_TX:
+		rc = snd_soc_register_component(&pdev->dev,
+			&msm_dai_spdif_q6_component,
+			&msm_dai_q6_spdif_spdif_tx_dai[1], 1);
+		break;
+	default:
+		dev_err(&pdev->dev, "invalid device ID %d\n", pdev->id);
+		rc = -ENODEV;
+		break;
+	}
+
 	return rc;
 }
 
@@ -4066,8 +5449,54 @@ static struct platform_driver msm_dai_q6_spdif_driver = {
 		.name = "msm-dai-q6-spdif",
 		.owner = THIS_MODULE,
 		.of_match_table = msm_dai_q6_spdif_dt_match,
+		.suppress_bind_attrs = true,
 	},
 };
+
+static int msm_dai_q6_tdm_set_clk_param(u32 group_id,
+					struct afe_clk_set *clk_set, u32 mode)
+{
+	switch (group_id) {
+	case AFE_GROUP_DEVICE_ID_PRIMARY_TDM_RX:
+	case AFE_GROUP_DEVICE_ID_PRIMARY_TDM_TX:
+		if (mode)
+			clk_set->clk_id = Q6AFE_LPASS_CLK_ID_PRI_TDM_IBIT;
+		else
+			clk_set->clk_id = Q6AFE_LPASS_CLK_ID_PRI_TDM_EBIT;
+		break;
+	case AFE_GROUP_DEVICE_ID_SECONDARY_TDM_RX:
+	case AFE_GROUP_DEVICE_ID_SECONDARY_TDM_TX:
+		if (mode)
+			clk_set->clk_id = Q6AFE_LPASS_CLK_ID_SEC_TDM_IBIT;
+		else
+			clk_set->clk_id = Q6AFE_LPASS_CLK_ID_SEC_TDM_EBIT;
+		break;
+	case AFE_GROUP_DEVICE_ID_TERTIARY_TDM_RX:
+	case AFE_GROUP_DEVICE_ID_TERTIARY_TDM_TX:
+		if (mode)
+			clk_set->clk_id = Q6AFE_LPASS_CLK_ID_TER_TDM_IBIT;
+		else
+			clk_set->clk_id = Q6AFE_LPASS_CLK_ID_TER_TDM_EBIT;
+		break;
+	case AFE_GROUP_DEVICE_ID_QUATERNARY_TDM_RX:
+	case AFE_GROUP_DEVICE_ID_QUATERNARY_TDM_TX:
+		if (mode)
+			clk_set->clk_id = Q6AFE_LPASS_CLK_ID_QUAD_TDM_IBIT;
+		else
+			clk_set->clk_id = Q6AFE_LPASS_CLK_ID_QUAD_TDM_EBIT;
+		break;
+	case AFE_GROUP_DEVICE_ID_QUINARY_TDM_RX:
+	case AFE_GROUP_DEVICE_ID_QUINARY_TDM_TX:
+		if (mode)
+			clk_set->clk_id = Q6AFE_LPASS_CLK_ID_QUIN_TDM_IBIT;
+		else
+			clk_set->clk_id = Q6AFE_LPASS_CLK_ID_QUIN_TDM_EBIT;
+		break;
+	default:
+		return -EINVAL;
+	}
+	return 0;
+}
 
 static int msm_dai_tdm_q6_probe(struct platform_device *pdev)
 {
@@ -4076,6 +5505,7 @@ static int msm_dai_tdm_q6_probe(struct platform_device *pdev)
 	uint32_t array_length = 0;
 	int i = 0;
 	int group_idx = 0;
+	u32 clk_mode = 0;
 
 	/* extract tdm group info into static */
 	rc = of_property_read_u32(pdev->dev.of_node,
@@ -4089,31 +5519,20 @@ static int msm_dai_tdm_q6_probe(struct platform_device *pdev)
 	dev_dbg(&pdev->dev, "%s: Group ID from DT file 0x%x\n",
 		__func__, tdm_group_cfg.group_id);
 
-	dev_info(&pdev->dev, "%s: dev_name: %s group_id: 0x%x\n",
-		__func__, dev_name(&pdev->dev), tdm_group_cfg.group_id);
-
-	group_idx = msm_dai_q6_get_group_idx(tdm_group_cfg.group_id);
-	if (group_idx < 0) {
-		dev_err(&pdev->dev, "%s: group id 0x%x not supported\n",
-			__func__, tdm_group_cfg.group_id);
-		rc = -EINVAL;
-		goto rtn;
-	}
-
 	rc = of_property_read_u32(pdev->dev.of_node,
 		"qcom,msm-cpudai-tdm-group-num-ports",
-		&num_tdm_group_ports[group_idx]);
+		&num_tdm_group_ports);
 	if (rc) {
 		dev_err(&pdev->dev, "%s: Group Num Ports from DT file %s\n",
 			__func__, "qcom,msm-cpudai-tdm-group-num-ports");
 		goto rtn;
 	}
 	dev_dbg(&pdev->dev, "%s: Group Num Ports from DT file 0x%x\n",
-		__func__, num_tdm_group_ports[group_idx]);
+		__func__, num_tdm_group_ports);
 
-	if (num_tdm_group_ports[group_idx] > AFE_GROUP_DEVICE_NUM_PORTS) {
+	if (num_tdm_group_ports > AFE_GROUP_DEVICE_NUM_PORTS) {
 		dev_err(&pdev->dev, "%s Group Num Ports %d greater than Max %d\n",
-			__func__, num_tdm_group_ports[group_idx],
+			__func__, num_tdm_group_ports,
 			AFE_GROUP_DEVICE_NUM_PORTS);
 		rc = -EINVAL;
 		goto rtn;
@@ -4128,20 +5547,19 @@ static int msm_dai_tdm_q6_probe(struct platform_device *pdev)
 		rc = -EINVAL;
 		goto rtn;
 	}
-	if (array_length != sizeof(uint32_t) * num_tdm_group_ports[group_idx]) {
+	if (array_length != sizeof(uint32_t) * num_tdm_group_ports) {
 		dev_err(&pdev->dev, "%s array_length is %d, expected is %zd\n",
 			__func__, array_length,
-			sizeof(uint32_t) * num_tdm_group_ports[group_idx]);
+			sizeof(uint32_t) * num_tdm_group_ports);
 		rc = -EINVAL;
 		goto rtn;
 	}
 
-	for (i = 0; i < num_tdm_group_ports[group_idx]; i++)
+	for (i = 0; i < num_tdm_group_ports; i++)
 		tdm_group_cfg.port_id[i] =
 			(u16)be32_to_cpu(port_id_array[i]);
 	/* Unused index should be filled with 0 or AFE_PORT_INVALID */
-	for (i = num_tdm_group_ports[group_idx];
-			i < AFE_GROUP_DEVICE_NUM_PORTS; i++)
+	for (i = num_tdm_group_ports; i < AFE_GROUP_DEVICE_NUM_PORTS; i++)
 		tdm_group_cfg.port_id[i] =
 			AFE_PORT_INVALID;
 
@@ -4157,27 +5575,71 @@ static int msm_dai_tdm_q6_probe(struct platform_device *pdev)
 	dev_dbg(&pdev->dev, "%s: Clk Rate from DT file %d\n",
 		__func__, tdm_clk_set.clk_freq_in_hz);
 
-	rc = of_property_read_u16(pdev->dev.of_node,
-		"qcom,msm-cpudai-tdm-clk-attribute",
-		&tdm_clk_set.clk_attri);
+	/* initialize static tdm clk attribute to default value */
+	tdm_clk_set.clk_attri = Q6AFE_LPASS_CLK_ATTRIBUTE_INVERT_COUPLE_NO;
+
+	/* extract tdm clk attribute into static */
+	if (of_find_property(pdev->dev.of_node,
+			"qcom,msm-cpudai-tdm-clk-attribute", NULL)) {
+		rc = of_property_read_u16(pdev->dev.of_node,
+			"qcom,msm-cpudai-tdm-clk-attribute",
+			&tdm_clk_set.clk_attri);
+		if (rc) {
+			dev_err(&pdev->dev, "%s: value for clk attribute not found %s\n",
+				__func__, "qcom,msm-cpudai-tdm-clk-attribute");
+			goto rtn;
+		}
+		dev_dbg(&pdev->dev, "%s: clk attribute from DT file %d\n",
+			__func__, tdm_clk_set.clk_attri);
+	} else
+		dev_dbg(&pdev->dev, "%s: clk attribute not found\n", __func__);
+
+	/* extract tdm lane cfg to static */
+	tdm_lane_cfg.port_id = tdm_group_cfg.group_id;
+	tdm_lane_cfg.lane_mask = AFE_LANE_MASK_INVALID;
+	if (of_find_property(pdev->dev.of_node,
+			"qcom,msm-cpudai-tdm-lane-mask", NULL)) {
+		rc = of_property_read_u16(pdev->dev.of_node,
+			"qcom,msm-cpudai-tdm-lane-mask",
+			&tdm_lane_cfg.lane_mask);
+		if (rc) {
+			dev_err(&pdev->dev, "%s: value for tdm lane mask not found %s\n",
+				__func__, "qcom,msm-cpudai-tdm-lane-mask");
+			goto rtn;
+		}
+		dev_dbg(&pdev->dev, "%s: tdm lane mask from DT file %d\n",
+			__func__, tdm_lane_cfg.lane_mask);
+	} else
+		dev_dbg(&pdev->dev, "%s: tdm lane mask not found\n", __func__);
+
+	/* extract tdm clk src master/slave info into static */
+	rc = of_property_read_u32(pdev->dev.of_node,
+		"qcom,msm-cpudai-tdm-clk-internal",
+		&clk_mode);
 	if (rc) {
-		dev_dbg(&pdev->dev, "%s: No Clk attribute in DT file %s\n",
-			__func__, "qcom,msm-cpudai-tdm-clk-attribute");
+		dev_err(&pdev->dev, "%s: Clk id from DT file %s\n",
+			__func__, "qcom,msm-cpudai-tdm-clk-internal");
+		goto rtn;
 	}
-	dev_dbg(&pdev->dev, "%s: Clk Attribute from DT file %d\n",
-		__func__, tdm_clk_set.clk_attri);
+	dev_dbg(&pdev->dev, "%s: Clk id from DT file %d\n",
+		__func__, clk_mode);
 
-	afe_ebit_unsupported = of_property_read_bool(pdev->dev.of_node,
-				"qcom,msm-cpudai-tdm-afe-ebit-unsupported");
-
-	dev_dbg(&pdev->dev, "afe_ebit_unsupported %d\n", afe_ebit_unsupported);
-
-	tdm_sec_port_enable = of_property_read_bool(pdev->dev.of_node,
-				"qcom,msm-cpudai-tdm-sec-port-enable");
-
-	dev_dbg(&pdev->dev, "tdm_sec_port_enable %d\n", tdm_sec_port_enable);
+	rc = msm_dai_q6_tdm_set_clk_param(tdm_group_cfg.group_id,
+					  &tdm_clk_set, clk_mode);
+	if (rc) {
+		dev_err(&pdev->dev, "%s: group id not supported 0x%x\n",
+			__func__, tdm_group_cfg.group_id);
+		goto rtn;
+	}
 
 	/* other initializations within device group */
+	group_idx = msm_dai_q6_get_group_idx(tdm_group_cfg.group_id);
+	if (group_idx < 0) {
+		dev_err(&pdev->dev, "%s: group id 0x%x not supported\n",
+			__func__, tdm_group_cfg.group_id);
+		rc = -EINVAL;
+		goto rtn;
+	}
 	atomic_set(&tdm_group_ref[group_idx], 0);
 
 	/* probe child node info */
@@ -4212,6 +5674,7 @@ static struct platform_driver msm_dai_tdm_q6 = {
 		.name = "msm-dai-tdm",
 		.owner = THIS_MODULE,
 		.of_match_table = msm_dai_tdm_dt_match,
+		.suppress_bind_attrs = true,
 	},
 };
 
@@ -4221,7 +5684,20 @@ static int msm_dai_q6_tdm_data_format_put(struct snd_kcontrol *kcontrol,
 	struct msm_dai_q6_tdm_dai_data *dai_data = kcontrol->private_data;
 	int value = ucontrol->value.integer.value[0];
 
-	dai_data->port_cfg.tdm.data_format = value;
+	switch (value) {
+	case 0:
+		dai_data->port_cfg.tdm.data_format = AFE_LINEAR_PCM_DATA;
+		break;
+	case 1:
+		dai_data->port_cfg.tdm.data_format = AFE_NON_LINEAR_DATA;
+		break;
+	case 2:
+		dai_data->port_cfg.tdm.data_format = AFE_GENERIC_COMPRESSED;
+		break;
+	default:
+		pr_err("%s: data_format invalid\n", __func__);
+		break;
+	}
 	pr_debug("%s: data_format = %d\n",
 		__func__, dai_data->port_cfg.tdm.data_format);
 	return 0;
@@ -4490,6 +5966,54 @@ static const struct snd_kcontrol_new tdm_config_controls_data_format[] = {
 	SOC_ENUM_EXT("QUAT_TDM_TX_7 Data Format", tdm_config_enum[0],
 			msm_dai_q6_tdm_data_format_get,
 			msm_dai_q6_tdm_data_format_put),
+	SOC_ENUM_EXT("QUIN_TDM_RX_0 Data Format", tdm_config_enum[0],
+			msm_dai_q6_tdm_data_format_get,
+			msm_dai_q6_tdm_data_format_put),
+	SOC_ENUM_EXT("QUIN_TDM_RX_1 Data Format", tdm_config_enum[0],
+			msm_dai_q6_tdm_data_format_get,
+			msm_dai_q6_tdm_data_format_put),
+	SOC_ENUM_EXT("QUIN_TDM_RX_2 Data Format", tdm_config_enum[0],
+			msm_dai_q6_tdm_data_format_get,
+			msm_dai_q6_tdm_data_format_put),
+	SOC_ENUM_EXT("QUIN_TDM_RX_3 Data Format", tdm_config_enum[0],
+			msm_dai_q6_tdm_data_format_get,
+			msm_dai_q6_tdm_data_format_put),
+	SOC_ENUM_EXT("QUIN_TDM_RX_4 Data Format", tdm_config_enum[0],
+			msm_dai_q6_tdm_data_format_get,
+			msm_dai_q6_tdm_data_format_put),
+	SOC_ENUM_EXT("QUIN_TDM_RX_5 Data Format", tdm_config_enum[0],
+			msm_dai_q6_tdm_data_format_get,
+			msm_dai_q6_tdm_data_format_put),
+	SOC_ENUM_EXT("QUIN_TDM_RX_6 Data Format", tdm_config_enum[0],
+			msm_dai_q6_tdm_data_format_get,
+			msm_dai_q6_tdm_data_format_put),
+	SOC_ENUM_EXT("QUIN_TDM_RX_7 Data Format", tdm_config_enum[0],
+			msm_dai_q6_tdm_data_format_get,
+			msm_dai_q6_tdm_data_format_put),
+	SOC_ENUM_EXT("QUIN_TDM_TX_0 Data Format", tdm_config_enum[0],
+			msm_dai_q6_tdm_data_format_get,
+			msm_dai_q6_tdm_data_format_put),
+	SOC_ENUM_EXT("QUIN_TDM_TX_1 Data Format", tdm_config_enum[0],
+			msm_dai_q6_tdm_data_format_get,
+			msm_dai_q6_tdm_data_format_put),
+	SOC_ENUM_EXT("QUIN_TDM_TX_2 Data Format", tdm_config_enum[0],
+			msm_dai_q6_tdm_data_format_get,
+			msm_dai_q6_tdm_data_format_put),
+	SOC_ENUM_EXT("QUIN_TDM_TX_3 Data Format", tdm_config_enum[0],
+			msm_dai_q6_tdm_data_format_get,
+			msm_dai_q6_tdm_data_format_put),
+	SOC_ENUM_EXT("QUIN_TDM_TX_4 Data Format", tdm_config_enum[0],
+			msm_dai_q6_tdm_data_format_get,
+			msm_dai_q6_tdm_data_format_put),
+	SOC_ENUM_EXT("QUIN_TDM_TX_5 Data Format", tdm_config_enum[0],
+			msm_dai_q6_tdm_data_format_get,
+			msm_dai_q6_tdm_data_format_put),
+	SOC_ENUM_EXT("QUIN_TDM_TX_6 Data Format", tdm_config_enum[0],
+			msm_dai_q6_tdm_data_format_get,
+			msm_dai_q6_tdm_data_format_put),
+	SOC_ENUM_EXT("QUIN_TDM_TX_7 Data Format", tdm_config_enum[0],
+			msm_dai_q6_tdm_data_format_get,
+			msm_dai_q6_tdm_data_format_put),
 };
 
 static const struct snd_kcontrol_new tdm_config_controls_header_type[] = {
@@ -4683,6 +6207,54 @@ static const struct snd_kcontrol_new tdm_config_controls_header_type[] = {
 			msm_dai_q6_tdm_header_type_get,
 			msm_dai_q6_tdm_header_type_put),
 	SOC_ENUM_EXT("QUAT_TDM_TX_7 Header Type", tdm_config_enum[1],
+			msm_dai_q6_tdm_header_type_get,
+			msm_dai_q6_tdm_header_type_put),
+	SOC_ENUM_EXT("QUIN_TDM_RX_0 Header Type", tdm_config_enum[1],
+			msm_dai_q6_tdm_header_type_get,
+			msm_dai_q6_tdm_header_type_put),
+	SOC_ENUM_EXT("QUIN_TDM_RX_1 Header Type", tdm_config_enum[1],
+			msm_dai_q6_tdm_header_type_get,
+			msm_dai_q6_tdm_header_type_put),
+	SOC_ENUM_EXT("QUIN_TDM_RX_2 Header Type", tdm_config_enum[1],
+			msm_dai_q6_tdm_header_type_get,
+			msm_dai_q6_tdm_header_type_put),
+	SOC_ENUM_EXT("QUIN_TDM_RX_3 Header Type", tdm_config_enum[1],
+			msm_dai_q6_tdm_header_type_get,
+			msm_dai_q6_tdm_header_type_put),
+	SOC_ENUM_EXT("QUIN_TDM_RX_4 Header Type", tdm_config_enum[1],
+			msm_dai_q6_tdm_header_type_get,
+			msm_dai_q6_tdm_header_type_put),
+	SOC_ENUM_EXT("QUIN_TDM_RX_5 Header Type", tdm_config_enum[1],
+			msm_dai_q6_tdm_header_type_get,
+			msm_dai_q6_tdm_header_type_put),
+	SOC_ENUM_EXT("QUIN_TDM_RX_6 Header Type", tdm_config_enum[1],
+			msm_dai_q6_tdm_header_type_get,
+			msm_dai_q6_tdm_header_type_put),
+	SOC_ENUM_EXT("QUIN_TDM_RX_7 Header Type", tdm_config_enum[1],
+			msm_dai_q6_tdm_header_type_get,
+			msm_dai_q6_tdm_header_type_put),
+	SOC_ENUM_EXT("QUIN_TDM_TX_0 Header Type", tdm_config_enum[1],
+			msm_dai_q6_tdm_header_type_get,
+			msm_dai_q6_tdm_header_type_put),
+	SOC_ENUM_EXT("QUIN_TDM_TX_1 Header Type", tdm_config_enum[1],
+			msm_dai_q6_tdm_header_type_get,
+			msm_dai_q6_tdm_header_type_put),
+	SOC_ENUM_EXT("QUIN_TDM_TX_2 Header Type", tdm_config_enum[1],
+			msm_dai_q6_tdm_header_type_get,
+			msm_dai_q6_tdm_header_type_put),
+	SOC_ENUM_EXT("QUIN_TDM_TX_3 Header Type", tdm_config_enum[1],
+			msm_dai_q6_tdm_header_type_get,
+			msm_dai_q6_tdm_header_type_put),
+	SOC_ENUM_EXT("QUIN_TDM_TX_4 Header Type", tdm_config_enum[1],
+			msm_dai_q6_tdm_header_type_get,
+			msm_dai_q6_tdm_header_type_put),
+	SOC_ENUM_EXT("QUIN_TDM_TX_5 Header Type", tdm_config_enum[1],
+			msm_dai_q6_tdm_header_type_get,
+			msm_dai_q6_tdm_header_type_put),
+	SOC_ENUM_EXT("QUIN_TDM_TX_6 Header Type", tdm_config_enum[1],
+			msm_dai_q6_tdm_header_type_get,
+			msm_dai_q6_tdm_header_type_put),
+	SOC_ENUM_EXT("QUIN_TDM_TX_7 Header Type", tdm_config_enum[1],
 			msm_dai_q6_tdm_header_type_get,
 			msm_dai_q6_tdm_header_type_put),
 };
@@ -4944,6 +6516,70 @@ static const struct snd_kcontrol_new tdm_config_controls_header[] = {
 			SND_SOC_NOPM, 0, 0xFFFFFFFF, 0, 8,
 			msm_dai_q6_tdm_header_get,
 			msm_dai_q6_tdm_header_put),
+	SOC_SINGLE_MULTI_EXT("QUIN_TDM_RX_0 Header",
+			SND_SOC_NOPM, 0, 0xFFFFFFFF, 0, 8,
+			msm_dai_q6_tdm_header_get,
+			msm_dai_q6_tdm_header_put),
+	SOC_SINGLE_MULTI_EXT("QUIN_TDM_RX_1 Header",
+			SND_SOC_NOPM, 0, 0xFFFFFFFF, 0, 8,
+			msm_dai_q6_tdm_header_get,
+			msm_dai_q6_tdm_header_put),
+	SOC_SINGLE_MULTI_EXT("QUIN_TDM_RX_2 Header",
+			SND_SOC_NOPM, 0, 0xFFFFFFFF, 0, 8,
+			msm_dai_q6_tdm_header_get,
+			msm_dai_q6_tdm_header_put),
+	SOC_SINGLE_MULTI_EXT("QUIN_TDM_RX_3 Header",
+			SND_SOC_NOPM, 0, 0xFFFFFFFF, 0, 8,
+			msm_dai_q6_tdm_header_get,
+			msm_dai_q6_tdm_header_put),
+	SOC_SINGLE_MULTI_EXT("QUIN_TDM_RX_4 Header",
+			SND_SOC_NOPM, 0, 0xFFFFFFFF, 0, 8,
+			msm_dai_q6_tdm_header_get,
+			msm_dai_q6_tdm_header_put),
+	SOC_SINGLE_MULTI_EXT("QUIN_TDM_RX_5 Header",
+			SND_SOC_NOPM, 0, 0xFFFFFFFF, 0, 8,
+			msm_dai_q6_tdm_header_get,
+			msm_dai_q6_tdm_header_put),
+	SOC_SINGLE_MULTI_EXT("QUIN_TDM_RX_6 Header",
+			SND_SOC_NOPM, 0, 0xFFFFFFFF, 0, 8,
+			msm_dai_q6_tdm_header_get,
+			msm_dai_q6_tdm_header_put),
+	SOC_SINGLE_MULTI_EXT("QUIN_TDM_RX_7 Header",
+			SND_SOC_NOPM, 0, 0xFFFFFFFF, 0, 8,
+			msm_dai_q6_tdm_header_get,
+			msm_dai_q6_tdm_header_put),
+	SOC_SINGLE_MULTI_EXT("QUIN_TDM_TX_0 Header",
+			SND_SOC_NOPM, 0, 0xFFFFFFFF, 0, 8,
+			msm_dai_q6_tdm_header_get,
+			msm_dai_q6_tdm_header_put),
+	SOC_SINGLE_MULTI_EXT("QUIN_TDM_TX_1 Header",
+			SND_SOC_NOPM, 0, 0xFFFFFFFF, 0, 8,
+			msm_dai_q6_tdm_header_get,
+			msm_dai_q6_tdm_header_put),
+	SOC_SINGLE_MULTI_EXT("QUIN_TDM_TX_2 Header",
+			SND_SOC_NOPM, 0, 0xFFFFFFFF, 0, 8,
+			msm_dai_q6_tdm_header_get,
+			msm_dai_q6_tdm_header_put),
+	SOC_SINGLE_MULTI_EXT("QUIN_TDM_TX_3 Header",
+			SND_SOC_NOPM, 0, 0xFFFFFFFF, 0, 8,
+			msm_dai_q6_tdm_header_get,
+			msm_dai_q6_tdm_header_put),
+	SOC_SINGLE_MULTI_EXT("QUIN_TDM_TX_4 Header",
+			SND_SOC_NOPM, 0, 0xFFFFFFFF, 0, 8,
+			msm_dai_q6_tdm_header_get,
+			msm_dai_q6_tdm_header_put),
+	SOC_SINGLE_MULTI_EXT("QUIN_TDM_TX_5 Header",
+			SND_SOC_NOPM, 0, 0xFFFFFFFF, 0, 8,
+			msm_dai_q6_tdm_header_get,
+			msm_dai_q6_tdm_header_put),
+	SOC_SINGLE_MULTI_EXT("QUIN_TDM_TX_6 Header",
+			SND_SOC_NOPM, 0, 0xFFFFFFFF, 0, 8,
+			msm_dai_q6_tdm_header_get,
+			msm_dai_q6_tdm_header_put),
+	SOC_SINGLE_MULTI_EXT("QUIN_TDM_TX_7 Header",
+			SND_SOC_NOPM, 0, 0xFFFFFFFF, 0, 8,
+			msm_dai_q6_tdm_header_get,
+			msm_dai_q6_tdm_header_put),
 };
 
 static int msm_dai_q6_tdm_set_clk(
@@ -4952,51 +6588,6 @@ static int msm_dai_q6_tdm_set_clk(
 {
 	int rc = 0;
 
-	pr_debug("dai_data->group_cfg.tdm_cfg.group_id = %d : %d\n",
-			dai_data->group_cfg.tdm_cfg.group_id,
-				dai_data->clk_set.clk_freq_in_hz);
-	switch (dai_data->group_cfg.tdm_cfg.group_id) {
-	case AFE_GROUP_DEVICE_ID_PRIMARY_TDM_RX:
-	case AFE_GROUP_DEVICE_ID_PRIMARY_TDM_TX:
-		if (dai_data->clk_set.clk_freq_in_hz) {
-			dai_data->clk_set.clk_id =
-				Q6AFE_LPASS_CLK_ID_PRI_TDM_IBIT;
-		} else
-			dai_data->clk_set.clk_id =
-				Q6AFE_LPASS_CLK_ID_PRI_TDM_EBIT;
-		break;
-	case AFE_GROUP_DEVICE_ID_SECONDARY_TDM_RX:
-	case AFE_GROUP_DEVICE_ID_SECONDARY_TDM_TX:
-		if (dai_data->clk_set.clk_freq_in_hz) {
-			dai_data->clk_set.clk_id =
-				Q6AFE_LPASS_CLK_ID_SEC_TDM_IBIT;
-		} else
-			dai_data->clk_set.clk_id =
-				Q6AFE_LPASS_CLK_ID_SEC_TDM_EBIT;
-		break;
-	case AFE_GROUP_DEVICE_ID_TERTIARY_TDM_RX:
-	case AFE_GROUP_DEVICE_ID_TERTIARY_TDM_TX:
-		if (dai_data->clk_set.clk_freq_in_hz) {
-			dai_data->clk_set.clk_id =
-				Q6AFE_LPASS_CLK_ID_TER_TDM_IBIT;
-		} else
-			dai_data->clk_set.clk_id =
-				Q6AFE_LPASS_CLK_ID_TER_TDM_EBIT;
-		break;
-	case AFE_GROUP_DEVICE_ID_QUATERNARY_TDM_RX:
-	case AFE_GROUP_DEVICE_ID_QUATERNARY_TDM_TX:
-		if (dai_data->clk_set.clk_freq_in_hz) {
-			dai_data->clk_set.clk_id =
-				Q6AFE_LPASS_CLK_ID_QUAD_TDM_IBIT;
-		} else
-			dai_data->clk_set.clk_id =
-				Q6AFE_LPASS_CLK_ID_QUAD_TDM_EBIT;
-		break;
-	default:
-		pr_err("%s: port id 0x%x not supported\n",
-			__func__, port_id);
-		return -EINVAL;
-	}
 	dai_data->clk_set.enable = enable;
 
 	rc = afe_set_lpass_clock_v2(port_id,
@@ -5011,8 +6602,7 @@ static int msm_dai_q6_tdm_set_clk(
 static int msm_dai_q6_dai_tdm_probe(struct snd_soc_dai *dai)
 {
 	int rc = 0;
-	struct msm_dai_q6_tdm_dai_data *tdm_dai_data =
-			dev_get_drvdata(dai->dev);
+	struct msm_dai_q6_tdm_dai_data *tdm_dai_data = NULL;
 	struct snd_kcontrol *data_format_kcontrol = NULL;
 	struct snd_kcontrol *header_type_kcontrol = NULL;
 	struct snd_kcontrol *header_kcontrol = NULL;
@@ -5020,6 +6610,8 @@ static int msm_dai_q6_dai_tdm_probe(struct snd_soc_dai *dai)
 	const struct snd_kcontrol_new *data_format_ctrl = NULL;
 	const struct snd_kcontrol_new *header_type_ctrl = NULL;
 	const struct snd_kcontrol_new *header_ctrl = NULL;
+
+	tdm_dai_data = dev_get_drvdata(dai->dev);
 
 	msm_dai_q6_set_dai_id(dai);
 
@@ -5041,9 +6633,9 @@ static int msm_dai_q6_dai_tdm_probe(struct snd_soc_dai *dai)
 	if (data_format_ctrl) {
 		data_format_kcontrol = snd_ctl_new1(data_format_ctrl,
 					tdm_dai_data);
-		rc = snd_ctl_add(dai->card->snd_card, data_format_kcontrol);
-
-		if (IS_ERR_VALUE(rc)) {
+		rc = snd_ctl_add(dai->component->card->snd_card,
+				 data_format_kcontrol);
+		if (rc < 0) {
 			dev_err(dai->dev, "%s: err add data format ctrl DAI = %s\n",
 				__func__, dai->name);
 			goto rtn;
@@ -5053,11 +6645,11 @@ static int msm_dai_q6_dai_tdm_probe(struct snd_soc_dai *dai)
 	if (header_type_ctrl) {
 		header_type_kcontrol = snd_ctl_new1(header_type_ctrl,
 					tdm_dai_data);
-		rc = snd_ctl_add(dai->card->snd_card, header_type_kcontrol);
-
-		if (IS_ERR_VALUE(rc)) {
+		rc = snd_ctl_add(dai->component->card->snd_card,
+				 header_type_kcontrol);
+		if (rc < 0) {
 			if (data_format_kcontrol)
-				snd_ctl_remove(dai->card->snd_card,
+				snd_ctl_remove(dai->component->card->snd_card,
 					data_format_kcontrol);
 			dev_err(dai->dev, "%s: err add header type ctrl DAI = %s\n",
 				__func__, dai->name);
@@ -5068,20 +6660,26 @@ static int msm_dai_q6_dai_tdm_probe(struct snd_soc_dai *dai)
 	if (header_ctrl) {
 		header_kcontrol = snd_ctl_new1(header_ctrl,
 					tdm_dai_data);
-		rc = snd_ctl_add(dai->card->snd_card, header_kcontrol);
-
-		if (IS_ERR_VALUE(rc)) {
+		rc = snd_ctl_add(dai->component->card->snd_card,
+				 header_kcontrol);
+		if (rc < 0) {
 			if (header_type_kcontrol)
-				snd_ctl_remove(dai->card->snd_card,
+				snd_ctl_remove(dai->component->card->snd_card,
 					header_type_kcontrol);
 			if (data_format_kcontrol)
-				snd_ctl_remove(dai->card->snd_card,
+				snd_ctl_remove(dai->component->card->snd_card,
 					data_format_kcontrol);
 			dev_err(dai->dev, "%s: err add header ctrl DAI = %s\n",
 				__func__, dai->name);
 			goto rtn;
 		}
 	}
+
+	if (tdm_dai_data->is_island_dai)
+		rc = msm_dai_q6_add_island_mx_ctls(
+						dai->component->card->snd_card,
+						dai->name,
+						dai->id, (void *)tdm_dai_data);
 
 	rc = msm_dai_q6_dai_add_route(dai);
 
@@ -5111,7 +6709,7 @@ static int msm_dai_q6_dai_tdm_remove(struct snd_soc_dai *dai)
 	/* If AFE port is still up, close it */
 	if (test_bit(STATUS_PORT_STARTED, tdm_dai_data->status_mask)) {
 		rc = afe_close(dai->id); /* can block */
-		if (IS_ERR_VALUE(rc)) {
+		if (rc < 0) {
 			dev_err(dai->dev, "%s: fail to close AFE port 0x%x\n",
 				__func__, dai->id);
 		}
@@ -5121,20 +6719,19 @@ static int msm_dai_q6_dai_tdm_remove(struct snd_soc_dai *dai)
 
 		if (atomic_read(group_ref) == 0) {
 			rc = afe_port_group_enable(group_id,
-				NULL, false);
-			if (IS_ERR_VALUE(rc)) {
+				NULL, false, NULL);
+			if (rc < 0) {
 				dev_err(dai->dev, "fail to disable AFE group 0x%x\n",
 					group_id);
 			}
-			if (!(tdm_dai_data->afe_ebit_unsupported &&
-			     !tdm_dai_data->clk_set.clk_freq_in_hz)) {
-				rc = msm_dai_q6_tdm_set_clk(tdm_dai_data,
-							    dai->id, false);
-				if (IS_ERR_VALUE(rc)) {
-					dev_err(dai->dev,
-					"%s: fail to disable AFE clk 0x%x\n",
+		}
+
+		if (msm_dai_q6_get_tdm_clk_ref(group_idx) == 0) {
+			rc = msm_dai_q6_tdm_set_clk(tdm_dai_data,
+				dai->id, false);
+			if (rc < 0) {
+				dev_err(dai->dev, "%s: fail to disable AFE clk 0x%x\n",
 					__func__, dai->id);
-				}
 			}
 		}
 	}
@@ -5163,18 +6760,26 @@ static int msm_dai_q6_tdm_set_tdm_slot(struct snd_soc_dai *dai,
 		return -EINVAL;
 	}
 
-	/* HW only supports 16 and 8 slots configuration */
+	/* HW supports 1-32 slots configuration. Typical: 1, 2, 4, 8, 16, 32 */
 	switch (slots) {
+	case 1:
+		cap_mask = 0x01;
+		break;
+	case 2:
+		cap_mask = 0x03;
+		break;
+	case 4:
+		cap_mask = 0x0F;
+		break;
 	case 8:
 		cap_mask = 0xFF;
 		break;
 	case 16:
 		cap_mask = 0xFFFF;
 		break;
-	case 4:
-		cap_mask = 0xF;
+	case 32:
+		cap_mask = 0xFFFFFFFF;
 		break;
-
 	default:
 		dev_err(dai->dev, "%s: invalid slots %d\n",
 			__func__, slots);
@@ -5214,14 +6819,17 @@ static int msm_dai_q6_tdm_set_tdm_slot(struct snd_soc_dai *dai,
 	case AFE_PORT_ID_QUATERNARY_TDM_RX_5:
 	case AFE_PORT_ID_QUATERNARY_TDM_RX_6:
 	case AFE_PORT_ID_QUATERNARY_TDM_RX_7:
+	case AFE_PORT_ID_QUINARY_TDM_RX:
+	case AFE_PORT_ID_QUINARY_TDM_RX_1:
+	case AFE_PORT_ID_QUINARY_TDM_RX_2:
+	case AFE_PORT_ID_QUINARY_TDM_RX_3:
+	case AFE_PORT_ID_QUINARY_TDM_RX_4:
+	case AFE_PORT_ID_QUINARY_TDM_RX_5:
+	case AFE_PORT_ID_QUINARY_TDM_RX_6:
+	case AFE_PORT_ID_QUINARY_TDM_RX_7:
 		tdm_group->nslots_per_frame = slots;
 		tdm_group->slot_width = slot_width;
 		tdm_group->slot_mask = rx_mask & cap_mask;
-		dev_dbg(dai->dev, "%s:Rx:tdm_group->nslots_per_frame %d\n"
-				"tdm_group->slot_width %d\n"
-				"tdm_group->slot_mask %d\n", __func__,
-				tdm_group->nslots_per_frame,
-				tdm_group->slot_width, tdm_group->slot_mask);
 		break;
 	case AFE_PORT_ID_PRIMARY_TDM_TX:
 	case AFE_PORT_ID_PRIMARY_TDM_TX_1:
@@ -5255,13 +6863,17 @@ static int msm_dai_q6_tdm_set_tdm_slot(struct snd_soc_dai *dai,
 	case AFE_PORT_ID_QUATERNARY_TDM_TX_5:
 	case AFE_PORT_ID_QUATERNARY_TDM_TX_6:
 	case AFE_PORT_ID_QUATERNARY_TDM_TX_7:
+	case AFE_PORT_ID_QUINARY_TDM_TX:
+	case AFE_PORT_ID_QUINARY_TDM_TX_1:
+	case AFE_PORT_ID_QUINARY_TDM_TX_2:
+	case AFE_PORT_ID_QUINARY_TDM_TX_3:
+	case AFE_PORT_ID_QUINARY_TDM_TX_4:
+	case AFE_PORT_ID_QUINARY_TDM_TX_5:
+	case AFE_PORT_ID_QUINARY_TDM_TX_6:
+	case AFE_PORT_ID_QUINARY_TDM_TX_7:
 		tdm_group->nslots_per_frame = slots;
 		tdm_group->slot_width = slot_width;
 		tdm_group->slot_mask = tx_mask & cap_mask;
-		dev_dbg(dai->dev, "%s:Tx:tdm_group->nslots_per_frame %d\n"
-			"tdm_group->slot_width %d,tdm_group->slot_mask %d\n"
-			"tx%d\n", __func__, tdm_group->nslots_per_frame,
-			tdm_group->slot_width, tdm_group->slot_mask, tx_mask);
 		break;
 	default:
 		dev_err(dai->dev, "%s: invalid dai id 0x%x\n",
@@ -5270,6 +6882,26 @@ static int msm_dai_q6_tdm_set_tdm_slot(struct snd_soc_dai *dai,
 	}
 
 	return rc;
+}
+
+static int msm_dai_q6_tdm_set_sysclk(struct snd_soc_dai *dai,
+				int clk_id, unsigned int freq, int dir)
+{
+	struct msm_dai_q6_tdm_dai_data *dai_data =
+		dev_get_drvdata(dai->dev);
+
+	if ((dai->id >= AFE_PORT_ID_PRIMARY_TDM_RX) &&
+		(dai->id <= AFE_PORT_ID_QUINARY_TDM_TX_7)) {
+		dai_data->clk_set.clk_freq_in_hz = freq;
+	} else {
+		dev_err(dai->dev, "%s: invalid dai id 0x%x\n",
+			__func__, dai->id);
+		return -EINVAL;
+	}
+
+	dev_dbg(dai->dev, "%s: dai id = 0x%x, group clk_freq = %d\n",
+			__func__, dai->id, freq);
+	return 0;
 }
 
 static int msm_dai_q6_tdm_set_channel_map(struct snd_soc_dai *dai,
@@ -5281,6 +6913,8 @@ static int msm_dai_q6_tdm_set_channel_map(struct snd_soc_dai *dai,
 		dev_get_drvdata(dai->dev);
 	struct afe_param_id_slot_mapping_cfg *slot_mapping =
 		&dai_data->port_cfg.slot_mapping;
+	struct afe_param_id_slot_mapping_cfg_v2 *slot_mapping_v2 =
+		&dai_data->port_cfg.slot_mapping_v2;
 	int i = 0;
 
 	dev_dbg(dai->dev, "%s: dai id = 0x%x\n", __func__, dai->id);
@@ -5318,23 +6952,49 @@ static int msm_dai_q6_tdm_set_channel_map(struct snd_soc_dai *dai,
 	case AFE_PORT_ID_QUATERNARY_TDM_RX_5:
 	case AFE_PORT_ID_QUATERNARY_TDM_RX_6:
 	case AFE_PORT_ID_QUATERNARY_TDM_RX_7:
-		if (!rx_slot) {
-			dev_err(dai->dev, "%s: rx slot not found\n", __func__);
-			return -EINVAL;
-		}
-		if (rx_num > AFE_PORT_MAX_AUDIO_CHAN_CNT) {
-			dev_err(dai->dev, "%s: invalid rx num %d\n", __func__,
-				rx_num);
-			return -EINVAL;
-		}
+		if (q6core_get_avcs_api_version_per_service(
+			APRV2_IDS_SERVICE_ID_ADSP_AFE_V) >= AFE_API_VERSION_V3) {
+			if (!rx_slot) {
+				dev_err(dai->dev, "%s: rx slot not found\n",
+						__func__);
+				return -EINVAL;
+			}
+			if (rx_num > AFE_PORT_MAX_AUDIO_CHAN_CNT_V2) {
+				dev_err(dai->dev, "%s: invalid rx num %d\n",
+						__func__,
+					rx_num);
+				return -EINVAL;
+			}
 
-		for (i = 0; i < rx_num; i++)
-			slot_mapping->offset[i] = rx_slot[i];
-		for (i = rx_num; i < AFE_PORT_MAX_AUDIO_CHAN_CNT; i++)
-			slot_mapping->offset[i] =
-				AFE_SLOT_MAPPING_OFFSET_INVALID;
+			for (i = 0; i < rx_num; i++)
+				slot_mapping_v2->offset[i] = rx_slot[i];
+			for (i = rx_num; i < AFE_PORT_MAX_AUDIO_CHAN_CNT_V2;
+					i++)
+				slot_mapping_v2->offset[i] =
+					AFE_SLOT_MAPPING_OFFSET_INVALID;
 
-		slot_mapping->num_channel = rx_num;
+			slot_mapping_v2->num_channel = rx_num;
+		} else {
+			if (!rx_slot) {
+				dev_err(dai->dev, "%s: rx slot not found\n",
+						__func__);
+				return -EINVAL;
+			}
+			if (rx_num > AFE_PORT_MAX_AUDIO_CHAN_CNT) {
+				dev_err(dai->dev, "%s: invalid rx num %d\n",
+						__func__,
+					rx_num);
+				return -EINVAL;
+			}
+
+			for (i = 0; i < rx_num; i++)
+				slot_mapping->offset[i] = rx_slot[i];
+			for (i = rx_num; i < AFE_PORT_MAX_AUDIO_CHAN_CNT; i++)
+				slot_mapping->offset[i] =
+					AFE_SLOT_MAPPING_OFFSET_INVALID;
+
+			slot_mapping->num_channel = rx_num;
+		}
 		break;
 	case AFE_PORT_ID_PRIMARY_TDM_TX:
 	case AFE_PORT_ID_PRIMARY_TDM_TX_1:
@@ -5368,23 +7028,49 @@ static int msm_dai_q6_tdm_set_channel_map(struct snd_soc_dai *dai,
 	case AFE_PORT_ID_QUATERNARY_TDM_TX_5:
 	case AFE_PORT_ID_QUATERNARY_TDM_TX_6:
 	case AFE_PORT_ID_QUATERNARY_TDM_TX_7:
-		if (!tx_slot) {
-			dev_err(dai->dev, "%s: tx slot not found\n", __func__);
-			return -EINVAL;
-		}
-		if (tx_num > AFE_PORT_MAX_AUDIO_CHAN_CNT) {
-			dev_err(dai->dev, "%s: invalid tx num %d\n", __func__,
-				tx_num);
-			return -EINVAL;
-		}
+		if (q6core_get_avcs_api_version_per_service(
+			APRV2_IDS_SERVICE_ID_ADSP_AFE_V) >= AFE_API_VERSION_V3) {
+			if (!tx_slot) {
+				dev_err(dai->dev, "%s: tx slot not found\n",
+						__func__);
+				return -EINVAL;
+			}
+			if (tx_num > AFE_PORT_MAX_AUDIO_CHAN_CNT_V2) {
+				dev_err(dai->dev, "%s: invalid tx num %d\n",
+						__func__,
+					tx_num);
+				return -EINVAL;
+			}
 
-		for (i = 0; i < tx_num; i++)
-			slot_mapping->offset[i] = tx_slot[i];
-		for (i = tx_num; i < AFE_PORT_MAX_AUDIO_CHAN_CNT; i++)
-			slot_mapping->offset[i] =
-				AFE_SLOT_MAPPING_OFFSET_INVALID;
+			for (i = 0; i < tx_num; i++)
+				slot_mapping_v2->offset[i] = tx_slot[i];
+			for (i = tx_num; i < AFE_PORT_MAX_AUDIO_CHAN_CNT_V2;
+					i++)
+				slot_mapping_v2->offset[i] =
+					AFE_SLOT_MAPPING_OFFSET_INVALID;
 
-		slot_mapping->num_channel = tx_num;
+			slot_mapping_v2->num_channel = tx_num;
+		} else {
+			if (!tx_slot) {
+				dev_err(dai->dev, "%s: tx slot not found\n",
+						__func__);
+				return -EINVAL;
+			}
+			if (tx_num > AFE_PORT_MAX_AUDIO_CHAN_CNT) {
+				dev_err(dai->dev, "%s: invalid tx num %d\n",
+						__func__,
+					tx_num);
+				return -EINVAL;
+			}
+
+			for (i = 0; i < tx_num; i++)
+				slot_mapping->offset[i] = tx_slot[i];
+			for (i = tx_num; i < AFE_PORT_MAX_AUDIO_CHAN_CNT; i++)
+				slot_mapping->offset[i] =
+					AFE_SLOT_MAPPING_OFFSET_INVALID;
+
+			slot_mapping->num_channel = tx_num;
+		}
 		break;
 	default:
 		dev_err(dai->dev, "%s: invalid dai id 0x%x\n",
@@ -5408,19 +7094,16 @@ static int msm_dai_q6_tdm_hw_params(struct snd_pcm_substream *substream,
 		&dai_data->port_cfg.tdm;
 	struct afe_param_id_slot_mapping_cfg *slot_mapping =
 		&dai_data->port_cfg.slot_mapping;
+	struct afe_param_id_slot_mapping_cfg_v2 *slot_mapping_v2 =
+		&dai_data->port_cfg.slot_mapping_v2;
 	struct afe_param_id_custom_tdm_header_cfg *custom_tdm_header =
 		&dai_data->port_cfg.custom_tdm_header;
 
 	pr_debug("%s: dev_name: %s\n",
 		__func__, dev_name(dai->dev));
 
-	if (params_rate(params) != 48000) {
-		dev_err(dai->dev, "%s: invalid param rate %d\n",
-			__func__, params_rate(params));
-		return -EINVAL;
-	}
 	if ((params_channels(params) == 0) ||
-		(params_channels(params) > 8)) {
+		(params_channels(params) > 32)) {
 		dev_err(dai->dev, "%s: invalid param channels %d\n",
 			__func__, params_channels(params));
 		return -EINVAL;
@@ -5449,7 +7132,17 @@ static int msm_dai_q6_tdm_hw_params(struct snd_pcm_substream *substream,
 	 * NOTE: group config is set to the same as slot config.
 	 */
 	tdm_group->bit_width = tdm_group->slot_width;
-	tdm_group->num_channels = tdm_group->nslots_per_frame;
+
+	/*
+	 * for multi lane scenario
+	 * Total number of active channels = number of active lanes * number of active slots.
+	 */
+	if (dai_data->lane_cfg.lane_mask != AFE_LANE_MASK_INVALID)
+		tdm_group->num_channels = tdm_group->nslots_per_frame
+			* num_of_bits_set(dai_data->lane_cfg.lane_mask);
+	else
+		tdm_group->num_channels = tdm_group->nslots_per_frame;
+
 	tdm_group->sample_rate = dai_data->rate;
 
 	pr_debug("%s: TDM GROUP:\n"
@@ -5474,6 +7167,10 @@ static int msm_dai_q6_tdm_hw_params(struct snd_pcm_substream *substream,
 		tdm_group->port_id[5],
 		tdm_group->port_id[6],
 		tdm_group->port_id[7]);
+	pr_debug("%s: TDM GROUP ID 0x%x lane mask 0x%x:\n",
+		__func__,
+		tdm_group->group_id,
+		dai_data->lane_cfg.lane_mask);
 
 	/*
 	 * update tdm config param
@@ -5508,32 +7205,88 @@ static int msm_dai_q6_tdm_hw_params(struct snd_pcm_substream *substream,
 		tdm->ctrl_data_out_enable,
 		tdm->ctrl_invert_sync_pulse,
 		tdm->ctrl_sync_data_delay);
+	if (q6core_get_avcs_api_version_per_service(
+		APRV2_IDS_SERVICE_ID_ADSP_AFE_V) >= AFE_API_VERSION_V3) {
+		/*
+		 * update slot mapping v2 config param
+		 * NOTE: channels/rate/bitwidth are per stream property
+		 */
+		slot_mapping_v2->bitwidth = dai_data->bitwidth;
 
-	/*
-	 * update slot mapping config param
-	 * NOTE: channels/rate/bitwidth are per stream property
-	 */
-	slot_mapping->bitwidth = dai_data->bitwidth;
-
-	pr_debug("%s: SLOT MAPPING:\n"
+	pr_debug("%s: SLOT MAPPING_V2:\n"
 		"num_channel=%d bitwidth=%d data_align=0x%x\n",
 		__func__,
-		slot_mapping->num_channel,
-		slot_mapping->bitwidth,
-		slot_mapping->data_align_type);
-	pr_debug("%s: SLOT MAPPING:\n"
+		slot_mapping_v2->num_channel,
+		slot_mapping_v2->bitwidth,
+		slot_mapping_v2->data_align_type);
+	pr_debug("%s: SLOT MAPPING V2:\n"
 		"offset[0]=0x%x offset[1]=0x%x offset[2]=0x%x offset[3]=0x%x\n"
-		"offset[4]=0x%x offset[5]=0x%x offset[6]=0x%x offset[7]=0x%x\n",
+		"offset[4]=0x%x offset[5]=0x%x offset[6]=0x%x offset[7]=0x%x\n"
+		"offset[8]=0x%x offset[9]=0x%x offset[10]=0x%x offset[11]=0x%x\n"
+		"offset[12]=0x%x offset[13]=0x%x offset[14]=0x%x offset[15]=0x%x\n"
+		"offset[16]=0x%x offset[17]=0x%x offset[18]=0x%x offset[19]=0x%x\n"
+		"offset[20]=0x%x offset[21]=0x%x offset[22]=0x%x offset[23]=0x%x\n"
+		"offset[24]=0x%x offset[25]=0x%x offset[26]=0x%x offset[27]=0x%x\n"
+		"offset[28]=0x%x offset[29]=0x%x offset[30]=0x%x offset[31]=0x%x\n",
 		__func__,
-		slot_mapping->offset[0],
-		slot_mapping->offset[1],
-		slot_mapping->offset[2],
-		slot_mapping->offset[3],
-		slot_mapping->offset[4],
-		slot_mapping->offset[5],
-		slot_mapping->offset[6],
-		slot_mapping->offset[7]);
+		slot_mapping_v2->offset[0],
+		slot_mapping_v2->offset[1],
+		slot_mapping_v2->offset[2],
+		slot_mapping_v2->offset[3],
+		slot_mapping_v2->offset[4],
+		slot_mapping_v2->offset[5],
+		slot_mapping_v2->offset[6],
+		slot_mapping_v2->offset[7],
+		slot_mapping_v2->offset[8],
+		slot_mapping_v2->offset[9],
+		slot_mapping_v2->offset[10],
+		slot_mapping_v2->offset[11],
+		slot_mapping_v2->offset[12],
+		slot_mapping_v2->offset[13],
+		slot_mapping_v2->offset[14],
+		slot_mapping_v2->offset[15],
+		slot_mapping_v2->offset[16],
+		slot_mapping_v2->offset[17],
+		slot_mapping_v2->offset[18],
+		slot_mapping_v2->offset[19],
+		slot_mapping_v2->offset[20],
+		slot_mapping_v2->offset[21],
+		slot_mapping_v2->offset[22],
+		slot_mapping_v2->offset[23],
+		slot_mapping_v2->offset[24],
+		slot_mapping_v2->offset[25],
+		slot_mapping_v2->offset[26],
+		slot_mapping_v2->offset[27],
+		slot_mapping_v2->offset[28],
+		slot_mapping_v2->offset[29],
+		slot_mapping_v2->offset[30],
+		slot_mapping_v2->offset[31]);
+	} else {
+		/*
+		 * update slot mapping config param
+		 * NOTE: channels/rate/bitwidth are per stream property
+		 */
+		slot_mapping->bitwidth = dai_data->bitwidth;
 
+		pr_debug("%s: SLOT MAPPING:\n"
+			"num_channel=%d bitwidth=%d data_align=0x%x\n",
+			__func__,
+			slot_mapping->num_channel,
+			slot_mapping->bitwidth,
+			slot_mapping->data_align_type);
+		pr_debug("%s: SLOT MAPPING:\n"
+			"offset[0]=0x%x offset[1]=0x%x offset[2]=0x%x offset[3]=0x%x\n"
+			"offset[4]=0x%x offset[5]=0x%x offset[6]=0x%x offset[7]=0x%x\n",
+			__func__,
+			slot_mapping->offset[0],
+			slot_mapping->offset[1],
+			slot_mapping->offset[2],
+			slot_mapping->offset[3],
+			slot_mapping->offset[4],
+			slot_mapping->offset[5],
+			slot_mapping->offset[6],
+			slot_mapping->offset[7]);
+	}
 	/*
 	 * update custom header config param
 	 * NOTE: channels/rate/bitwidth are per playback stream property.
@@ -5562,34 +7315,7 @@ static int msm_dai_q6_tdm_hw_params(struct snd_pcm_substream *substream,
 			custom_tdm_header->header[6],
 			custom_tdm_header->header[7]);
 	}
-	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
-		group_cfg_tx.tdm_cfg.num_channels =
-			dai_data->group_cfg.tdm_cfg.num_channels;
-		group_cfg_tx.tdm_cfg.sample_rate =
-			dai_data->group_cfg.tdm_cfg.sample_rate;
-		group_cfg_tx.tdm_cfg.bit_width =
-			dai_data->group_cfg.tdm_cfg.bit_width;
-		group_cfg_tx.tdm_cfg.nslots_per_frame =
-			dai_data->group_cfg.tdm_cfg.nslots_per_frame;
-		group_cfg_tx.tdm_cfg.slot_width =
-			dai_data->group_cfg.tdm_cfg.slot_width;
-		group_cfg_tx.tdm_cfg.slot_mask =
-			dai_data->group_cfg.tdm_cfg.slot_mask;
-	} else {
-		group_cfg_rx.tdm_cfg.num_channels =
-			dai_data->group_cfg.tdm_cfg.num_channels;
-		group_cfg_rx.tdm_cfg.sample_rate =
-			dai_data->group_cfg.tdm_cfg.sample_rate;
-		group_cfg_rx.tdm_cfg.bit_width =
-			dai_data->group_cfg.tdm_cfg.bit_width;
-		group_cfg_rx.tdm_cfg.nslots_per_frame =
-			dai_data->group_cfg.tdm_cfg.nslots_per_frame;
-		group_cfg_rx.tdm_cfg.slot_width =
-			dai_data->group_cfg.tdm_cfg.slot_width;
-		group_cfg_rx.tdm_cfg.slot_mask =
-			dai_data->group_cfg.tdm_cfg.slot_mask;
 
-	}
 	return 0;
 }
 
@@ -5600,13 +7326,15 @@ static int msm_dai_q6_tdm_prepare(struct snd_pcm_substream *substream,
 	struct msm_dai_q6_tdm_dai_data *dai_data =
 		dev_get_drvdata(dai->dev);
 	u16 group_id = dai_data->group_cfg.tdm_cfg.group_id;
-	u16 sec_group_id = 0;
 	int group_idx = 0;
-	int sec_group_idx = 0;
-	u16 prim_port_id = 0;
-	u16 sec_port_id = 0;
 	atomic_t *group_ref = NULL;
-	atomic_t *sec_group_ref = NULL;
+
+	dev_dbg(dai->dev, "%s: dev_name: %s dev_id: 0x%x group_id: 0x%x\n",
+		 __func__, dev_name(dai->dev), dai->dev->id, group_id);
+
+	if (dai_data->port_cfg.custom_tdm_header.minor_version == 0)
+		dev_dbg(dai->dev,
+			 "%s: Custom tdm header not supported\n", __func__);
 
 	group_idx = msm_dai_q6_get_group_idx(dai->id);
 	if (group_idx < 0) {
@@ -5620,180 +7348,57 @@ static int msm_dai_q6_tdm_prepare(struct snd_pcm_substream *substream,
 	group_ref = &tdm_group_ref[group_idx];
 
 	if (!test_bit(STATUS_PORT_STARTED, dai_data->status_mask)) {
+
+		if (msm_dai_q6_get_tdm_clk_ref(group_idx) == 0) {
+			/* TX and RX share the same clk. So enable the clk
+			 * per TDM interface. */
+			rc = msm_dai_q6_tdm_set_clk(dai_data,
+				dai->id, true);
+			if (rc < 0) {
+				dev_err(dai->dev, "%s: fail to enable AFE clk 0x%x\n",
+					__func__, dai->id);
+				goto rtn;
+			}
+		}
+
 		/* PORT START should be set if prepare called
-		in active state. */
+		 * in active state.
+		 */
 		if (atomic_read(group_ref) == 0) {
-			/* TX and RX share the same clk.
-			AFE clk is enabled per group to simplify the logic.
-			DSP will monitor the clk count. */
-			if (!(dai_data->afe_ebit_unsupported &&
-			      !dai_data->clk_set.clk_freq_in_hz)) {
-				rc = msm_dai_q6_tdm_set_clk(dai_data,
-					dai->id, true);
-				if (IS_ERR_VALUE(rc)) {
-					dev_err(dai->dev,
-						"%s:AFE CLK enable fail 0x%x\n",
-						__func__, dai->id);
-					goto rtn;
-				}
-			}
+			/*
+			 * if only one port, don't do group enable as there
+			 * is no group need for only one port
+			 */
 			if (dai_data->num_group_ports > 1) {
-				dev_dbg(dai->dev, "%s:enable afe group\n",
-					__func__);
 				rc = afe_port_group_enable(group_id,
-					&dai_data->group_cfg, true);
-				if (IS_ERR_VALUE(rc)) {
+					&dai_data->group_cfg, true,
+					&dai_data->lane_cfg);
+				if (rc < 0) {
 					dev_err(dai->dev,
-						"%s:failed to enable grp %x\n",
-						__func__, group_id);
+					"%s: fail to enable AFE group 0x%x\n",
+					__func__, group_id);
 					goto rtn;
 				}
 			}
 		}
-		/*
-		* 8909 HW and 9x50 HW have a dependency where for Rx/Tx to
-		* work in TDM mode
-		* We need to start a Tx or Rx port in the same group.
-		* Hence for BG use TDM_TX when a RX session is requested and
-		* use TDM_RX port when a TX session is requested as these ports
-		* are unused as of now.
-		*/
-		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
-			prim_port_id = dai->id;
-			if (dai_data->sec_port_enable) {
-				sec_port_id = (dai->id ==
-					AFE_PORT_ID_SECONDARY_TDM_RX) ? (
-					AFE_PORT_ID_SECONDARY_TDM_TX) : (
-					AFE_PORT_ID_PRIMARY_TDM_TX);
-				sec_group_ref = &tdm_group_ref[sec_group_idx];
-			}
-			if ((dai_data->num_group_ports > 1) &&
-			    (dai_data->sec_port_enable)) {
-				sec_group_id = (dai->id ==
-					AFE_PORT_ID_SECONDARY_TDM_RX) ? (
-				AFE_GROUP_DEVICE_ID_SECONDARY_TDM_TX) : (
-				AFE_GROUP_DEVICE_ID_PRIMARY_TDM_TX);
-				sec_group_idx =
-					msm_dai_q6_get_group_idx(sec_group_id);
-				if (sec_group_idx < 0) {
-					dev_err(dai->dev, "%s port id 0x%x\n"
-						"not supported\n", __func__,
-						sec_group_id);
-					goto rtn;
-				}
-				if (atomic_read(sec_group_ref) == 0) {
-					rc = afe_port_group_enable(
-							sec_group_id,
-							&group_cfg_tx,
-							   true);
-					if (IS_ERR_VALUE(rc)) {
-							dev_err(dai->dev,
-							"%s:failed to\n"
-							"enable grp\n"
-							"%x\n",	__func__,
-							group_id);
-						goto rtn;
-					}
-				}
-			}
-		} else {
-			prim_port_id = dai->id;
-			if (dai_data->sec_port_enable) {
-				sec_port_id = (dai->id ==
-					AFE_PORT_ID_SECONDARY_TDM_TX) ? (
-					AFE_PORT_ID_SECONDARY_TDM_RX) : (
-					AFE_PORT_ID_PRIMARY_TDM_RX);
-				sec_group_ref = &tdm_group_ref[sec_group_idx];
-			}
-			if ((dai_data->num_group_ports > 1) &&
-			    (dai_data->sec_port_enable)) {
-				sec_group_id = (dai->id ==
-					AFE_PORT_ID_SECONDARY_TDM_TX) ? (
-				AFE_GROUP_DEVICE_ID_SECONDARY_TDM_RX) : (
-				AFE_GROUP_DEVICE_ID_PRIMARY_TDM_RX);
-				sec_group_idx =
-					msm_dai_q6_get_group_idx(sec_group_id);
-				if (sec_group_idx < 0) {
-					dev_err(dai->dev, "%s port id 0x%x\n"
-						" not supported\n", __func__,
-						sec_group_id);
-						goto rtn;
-				}
-				if (atomic_read(sec_group_ref) == 0) {
-					rc = afe_port_group_enable(
-								  sec_group_id,
-								  &group_cfg_rx,
-								  true);
-					if (IS_ERR_VALUE(rc)) {
-							dev_err(dai->dev,
-							"%s:failed to\n"
-							"enable grp\n"
-							"%x\n", __func__,
-							group_id);
-						goto rtn;
-					}
-				}
-			}
-		}
-		dev_dbg(dai->dev, "\n%s:open prim port id %d TDM rate: %d\n"
-				"dai_data->port_cfg.tdm.slot_mask %x\n"
-				"dai_data->port_cfg.tdm.nslots_per_frame:%x\n",
-				__func__, prim_port_id,
-				dai_data->port_cfg.tdm.num_channels,
-				dai_data->port_cfg.tdm.slot_mask,
-				dai_data->port_cfg.tdm.nslots_per_frame);
 
-		rc = afe_tdm_port_start(prim_port_id, &dai_data->port_cfg,
+		rc = afe_tdm_port_start(dai->id, &dai_data->port_cfg,
 			dai_data->rate, dai_data->num_group_ports);
-
-		if (IS_ERR_VALUE(rc)) {
+		if (rc < 0) {
 			if (atomic_read(group_ref) == 0) {
 				afe_port_group_enable(group_id,
-					NULL, false);
-				if (!(dai_data->afe_ebit_unsupported &&
-				      !dai_data->clk_set.clk_freq_in_hz))
-					msm_dai_q6_tdm_set_clk(dai_data,
-						dai->id, false);
+					NULL, false, NULL);
 			}
-			dev_err(dai->dev, "%s: open AFE port 0x%x\n",
-				__func__, prim_port_id);
+			if (msm_dai_q6_get_tdm_clk_ref(group_idx) == 0) {
+				msm_dai_q6_tdm_set_clk(dai_data,
+					dai->id, false);
+			}
+			dev_err(dai->dev, "%s: fail to open AFE port 0x%x\n",
+				__func__, dai->id);
 		} else {
 			set_bit(STATUS_PORT_STARTED,
 				dai_data->status_mask);
 			atomic_inc(group_ref);
-		}
-
-		dai_data->port_cfg.tdm.num_channels = 1;
-		dai_data->port_cfg.tdm.slot_mask = 1;
-
-		dev_dbg(dai->dev, "\n%s:open sec port id %d TDM rate: %d\n"
-			"dai_data->port_cfg.tdm.slot_mask %x\n"
-			"dai_data->port_cfg.tdm.nslotsper_frame:%x\n", __func__,
-			sec_port_id, dai_data->port_cfg.tdm.num_channels,
-			dai_data->port_cfg.tdm.slot_mask,
-			dai_data->port_cfg.tdm.nslots_per_frame);
-
-		if (sec_port_id != 0) {
-			rc = afe_tdm_port_start(sec_port_id,
-						&dai_data->port_cfg,
-						dai_data->rate,
-						dai_data->num_group_ports);
-			if (IS_ERR_VALUE(rc)) {
-				if (atomic_read(group_ref) == 0) {
-					afe_port_group_enable(group_id,
-						NULL, false);
-				if (!(dai_data->afe_ebit_unsupported &&
-				     !dai_data->clk_set.clk_freq_in_hz))
-					msm_dai_q6_tdm_set_clk(dai_data,
-							       dai->id, false);
-				}
-				dev_err(dai->dev, "%s: fail AFE port 0x%x\n",
-						__func__, sec_port_id);
-			} else {
-				set_bit(STATUS_PORT_STARTED,
-					dai_data->status_mask);
-				atomic_inc(sec_group_ref);
-			}
 		}
 
 		/* TODO: need to monitor PCM/MI2S/TDM HW status */
@@ -5813,13 +7418,8 @@ static void msm_dai_q6_tdm_shutdown(struct snd_pcm_substream *substream,
 	struct msm_dai_q6_tdm_dai_data *dai_data =
 		dev_get_drvdata(dai->dev);
 	u16 group_id = dai_data->group_cfg.tdm_cfg.group_id;
-	u16 sec_group_id = 0;
 	int group_idx = 0;
-	int sec_group_idx = 0;
-	u16 prim_port_id = 0;
-	u16 sec_port_id = 0;
 	atomic_t *group_ref = NULL;
-	atomic_t *sec_group_ref = NULL;
 
 	group_idx = msm_dai_q6_get_group_idx(dai->id);
 	if (group_idx < 0) {
@@ -5833,104 +7433,33 @@ static void msm_dai_q6_tdm_shutdown(struct snd_pcm_substream *substream,
 	group_ref = &tdm_group_ref[group_idx];
 
 	if (test_bit(STATUS_PORT_STARTED, dai_data->status_mask)) {
-		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
-			prim_port_id = dai->id;
-			if (dai_data->sec_port_enable) {
-				sec_port_id = (dai->id ==
-					AFE_PORT_ID_SECONDARY_TDM_RX) ? (
-					AFE_PORT_ID_SECONDARY_TDM_TX) : (
-					AFE_PORT_ID_PRIMARY_TDM_TX);
-				sec_group_ref = &tdm_group_ref[sec_group_idx];
-			}
-			if ((dai_data->num_group_ports > 1) &&
-			    (dai_data->sec_port_enable)) {
-				sec_group_id = (dai->id ==
-					AFE_PORT_ID_SECONDARY_TDM_RX) ? (
-				AFE_GROUP_DEVICE_ID_SECONDARY_TDM_TX) : (
-				AFE_GROUP_DEVICE_ID_PRIMARY_TDM_TX);
-				sec_group_idx =
-					msm_dai_q6_get_group_idx(sec_group_id);
-				if (sec_group_idx < 0) {
-					dev_err(dai->dev, "%s port id 0x%x\n"
-						"not supported\n",
-						__func__, sec_group_id);
-					return;
-				}
-			}
-		} else {
-			prim_port_id = dai->id;
-			if (dai_data->sec_port_enable) {
-				sec_port_id = (dai->id ==
-					AFE_PORT_ID_SECONDARY_TDM_TX) ? (
-					AFE_PORT_ID_SECONDARY_TDM_RX) : (
-					AFE_PORT_ID_PRIMARY_TDM_RX);
-				sec_group_ref = &tdm_group_ref[sec_group_idx];
-			}
-			if ((dai_data->num_group_ports > 1) &&
-			    (dai_data->sec_port_enable)) {
-				sec_group_id = (dai->id ==
-					AFE_PORT_ID_SECONDARY_TDM_TX) ? (
-				AFE_GROUP_DEVICE_ID_SECONDARY_TDM_RX) : (
-				AFE_GROUP_DEVICE_ID_PRIMARY_TDM_RX);
-				sec_group_idx =
-					msm_dai_q6_get_group_idx(sec_group_id);
-				if (sec_group_idx < 0) {
-					dev_err(dai->dev, "%s port id 0x%x\n"
-						"not supported\n",
-						__func__, sec_group_id);
-					return;
-				}
-			}
-		}
-		rc = afe_close(prim_port_id);
-		if (IS_ERR_VALUE(rc)) {
+		rc = afe_close(dai->id);
+		if (rc < 0) {
 			dev_err(dai->dev, "%s: fail to close AFE port 0x%x\n",
-				__func__, prim_port_id);
+				__func__, dai->id);
 		}
-
-		if (sec_port_id != 0) {
-			rc = afe_close(sec_port_id);
-			if (IS_ERR_VALUE(rc)) {
-				dev_err(dai->dev, "%s: fail AFE port 0x%x\n",
-					__func__, sec_port_id);
-			}
-			atomic_dec(sec_group_ref);
-		}
-
 		atomic_dec(group_ref);
 		clear_bit(STATUS_PORT_STARTED,
 			dai_data->status_mask);
 
 		if (atomic_read(group_ref) == 0) {
 			rc = afe_port_group_enable(group_id,
-				NULL, false);
-			if (IS_ERR_VALUE(rc)) {
-				dev_err(dai->dev,
-					"%s: failed to disable grp 0x%x\n",
+				NULL, false, NULL);
+			if (rc < 0) {
+				dev_err(dai->dev, "%s: fail to disable AFE group 0x%x\n",
 					__func__, group_id);
 			}
-			if (!(dai_data->afe_ebit_unsupported &&
-				!dai_data->clk_set.clk_freq_in_hz)) {
-				rc = msm_dai_q6_tdm_set_clk(dai_data,
-							    dai->id, false);
-				if (IS_ERR_VALUE(rc)) {
-					dev_err(dai->dev,
-					"%s: fail to disable AFE clk 0x%x\n",
+		}
+
+		if (msm_dai_q6_get_tdm_clk_ref(group_idx) == 0) {
+			rc = msm_dai_q6_tdm_set_clk(dai_data,
+				dai->id, false);
+			if (rc < 0) {
+				dev_err(dai->dev, "%s: fail to disable AFE clk 0x%x\n",
 					__func__, dai->id);
-				}
 			}
 		}
-		if ((dai_data->num_group_ports > 1) &&
-		    (dai_data->sec_port_enable)) {
-			if (atomic_read(sec_group_ref) == 0) {
-				rc = afe_port_group_enable(sec_group_id,
-							NULL, false);
-				if (IS_ERR_VALUE(rc)) {
-					dev_err(dai->dev, "%s:failed to\n"
-					"enable grp %x\n", __func__, group_id);
-				}
-			}
-		}
+
 		/* TODO: need to monitor PCM/MI2S/TDM HW status */
 		/* NOTE: AFE should error out if HW resource contention */
 
@@ -5944,6 +7473,7 @@ static struct snd_soc_dai_ops msm_dai_q6_tdm_ops = {
 	.hw_params        = msm_dai_q6_tdm_hw_params,
 	.set_tdm_slot     = msm_dai_q6_tdm_set_tdm_slot,
 	.set_channel_map  = msm_dai_q6_tdm_set_channel_map,
+	.set_sysclk       = msm_dai_q6_tdm_set_sysclk,
 	.shutdown         = msm_dai_q6_tdm_shutdown,
 };
 
@@ -5953,14 +7483,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Primary TDM0 Playback",
 			.aif_name = "PRI_TDM_RX_0",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "PRI_TDM_RX_0",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_PRIMARY_TDM_RX,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -5971,14 +7504,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Primary TDM1 Playback",
 			.aif_name = "PRI_TDM_RX_1",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "PRI_TDM_RX_1",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_PRIMARY_TDM_RX_1,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -5989,14 +7525,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Primary TDM2 Playback",
 			.aif_name = "PRI_TDM_RX_2",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "PRI_TDM_RX_2",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_PRIMARY_TDM_RX_2,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6007,14 +7546,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Primary TDM3 Playback",
 			.aif_name = "PRI_TDM_RX_3",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "PRI_TDM_RX_3",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_PRIMARY_TDM_RX_3,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6025,14 +7567,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Primary TDM4 Playback",
 			.aif_name = "PRI_TDM_RX_4",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "PRI_TDM_RX_4",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_PRIMARY_TDM_RX_4,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6043,14 +7588,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Primary TDM5 Playback",
 			.aif_name = "PRI_TDM_RX_5",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "PRI_TDM_RX_5",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_PRIMARY_TDM_RX_5,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6061,14 +7609,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Primary TDM6 Playback",
 			.aif_name = "PRI_TDM_RX_6",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "PRI_TDM_RX_6",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_PRIMARY_TDM_RX_6,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6079,14 +7630,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Primary TDM7 Playback",
 			.aif_name = "PRI_TDM_RX_7",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "PRI_TDM_RX_7",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_PRIMARY_TDM_RX_7,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6097,14 +7651,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Primary TDM0 Capture",
 			.aif_name = "PRI_TDM_TX_0",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "PRI_TDM_TX_0",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_PRIMARY_TDM_TX,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6115,14 +7672,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Primary TDM1 Capture",
 			.aif_name = "PRI_TDM_TX_1",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "PRI_TDM_TX_1",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_PRIMARY_TDM_TX_1,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6133,14 +7693,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Primary TDM2 Capture",
 			.aif_name = "PRI_TDM_TX_2",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "PRI_TDM_TX_2",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_PRIMARY_TDM_TX_2,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6151,14 +7714,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Primary TDM3 Capture",
 			.aif_name = "PRI_TDM_TX_3",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "PRI_TDM_TX_3",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_PRIMARY_TDM_TX_3,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6169,14 +7735,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Primary TDM4 Capture",
 			.aif_name = "PRI_TDM_TX_4",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "PRI_TDM_TX_4",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_PRIMARY_TDM_TX_4,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6187,14 +7756,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Primary TDM5 Capture",
 			.aif_name = "PRI_TDM_TX_5",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "PRI_TDM_TX_5",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_PRIMARY_TDM_TX_5,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6205,14 +7777,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Primary TDM6 Capture",
 			.aif_name = "PRI_TDM_TX_6",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "PRI_TDM_TX_6",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_PRIMARY_TDM_TX_6,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6223,14 +7798,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Primary TDM7 Capture",
 			.aif_name = "PRI_TDM_TX_7",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "PRI_TDM_TX_7",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_PRIMARY_TDM_TX_7,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6241,14 +7819,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Secondary TDM0 Playback",
 			.aif_name = "SEC_TDM_RX_0",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "SEC_TDM_RX_0",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_SECONDARY_TDM_RX,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6259,14 +7840,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Secondary TDM1 Playback",
 			.aif_name = "SEC_TDM_RX_1",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "SEC_TDM_RX_1",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_SECONDARY_TDM_RX_1,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6277,14 +7861,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Secondary TDM2 Playback",
 			.aif_name = "SEC_TDM_RX_2",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "SEC_TDM_RX_2",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_SECONDARY_TDM_RX_2,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6295,14 +7882,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Secondary TDM3 Playback",
 			.aif_name = "SEC_TDM_RX_3",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "SEC_TDM_RX_3",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_SECONDARY_TDM_RX_3,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6313,14 +7903,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Secondary TDM4 Playback",
 			.aif_name = "SEC_TDM_RX_4",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "SEC_TDM_RX_4",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_SECONDARY_TDM_RX_4,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6331,14 +7924,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Secondary TDM5 Playback",
 			.aif_name = "SEC_TDM_RX_5",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "SEC_TDM_RX_5",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_SECONDARY_TDM_RX_5,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6349,14 +7945,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Secondary TDM6 Playback",
 			.aif_name = "SEC_TDM_RX_6",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "SEC_TDM_RX_6",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_SECONDARY_TDM_RX_6,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6367,14 +7966,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Secondary TDM7 Playback",
 			.aif_name = "SEC_TDM_RX_7",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "SEC_TDM_RX_7",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_SECONDARY_TDM_RX_7,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6385,14 +7987,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Secondary TDM0 Capture",
 			.aif_name = "SEC_TDM_TX_0",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "SEC_TDM_TX_0",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_SECONDARY_TDM_TX,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6403,14 +8008,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Secondary TDM1 Capture",
 			.aif_name = "SEC_TDM_TX_1",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "SEC_TDM_TX_1",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_SECONDARY_TDM_TX_1,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6421,14 +8029,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Secondary TDM2 Capture",
 			.aif_name = "SEC_TDM_TX_2",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "SEC_TDM_TX_2",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_SECONDARY_TDM_TX_2,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6439,14 +8050,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Secondary TDM3 Capture",
 			.aif_name = "SEC_TDM_TX_3",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "SEC_TDM_TX_3",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_SECONDARY_TDM_TX_3,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6457,14 +8071,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Secondary TDM4 Capture",
 			.aif_name = "SEC_TDM_TX_4",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "SEC_TDM_TX_4",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_SECONDARY_TDM_TX_4,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6475,14 +8092,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Secondary TDM5 Capture",
 			.aif_name = "SEC_TDM_TX_5",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "SEC_TDM_TX_5",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_SECONDARY_TDM_TX_5,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6493,14 +8113,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Secondary TDM6 Capture",
 			.aif_name = "SEC_TDM_TX_6",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "SEC_TDM_TX_6",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_SECONDARY_TDM_TX_6,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6511,14 +8134,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Secondary TDM7 Capture",
 			.aif_name = "SEC_TDM_TX_7",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "SEC_TDM_TX_7",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_SECONDARY_TDM_TX_7,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6529,14 +8155,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Tertiary TDM0 Playback",
 			.aif_name = "TERT_TDM_RX_0",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "TERT_TDM_RX_0",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_TERTIARY_TDM_RX,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6547,14 +8176,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Tertiary TDM1 Playback",
 			.aif_name = "TERT_TDM_RX_1",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "TERT_TDM_RX_1",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_TERTIARY_TDM_RX_1,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6565,14 +8197,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Tertiary TDM2 Playback",
 			.aif_name = "TERT_TDM_RX_2",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "TERT_TDM_RX_2",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_TERTIARY_TDM_RX_2,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6583,14 +8218,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Tertiary TDM3 Playback",
 			.aif_name = "TERT_TDM_RX_3",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "TERT_TDM_RX_3",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_TERTIARY_TDM_RX_3,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6601,14 +8239,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Tertiary TDM4 Playback",
 			.aif_name = "TERT_TDM_RX_4",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "TERT_TDM_RX_4",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_TERTIARY_TDM_RX_4,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6619,14 +8260,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Tertiary TDM5 Playback",
 			.aif_name = "TERT_TDM_RX_5",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "TERT_TDM_RX_5",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_TERTIARY_TDM_RX_5,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6637,14 +8281,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Tertiary TDM6 Playback",
 			.aif_name = "TERT_TDM_RX_6",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "TERT_TDM_RX_6",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_TERTIARY_TDM_RX_6,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6655,14 +8302,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Tertiary TDM7 Playback",
 			.aif_name = "TERT_TDM_RX_7",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "TERT_TDM_RX_7",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_TERTIARY_TDM_RX_7,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6673,14 +8323,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Tertiary TDM0 Capture",
 			.aif_name = "TERT_TDM_TX_0",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "TERT_TDM_TX_0",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_TERTIARY_TDM_TX,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6691,14 +8344,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Tertiary TDM1 Capture",
 			.aif_name = "TERT_TDM_TX_1",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "TERT_TDM_TX_1",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_TERTIARY_TDM_TX_1,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6709,14 +8365,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Tertiary TDM2 Capture",
 			.aif_name = "TERT_TDM_TX_2",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "TERT_TDM_TX_2",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_TERTIARY_TDM_TX_2,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6727,14 +8386,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Tertiary TDM3 Capture",
 			.aif_name = "TERT_TDM_TX_3",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "TERT_TDM_TX_3",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_TERTIARY_TDM_TX_3,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6745,14 +8407,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Tertiary TDM4 Capture",
 			.aif_name = "TERT_TDM_TX_4",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "TERT_TDM_TX_4",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_TERTIARY_TDM_TX_4,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6763,14 +8428,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Tertiary TDM5 Capture",
 			.aif_name = "TERT_TDM_TX_5",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "TERT_TDM_TX_5",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_TERTIARY_TDM_TX_5,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6781,14 +8449,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Tertiary TDM6 Capture",
 			.aif_name = "TERT_TDM_TX_6",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "TERT_TDM_TX_6",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_TERTIARY_TDM_TX_6,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6799,14 +8470,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Tertiary TDM7 Capture",
 			.aif_name = "TERT_TDM_TX_7",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "TERT_TDM_TX_7",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_TERTIARY_TDM_TX_7,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6817,14 +8491,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Quaternary TDM0 Playback",
 			.aif_name = "QUAT_TDM_RX_0",
 			.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
-				SNDRV_PCM_RATE_16000,
+				SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "QUAT_TDM_RX_0",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_QUATERNARY_TDM_RX,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6835,14 +8512,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Quaternary TDM1 Playback",
 			.aif_name = "QUAT_TDM_RX_1",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "QUAT_TDM_RX_1",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_QUATERNARY_TDM_RX_1,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6853,14 +8533,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Quaternary TDM2 Playback",
 			.aif_name = "QUAT_TDM_RX_2",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "QUAT_TDM_RX_2",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_QUATERNARY_TDM_RX_2,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6871,14 +8554,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Quaternary TDM3 Playback",
 			.aif_name = "QUAT_TDM_RX_3",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "QUAT_TDM_RX_3",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_QUATERNARY_TDM_RX_3,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6889,14 +8575,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Quaternary TDM4 Playback",
 			.aif_name = "QUAT_TDM_RX_4",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "QUAT_TDM_RX_4",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_QUATERNARY_TDM_RX_4,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6907,14 +8596,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Quaternary TDM5 Playback",
 			.aif_name = "QUAT_TDM_RX_5",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "QUAT_TDM_RX_5",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_QUATERNARY_TDM_RX_5,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6925,14 +8617,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Quaternary TDM6 Playback",
 			.aif_name = "QUAT_TDM_RX_6",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "QUAT_TDM_RX_6",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_QUATERNARY_TDM_RX_6,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6943,14 +8638,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Quaternary TDM7 Playback",
 			.aif_name = "QUAT_TDM_RX_7",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "QUAT_TDM_RX_7",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_QUATERNARY_TDM_RX_7,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6961,14 +8659,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Quaternary TDM0 Capture",
 			.aif_name = "QUAT_TDM_TX_0",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "QUAT_TDM_TX_0",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_QUATERNARY_TDM_TX,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6979,14 +8680,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Quaternary TDM1 Capture",
 			.aif_name = "QUAT_TDM_TX_1",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "QUAT_TDM_TX_1",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_QUATERNARY_TDM_TX_1,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -6997,14 +8701,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Quaternary TDM2 Capture",
 			.aif_name = "QUAT_TDM_TX_2",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "QUAT_TDM_TX_2",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_QUATERNARY_TDM_TX_2,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -7015,14 +8722,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Quaternary TDM3 Capture",
 			.aif_name = "QUAT_TDM_TX_3",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "QUAT_TDM_TX_3",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_QUATERNARY_TDM_TX_3,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -7033,14 +8743,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Quaternary TDM4 Capture",
 			.aif_name = "QUAT_TDM_TX_4",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "QUAT_TDM_TX_4",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_QUATERNARY_TDM_TX_4,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -7051,14 +8764,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Quaternary TDM5 Capture",
 			.aif_name = "QUAT_TDM_TX_5",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "QUAT_TDM_TX_5",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_QUATERNARY_TDM_TX_5,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -7069,14 +8785,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Quaternary TDM6 Capture",
 			.aif_name = "QUAT_TDM_TX_6",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "QUAT_TDM_TX_6",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_QUATERNARY_TDM_TX_6,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -7087,14 +8806,17 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.stream_name = "Quaternary TDM7 Capture",
 			.aif_name = "QUAT_TDM_TX_7",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
-				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000,
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE,
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
 			.channels_min = 1,
-			.channels_max = 8,
+			.channels_max = 16,
 			.rate_min = 8000,
-			.rate_max = 48000,
+			.rate_max = 352800,
 		},
+		.name = "QUAT_TDM_TX_7",
 		.ops = &msm_dai_q6_tdm_ops,
 		.id = AFE_PORT_ID_QUATERNARY_TDM_TX_7,
 		.probe = msm_dai_q6_dai_tdm_probe,
@@ -7113,7 +8835,7 @@ static int msm_dai_q6_tdm_dev_probe(struct platform_device *pdev)
 	int rc = 0;
 	u32 tdm_dev_id = 0;
 	int port_idx = 0;
-	int group_idx = 0;
+	struct device_node *tdm_parent_node = NULL;
 
 	/* retrieve device/afe id */
 	rc = of_property_read_u32(pdev->dev.of_node,
@@ -7133,17 +8855,6 @@ static int msm_dai_q6_tdm_dev_probe(struct platform_device *pdev)
 	}
 	pdev->id = tdm_dev_id;
 
-	dev_info(&pdev->dev, "%s: dev_name: %s dev_id: 0x%x\n",
-		__func__, dev_name(&pdev->dev), tdm_dev_id);
-
-	group_idx = msm_dai_q6_get_group_idx(tdm_dev_id);
-	if (group_idx < 0) {
-		dev_err(&pdev->dev, "%s: group id 0x%x not supported\n",
-			__func__, tdm_group_cfg.group_id);
-		rc = -EINVAL;
-		goto rtn;
-	}
-
 	dai_data = kzalloc(sizeof(struct msm_dai_q6_tdm_dai_data),
 				GFP_KERNEL);
 	if (!dai_data) {
@@ -7155,8 +8866,15 @@ static int msm_dai_q6_tdm_dev_probe(struct platform_device *pdev)
 	}
 	memset(dai_data, 0, sizeof(*dai_data));
 
-	/* TDM CFG */
 	rc = of_property_read_u32(pdev->dev.of_node,
+				    "qcom,msm-dai-is-island-supported",
+				    &dai_data->is_island_dai);
+	if (rc)
+		dev_dbg(&pdev->dev, "island supported entry not found\n");
+
+	/* TDM CFG */
+	tdm_parent_node = of_get_parent(pdev->dev.of_node);
+	rc = of_property_read_u32(tdm_parent_node,
 		"qcom,msm-cpudai-tdm-sync-mode",
 		(u32 *)&dai_data->port_cfg.tdm.sync_mode);
 	if (rc) {
@@ -7167,7 +8885,7 @@ static int msm_dai_q6_tdm_dev_probe(struct platform_device *pdev)
 	dev_dbg(&pdev->dev, "%s: Sync Mode from DT file 0x%x\n",
 		__func__, dai_data->port_cfg.tdm.sync_mode);
 
-	rc = of_property_read_u32(pdev->dev.of_node,
+	rc = of_property_read_u32(tdm_parent_node,
 		"qcom,msm-cpudai-tdm-sync-src",
 		(u32 *)&dai_data->port_cfg.tdm.sync_src);
 	if (rc) {
@@ -7178,7 +8896,7 @@ static int msm_dai_q6_tdm_dev_probe(struct platform_device *pdev)
 	dev_dbg(&pdev->dev, "%s: Sync Src from DT file 0x%x\n",
 		__func__, dai_data->port_cfg.tdm.sync_src);
 
-	rc = of_property_read_u32(pdev->dev.of_node,
+	rc = of_property_read_u32(tdm_parent_node,
 		"qcom,msm-cpudai-tdm-data-out",
 		(u32 *)&dai_data->port_cfg.tdm.ctrl_data_out_enable);
 	if (rc) {
@@ -7189,7 +8907,7 @@ static int msm_dai_q6_tdm_dev_probe(struct platform_device *pdev)
 	dev_dbg(&pdev->dev, "%s: Data Out from DT file 0x%x\n",
 		__func__, dai_data->port_cfg.tdm.ctrl_data_out_enable);
 
-	rc = of_property_read_u32(pdev->dev.of_node,
+	rc = of_property_read_u32(tdm_parent_node,
 		"qcom,msm-cpudai-tdm-invert-sync",
 		(u32 *)&dai_data->port_cfg.tdm.ctrl_invert_sync_pulse);
 	if (rc) {
@@ -7200,7 +8918,7 @@ static int msm_dai_q6_tdm_dev_probe(struct platform_device *pdev)
 	dev_dbg(&pdev->dev, "%s: Invert Sync from DT file 0x%x\n",
 		__func__, dai_data->port_cfg.tdm.ctrl_invert_sync_pulse);
 
-	rc = of_property_read_u32(pdev->dev.of_node,
+	rc = of_property_read_u32(tdm_parent_node,
 		"qcom,msm-cpudai-tdm-data-delay",
 		(u32 *)&dai_data->port_cfg.tdm.ctrl_sync_data_delay);
 	if (rc) {
@@ -7232,6 +8950,8 @@ static int msm_dai_q6_tdm_dev_probe(struct platform_device *pdev)
 	/* TDM SLOT MAPPING CFG -- set default */
 	dai_data->port_cfg.slot_mapping.minor_version =
 		AFE_API_VERSION_SLOT_MAPPING_CONFIG;
+	dai_data->port_cfg.slot_mapping_v2.minor_version =
+		AFE_API_VERSION_SLOT_MAPPING_CONFIG_V2;
 
 	/* CUSTOM TDM HEADER CFG */
 	custom_tdm_header = &dai_data->port_cfg.custom_tdm_header;
@@ -7283,8 +9003,6 @@ static int msm_dai_q6_tdm_dev_probe(struct platform_device *pdev)
 		custom_tdm_header->header_type =
 			AFE_CUSTOM_TDM_HEADER_TYPE_INVALID;
 	} else {
-		dev_info(&pdev->dev,
-			"%s: Custom tdm header not supported\n", __func__);
 		/* CUSTOM TDM HEADER CFG -- set default */
 		custom_tdm_header->header_type =
 			AFE_CUSTOM_TDM_HEADER_TYPE_INVALID;
@@ -7296,51 +9014,8 @@ static int msm_dai_q6_tdm_dev_probe(struct platform_device *pdev)
 	/* copy static group cfg per parent node */
 	dai_data->group_cfg.tdm_cfg = tdm_group_cfg;
 	/* copy static num group ports per parent node */
-	dai_data->num_group_ports = num_tdm_group_ports[group_idx];
-	dev_dbg(&pdev->dev, "TX group configuration tdm_dev_id 0x%x\n",
-				tdm_dev_id);
-
-	dai_data->afe_ebit_unsupported = afe_ebit_unsupported;
-	dai_data->sec_port_enable = tdm_sec_port_enable;
-
-	if (tdm_dev_id == AFE_PORT_ID_PRIMARY_TDM_TX ||
-		tdm_dev_id == AFE_PORT_ID_PRIMARY_TDM_TX_1 ||
-		tdm_dev_id == AFE_PORT_ID_PRIMARY_TDM_TX_2 ||
-		tdm_dev_id == AFE_PORT_ID_SECONDARY_TDM_TX ||
-		tdm_dev_id == AFE_PORT_ID_SECONDARY_TDM_TX_1 ||
-		tdm_dev_id == AFE_PORT_ID_PRIMARY_TDM_TX_3) {
-		memcpy(&group_cfg_tx.group_cfg,
-			&dai_data->group_cfg.group_cfg ,
-			sizeof(dai_data->group_cfg.group_cfg));
-		memcpy(&group_cfg_tx.group_enable,
-			&dai_data->group_cfg.group_enable,
-			sizeof(dai_data->group_cfg.group_enable));
-		memcpy(&group_cfg_tx.tdm_cfg,
-			&dai_data->group_cfg.tdm_cfg,
-			sizeof(dai_data->group_cfg.tdm_cfg));
-		dev_dbg(&pdev->dev,
-			"Copy TX group configuration Successfully tdm_id %d\n",
-			tdm_dev_id);
-	}
-	if (tdm_dev_id == AFE_PORT_ID_PRIMARY_TDM_RX ||
-		tdm_dev_id == AFE_PORT_ID_PRIMARY_TDM_RX_1 ||
-		tdm_dev_id == AFE_PORT_ID_PRIMARY_TDM_RX_2 ||
-		tdm_dev_id == AFE_PORT_ID_SECONDARY_TDM_RX ||
-		tdm_dev_id == AFE_PORT_ID_SECONDARY_TDM_RX_1 ||
-		tdm_dev_id == AFE_PORT_ID_PRIMARY_TDM_RX_3) {
-		memcpy(&group_cfg_rx.group_cfg,
-			&dai_data->group_cfg.group_cfg ,
-			sizeof(dai_data->group_cfg.group_cfg));
-		memcpy(&group_cfg_rx.group_enable,
-			&dai_data->group_cfg.group_enable,
-			sizeof(dai_data->group_cfg.group_enable));
-		memcpy(&group_cfg_rx.tdm_cfg,
-			&dai_data->group_cfg.tdm_cfg,
-			sizeof(dai_data->group_cfg.tdm_cfg));
-		dev_dbg(&pdev->dev,
-			"Copy RX group configuration Successfully tdm_id %d\n",
-			tdm_dev_id);
-	}
+	dai_data->num_group_ports = num_tdm_group_ports;
+	dai_data->lane_cfg = tdm_lane_cfg;
 
 	dev_set_drvdata(&pdev->dev, dai_data);
 
@@ -7397,9 +9072,912 @@ static struct platform_driver msm_dai_q6_tdm_driver = {
 		.name = "msm-dai-q6-tdm",
 		.owner = THIS_MODULE,
 		.of_match_table = msm_dai_q6_tdm_dev_dt_match,
+		.suppress_bind_attrs = true,
 	},
 };
 
+static int msm_dai_q6_cdc_dma_format_put(struct snd_kcontrol *kcontrol,
+				      struct snd_ctl_elem_value *ucontrol)
+{
+	struct msm_dai_q6_cdc_dma_dai_data *dai_data = kcontrol->private_data;
+	int value = ucontrol->value.integer.value[0];
+
+	dai_data->port_config.cdc_dma.data_format = value;
+	pr_debug("%s: format = %d\n", __func__, value);
+	return 0;
+}
+
+static int msm_dai_q6_cdc_dma_format_get(struct snd_kcontrol *kcontrol,
+				      struct snd_ctl_elem_value *ucontrol)
+{
+	struct msm_dai_q6_cdc_dma_dai_data *dai_data = kcontrol->private_data;
+
+	ucontrol->value.integer.value[0] =
+		dai_data->port_config.cdc_dma.data_format;
+	return 0;
+}
+static const struct snd_kcontrol_new cdc_dma_config_controls[] = {
+	SOC_ENUM_EXT("WSA_CDC_DMA_0 TX Format", cdc_dma_config_enum[0],
+		     msm_dai_q6_cdc_dma_format_get,
+		     msm_dai_q6_cdc_dma_format_put),
+};
+
+/* SOC probe for codec DMA interface */
+static int msm_dai_q6_dai_cdc_dma_probe(struct snd_soc_dai *dai)
+{
+	struct msm_dai_q6_cdc_dma_dai_data *dai_data = NULL;
+	int rc = 0;
+
+	if (!dai) {
+		pr_err("%s: Invalid params dai\n", __func__);
+		return -EINVAL;
+	}
+	if (!dai->dev) {
+		pr_err("%s: Invalid params dai dev\n", __func__);
+		return -EINVAL;
+	}
+
+	msm_dai_q6_set_dai_id(dai);
+	dai_data = dev_get_drvdata(dai->dev);
+
+	switch (dai->id) {
+	case AFE_PORT_ID_WSA_CODEC_DMA_TX_0:
+		rc = snd_ctl_add(dai->component->card->snd_card,
+				 snd_ctl_new1(&cdc_dma_config_controls[0],
+				 dai_data));
+		break;
+	default:
+		break;
+	}
+
+	if (rc < 0)
+		dev_err(dai->dev, "%s: err add config ctl, DAI = %s\n",
+			__func__, dai->name);
+
+	if (dai_data->is_island_dai)
+		rc = msm_dai_q6_add_island_mx_ctls(
+						dai->component->card->snd_card,
+						dai->name, dai->id,
+						(void *)dai_data);
+
+	rc = msm_dai_q6_dai_add_route(dai);
+	return rc;
+}
+
+static int msm_dai_q6_dai_cdc_dma_remove(struct snd_soc_dai *dai)
+{
+	struct msm_dai_q6_cdc_dma_dai_data *dai_data =
+		dev_get_drvdata(dai->dev);
+	int rc = 0;
+
+	/* If AFE port is still up, close it */
+	if (test_bit(STATUS_PORT_STARTED, dai_data->status_mask)) {
+		dev_dbg(dai->dev, "%s: stop codec dma port:%d\n", __func__,
+			dai->id);
+		rc = afe_close(dai->id); /* can block */
+		if (rc < 0)
+			dev_err(dai->dev, "fail to close AFE port\n");
+		clear_bit(STATUS_PORT_STARTED, dai_data->status_mask);
+	}
+	return rc;
+}
+
+static int msm_dai_q6_cdc_dma_set_channel_map(struct snd_soc_dai *dai,
+			unsigned int tx_num_ch, unsigned int *tx_ch_mask,
+			unsigned int rx_num_ch, unsigned int *rx_ch_mask)
+
+{
+	int rc = 0;
+	struct msm_dai_q6_cdc_dma_dai_data *dai_data =
+						dev_get_drvdata(dai->dev);
+	unsigned int ch_mask = 0, ch_num = 0;
+
+	dev_dbg(dai->dev, "%s: id = %d\n", __func__, dai->id);
+	switch (dai->id) {
+	case AFE_PORT_ID_WSA_CODEC_DMA_RX_0:
+	case AFE_PORT_ID_WSA_CODEC_DMA_RX_1:
+	case AFE_PORT_ID_RX_CODEC_DMA_RX_0:
+	case AFE_PORT_ID_RX_CODEC_DMA_RX_1:
+	case AFE_PORT_ID_RX_CODEC_DMA_RX_2:
+	case AFE_PORT_ID_RX_CODEC_DMA_RX_3:
+	case AFE_PORT_ID_RX_CODEC_DMA_RX_4:
+	case AFE_PORT_ID_RX_CODEC_DMA_RX_5:
+	case AFE_PORT_ID_RX_CODEC_DMA_RX_6:
+	case AFE_PORT_ID_RX_CODEC_DMA_RX_7:
+		if (!rx_ch_mask) {
+			dev_err(dai->dev, "%s: invalid rx ch mask\n", __func__);
+			return -EINVAL;
+		}
+		if (rx_num_ch > AFE_PORT_MAX_AUDIO_CHAN_CNT) {
+			dev_err(dai->dev, "%s: invalid rx_num_ch %d\n",
+				__func__, rx_num_ch);
+			return -EINVAL;
+		}
+		ch_mask = *rx_ch_mask;
+		ch_num = rx_num_ch;
+		break;
+	case AFE_PORT_ID_WSA_CODEC_DMA_TX_0:
+	case AFE_PORT_ID_WSA_CODEC_DMA_TX_1:
+	case AFE_PORT_ID_WSA_CODEC_DMA_TX_2:
+	case AFE_PORT_ID_VA_CODEC_DMA_TX_0:
+	case AFE_PORT_ID_VA_CODEC_DMA_TX_1:
+	case AFE_PORT_ID_TX_CODEC_DMA_TX_0:
+	case AFE_PORT_ID_TX_CODEC_DMA_TX_1:
+	case AFE_PORT_ID_TX_CODEC_DMA_TX_2:
+	case AFE_PORT_ID_TX_CODEC_DMA_TX_3:
+	case AFE_PORT_ID_TX_CODEC_DMA_TX_4:
+	case AFE_PORT_ID_TX_CODEC_DMA_TX_5:
+		if (!tx_ch_mask) {
+			dev_err(dai->dev, "%s: invalid tx ch mask\n", __func__);
+			return -EINVAL;
+		}
+		if (tx_num_ch > AFE_PORT_MAX_AUDIO_CHAN_CNT) {
+			dev_err(dai->dev, "%s: invalid tx_num_ch %d\n",
+				__func__, tx_num_ch);
+			return -EINVAL;
+		}
+		ch_mask = *tx_ch_mask;
+		ch_num = tx_num_ch;
+		break;
+	default:
+		dev_err(dai->dev, "%s: invalid dai id %d\n", __func__, dai->id);
+		return -EINVAL;
+	}
+
+	dai_data->port_config.cdc_dma.active_channels_mask = ch_mask;
+	dev_dbg(dai->dev, "%s: CDC_DMA_%d_ch cnt[%d] ch mask[0x%x]\n", __func__,
+			dai->id, ch_num, ch_mask);
+	return rc;
+}
+
+static int msm_dai_q6_cdc_dma_hw_params(
+		struct snd_pcm_substream *substream,
+		struct snd_pcm_hw_params *params,
+		struct snd_soc_dai *dai)
+{
+	struct msm_dai_q6_cdc_dma_dai_data *dai_data =
+						dev_get_drvdata(dai->dev);
+
+	switch (params_format(params)) {
+	case SNDRV_PCM_FORMAT_S16_LE:
+	case SNDRV_PCM_FORMAT_SPECIAL:
+		dai_data->port_config.cdc_dma.bit_width = 16;
+		break;
+	case SNDRV_PCM_FORMAT_S24_LE:
+	case SNDRV_PCM_FORMAT_S24_3LE:
+		dai_data->port_config.cdc_dma.bit_width = 24;
+		break;
+	case SNDRV_PCM_FORMAT_S32_LE:
+		dai_data->port_config.cdc_dma.bit_width = 32;
+		break;
+	default:
+		dev_err(dai->dev, "%s: format %d\n",
+			__func__, params_format(params));
+		return -EINVAL;
+	}
+
+	dai_data->rate = params_rate(params);
+	dai_data->channels = params_channels(params);
+
+	dai_data->port_config.cdc_dma.cdc_dma_cfg_minor_version =
+				AFE_API_VERSION_CODEC_DMA_CONFIG;
+	dai_data->port_config.cdc_dma.sample_rate = dai_data->rate;
+	dai_data->port_config.cdc_dma.num_channels = dai_data->channels;
+	dev_dbg(dai->dev, "%s: bit_wd[%hu] format[%hu]\n"
+		"num_channel %hu sample_rate %d\n", __func__,
+		dai_data->port_config.cdc_dma.bit_width,
+		dai_data->port_config.cdc_dma.data_format,
+		dai_data->port_config.cdc_dma.num_channels,
+		dai_data->rate);
+
+	return 0;
+}
+
+static int msm_dai_q6_cdc_dma_prepare(struct snd_pcm_substream *substream,
+		struct snd_soc_dai *dai)
+{
+	struct msm_dai_q6_cdc_dma_dai_data *dai_data =
+						dev_get_drvdata(dai->dev);
+	int rc = 0;
+
+	if (!test_bit(STATUS_PORT_STARTED, dai_data->status_mask)) {
+		if ((dai->id == AFE_PORT_ID_WSA_CODEC_DMA_TX_0) &&
+			(dai_data->port_config.cdc_dma.data_format == 1))
+			dai_data->port_config.cdc_dma.data_format =
+				AFE_LINEAR_PCM_DATA_PACKED_16BIT;
+
+		rc = afe_port_start(dai->id, &dai_data->port_config,
+						dai_data->rate);
+		if (rc < 0)
+			dev_err(dai->dev, "fail to open AFE port 0x%x\n",
+				dai->id);
+		else
+			set_bit(STATUS_PORT_STARTED,
+				dai_data->status_mask);
+	}
+	return rc;
+}
+
+
+static void msm_dai_q6_cdc_dma_shutdown(struct snd_pcm_substream *substream,
+				     struct snd_soc_dai *dai)
+{
+	struct msm_dai_q6_dai_data *dai_data = dev_get_drvdata(dai->dev);
+	int rc = 0;
+
+	if (test_bit(STATUS_PORT_STARTED, dai_data->status_mask)) {
+		dev_dbg(dai->dev, "%s: stop AFE port:%d\n", __func__,
+			dai->id);
+		rc = afe_close(dai->id); /* can block */
+		if (rc < 0)
+			dev_err(dai->dev, "fail to close AFE port\n");
+
+		dev_dbg(dai->dev, "%s: dai_data->status_mask = %ld\n", __func__,
+			*dai_data->status_mask);
+		clear_bit(STATUS_PORT_STARTED, dai_data->status_mask);
+	}
+
+	if (test_bit(STATUS_PORT_STARTED, dai_data->hwfree_status))
+		clear_bit(STATUS_PORT_STARTED, dai_data->hwfree_status);
+}
+
+static struct snd_soc_dai_ops msm_dai_q6_cdc_dma_ops = {
+	.prepare          = msm_dai_q6_cdc_dma_prepare,
+	.hw_params        = msm_dai_q6_cdc_dma_hw_params,
+	.shutdown         = msm_dai_q6_cdc_dma_shutdown,
+	.set_channel_map = msm_dai_q6_cdc_dma_set_channel_map,
+};
+
+static struct snd_soc_dai_ops msm_dai_q6_cdc_wsa_dma_ops = {
+	.prepare          = msm_dai_q6_cdc_dma_prepare,
+	.hw_params        = msm_dai_q6_cdc_dma_hw_params,
+	.shutdown         = msm_dai_q6_cdc_dma_shutdown,
+	.set_channel_map = msm_dai_q6_cdc_dma_set_channel_map,
+	.digital_mute = msm_dai_q6_spk_digital_mute,
+};
+
+static struct snd_soc_dai_driver msm_dai_q6_cdc_dma_dai[] = {
+	{
+		.playback = {
+			.stream_name = "WSA CDC DMA0 Playback",
+			.aif_name = "WSA_CDC_DMA_RX_0",
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 |
+				SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_22050 |
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 |
+				SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_88200 |
+				SNDRV_PCM_RATE_96000 | SNDRV_PCM_RATE_176400 |
+				SNDRV_PCM_RATE_192000 | SNDRV_PCM_RATE_352800 |
+				SNDRV_PCM_RATE_384000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S24_3LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
+			.channels_min = 1,
+			.channels_max = 4,
+			.rate_min = 8000,
+			.rate_max = 384000,
+		},
+		.name = "WSA_CDC_DMA_RX_0",
+		.ops = &msm_dai_q6_cdc_wsa_dma_ops,
+		.id = AFE_PORT_ID_WSA_CODEC_DMA_RX_0,
+		.probe = msm_dai_q6_dai_cdc_dma_probe,
+		.remove = msm_dai_q6_dai_cdc_dma_remove,
+	},
+	{
+		.capture = {
+			.stream_name = "WSA CDC DMA0 Capture",
+			.aif_name = "WSA_CDC_DMA_TX_0",
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 |
+				SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_22050 |
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 |
+				SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_88200 |
+				SNDRV_PCM_RATE_96000 | SNDRV_PCM_RATE_176400 |
+				SNDRV_PCM_RATE_192000 | SNDRV_PCM_RATE_352800 |
+				SNDRV_PCM_RATE_384000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S24_3LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
+			.channels_min = 1,
+			.channels_max = 4,
+			.rate_min = 8000,
+			.rate_max = 384000,
+		},
+		.name = "WSA_CDC_DMA_TX_0",
+		.ops = &msm_dai_q6_cdc_dma_ops,
+		.id = AFE_PORT_ID_WSA_CODEC_DMA_TX_0,
+		.probe = msm_dai_q6_dai_cdc_dma_probe,
+		.remove = msm_dai_q6_dai_cdc_dma_remove,
+		},
+	{
+		.playback = {
+			.stream_name = "WSA CDC DMA1 Playback",
+			.aif_name = "WSA_CDC_DMA_RX_1",
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 |
+				SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_22050 |
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 |
+				SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_88200 |
+				SNDRV_PCM_RATE_96000 | SNDRV_PCM_RATE_176400 |
+				SNDRV_PCM_RATE_192000 | SNDRV_PCM_RATE_352800 |
+				SNDRV_PCM_RATE_384000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S24_3LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
+			.channels_min = 1,
+			.channels_max = 2,
+			.rate_min = 8000,
+			.rate_max = 384000,
+		},
+		.name = "WSA_CDC_DMA_RX_1",
+		.ops = &msm_dai_q6_cdc_wsa_dma_ops,
+		.id = AFE_PORT_ID_WSA_CODEC_DMA_RX_1,
+		.probe = msm_dai_q6_dai_cdc_dma_probe,
+		.remove = msm_dai_q6_dai_cdc_dma_remove,
+	},
+	{
+		.capture = {
+			.stream_name = "WSA CDC DMA1 Capture",
+			.aif_name = "WSA_CDC_DMA_TX_1",
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 |
+				SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_22050 |
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 |
+				SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_88200 |
+				SNDRV_PCM_RATE_96000 | SNDRV_PCM_RATE_176400 |
+				SNDRV_PCM_RATE_192000 | SNDRV_PCM_RATE_352800 |
+				SNDRV_PCM_RATE_384000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S24_3LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
+			.channels_min = 1,
+			.channels_max = 2,
+			.rate_min = 8000,
+			.rate_max = 384000,
+		},
+		.name = "WSA_CDC_DMA_TX_1",
+		.ops = &msm_dai_q6_cdc_dma_ops,
+		.id = AFE_PORT_ID_WSA_CODEC_DMA_TX_1,
+		.probe = msm_dai_q6_dai_cdc_dma_probe,
+		.remove = msm_dai_q6_dai_cdc_dma_remove,
+	},
+	{
+		.capture = {
+			.stream_name = "WSA CDC DMA2 Capture",
+			.aif_name = "WSA_CDC_DMA_TX_2",
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 |
+				SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_22050 |
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 |
+				SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_88200 |
+				SNDRV_PCM_RATE_96000 | SNDRV_PCM_RATE_176400 |
+				SNDRV_PCM_RATE_192000 | SNDRV_PCM_RATE_352800 |
+				SNDRV_PCM_RATE_384000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S24_3LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
+			.channels_min = 1,
+			.channels_max = 1,
+			.rate_min = 8000,
+			.rate_max = 384000,
+		},
+		.name = "WSA_CDC_DMA_TX_2",
+		.ops = &msm_dai_q6_cdc_dma_ops,
+		.id = AFE_PORT_ID_WSA_CODEC_DMA_TX_2,
+		.probe = msm_dai_q6_dai_cdc_dma_probe,
+		.remove = msm_dai_q6_dai_cdc_dma_remove,
+	},
+	{
+		.capture = {
+			.stream_name = "VA CDC DMA0 Capture",
+			.aif_name = "VA_CDC_DMA_TX_0",
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 |
+				SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_22050 |
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 |
+				SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_88200 |
+				SNDRV_PCM_RATE_96000 | SNDRV_PCM_RATE_176400 |
+				SNDRV_PCM_RATE_192000 | SNDRV_PCM_RATE_352800 |
+				SNDRV_PCM_RATE_384000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S24_3LE,
+			.channels_min = 1,
+			.channels_max = 8,
+			.rate_min = 8000,
+			.rate_max = 384000,
+		},
+		.name = "VA_CDC_DMA_TX_0",
+		.ops = &msm_dai_q6_cdc_dma_ops,
+		.id = AFE_PORT_ID_VA_CODEC_DMA_TX_0,
+		.probe = msm_dai_q6_dai_cdc_dma_probe,
+		.remove = msm_dai_q6_dai_cdc_dma_remove,
+	},
+	{
+		.capture = {
+			.stream_name = "VA CDC DMA1 Capture",
+			.aif_name = "VA_CDC_DMA_TX_1",
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 |
+				SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_22050 |
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 |
+				SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_88200 |
+				SNDRV_PCM_RATE_96000 | SNDRV_PCM_RATE_176400 |
+				SNDRV_PCM_RATE_192000 | SNDRV_PCM_RATE_352800 |
+				SNDRV_PCM_RATE_384000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S24_3LE,
+			.channels_min = 1,
+			.channels_max = 8,
+			.rate_min = 8000,
+			.rate_max = 384000,
+		},
+		.name = "VA_CDC_DMA_TX_1",
+		.ops = &msm_dai_q6_cdc_dma_ops,
+		.id = AFE_PORT_ID_VA_CODEC_DMA_TX_1,
+		.probe = msm_dai_q6_dai_cdc_dma_probe,
+		.remove = msm_dai_q6_dai_cdc_dma_remove,
+	},
+	{
+		.playback = {
+			.stream_name = "RX CDC DMA0 Playback",
+			.aif_name = "RX_CDC_DMA_RX_0",
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 |
+				SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_22050 |
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 |
+				SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_88200 |
+				SNDRV_PCM_RATE_96000 | SNDRV_PCM_RATE_176400 |
+				SNDRV_PCM_RATE_192000 | SNDRV_PCM_RATE_352800 |
+				SNDRV_PCM_RATE_384000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S24_3LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
+			.channels_min = 1,
+			.channels_max = 2,
+			.rate_min = 8000,
+			.rate_max = 384000,
+		},
+		.ops = &msm_dai_q6_cdc_dma_ops,
+		.id = AFE_PORT_ID_RX_CODEC_DMA_RX_0,
+		.probe = msm_dai_q6_dai_cdc_dma_probe,
+		.remove = msm_dai_q6_dai_cdc_dma_remove,
+	},
+	{
+		.capture = {
+			.stream_name = "TX CDC DMA0 Capture",
+			.aif_name = "TX_CDC_DMA_TX_0",
+			.rates = SNDRV_PCM_RATE_8000 |
+				SNDRV_PCM_RATE_16000 |
+				SNDRV_PCM_RATE_32000 |
+				SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_96000 |
+				SNDRV_PCM_RATE_192000 |
+				SNDRV_PCM_RATE_384000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S24_3LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
+			.channels_min = 1,
+			.channels_max = 3,
+			.rate_min = 8000,
+			.rate_max = 384000,
+		},
+		.ops = &msm_dai_q6_cdc_dma_ops,
+		.id = AFE_PORT_ID_TX_CODEC_DMA_TX_0,
+		.probe = msm_dai_q6_dai_cdc_dma_probe,
+		.remove = msm_dai_q6_dai_cdc_dma_remove,
+	},
+	{
+		.playback = {
+			.stream_name = "RX CDC DMA1 Playback",
+			.aif_name = "RX_CDC_DMA_RX_1",
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 |
+				SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_22050 |
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 |
+				SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_88200 |
+				SNDRV_PCM_RATE_96000 | SNDRV_PCM_RATE_176400 |
+				SNDRV_PCM_RATE_192000 | SNDRV_PCM_RATE_352800 |
+				SNDRV_PCM_RATE_384000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S24_3LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
+			.channels_min = 1,
+			.channels_max = 2,
+			.rate_min = 8000,
+			.rate_max = 384000,
+		},
+		.ops = &msm_dai_q6_cdc_dma_ops,
+		.id = AFE_PORT_ID_RX_CODEC_DMA_RX_1,
+		.probe = msm_dai_q6_dai_cdc_dma_probe,
+		.remove = msm_dai_q6_dai_cdc_dma_remove,
+	},
+	{
+		.capture = {
+			.stream_name = "TX CDC DMA1 Capture",
+			.aif_name = "TX_CDC_DMA_TX_1",
+			.rates = SNDRV_PCM_RATE_8000 |
+				SNDRV_PCM_RATE_16000 |
+				SNDRV_PCM_RATE_32000 |
+				SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_96000 |
+				SNDRV_PCM_RATE_192000 |
+				SNDRV_PCM_RATE_384000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S24_3LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
+			.channels_min = 1,
+			.channels_max = 3,
+			.rate_min = 8000,
+			.rate_max = 384000,
+		},
+		.ops = &msm_dai_q6_cdc_dma_ops,
+		.id = AFE_PORT_ID_TX_CODEC_DMA_TX_1,
+		.probe = msm_dai_q6_dai_cdc_dma_probe,
+		.remove = msm_dai_q6_dai_cdc_dma_remove,
+	},
+	{
+		.playback = {
+			.stream_name = "RX CDC DMA2 Playback",
+			.aif_name = "RX_CDC_DMA_RX_2",
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 |
+				SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_22050 |
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 |
+				SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_88200 |
+				SNDRV_PCM_RATE_96000 | SNDRV_PCM_RATE_176400 |
+				SNDRV_PCM_RATE_192000 | SNDRV_PCM_RATE_352800 |
+				SNDRV_PCM_RATE_384000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S24_3LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
+			.channels_min = 1,
+			.channels_max = 1,
+			.rate_min = 8000,
+			.rate_max = 384000,
+		},
+		.ops = &msm_dai_q6_cdc_dma_ops,
+		.id = AFE_PORT_ID_RX_CODEC_DMA_RX_2,
+		.probe = msm_dai_q6_dai_cdc_dma_probe,
+		.remove = msm_dai_q6_dai_cdc_dma_remove,
+	},
+	{
+		.capture = {
+			.stream_name = "TX CDC DMA2 Capture",
+			.aif_name = "TX_CDC_DMA_TX_2",
+			.rates = SNDRV_PCM_RATE_8000 |
+				SNDRV_PCM_RATE_16000 |
+				SNDRV_PCM_RATE_32000 |
+				SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_96000 |
+				SNDRV_PCM_RATE_192000 |
+				SNDRV_PCM_RATE_384000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S24_3LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
+			.channels_min = 1,
+			.channels_max = 4,
+			.rate_min = 8000,
+			.rate_max = 384000,
+		},
+		.ops = &msm_dai_q6_cdc_dma_ops,
+		.id = AFE_PORT_ID_TX_CODEC_DMA_TX_2,
+		.probe = msm_dai_q6_dai_cdc_dma_probe,
+		.remove = msm_dai_q6_dai_cdc_dma_remove,
+	},	{
+		.playback = {
+			.stream_name = "RX CDC DMA3 Playback",
+			.aif_name = "RX_CDC_DMA_RX_3",
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 |
+				SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_22050 |
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 |
+				SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_88200 |
+				SNDRV_PCM_RATE_96000 | SNDRV_PCM_RATE_176400 |
+				SNDRV_PCM_RATE_192000 | SNDRV_PCM_RATE_352800 |
+				SNDRV_PCM_RATE_384000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S24_3LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
+			.channels_min = 1,
+			.channels_max = 1,
+			.rate_min = 8000,
+			.rate_max = 384000,
+		},
+		.ops = &msm_dai_q6_cdc_dma_ops,
+		.id = AFE_PORT_ID_RX_CODEC_DMA_RX_3,
+		.probe = msm_dai_q6_dai_cdc_dma_probe,
+		.remove = msm_dai_q6_dai_cdc_dma_remove,
+	},
+	{
+		.capture = {
+			.stream_name = "TX CDC DMA3 Capture",
+			.aif_name = "TX_CDC_DMA_TX_3",
+			.rates = SNDRV_PCM_RATE_8000 |
+				SNDRV_PCM_RATE_16000 |
+				SNDRV_PCM_RATE_32000 |
+				SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_96000 |
+				SNDRV_PCM_RATE_192000 |
+				SNDRV_PCM_RATE_384000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S24_3LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
+			.channels_min = 1,
+			.channels_max = 8,
+			.rate_min = 8000,
+			.rate_max = 384000,
+		},
+		.ops = &msm_dai_q6_cdc_dma_ops,
+		.id = AFE_PORT_ID_TX_CODEC_DMA_TX_3,
+		.probe = msm_dai_q6_dai_cdc_dma_probe,
+		.remove = msm_dai_q6_dai_cdc_dma_remove,
+	},
+	{
+		.playback = {
+			.stream_name = "RX CDC DMA4 Playback",
+			.aif_name = "RX_CDC_DMA_RX_4",
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 |
+				SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_22050 |
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 |
+				SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_88200 |
+				SNDRV_PCM_RATE_96000 | SNDRV_PCM_RATE_176400 |
+				SNDRV_PCM_RATE_192000 | SNDRV_PCM_RATE_352800 |
+				SNDRV_PCM_RATE_384000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S24_3LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
+			.channels_min = 1,
+			.channels_max = 6,
+			.rate_min = 8000,
+			.rate_max = 384000,
+		},
+		.ops = &msm_dai_q6_cdc_dma_ops,
+		.id = AFE_PORT_ID_RX_CODEC_DMA_RX_4,
+		.probe = msm_dai_q6_dai_cdc_dma_probe,
+		.remove = msm_dai_q6_dai_cdc_dma_remove,
+	},
+	{
+		.capture = {
+			.stream_name = "TX CDC DMA4 Capture",
+			.aif_name = "TX_CDC_DMA_TX_4",
+			.rates = SNDRV_PCM_RATE_8000 |
+				SNDRV_PCM_RATE_16000 |
+				SNDRV_PCM_RATE_32000 |
+				SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_96000 |
+				SNDRV_PCM_RATE_192000 |
+				SNDRV_PCM_RATE_384000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S24_3LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
+			.channels_min = 1,
+			.channels_max = 8,
+			.rate_min = 8000,
+			.rate_max = 384000,
+		},
+		.ops = &msm_dai_q6_cdc_dma_ops,
+		.id = AFE_PORT_ID_TX_CODEC_DMA_TX_4,
+		.probe = msm_dai_q6_dai_cdc_dma_probe,
+		.remove = msm_dai_q6_dai_cdc_dma_remove,
+	},
+	{
+		.playback = {
+			.stream_name = "RX CDC DMA5 Playback",
+			.aif_name = "RX_CDC_DMA_RX_5",
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 |
+				SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_22050 |
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 |
+				SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_88200 |
+				SNDRV_PCM_RATE_96000 | SNDRV_PCM_RATE_176400 |
+				SNDRV_PCM_RATE_192000 | SNDRV_PCM_RATE_352800 |
+				SNDRV_PCM_RATE_384000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S24_3LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
+			.channels_min = 1,
+			.channels_max = 1,
+			.rate_min = 8000,
+			.rate_max = 384000,
+		},
+		.ops = &msm_dai_q6_cdc_dma_ops,
+		.id = AFE_PORT_ID_RX_CODEC_DMA_RX_5,
+		.probe = msm_dai_q6_dai_cdc_dma_probe,
+		.remove = msm_dai_q6_dai_cdc_dma_remove,
+	},
+	{
+		.capture = {
+			.stream_name = "TX CDC DMA5 Capture",
+			.aif_name = "TX_CDC_DMA_TX_5",
+			.rates = SNDRV_PCM_RATE_8000 |
+				SNDRV_PCM_RATE_16000 |
+				SNDRV_PCM_RATE_32000 |
+				SNDRV_PCM_RATE_48000 |
+				SNDRV_PCM_RATE_96000 |
+				SNDRV_PCM_RATE_192000 |
+				SNDRV_PCM_RATE_384000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S24_3LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
+			.channels_min = 1,
+			.channels_max = 4,
+			.rate_min = 8000,
+			.rate_max = 384000,
+		},
+		.ops = &msm_dai_q6_cdc_dma_ops,
+		.id = AFE_PORT_ID_TX_CODEC_DMA_TX_5,
+		.probe = msm_dai_q6_dai_cdc_dma_probe,
+		.remove = msm_dai_q6_dai_cdc_dma_remove,
+	},
+	{
+		.playback = {
+			.stream_name = "RX CDC DMA6 Playback",
+			.aif_name = "RX_CDC_DMA_RX_6",
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 |
+				SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_22050 |
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 |
+				SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_88200 |
+				SNDRV_PCM_RATE_96000 | SNDRV_PCM_RATE_176400 |
+				SNDRV_PCM_RATE_192000 | SNDRV_PCM_RATE_352800 |
+				SNDRV_PCM_RATE_384000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S24_3LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
+			.channels_min = 1,
+			.channels_max = 4,
+			.rate_min = 8000,
+			.rate_max = 384000,
+		},
+		.ops = &msm_dai_q6_cdc_dma_ops,
+		.id = AFE_PORT_ID_RX_CODEC_DMA_RX_6,
+		.probe = msm_dai_q6_dai_cdc_dma_probe,
+		.remove = msm_dai_q6_dai_cdc_dma_remove,
+	},
+	{
+		.playback = {
+			.stream_name = "RX CDC DMA7 Playback",
+			.aif_name = "RX_CDC_DMA_RX_7",
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 |
+				SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_22050 |
+				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 |
+				SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_88200 |
+				SNDRV_PCM_RATE_96000 | SNDRV_PCM_RATE_176400 |
+				SNDRV_PCM_RATE_192000 | SNDRV_PCM_RATE_352800 |
+				SNDRV_PCM_RATE_384000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE |
+				   SNDRV_PCM_FMTBIT_S24_LE |
+				   SNDRV_PCM_FMTBIT_S24_3LE |
+				   SNDRV_PCM_FMTBIT_S32_LE,
+			.channels_min = 1,
+			.channels_max = 2,
+			.rate_min = 8000,
+			.rate_max = 384000,
+		},
+		.ops = &msm_dai_q6_cdc_dma_ops,
+		.id = AFE_PORT_ID_RX_CODEC_DMA_RX_7,
+		.probe = msm_dai_q6_dai_cdc_dma_probe,
+		.remove = msm_dai_q6_dai_cdc_dma_remove,
+	},
+};
+
+static const struct snd_soc_component_driver msm_q6_cdc_dma_dai_component = {
+	.name = "msm-dai-cdc-dma-dev",
+};
+
+/* DT related probe for each codec DMA interface device */
+static int msm_dai_q6_cdc_dma_dev_probe(struct platform_device *pdev)
+{
+	const char *q6_cdc_dma_dev_id = "qcom,msm-dai-cdc-dma-dev-id";
+	u32 cdc_dma_id = 0;
+	int i;
+	int rc = 0;
+	struct msm_dai_q6_cdc_dma_dai_data *dai_data = NULL;
+
+	rc = of_property_read_u32(pdev->dev.of_node, q6_cdc_dma_dev_id,
+				  &cdc_dma_id);
+	if (rc) {
+		dev_err(&pdev->dev,
+			"%s: missing 0x%x in dt node\n", __func__, cdc_dma_id);
+		return rc;
+	}
+
+	dev_dbg(&pdev->dev, "%s: dev name %s dev id 0x%x\n", __func__,
+		dev_name(&pdev->dev), cdc_dma_id);
+
+	pdev->id = cdc_dma_id;
+
+	dai_data = devm_kzalloc(&pdev->dev,
+				sizeof(struct msm_dai_q6_cdc_dma_dai_data),
+				GFP_KERNEL);
+
+	if (!dai_data)
+		return -ENOMEM;
+
+	rc = of_property_read_u32(pdev->dev.of_node,
+				    "qcom,msm-dai-is-island-supported",
+				    &dai_data->is_island_dai);
+	if (rc)
+		dev_dbg(&pdev->dev, "island supported entry not found\n");
+
+	dev_set_drvdata(&pdev->dev, dai_data);
+
+	for (i = 0; i < ARRAY_SIZE(msm_dai_q6_cdc_dma_dai); i++) {
+		if (msm_dai_q6_cdc_dma_dai[i].id == cdc_dma_id) {
+			return snd_soc_register_component(&pdev->dev,
+				&msm_q6_cdc_dma_dai_component,
+				&msm_dai_q6_cdc_dma_dai[i], 1);
+		}
+	}
+	return -ENODEV;
+}
+
+static int msm_dai_q6_cdc_dma_dev_remove(struct platform_device *pdev)
+{
+	snd_soc_unregister_component(&pdev->dev);
+	return 0;
+}
+
+static const struct of_device_id msm_dai_q6_cdc_dma_dev_dt_match[] = {
+	{ .compatible = "qcom,msm-dai-cdc-dma-dev", },
+	{ }
+};
+
+MODULE_DEVICE_TABLE(of, msm_dai_q6_cdc_dma_dev_dt_match);
+
+static struct platform_driver msm_dai_q6_cdc_dma_driver = {
+	.probe  = msm_dai_q6_cdc_dma_dev_probe,
+	.remove  = msm_dai_q6_cdc_dma_dev_remove,
+	.driver = {
+		.name = "msm-dai-cdc-dma-dev",
+		.owner = THIS_MODULE,
+		.of_match_table = msm_dai_q6_cdc_dma_dev_dt_match,
+	},
+};
+
+/* DT related probe for codec DMA interface device group */
+static int msm_dai_cdc_dma_q6_probe(struct platform_device *pdev)
+{
+	int rc;
+
+	rc = of_platform_populate(pdev->dev.of_node, NULL, NULL, &pdev->dev);
+	if (rc) {
+		dev_err(&pdev->dev, "%s: failed to add child nodes, rc=%d\n",
+			__func__, rc);
+	} else
+		dev_dbg(&pdev->dev, "%s: added child node\n", __func__);
+	return rc;
+}
+
+static int msm_dai_cdc_dma_q6_remove(struct platform_device *pdev)
+{
+	of_platform_depopulate(&pdev->dev);
+	return 0;
+}
+
+static const struct of_device_id msm_dai_cdc_dma_dt_match[] = {
+	{ .compatible = "qcom,msm-dai-cdc-dma", },
+	{ }
+};
+
+MODULE_DEVICE_TABLE(of, msm_dai_cdc_dma_dt_match);
+
+static struct platform_driver msm_dai_cdc_dma_q6 = {
+	.probe  = msm_dai_cdc_dma_q6_probe,
+	.remove = msm_dai_cdc_dma_q6_remove,
+	.driver = {
+		.name = "msm-dai-cdc-dma",
+		.owner = THIS_MODULE,
+		.of_match_table = msm_dai_cdc_dma_dt_match,
+	},
+};
 static int __init msm_dai_q6_init(void)
 {
 	int rc;
@@ -7451,8 +10029,25 @@ static int __init msm_dai_q6_init(void)
 		pr_err("%s: fail to register dai TDM\n", __func__);
 		goto dai_tdm_q6_fail;
 	}
+
+	rc = platform_driver_register(&msm_dai_q6_cdc_dma_driver);
+	if (rc) {
+		pr_err("%s: fail to register dai CDC DMA dev\n", __func__);
+		goto dai_cdc_dma_q6_dev_fail;
+	}
+
+
+	rc = platform_driver_register(&msm_dai_cdc_dma_q6);
+	if (rc) {
+		pr_err("%s: fail to register dai CDC DMA\n", __func__);
+		goto dai_cdc_dma_q6_fail;
+	}
 	return rc;
 
+dai_cdc_dma_q6_fail:
+	platform_driver_unregister(&msm_dai_q6_cdc_dma_driver);
+dai_cdc_dma_q6_dev_fail:
+	platform_driver_unregister(&msm_dai_tdm_q6);
 dai_tdm_q6_fail:
 	platform_driver_unregister(&msm_dai_q6_tdm_driver);
 dai_q6_tdm_drv_fail:
@@ -7474,10 +10069,16 @@ module_init(msm_dai_q6_init);
 
 static void __exit msm_dai_q6_exit(void)
 {
+	platform_driver_unregister(&msm_dai_cdc_dma_q6);
+	platform_driver_unregister(&msm_dai_q6_cdc_dma_driver);
+	platform_driver_unregister(&msm_dai_tdm_q6);
+	platform_driver_unregister(&msm_dai_q6_tdm_driver);
+	platform_driver_unregister(&msm_dai_q6_spdif_driver);
+	platform_driver_unregister(&msm_dai_mi2s_q6);
+	platform_driver_unregister(&msm_dai_q6_mi2s_driver);
 	platform_driver_unregister(&msm_dai_q6_dev);
 	platform_driver_unregister(&msm_dai_q6);
 	platform_driver_unregister(&msm_auxpcm_dev_driver);
-	platform_driver_unregister(&msm_dai_q6_spdif_driver);
 }
 module_exit(msm_dai_q6_exit);
 
