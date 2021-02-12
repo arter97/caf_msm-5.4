@@ -2101,9 +2101,10 @@ static int qrtr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	struct ifreq ifr;
 	long len = 0;
 	int rc = 0;
-
 	lock_sock(sk);
-
+#if IS_ENABLED(CONFIG_QRTR_BPF_FILTER)
+	int ufd;
+#endif
 	switch (cmd) {
 	case TIOCOUTQ:
 		len = sk->sk_sndbuf - sk_wmem_alloc_get(sk);
@@ -2141,6 +2142,20 @@ static int qrtr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	case SIOCSIFNETMASK:
 		rc = -EINVAL;
 		break;
+#if IS_ENABLED(CONFIG_QRTR_BPF_FILTER)
+	case QRTR_ATTACH_BPF:
+		if (copy_from_user(&ufd, argp, sizeof(ufd))) {
+			rc = -EFAULT;
+			break;
+		}
+
+		rc = qrtr_bpf_filter_attach(ufd);
+		break;
+
+	case QRTR_DETTACH_BPF:
+		rc = qrtr_bpf_filter_detach();
+		break;
+#endif
 	default:
 		rc = -ENOIOCTLCMD;
 		break;
