@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, 2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -695,7 +695,7 @@ int tomtom_enable_qfuse_sensing(struct snd_soc_codec *codec)
 	 */
 	usleep_range(5000, 5500);
 	if ((snd_soc_read(codec, TOMTOM_A_QFUSE_STATUS) & (0x03)) != 0x03)
-		WARN(1, "%s: Qfuse sense is not complete\n", __func__);
+		pr_debug("%s: Qfuse sense is not complete\n", __func__);
 
 	if (tomtom->wcd_ext_clk)
 		tomtom_codec_mclk_enable(codec, false, false);
