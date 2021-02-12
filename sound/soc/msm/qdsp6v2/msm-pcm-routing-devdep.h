@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, 2021, The Linux Foundation. All rights reserved.
 * This program is free software; you can redistribute it and/or modify
 * it under the terms of the GNU General Public License version 2 and
 * only version 2 as published by the Free Software Foundation.
@@ -28,7 +28,6 @@ static inline int msm_pcm_routing_hwdep_new(struct snd_soc_pcm_runtime *runtime,
 
 static inline void msm_pcm_routing_hwdep_free(struct snd_pcm *pcm)
 {
-	return;
 }
 #endif
 #endif

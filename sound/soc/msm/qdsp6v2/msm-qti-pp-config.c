@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, 2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -27,7 +27,8 @@
 
 /* EQUALIZER */
 /* Equal to Frontend after last of the MULTIMEDIA SESSIONS */
-#define MAX_EQ_SESSIONS		MSM_FRONTEND_DAI_CS_VOICE
+#define MAX_EQ_SESSIONS		(MSM_FRONTEND_DAI_MAX + 1)
+#define CHMIX_CFG_CONST_PARAM_SIZE 4
 
 enum {
 	EQ_BAND1 = 0,
@@ -44,21 +45,6 @@ enum {
 	EQ_BAND12,
 	EQ_BAND_MAX,
 };
-
-struct msm_audio_eq_band {
-	uint16_t     band_idx; /* The band index, 0 .. 11 */
-	uint32_t     filter_type; /* Filter band type */
-	uint32_t     center_freq_hz; /* Filter band center frequency */
-	uint32_t     filter_gain; /* Filter band initial gain (dB) */
-			/* Range is +12 dB to -12 dB with 1dB increments. */
-	uint32_t     q_factor;
-} __packed;
-
-struct msm_audio_eq_stream_config {
-	uint32_t	enable; /* Number of consequtive bands specified */
-	uint32_t	num_bands;
-	struct msm_audio_eq_band	eq_bands[EQ_BAND_MAX];
-} __packed;
 
 /* Audio Sphere data structures */
 struct msm_audio_pp_asphere_state_s {
@@ -94,6 +80,7 @@ static const DECLARE_TLV_DB_LINEAR(sec_auxpcm_lb_vol_gain, 0,
 				INT_RX_VOL_MAX_STEPS);
 
 static int msm_multichannel_ec_primary_mic_ch;
+static int msm_ffecns_effect;
 
 static void msm_qti_pp_send_eq_values_(int eq_idx)
 {
@@ -186,6 +173,45 @@ static int msm_qti_pp_put_eq_band_count_audio_mixer(
 	return 0;
 }
 
+static int msm_qti_pp_put_dtmf_module_enable
+		(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	u16 fe_id = 0;
+	struct msm_pcm_routing_fdai_data fe_dai;
+	struct audio_client *ac = NULL;
+	struct param_hdr_v3 param_hdr;
+	int ret = 0;
+	u32 flag = (bool)ucontrol->value.integer.value[0];
+
+	fe_id = ((struct soc_multi_mixer_control *)
+			kcontrol->private_value)->shift;
+	if (fe_id >= MSM_FRONTEND_DAI_MM_SIZE) {
+		pr_err("%s: invalid FE %d\n", __func__, fe_id);
+		return -EINVAL;
+	}
+
+	msm_pcm_routing_get_fedai_info(fe_id, SESSION_TYPE_RX, &fe_dai);
+	ac = q6asm_get_audio_client(fe_dai.strm_id);
+
+	if (ac == NULL) {
+		pr_err("%s ac is null.\n", __func__);
+		ret = -EINVAL;
+		goto done;
+	}
+
+	param_hdr.module_id = AUDPROC_MODULE_ID_DTMF_DETECTION;
+	param_hdr.instance_id = INSTANCE_ID_0;
+	param_hdr.param_id = AUDPROC_PARAM_ID_ENABLE;
+	param_hdr.param_size = 4;
+
+	ret = q6asm_pack_and_set_pp_param_in_band(ac,
+			param_hdr, (u8 *)&flag);
+
+done:
+	return ret;
+}
+
 static int msm_qti_pp_get_eq_band_audio_mixer(struct snd_kcontrol *kcontrol,
 					    struct snd_ctl_elem_value *ucontrol)
 {
@@ -247,6 +273,7 @@ static int msm_qti_pp_put_eq_band_audio_mixer(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+#ifdef CONFIG_QTI_PP
 void msm_qti_pp_send_eq_values(int fedai_id)
 {
 	if (eq_data[fedai_id].enable)
@@ -266,6 +293,7 @@ int msm_qti_pp_send_stereo_to_custom_stereo_cmd(int port_id, int copp_idx,
 	int16_t *update_params_value16 = 0;
 	uint32_t params_length = CUSTOM_STEREO_PAYLOAD_SIZE * sizeof(uint32_t);
 	uint32_t avail_length = params_length;
+
 	pr_debug("%s: port_id - %d, session id - %d\n", __func__, port_id,
 		 session_id);
 	params_value = kzalloc(params_length, GFP_KERNEL);
@@ -276,6 +304,11 @@ int msm_qti_pp_send_stereo_to_custom_stereo_cmd(int port_id, int copp_idx,
 	update_params_value32 = (int *)params_value;
 	if (avail_length < 2 * sizeof(uint32_t))
 		goto skip_send_cmd;
+
+	/*
+	 * This module is internal to ADSP and cannot be configured with
+	 * an instance id
+	 */
 	*update_params_value32++ = MTMX_MODULE_ID_DEFAULT_CHMIXER;
 	*update_params_value32++ = DEFAULT_CHMIXER_PARAM_ID_COEFF;
 	avail_length = avail_length - (2 * sizeof(uint32_t));
@@ -303,7 +336,8 @@ int msm_qti_pp_send_stereo_to_custom_stereo_cmd(int port_id, int copp_idx,
 	*update_params_value16++ = PCM_CHANNEL_FR;
 	avail_length = avail_length - (10 * sizeof(uint16_t));
 	/* weighting coefficients as name suggests,
-	mixing will be done according to these coefficients*/
+	 * mixing will be done according to these coefficients
+	 */
 	if (avail_length < 4 * sizeof(uint16_t))
 		goto skip_send_cmd;
 	*update_params_value16++ = op_FL_ip_FL_weight;
@@ -332,6 +366,162 @@ skip_send_cmd:
 		return -ENOMEM;
 }
 
+static int msm_qti_pp_arrange_mch_map(int16_t *update_params_value16,
+			 int channel_count)
+{
+	int i;
+	int16_t ch_map[PCM_FORMAT_MAX_CHANNELS_9] = {
+			PCM_CHANNEL_FL, PCM_CHANNEL_FR, PCM_CHANNEL_FC,
+			PCM_CHANNEL_LS, PCM_CHANNEL_RS, PCM_CHANNEL_LFE,
+			PCM_CHANNEL_LB, PCM_CHANNEL_RB, PCM_CHANNEL_CS };
+
+	if (channel_count < 1 ||
+	    channel_count > PCM_FORMAT_MAX_CHANNELS_9) {
+		pr_err("%s: invalid ch_cnt %d\n",
+			__func__, channel_count);
+		return -EINVAL;
+	}
+
+	switch (channel_count) {
+	/* Add special cases here */
+	case 1:
+		*update_params_value16++ = PCM_CHANNEL_FC;
+		break;
+	case 4:
+		*update_params_value16++ = PCM_CHANNEL_FL;
+		*update_params_value16++ = PCM_CHANNEL_FR;
+		*update_params_value16++ = PCM_CHANNEL_LS;
+		*update_params_value16++ = PCM_CHANNEL_RS;
+		break;
+
+	/* Add standard cases here */
+	default:
+		for (i = 0; i < channel_count; i++)
+			*update_params_value16++ = ch_map[i];
+		break;
+	}
+
+	return 0;
+}
+
+static uint32_t msm_qti_pp_get_chmix_param_size(int ip_ch_cnt, int op_ch_cnt)
+{
+	uint32_t param_size;
+	/* Assign constant part of param length initially -
+	 * Index, Num out channels, Num in channels.
+	 */
+	param_size = CHMIX_CFG_CONST_PARAM_SIZE * sizeof(uint16_t);
+
+	/* Calculate variable part of param length using ip and op channels */
+
+	/* channel map for input and output channels */
+	param_size += op_ch_cnt * sizeof(uint16_t);
+	param_size += ip_ch_cnt * sizeof(uint16_t);
+
+	/* weightage coeff for each op ch corresponding to each ip ch */
+	param_size += (ip_ch_cnt * op_ch_cnt) * sizeof(uint16_t);
+
+	/* Params length should be multiple of 4 bytes i.e 32bit aligned*/
+	param_size = (param_size + 3) & 0xFFFFFFFC;
+
+	return param_size;
+}
+
+/*
+ * msm_qti_pp_send_chmix_cfg_cmd:
+ *	Send the custom channel mixer configuration command.
+ *
+ * @port_id: Backend port id
+ * @copp_idx: ADM copp index
+ * @session_id: id for the session requesting channel mixer
+ * @ip_channel_cnt: Input channel count
+ * @op_channel_cnt: Output channel count
+ * @ch_wght_coeff: Channel weight co-efficients for mixing
+ * @session_type: Indicates TX or RX session
+ * @stream_type: Indicates Audio or Listen stream type
+ */
+int msm_qti_pp_send_chmix_cfg_cmd(int port_id, int copp_idx,
+				unsigned int session_id, int ip_channel_cnt,
+				int op_channel_cnt, int *ch_wght_coeff,
+				int session_type, int stream_type)
+{
+	char *params_value;
+	int rc = 0, i, direction;
+	u8 *param_ptr;
+	int16_t *update_params_value16 = 0;
+	uint32_t param_size = msm_qti_pp_get_chmix_param_size(ip_channel_cnt,
+				op_channel_cnt);
+	struct param_hdr_v3 *param_hdr;
+
+	/* constant payload data size represents module_id, param_id,
+	 * param size, reserved field.
+	 */
+	uint32_t params_length = param_size + sizeof(*param_hdr);
+
+	pr_debug("%s: port_id - %d, session id - %d\n", __func__, port_id,
+		 session_id);
+
+	params_value = kzalloc(params_length, GFP_KERNEL);
+	if (!params_value)
+		return -ENOMEM;
+
+	param_ptr = params_value;
+
+	param_hdr = (struct param_hdr_v3 *) param_ptr;
+	param_hdr->module_id = MTMX_MODULE_ID_DEFAULT_CHMIXER;
+	param_hdr->instance_id = INSTANCE_ID_0;
+	param_hdr->param_id = DEFAULT_CHMIXER_PARAM_ID_COEFF;
+	param_hdr->param_size = param_size;
+
+	param_ptr += sizeof(*param_hdr);
+
+	update_params_value16 = (int16_t *) param_ptr;
+	/*for alignment only*/
+	*update_params_value16++ = 0;
+	/*index is 32-bit param in little endian*/
+	*update_params_value16++ = CUSTOM_STEREO_INDEX_PARAM;
+	*update_params_value16++ = 0;
+	/*number of out ch*/
+	*update_params_value16++ = op_channel_cnt;
+	/*number of in ch*/
+	*update_params_value16++ = ip_channel_cnt;
+
+	/* Out ch map FL/FR*/
+	msm_qti_pp_arrange_mch_map(update_params_value16, op_channel_cnt);
+	update_params_value16 += op_channel_cnt;
+
+	/* In ch map FL/FR*/
+	msm_qti_pp_arrange_mch_map(update_params_value16, ip_channel_cnt);
+	update_params_value16 += ip_channel_cnt;
+
+	/* weighting coefficients as name suggests,
+	 * mixing will be done according to these coefficients.
+	 */
+	for (i = 0; i < ip_channel_cnt * op_channel_cnt; i++)
+		*update_params_value16++ =
+					ch_wght_coeff[i] ? Q14_GAIN_UNITY : 0;
+	if (params_length) {
+		direction = (session_type == SESSION_TYPE_RX) ?
+			ADM_MATRIX_ID_AUDIO_RX : ADM_MATRIX_ID_AUDIO_TX;
+		rc = adm_set_custom_chmix_cfg(port_id,
+					      copp_idx,
+					      session_id,
+					      params_value,
+					      params_length,
+					      direction,
+					      stream_type);
+		if (rc) {
+			pr_err("%s: send params failed rc=%d\n", __func__, rc);
+			kfree(params_value);
+			return -EINVAL;
+		}
+	}
+	kfree(params_value);
+	return 0;
+}
+EXPORT_SYMBOL(msm_qti_pp_send_chmix_cfg_cmd);
+#endif /* CONFIG_QTI_PP */
+
 /* RMS */
 static int msm_qti_pp_get_rms_value_control(struct snd_kcontrol *kcontrol,
 					    struct snd_ctl_elem_value *ucontrol)
@@ -340,14 +530,13 @@ static int msm_qti_pp_get_rms_value_control(struct snd_kcontrol *kcontrol,
 	int be_idx = 0, copp_idx;
 	char *param_value;
 	int *update_param_value;
-	uint32_t param_length = sizeof(uint32_t);
-	uint32_t param_payload_len = RMS_PAYLOAD_LEN * sizeof(uint32_t);
+	uint32_t param_size = (RMS_PAYLOAD_LEN + 1) * sizeof(uint32_t);
 	struct msm_pcm_routing_bdai_data msm_bedai;
-	param_value = kzalloc(param_length + param_payload_len, GFP_KERNEL);
-	if (!param_value) {
-		pr_err("%s, param memory alloc failed\n", __func__);
+	struct param_hdr_v3 param_hdr;
+
+	param_value = kzalloc(param_size, GFP_KERNEL);
+	if (!param_value)
 		return -ENOMEM;
-	}
 	msm_pcm_routing_acquire_lock();
 	for (be_idx = 0; be_idx < MSM_BACKEND_DAI_MAX; be_idx++) {
 		msm_pcm_routing_get_bedai_info(be_idx, &msm_bedai);
@@ -363,15 +552,17 @@ static int msm_qti_pp_get_rms_value_control(struct snd_kcontrol *kcontrol,
 	copp_idx = adm_get_default_copp_idx(SLIMBUS_0_TX);
 	if ((copp_idx < 0) || (copp_idx > MAX_COPPS_PER_PORT)) {
 		pr_err("%s, no active copp to query rms copp_idx:%d\n",
-			__func__ , copp_idx);
+			__func__, copp_idx);
 		rc = -EINVAL;
 		goto get_rms_value_err;
 	}
-	rc = adm_get_params(SLIMBUS_0_TX, copp_idx,
-			RMS_MODULEID_APPI_PASSTHRU,
-			RMS_PARAM_FIRST_SAMPLE,
-			param_length + param_payload_len,
-			param_value);
+	memset(&param_hdr, 0, sizeof(param_hdr));
+	param_hdr.module_id = RMS_MODULEID_APPI_PASSTHRU;
+	param_hdr.instance_id = INSTANCE_ID_0;
+	param_hdr.param_id = RMS_PARAM_FIRST_SAMPLE;
+	param_hdr.param_size = param_size;
+	rc = adm_get_pp_params(SLIMBUS_0_TX, copp_idx, ADM_CLIENT_ID_DEFAULT,
+			       NULL, &param_hdr, param_value);
 	if (rc) {
 		pr_err("%s: get parameters failed rc=%d\n", __func__, rc);
 		rc = -EINVAL;
@@ -401,6 +592,9 @@ static int msm_afe_lb_vol_ctrl;
 static int msm_afe_sec_mi2s_lb_vol_ctrl;
 static int msm_afe_tert_mi2s_lb_vol_ctrl;
 static int msm_afe_quat_mi2s_lb_vol_ctrl;
+static int msm_afe_slimbus_7_lb_vol_ctrl;
+static int msm_afe_slimbus_8_lb_vol_ctrl;
+static int msm_asm_bit_width;
 static const DECLARE_TLV_DB_LINEAR(fm_rx_vol_gain, 0, INT_RX_VOL_MAX_STEPS);
 static const DECLARE_TLV_DB_LINEAR(afe_lb_vol_gain, 0, INT_RX_VOL_MAX_STEPS);
 
@@ -414,9 +608,41 @@ static int msm_qti_pp_get_fm_vol_mixer(struct snd_kcontrol *kcontrol,
 static int msm_qti_pp_set_fm_vol_mixer(struct snd_kcontrol *kcontrol,
 			    struct snd_ctl_elem_value *ucontrol)
 {
-	afe_loopback_gain(INT_FM_TX , ucontrol->value.integer.value[0]);
+	afe_loopback_gain(INT_FM_TX, ucontrol->value.integer.value[0]);
 
 	msm_route_fm_vol_control = ucontrol->value.integer.value[0];
+
+	return 0;
+}
+
+static int msm_asm_bit_width_get(struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s get ASM bitwidth = %d\n",
+		__func__, msm_asm_bit_width);
+
+	ucontrol->value.integer.value[0] = msm_asm_bit_width;
+
+	return 0;
+}
+
+static int msm_asm_bit_width_put(struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_value *ucontrol)
+{
+	switch (ucontrol->value.integer.value[0]) {
+	case 16:
+		msm_asm_bit_width = 16;
+		break;
+	case 24:
+		msm_asm_bit_width = 24;
+		break;
+	case 32:
+		msm_asm_bit_width = 32;
+		break;
+	default:
+		msm_asm_bit_width = 0;
+		break;
+	}
 
 	return 0;
 }
@@ -472,6 +698,53 @@ static int msm_qti_pp_set_tert_mi2s_lb_vol_mixer(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int msm_qti_pp_get_slimbus_7_lb_vol_mixer(struct snd_kcontrol *kcontrol,
+				       struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.integer.value[0] = msm_afe_slimbus_7_lb_vol_ctrl;
+	return 0;
+}
+
+static int msm_qti_pp_set_slimbus_7_lb_vol_mixer(struct snd_kcontrol *kcontrol,
+			    struct snd_ctl_elem_value *ucontrol)
+{
+	int ret = afe_loopback_gain(SLIMBUS_7_TX,
+				ucontrol->value.integer.value[0]);
+
+	if (ret)
+		pr_err("%s: failed to set LB vol for SLIMBUS_7_TX, err %d\n",
+			__func__, ret);
+	else
+		msm_afe_slimbus_7_lb_vol_ctrl =
+				ucontrol->value.integer.value[0];
+
+	return ret;
+}
+
+static int msm_qti_pp_get_slimbus_8_lb_vol_mixer(struct snd_kcontrol *kcontrol,
+				       struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.integer.value[0] = msm_afe_slimbus_8_lb_vol_ctrl;
+	return 0;
+}
+
+static int msm_qti_pp_set_slimbus_8_lb_vol_mixer(struct snd_kcontrol *kcontrol,
+			    struct snd_ctl_elem_value *ucontrol)
+{
+	int ret = 0;
+
+	ret = afe_loopback_gain(SLIMBUS_8_TX,
+				ucontrol->value.integer.value[0]);
+
+	if (ret)
+		pr_err("%s: failed to set LB vol for SLIMBUS_8_TX", __func__);
+	else
+		msm_afe_slimbus_8_lb_vol_ctrl =
+				ucontrol->value.integer.value[0];
+
+	return ret;
+}
+
 static int msm_qti_pp_get_icc_vol_mixer(struct snd_kcontrol *kcontrol,
 				       struct snd_ctl_elem_value *ucontrol)
 {
@@ -517,7 +790,7 @@ static int msm_qti_pp_get_hfp_vol_mixer(struct snd_kcontrol *kcontrol,
 static int msm_qti_pp_set_hfp_vol_mixer(struct snd_kcontrol *kcontrol,
 					struct snd_ctl_elem_value *ucontrol)
 {
-	afe_loopback_gain(INT_BT_SCO_TX , ucontrol->value.integer.value[0]);
+	afe_loopback_gain(INT_BT_SCO_TX, ucontrol->value.integer.value[0]);
 
 	msm_route_hfp_vol_control = ucontrol->value.integer.value[0];
 
@@ -575,24 +848,51 @@ static int msm_qti_pp_set_sec_auxpcm_lb_vol_mixer(
 static int msm_qti_pp_get_channel_map_mixer(struct snd_kcontrol *kcontrol,
 					    struct snd_ctl_elem_value *ucontrol)
 {
-	char channel_map[PCM_FORMAT_MAX_NUM_CHANNEL] = {0};
+	char channel_map[PCM_FORMAT_MAX_NUM_CHANNEL_V8] = {0};
 	int i;
 
 	adm_get_multi_ch_map(channel_map, ADM_PATH_PLAYBACK);
-	for (i = 0; i < PCM_FORMAT_MAX_NUM_CHANNEL; i++)
-		ucontrol->value.integer.value[i] = (unsigned) channel_map[i];
+	for (i = 0; i < PCM_FORMAT_MAX_NUM_CHANNEL_V8; i++)
+		ucontrol->value.integer.value[i] =
+			(unsigned int) channel_map[i];
 	return 0;
 }
 
 static int msm_qti_pp_put_channel_map_mixer(struct snd_kcontrol *kcontrol,
 					    struct snd_ctl_elem_value *ucontrol)
 {
-	char channel_map[PCM_FORMAT_MAX_NUM_CHANNEL];
+	char channel_map[PCM_FORMAT_MAX_NUM_CHANNEL_V8];
 	int i;
 
-	for (i = 0; i < PCM_FORMAT_MAX_NUM_CHANNEL; i++)
+	for (i = 0; i < PCM_FORMAT_MAX_NUM_CHANNEL_V8; i++)
 		channel_map[i] = (char)(ucontrol->value.integer.value[i]);
 	adm_set_multi_ch_map(channel_map, ADM_PATH_PLAYBACK);
+
+	return 0;
+}
+
+static int msm_qti_pp_get_channel_map_capture(struct snd_kcontrol *kcontrol,
+					    struct snd_ctl_elem_value *ucontrol)
+{
+	char channel_map[PCM_FORMAT_MAX_NUM_CHANNEL_V8] = {0};
+	int i;
+
+	adm_get_multi_ch_map(channel_map, ADM_PATH_LIVE_REC);
+	for (i = 0; i < PCM_FORMAT_MAX_NUM_CHANNEL_V8; i++)
+		ucontrol->value.integer.value[i] =
+			(unsigned int) channel_map[i];
+	return 0;
+}
+
+static int msm_qti_pp_put_channel_map_capture(struct snd_kcontrol *kcontrol,
+					    struct snd_ctl_elem_value *ucontrol)
+{
+	char channel_map[PCM_FORMAT_MAX_NUM_CHANNEL_V8];
+	int i;
+
+	for (i = 0; i < PCM_FORMAT_MAX_NUM_CHANNEL_V8; i++)
+		channel_map[i] = (char)(ucontrol->value.integer.value[i]);
+	adm_set_multi_ch_map(channel_map, ADM_PATH_LIVE_REC);
 
 	return 0;
 }
@@ -602,6 +902,7 @@ static int msm_qti_pp_put_channel_map_mixer(struct snd_kcontrol *kcontrol,
 static void msm_qti_pp_asphere_init_state(void)
 {
 	int i;
+
 	if (asphere_state.initialized)
 		return;
 	asphere_state.initialized = true;
@@ -619,67 +920,87 @@ static void msm_qti_pp_asphere_init_state(void)
 
 static int msm_qti_pp_asphere_send_params(int port_id, int copp_idx, bool force)
 {
-	char *params_value = NULL;
-	uint32_t *update_params_value = NULL;
-	uint32_t param_size = sizeof(uint32_t) +
-			sizeof(struct adm_param_data_v5);
-	int params_length = 0, param_count = 0, ret = 0;
+	u8 *packed_params = NULL;
+	u32 packed_params_size = 0;
+	u32 param_size = 0;
+	struct param_hdr_v3 param_hdr;
 	bool set_enable = force ||
 			(asphere_state.enabled != asphere_state.enabled_prev);
 	bool set_strength = asphere_state.enabled == 1 && (set_enable ||
 		(asphere_state.strength != asphere_state.strength_prev));
+	int param_count = 0;
+	int ret = 0;
 
 	if (set_enable)
 		param_count++;
 	if (set_strength)
 		param_count++;
-	params_length = param_count * param_size;
+
+	if (param_count == 0) {
+		pr_debug("%s: Nothing to send, exiting\n", __func__);
+		return 0;
+	}
 
 	pr_debug("%s: port_id %d, copp_id %d, forced %d, param_count %d\n",
-			__func__, port_id, copp_idx, force, param_count);
+		 __func__, port_id, copp_idx, force, param_count);
 	pr_debug("%s: enable prev:%u cur:%u, strength prev:%u cur:%u\n",
 		__func__, asphere_state.enabled_prev, asphere_state.enabled,
 		asphere_state.strength_prev, asphere_state.strength);
 
-	if (params_length > 0)
-		params_value = kzalloc(params_length, GFP_KERNEL);
-	if (!params_value) {
-		pr_err("%s, params memory alloc failed\n", __func__);
+	packed_params_size =
+		param_count * (sizeof(struct param_hdr_v3) + sizeof(uint32_t));
+	packed_params = kzalloc(packed_params_size, GFP_KERNEL);
+	if (!packed_params)
 		return -ENOMEM;
-	}
-	update_params_value = (uint32_t *)params_value;
-	params_length = 0;
+
+	memset(&param_hdr, 0, sizeof(param_hdr));
+	packed_params_size = 0;
+	param_hdr.module_id = AUDPROC_MODULE_ID_AUDIOSPHERE;
+	param_hdr.instance_id = INSTANCE_ID_0;
 	if (set_strength) {
 		/* add strength command */
-		*update_params_value++ = AUDPROC_MODULE_ID_AUDIOSPHERE;
-		*update_params_value++ = AUDPROC_PARAM_ID_AUDIOSPHERE_STRENGTH;
-		*update_params_value++ = sizeof(uint32_t);
-		*update_params_value++ = asphere_state.strength;
-		params_length += param_size;
+		param_hdr.param_id = AUDPROC_PARAM_ID_AUDIOSPHERE_STRENGTH;
+		param_hdr.param_size = sizeof(asphere_state.strength);
+		ret = q6common_pack_pp_params(packed_params +
+						      packed_params_size,
+					      &param_hdr,
+					      (u8 *) &asphere_state.strength,
+					      &param_size);
+		if (ret) {
+			pr_err("%s: Failed to pack params for audio sphere"
+				" strength, error %d\n", __func__, ret);
+			goto done;
+		}
+		packed_params_size += param_size;
 	}
 	if (set_enable) {
 		/* add enable command */
-		*update_params_value++ = AUDPROC_MODULE_ID_AUDIOSPHERE;
-		*update_params_value++ = AUDPROC_PARAM_ID_AUDIOSPHERE_ENABLE;
-		*update_params_value++ = sizeof(uint32_t);
-		*update_params_value++ = asphere_state.enabled;
-		params_length += param_size;
-	}
-	pr_debug("%s, param length: %d\n", __func__, params_length);
-	if (params_length) {
-		ret = adm_send_params_v5(port_id, copp_idx,
-					params_value, params_length);
+		param_hdr.param_id = AUDPROC_PARAM_ID_AUDIOSPHERE_ENABLE;
+		param_hdr.param_size = sizeof(asphere_state.enabled);
+		q6common_pack_pp_params(packed_params + packed_params_size,
+					&param_hdr,
+					(u8 *) &asphere_state.enabled,
+					&param_size);
 		if (ret) {
-			pr_err("%s: setting param failed with err=%d\n",
-				__func__, ret);
-			kfree(params_value);
-			return -EINVAL;
+			pr_err("%s: Failed to pack params for audio sphere"
+				" enable, error %d\n", __func__, ret);
+			goto done;
 		}
+		packed_params_size += param_size;
 	}
-	kfree(params_value);
+
+	pr_debug("%s: packed data size: %d\n", __func__, packed_params_size);
+	ret = adm_set_pp_params(port_id, copp_idx, NULL, packed_params,
+				packed_params_size);
+	if (ret)
+		pr_err("%s: set param failed with err=%d\n", __func__, ret);
+
+done:
+	kfree(packed_params);
 	return 0;
 }
 
+#if defined(CONFIG_QTI_PP) && defined(CONFIG_QTI_PP_AUDIOSPHERE)
 int msm_qti_pp_asphere_init(int port_id, int copp_idx)
 {
 	int index = adm_validate_and_get_port_index(port_id);
@@ -717,6 +1038,7 @@ void msm_qti_pp_asphere_deinit(int port_id)
 		asphere_state.copp_idx[index] = -1;
 	}
 }
+#endif
 
 static int msm_qti_pp_asphere_get(struct snd_kcontrol *kcontrol,
 			struct snd_ctl_elem_value *ucontrol)
@@ -764,6 +1086,497 @@ static int msm_qti_pp_asphere_set(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+int msm_adsp_init_mixer_ctl_pp_event_queue(struct snd_soc_pcm_runtime *rtd)
+{
+	struct snd_kcontrol *kctl;
+	const char *deviceNo = "NN";
+	char *mixer_str = NULL;
+	int ctl_len = 0, ret = 0;
+	const char *mixer_ctl_name = DSP_STREAM_CALLBACK;
+	struct dsp_stream_callback_prtd *kctl_prtd = NULL;
+
+	if (!rtd) {
+		pr_err("%s: rtd is NULL\n", __func__);
+		ret = -EINVAL;
+		goto done;
+	}
+
+	ctl_len = strlen(mixer_ctl_name) + 1 + strlen(deviceNo) + 1;
+	mixer_str = kzalloc(ctl_len, GFP_KERNEL);
+	if (!mixer_str) {
+		ret = -EINVAL;
+		goto done;
+	}
+
+	snprintf(mixer_str, ctl_len, "%s %d", mixer_ctl_name,
+		rtd->pcm->device);
+	kctl = snd_soc_card_get_kcontrol(rtd->card, mixer_str);
+	kfree(mixer_str);
+	if (!kctl) {
+		pr_err("%s: failed to get kctl.\n", __func__);
+		ret = -EINVAL;
+		goto done;
+	}
+
+	if (kctl->private_data != NULL) {
+		pr_err("%s: kctl_prtd is not NULL at initialization.\n",
+			__func__);
+		return -EINVAL;
+	}
+
+	kctl_prtd = kzalloc(sizeof(struct dsp_stream_callback_prtd),
+			GFP_KERNEL);
+	if (!kctl_prtd) {
+		ret = -ENOMEM;
+		goto done;
+	}
+
+	spin_lock_init(&kctl_prtd->prtd_spin_lock);
+	INIT_LIST_HEAD(&kctl_prtd->event_queue);
+	kctl_prtd->event_count = 0;
+	kctl->private_data = kctl_prtd;
+
+done:
+	return ret;
+}
+
+int msm_adsp_clean_mixer_ctl_pp_event_queue(struct snd_soc_pcm_runtime *rtd)
+{
+	struct snd_kcontrol *kctl;
+	const char *deviceNo = "NN";
+	char *mixer_str = NULL;
+	int ctl_len = 0, ret = 0;
+	struct dsp_stream_callback_list *node, *n;
+	unsigned long spin_flags;
+	const char *mixer_ctl_name = DSP_STREAM_CALLBACK;
+	struct dsp_stream_callback_prtd *kctl_prtd = NULL;
+
+	if (!rtd) {
+		pr_err("%s: rtd is NULL\n", __func__);
+		ret = -EINVAL;
+		goto done;
+	}
+
+	ctl_len = strlen(mixer_ctl_name) + 1 + strlen(deviceNo) + 1;
+	mixer_str = kzalloc(ctl_len, GFP_KERNEL);
+	if (!mixer_str) {
+		ret = -EINVAL;
+		goto done;
+	}
+
+	snprintf(mixer_str, ctl_len, "%s %d", mixer_ctl_name,
+		rtd->pcm->device);
+	kctl = snd_soc_card_get_kcontrol(rtd->card, mixer_str);
+	kfree(mixer_str);
+	if (!kctl) {
+		pr_err("%s: failed to get kctl.\n", __func__);
+		ret = -EINVAL;
+		goto done;
+	}
+
+	kctl_prtd = (struct dsp_stream_callback_prtd *)
+			kctl->private_data;
+	if (kctl_prtd != NULL) {
+		spin_lock_irqsave(&kctl_prtd->prtd_spin_lock, spin_flags);
+		/* clean the queue */
+		list_for_each_entry_safe(node, n,
+				&kctl_prtd->event_queue, list) {
+			list_del(&node->list);
+			kctl_prtd->event_count--;
+			pr_debug("%s: %d remaining events after del.\n",
+				__func__, kctl_prtd->event_count);
+			kfree(node);
+		}
+		spin_unlock_irqrestore(&kctl_prtd->prtd_spin_lock, spin_flags);
+	}
+
+	kfree(kctl_prtd);
+	kctl->private_data = NULL;
+
+done:
+	return ret;
+}
+
+int msm_adsp_init_mixer_ctl_adm_pp_event_queue(struct snd_soc_pcm_runtime *rtd)
+{
+	struct snd_kcontrol *kctl;
+	char *mixer_str = NULL;
+	int ctl_len = 0, ret = 0;
+	const char *mixer_ctl_name = DSP_ADM_CALLBACK;
+	struct dsp_adm_callback_prtd *kctl_prtd = NULL;
+
+	if (!rtd) {
+		pr_err("%s: rtd is NULL\n", __func__);
+		ret = -EINVAL;
+		goto done;
+	}
+
+	ctl_len = strlen(mixer_ctl_name) + 1;
+	mixer_str = kzalloc(ctl_len, GFP_KERNEL);
+	if (!mixer_str) {
+		ret = -EINVAL;
+		goto done;
+	}
+
+	snprintf(mixer_str, ctl_len, "%s", mixer_ctl_name);
+	kctl = snd_soc_card_get_kcontrol(rtd->card, mixer_str);
+	kfree(mixer_str);
+	if (!kctl) {
+		pr_err("%s: failed to get kctl.\n", __func__);
+		ret = -EINVAL;
+		goto done;
+	}
+
+	if (kctl->private_data != NULL) {
+		pr_err("%s: kctl_prtd is not NULL at initialization.\n",
+			__func__);
+		return -EINVAL;
+	}
+
+	kctl_prtd = kzalloc(sizeof(struct dsp_adm_callback_prtd),
+			GFP_KERNEL);
+	if (!kctl_prtd) {
+		ret = -ENOMEM;
+		goto done;
+	}
+
+	spin_lock_init(&kctl_prtd->prtd_spin_lock);
+	INIT_LIST_HEAD(&kctl_prtd->event_queue);
+	kctl_prtd->event_count = 0;
+	kctl->private_data = kctl_prtd;
+
+done:
+	return ret;
+}
+
+int msm_adsp_clean_mixer_ctl_adm_pp_event_queue(struct snd_soc_pcm_runtime *rtd)
+{
+	struct snd_kcontrol *kctl;
+	char *mixer_str = NULL;
+	int ctl_len = 0, ret = 0;
+	struct dsp_adm_callback_list *node, *n;
+	unsigned long spin_flags = 0;
+	const char *mixer_ctl_name = DSP_ADM_CALLBACK;
+	struct dsp_adm_callback_prtd *kctl_prtd = NULL;
+
+	if (!rtd) {
+		pr_err("%s: rtd is NULL\n", __func__);
+		ret = -EINVAL;
+		goto done;
+	}
+
+	ctl_len = strlen(mixer_ctl_name) + 1;
+	mixer_str = kzalloc(ctl_len, GFP_KERNEL);
+	if (!mixer_str) {
+		ret = -EINVAL;
+		goto done;
+	}
+
+	snprintf(mixer_str, ctl_len, "%s", mixer_ctl_name);
+	kctl = snd_soc_card_get_kcontrol(rtd->card, mixer_str);
+	kfree(mixer_str);
+	if (!kctl) {
+		pr_err("%s: failed to get kctl.\n", __func__);
+		ret = -EINVAL;
+		goto done;
+	}
+
+	kctl_prtd = (struct dsp_adm_callback_prtd *)
+			kctl->private_data;
+	if (kctl_prtd != NULL) {
+		spin_lock_irqsave(&kctl_prtd->prtd_spin_lock, spin_flags);
+		/* clean the queue */
+		list_for_each_entry_safe(node, n,
+				&kctl_prtd->event_queue, list) {
+			list_del(&node->list);
+			kctl_prtd->event_count--;
+			pr_debug("%s: %d remaining events after del.\n",
+				__func__, kctl_prtd->event_count);
+			kfree(node);
+		}
+		spin_unlock_irqrestore(&kctl_prtd->prtd_spin_lock, spin_flags);
+	}
+
+	kfree(kctl_prtd);
+	kctl->private_data = NULL;
+
+done:
+	return ret;
+}
+
+int msm_adsp_copp_inform_mixer_ctl(struct snd_soc_pcm_runtime *rtd,
+			uint32_t *payload)
+{
+	/* adsp adm pp event notifier */
+	struct snd_kcontrol *kctl;
+	struct snd_ctl_elem_value control;
+	char *mixer_str = NULL;
+	int ctl_len = 0, ret = 0;
+	struct dsp_adm_callback_list *new_event;
+	struct dsp_adm_callback_list *oldest_event;
+	unsigned long spin_flags = 0;
+	struct dsp_adm_callback_prtd *kctl_prtd = NULL;
+	struct msm_adsp_event_data *event_data = NULL;
+	const char *mixer_ctl_name = DSP_ADM_CALLBACK;
+	struct snd_ctl_elem_info kctl_info;
+
+	if (!rtd || !payload) {
+		pr_err("%s: %s is NULL\n", __func__,
+			(!rtd) ? "rtd" : "payload");
+		ret = -EINVAL;
+		goto done;
+	}
+
+	if (rtd->card->snd_card == NULL) {
+		pr_err("%s: snd_card is null.\n", __func__);
+		ret = -EINVAL;
+		goto done;
+	}
+
+	ctl_len = strlen(mixer_ctl_name) + 1;
+	mixer_str = kzalloc(ctl_len, GFP_ATOMIC);
+	if (!mixer_str) {
+		ret = -EINVAL;
+		goto done;
+	}
+
+	snprintf(mixer_str, ctl_len, "%s", mixer_ctl_name);
+	kctl = snd_soc_card_get_kcontrol(rtd->card, mixer_str);
+	kfree(mixer_str);
+	if (!kctl) {
+		pr_err("%s: failed to get kctl.\n", __func__);
+		ret = -EINVAL;
+		goto done;
+	}
+
+	event_data = (struct msm_adsp_event_data *)payload;
+	kctl->info(kctl, &kctl_info);
+	if (sizeof(struct msm_adsp_event_data)
+		+ event_data->payload_len > kctl_info.count) {
+		pr_err("%s: payload length exceeds limit of %u bytes.\n",
+			__func__, kctl_info.count);
+		ret = -EINVAL;
+		goto done;
+	}
+
+	kctl_prtd = (struct dsp_adm_callback_prtd *)
+			kctl->private_data;
+	if (kctl_prtd == NULL) {
+		/* queue is not initialized */
+		ret = -EINVAL;
+		pr_err("%s: event queue is not initialized.\n", __func__);
+		goto done;
+	}
+
+	new_event = kzalloc(sizeof(struct dsp_adm_callback_list)
+			+ event_data->payload_len + sizeof(uint32_t),
+			GFP_ATOMIC);
+	if (new_event == NULL) {
+		ret = -ENOMEM;
+		goto done;
+	}
+	memcpy((void *)&new_event->event, (void *)payload,
+		   event_data->payload_len
+		   + sizeof(struct msm_adsp_event_data));
+
+
+	spin_lock_irqsave(&kctl_prtd->prtd_spin_lock, spin_flags);
+	while (kctl_prtd->event_count >= DSP_ADM_CALLBACK_QUEUE_SIZE) {
+		pr_info("%s: queue of size %d is full. delete oldest one.\n",
+			__func__, DSP_ADM_CALLBACK_QUEUE_SIZE);
+		oldest_event = list_first_entry(&kctl_prtd->event_queue,
+				struct dsp_adm_callback_list, list);
+		pr_info("%s: event deleted: type %d length %d\n",
+			__func__, oldest_event->event.event_type,
+			oldest_event->event.payload_len);
+		list_del(&oldest_event->list);
+		kctl_prtd->event_count--;
+		kfree(oldest_event);
+	}
+
+	list_add_tail(&new_event->list, &kctl_prtd->event_queue);
+	kctl_prtd->event_count++;
+	spin_unlock_irqrestore(&kctl_prtd->prtd_spin_lock, spin_flags);
+
+	control.id = kctl->id;
+	snd_ctl_notify(rtd->card->snd_card,
+			SNDRV_CTL_EVENT_MASK_INFO,
+			&control.id);
+
+done:
+	return ret;
+}
+
+int msm_adsp_inform_mixer_ctl(struct snd_soc_pcm_runtime *rtd,
+			uint32_t *payload)
+{
+	/* adsp pp event notifier */
+	struct snd_kcontrol *kctl;
+	struct snd_ctl_elem_value control;
+	const char *deviceNo = "NN";
+	char *mixer_str = NULL;
+	int ctl_len = 0, ret = 0;
+	struct dsp_stream_callback_list *new_event;
+	struct dsp_stream_callback_list *oldest_event;
+	unsigned long spin_flags = 0;
+	struct dsp_stream_callback_prtd *kctl_prtd = NULL;
+	struct msm_adsp_event_data *event_data = NULL;
+	const char *mixer_ctl_name = DSP_STREAM_CALLBACK;
+	struct snd_ctl_elem_info kctl_info;
+
+	if (!rtd || !payload) {
+		pr_err("%s: %s is NULL\n", __func__,
+			(!rtd) ? "rtd" : "payload");
+		ret = -EINVAL;
+		goto done;
+	}
+
+	if (rtd->card->snd_card == NULL) {
+		pr_err("%s: snd_card is null.\n", __func__);
+		ret = -EINVAL;
+		goto done;
+	}
+
+	ctl_len = strlen(mixer_ctl_name) + 1 + strlen(deviceNo) + 1;
+	mixer_str = kzalloc(ctl_len, GFP_ATOMIC);
+	if (!mixer_str) {
+		ret = -EINVAL;
+		goto done;
+	}
+
+	snprintf(mixer_str, ctl_len, "%s %d", mixer_ctl_name,
+		rtd->pcm->device);
+	kctl = snd_soc_card_get_kcontrol(rtd->card, mixer_str);
+	kfree(mixer_str);
+	if (!kctl) {
+		pr_err("%s: failed to get kctl.\n", __func__);
+		ret = -EINVAL;
+		goto done;
+	}
+
+	event_data = (struct msm_adsp_event_data *)payload;
+	kctl->info(kctl, &kctl_info);
+
+	if (event_data->payload_len >
+		kctl_info.count - sizeof(struct msm_adsp_event_data)) {
+		pr_err("%s: payload length exceeds limit of %u bytes.\n",
+			__func__, kctl_info.count);
+		ret = -EINVAL;
+		goto done;
+	}
+
+	kctl_prtd = (struct dsp_stream_callback_prtd *)
+			kctl->private_data;
+	if (kctl_prtd == NULL) {
+		/* queue is not initialized */
+		ret = -EINVAL;
+		pr_err("%s: event queue is not initialized.\n", __func__);
+		goto done;
+	}
+
+	new_event = kzalloc(sizeof(struct dsp_stream_callback_list)
+			+ event_data->payload_len,
+			GFP_ATOMIC);
+	if (new_event == NULL) {
+		ret = -ENOMEM;
+		goto done;
+	}
+	memcpy((void *)&new_event->event, (void *)payload,
+		   event_data->payload_len
+		   + sizeof(struct msm_adsp_event_data));
+
+	spin_lock_irqsave(&kctl_prtd->prtd_spin_lock, spin_flags);
+	while (kctl_prtd->event_count >= DSP_STREAM_CALLBACK_QUEUE_SIZE) {
+		pr_info("%s: queue of size %d is full. delete oldest one.\n",
+			__func__, DSP_STREAM_CALLBACK_QUEUE_SIZE);
+		oldest_event = list_first_entry(&kctl_prtd->event_queue,
+				struct dsp_stream_callback_list, list);
+		pr_info("%s: event deleted: type %d length %d\n",
+			__func__, oldest_event->event.event_type,
+			oldest_event->event.payload_len);
+		list_del(&oldest_event->list);
+		kctl_prtd->event_count--;
+		kfree(oldest_event);
+	}
+
+	list_add_tail(&new_event->list, &kctl_prtd->event_queue);
+	kctl_prtd->event_count++;
+	spin_unlock_irqrestore(&kctl_prtd->prtd_spin_lock, spin_flags);
+
+	control.id = kctl->id;
+	snd_ctl_notify(rtd->card->snd_card,
+			SNDRV_CTL_EVENT_MASK_INFO,
+			&control.id);
+
+done:
+	return ret;
+}
+
+int msm_adsp_stream_cmd_info(struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_BYTES;
+	uinfo->count =
+		sizeof(((struct snd_ctl_elem_value *)0)->value.bytes.data);
+
+	return 0;
+}
+
+int msm_adsp_stream_callback_get(struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_value *ucontrol)
+{
+	uint32_t payload_size = 0;
+	struct dsp_stream_callback_list *oldest_event;
+	unsigned long spin_flags = 0;
+	struct dsp_stream_callback_prtd *kctl_prtd = NULL;
+	int ret = 0;
+
+	kctl_prtd = (struct dsp_stream_callback_prtd *)
+			kcontrol->private_data;
+	if (kctl_prtd == NULL) {
+		pr_debug("%s: ASM Stream PP event queue is not initialized.\n",
+			__func__);
+		ret = -EINVAL;
+		goto done;
+	}
+
+	spin_lock_irqsave(&kctl_prtd->prtd_spin_lock, spin_flags);
+	pr_debug("%s: %d events in queue.\n", __func__, kctl_prtd->event_count);
+	if (list_empty(&kctl_prtd->event_queue)) {
+		pr_err("%s: ASM Stream PP event queue is empty.\n", __func__);
+		ret = -EINVAL;
+		spin_unlock_irqrestore(&kctl_prtd->prtd_spin_lock, spin_flags);
+		goto done;
+	}
+
+	oldest_event = list_first_entry(&kctl_prtd->event_queue,
+			struct dsp_stream_callback_list, list);
+	list_del(&oldest_event->list);
+	kctl_prtd->event_count--;
+	spin_unlock_irqrestore(&kctl_prtd->prtd_spin_lock, spin_flags);
+
+	payload_size = oldest_event->event.payload_len;
+	pr_debug("%s: event fetched: type %d length %d\n",
+			__func__, oldest_event->event.event_type,
+			oldest_event->event.payload_len);
+	memcpy(ucontrol->value.bytes.data, &oldest_event->event,
+		sizeof(struct msm_adsp_event_data) + payload_size);
+	kfree(oldest_event);
+
+done:
+	return ret;
+}
+
+int msm_adsp_stream_callback_info(struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_BYTES;
+	uinfo->count =
+		sizeof(((struct snd_ctl_elem_value *)0)->value.bytes.data);
+
+	return 0;
+}
+
 static int msm_multichannel_ec_primary_mic_ch_put(struct snd_kcontrol *kcontrol,
 			struct snd_ctl_elem_value *ucontrol)
 {
@@ -801,6 +1614,50 @@ static const struct  snd_kcontrol_new msm_multichannel_ec_controls[] = {
 		msm_multichannel_ec_primary_mic_ch_put),
 };
 
+static char const *ffecns_effect_text[] = {"NO_EFFECT", "EC_ONLY", "NS_ONLY", "ECNS"};
+
+static int msm_ffecns_put(struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_value *ucontrol)
+{
+	int ret = -EINVAL;
+
+	if (ucontrol->value.integer.value[0] < 0 ||
+		ucontrol->value.integer.value[0] >= ARRAY_SIZE(ffecns_effect_text)) {
+		pr_err("%s: invalid ffecns effect value %ld\n",
+			__func__, ucontrol->value.integer.value[0]);
+		return -EINVAL;
+	}
+
+	msm_ffecns_effect = ucontrol->value.integer.value[0];
+
+	pr_debug("%s: set %s for ffecns\n", __func__,
+		ffecns_effect_text[msm_ffecns_effect]);
+
+	ret = adm_set_ffecns_effect(msm_ffecns_effect);
+	if (ret)
+		pr_err("%s: failed to set %s for ffecns\n",
+			__func__, ffecns_effect_text[msm_ffecns_effect]);
+
+	return ret;
+}
+
+static int msm_ffecns_get(struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.integer.value[0] = msm_ffecns_effect;
+	pr_debug("%s: ffecns effect = %ld\n",
+		__func__, ucontrol->value.integer.value[0]);
+
+	return 0;
+}
+
+static SOC_ENUM_SINGLE_EXT_DECL(ffecns_effect_enum, ffecns_effect_text);
+
+static const struct snd_kcontrol_new ec_ffecns_controls[] = {
+	SOC_ENUM_EXT("FFECNS Effect", ffecns_effect_enum,
+		msm_ffecns_get, msm_ffecns_put),
+};
+
 static const struct snd_kcontrol_new int_fm_vol_mixer_controls[] = {
 	SOC_SINGLE_EXT_TLV("Internal FM RX Volume", SND_SOC_NOPM, 0,
 	INT_RX_VOL_GAIN, 0, msm_qti_pp_get_fm_vol_mixer,
@@ -808,6 +1665,11 @@ static const struct snd_kcontrol_new int_fm_vol_mixer_controls[] = {
 	SOC_SINGLE_EXT_TLV("Quat MI2S FM RX Volume", SND_SOC_NOPM, 0,
 	INT_RX_VOL_GAIN, 0, msm_qti_pp_get_quat_mi2s_fm_vol_mixer,
 	msm_qti_pp_set_quat_mi2s_fm_vol_mixer, fm_rx_vol_gain),
+};
+
+static const struct snd_kcontrol_new dsp_bit_width_controls[] = {
+	SOC_SINGLE_EXT(DSP_BIT_WIDTH_MIXER_CTL, SND_SOC_NOPM, 0, 0x20,
+	0, msm_asm_bit_width_get, msm_asm_bit_width_put),
 };
 
 static const struct snd_kcontrol_new pri_mi2s_lb_vol_mixer_controls[] = {
@@ -826,6 +1688,20 @@ static const struct snd_kcontrol_new tert_mi2s_lb_vol_mixer_controls[] = {
 	SOC_SINGLE_EXT_TLV("Tert MI2S LOOPBACK Volume", SND_SOC_NOPM, 0,
 	INT_RX_VOL_GAIN, 0, msm_qti_pp_get_tert_mi2s_lb_vol_mixer,
 	msm_qti_pp_set_tert_mi2s_lb_vol_mixer, afe_lb_vol_gain),
+};
+
+static const struct snd_kcontrol_new slimbus_7_lb_vol_mixer_controls[] = {
+	SOC_SINGLE_EXT_TLV("SLIMBUS_7 LOOPBACK Volume", SND_SOC_NOPM, 0,
+				INT_RX_VOL_GAIN, 0,
+				msm_qti_pp_get_slimbus_7_lb_vol_mixer,
+				msm_qti_pp_set_slimbus_7_lb_vol_mixer,
+				afe_lb_vol_gain),
+};
+
+static const struct snd_kcontrol_new slimbus_8_lb_vol_mixer_controls[] = {
+	SOC_SINGLE_EXT_TLV("SLIMBUS_8 LOOPBACK Volume", SND_SOC_NOPM, 0,
+	INT_RX_VOL_GAIN, 0, msm_qti_pp_get_slimbus_8_lb_vol_mixer,
+	msm_qti_pp_set_slimbus_8_lb_vol_mixer, afe_lb_vol_gain),
 };
 
 static const struct snd_kcontrol_new int_hfp_vol_mixer_controls[] = {
@@ -857,9 +1733,17 @@ static const struct snd_kcontrol_new sec_auxpcm_lb_vol_mixer_controls[] = {
 };
 
 static const struct snd_kcontrol_new multi_ch_channel_map_mixer_controls[] = {
-	SOC_SINGLE_MULTI_EXT("Playback Device Channel Map", SND_SOC_NOPM, 0, 16,
-	0, 8, msm_qti_pp_get_channel_map_mixer,
+	SOC_SINGLE_MULTI_EXT("Playback Device Channel Map", SND_SOC_NOPM,
+	0, PCM_MAX_CHMAP_ID, 0, PCM_FORMAT_MAX_NUM_CHANNEL_V8,
+	msm_qti_pp_get_channel_map_mixer,
 	msm_qti_pp_put_channel_map_mixer),
+};
+
+static const struct snd_kcontrol_new multi_ch_channel_map_capture_controls[] = {
+	SOC_SINGLE_MULTI_EXT("Capture Device Channel Map", SND_SOC_NOPM,
+	0, PCM_MAX_CHMAP_ID, 0, PCM_FORMAT_MAX_NUM_CHANNEL_V8,
+	msm_qti_pp_get_channel_map_capture,
+	msm_qti_pp_put_channel_map_capture),
 };
 
 
@@ -1011,6 +1895,19 @@ static const struct snd_kcontrol_new asphere_mixer_controls[] = {
 	0xFFFFFFFF, 0, 2, msm_qti_pp_asphere_get, msm_qti_pp_asphere_set),
 };
 
+static const struct snd_kcontrol_new dtmf_detect_enable_mixer_controls[] = {
+	SOC_SINGLE_EXT("MultiMedia1 DTMF Detect Enable", SND_SOC_NOPM,
+	MSM_FRONTEND_DAI_MULTIMEDIA1, 1, 0, NULL,
+	msm_qti_pp_put_dtmf_module_enable),
+	SOC_SINGLE_EXT("MultiMedia6 DTMF Detect Enable", SND_SOC_NOPM,
+	MSM_FRONTEND_DAI_MULTIMEDIA6, 1, 0, NULL,
+	msm_qti_pp_put_dtmf_module_enable),
+	SOC_SINGLE_EXT("MultiMedia21 DTMF Detect Enable", SND_SOC_NOPM,
+	MSM_FRONTEND_DAI_MULTIMEDIA21, 1, 0, NULL,
+	msm_qti_pp_put_dtmf_module_enable),
+};
+
+#ifdef CONFIG_QTI_PP
 void msm_qti_pp_add_controls(struct snd_soc_platform *platform)
 {
 	snd_soc_add_platform_controls(platform, int_fm_vol_mixer_controls,
@@ -1024,6 +1921,12 @@ void msm_qti_pp_add_controls(struct snd_soc_platform *platform)
 
 	snd_soc_add_platform_controls(platform, tert_mi2s_lb_vol_mixer_controls,
 			ARRAY_SIZE(tert_mi2s_lb_vol_mixer_controls));
+
+	snd_soc_add_platform_controls(platform, slimbus_7_lb_vol_mixer_controls,
+			ARRAY_SIZE(slimbus_7_lb_vol_mixer_controls));
+
+	snd_soc_add_platform_controls(platform, slimbus_8_lb_vol_mixer_controls,
+			ARRAY_SIZE(slimbus_8_lb_vol_mixer_controls));
 
 	snd_soc_add_platform_controls(platform, int_hfp_vol_mixer_controls,
 			ARRAY_SIZE(int_hfp_vol_mixer_controls));
@@ -1043,6 +1946,10 @@ void msm_qti_pp_add_controls(struct snd_soc_platform *platform)
 				multi_ch_channel_map_mixer_controls,
 			ARRAY_SIZE(multi_ch_channel_map_mixer_controls));
 
+	snd_soc_add_platform_controls(platform,
+				multi_ch_channel_map_capture_controls,
+			ARRAY_SIZE(multi_ch_channel_map_capture_controls));
+
 	snd_soc_add_platform_controls(platform, get_rms_controls,
 			ARRAY_SIZE(get_rms_controls));
 
@@ -1060,4 +1967,15 @@ void msm_qti_pp_add_controls(struct snd_soc_platform *platform)
 
 	snd_soc_add_platform_controls(platform, msm_multichannel_ec_controls,
 			ARRAY_SIZE(msm_multichannel_ec_controls));
+
+	snd_soc_add_platform_controls(platform, ec_ffecns_controls,
+			ARRAY_SIZE(ec_ffecns_controls));
+
+	snd_soc_add_platform_controls(platform, dsp_bit_width_controls,
+			ARRAY_SIZE(dsp_bit_width_controls));
+
+	snd_soc_add_platform_controls(platform,
+				dtmf_detect_enable_mixer_controls,
+			ARRAY_SIZE(dtmf_detect_enable_mixer_controls));
 }
+#endif /* CONFIG_QTI_PP */
