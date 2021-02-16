@@ -1341,7 +1341,7 @@ static const struct adreno_a6xx_core adreno_gpu_core_a680 = {
 			ADRENO_IFPC | ADRENO_PREEMPTION,
 		.gpudev = &adreno_a6xx_gmu_gpudev,
 		.perfcounters = &adreno_a6xx_legacy_perfcounters,
-		.gmem_base = 0x100000,
+		.gmem_base = 0x200000,
 		.gmem_size = SZ_2M,
 		.bus_width = 32,
 		.snapshot_size = SZ_1M,
