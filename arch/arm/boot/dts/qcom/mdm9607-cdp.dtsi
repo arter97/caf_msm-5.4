@@ -154,7 +154,6 @@
 						&sdc1_wlan_gpio_active>;
 	pinctrl-1 = <&pmx_sdc1_clk_off &pmx_sdc1_cmd_off &pmx_sdc1_data_off
 						&sdc1_wlan_gpio_sleep>;
-	qcom,nonremovable;
 	qcom,core_3_0v_support;
 	status = "ok";
 };
