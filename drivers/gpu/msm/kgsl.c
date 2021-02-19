@@ -1,5 +1,5 @@
 /* Copyright (c) 2008-2019, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -255,8 +255,9 @@ kgsl_mem_entry_create(void)
 		kref_init(&entry->refcount);
 		/* put this ref in the caller functions after init */
 		kref_get(&entry->refcount);
+		atomic_set(&entry->map_count, 0);
 	}
-	atomic_set(&entry->map_count, 0);
+
 	return entry;
 }
 #ifdef CONFIG_DMA_SHARED_BUFFER
