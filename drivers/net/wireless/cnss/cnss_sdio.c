@@ -285,9 +285,11 @@ static int cnss_put_hw_resources(struct device *dev)
 		return ret;
 	}
 
-	if (cnss_pdata->regulator.wlan_vreg)
+	if (cnss_pdata->regulator.wlan_vreg &&
+	    regulator_is_enabled(cnss_pdata->regulator.wlan_vreg))
 		regulator_disable(cnss_pdata->regulator.wlan_vreg);
-	else
+
+	if (!cnss_pdata->regulator.wlan_vreg)
 		pr_debug("wlan_vreg regulator is invalid\n");
 
 	info->cnss_hw_state = CNSS_HW_SLEEP;
@@ -295,7 +297,7 @@ static int cnss_put_hw_resources(struct device *dev)
 	return ret;
 }
 
-static int cnss_get_hw_resources(struct device *dev)
+static int cnss_get_hw_resources(struct device *dev, bool power_restore_host)
 {
 	int ret = -EINVAL;
 	struct mmc_host *host;
@@ -330,9 +332,12 @@ static int cnss_get_hw_resources(struct device *dev)
 			return ret;
 		}
 	} else {
+		ret = 0;
 		pr_debug("wlan_vreg regulator is invalid\n");
 	}
 
+	if (!power_restore_host)
+		goto skip_power_restore_host;
 
 	ret = mmc_power_restore_host(host);
 	if (ret) {
@@ -343,6 +348,7 @@ static int cnss_get_hw_resources(struct device *dev)
 		return ret;
 	}
 
+skip_power_restore_host:
 	info->cnss_hw_state = CNSS_HW_ACTIVE;
 	return ret;
 }
@@ -390,7 +396,7 @@ static int cnss_sdio_powerup(const struct subsys_desc *subsys)
 	if (!wdrv->reinit)
 		return 0;
 
-	ret = cnss_get_hw_resources(cnss_info->dev);
+	ret = cnss_get_hw_resources(cnss_info->dev, true);
 	if (ret) {
 		pr_err("Failed to power up HW\n");
 		return ret;
@@ -831,15 +837,20 @@ static void cnss_sdio_set_platform_ops(struct device *dev)
 	dev->platform_data = pf_ops;
 }
 
+static int cnss_set_pinctrl_state(struct cnss_sdio_data *pdata, bool state);
+
 static int cnss_sdio_wlan_inserted(struct sdio_func *func,
 				   const struct sdio_device_id *id)
 {
 	struct cnss_sdio_info *info;
+	struct cnss_sdio_wlan_driver *wdrv;
+	int error = -EINVAL;
 
 	if (!cnss_pdata)
 		return -ENODEV;
 
 	info = &cnss_pdata->cnss_sdio_info;
+	wdrv = info->wdrv;
 
 	info->func = func;
 	info->card = func->card;
@@ -848,20 +859,61 @@ static int cnss_sdio_wlan_inserted(struct sdio_func *func,
 	info->dev = &func->dev;
 	cnss_sdio_set_platform_ops(info->dev);
 
-	cnss_put_hw_resources(cnss_pdata->cnss_sdio_info.dev);
+	if (wdrv && wdrv->probe) {
+		/**
+		 * Do not call mmc_power_restore_host() which will try to
+		 * mmc_sdio_init_card(), init card will fail since previously
+		 * it's already been initialized by mmc_attach_sdio() after card
+		 * removed, and detected by mmc controller when WLAN_EN pinctrl
+		 * set by pwr_irq handler.
+		 */
+		error = cnss_get_hw_resources(info->dev, false);
+		if (error) {
+			pr_err("Failed to restore power err:%d\n", error);
+			return error;
+		}
+		error = cnss_set_pinctrl_state(cnss_pdata, PINCTRL_ACTIVE);
+		if (error) {
+			pr_err("Fail to set pinctrl to active state\n");
+			cnss_put_hw_resources(info->dev);
+			return error;
+		}
+		error = wdrv->probe(info->func, info->id);
+		if (error) {
+			pr_err("wlan probe failed error=%d\n", error);
+			/**
+			 * Check memory leak in skb pre-alloc memory pool
+			 * Reset the skb memory pool
+			 */
+			wcnss_skb_prealloc_check_memory_leak();
+			wcnss_skb_pre_alloc_reset();
+			return error;
+		}
+	} else {
+		error = 0;
+		cnss_put_hw_resources(info->dev);
+	}
 
 	pr_info("SDIO Device is Probed\n");
-	return 0;
+	return error;
 }
 
 static void cnss_sdio_wlan_removed(struct sdio_func *func)
 {
 	struct cnss_sdio_info *info;
+	struct cnss_sdio_wlan_driver *wdrv;
 
 	if (!cnss_pdata)
 		return;
 
 	info = &cnss_pdata->cnss_sdio_info;
+	wdrv = info->wdrv;
+
+	if (wdrv && wdrv->remove) {
+		wdrv->remove(info->func);
+		cnss_set_pinctrl_state(cnss_pdata, PINCTRL_SLEEP);
+		cnss_put_hw_resources(info->dev);
+	}
 
 	info->host = NULL;
 	info->card = NULL;
@@ -1009,7 +1061,7 @@ int cnss_sdio_wlan_register_driver(struct cnss_sdio_wlan_driver *driver)
 	if (!driver)
 		return error;
 
-	error = cnss_get_hw_resources(dev);
+	error = cnss_get_hw_resources(dev, true);
 	if (error) {
 		pr_err("Failed to restore power err:%d\n", error);
 		return error;
