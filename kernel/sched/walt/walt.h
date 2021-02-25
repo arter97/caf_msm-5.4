@@ -229,6 +229,7 @@ static inline int cpu_boost_init(void) { }
 extern void walt_fixup_nr_big_tasks(struct rq *rq, struct task_struct *p,
 					int delta, bool inc);
 
+extern bool walt_try_pull_rt_task(struct rq *this_rq);
 #else /* CONFIG_SCHED_WALT */
 
 static inline void walt_sched_init_rq(struct rq *rq) { }
@@ -300,6 +301,11 @@ static inline u64 get_rtgb_active_time(void)
 }
 
 #define walt_try_to_wake_up(a) {}
+
+static inline bool walt_try_pull_rt_task(struct rq *this_rq)
+{
+	return false;
+}
 
 #endif /* CONFIG_SCHED_WALT */
 

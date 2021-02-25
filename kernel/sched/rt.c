@@ -1655,14 +1655,15 @@ static void check_preempt_equal_prio(struct rq *rq, struct task_struct *p)
 #ifdef CONFIG_SCHED_WALT
 #define WALT_RT_PULL_THRESHOLD_NS	250000
 static struct task_struct *pick_highest_pushable_task(struct rq *rq, int cpu);
-static void try_pull_rt_task(struct rq *this_rq)
+bool walt_try_pull_rt_task(struct rq *this_rq)
 {
 	int i, this_cpu = this_rq->cpu, src_cpu = this_cpu;
 	struct rq *src_rq;
 	struct task_struct *p;
+	bool pulled = false;
 
 	if (sched_rt_runnable(this_rq))
-		return;
+		return false;
 
 	for_each_possible_cpu(i) {
 		struct rq *rq = cpu_rq(i);
@@ -1675,7 +1676,7 @@ static void try_pull_rt_task(struct rq *this_rq)
 	}
 
 	if (src_cpu == this_cpu)
-		return;
+		return false;
 
 	src_rq = cpu_rq(src_cpu);
 	double_lock_balance(this_rq, src_rq);
@@ -1693,11 +1694,13 @@ static void try_pull_rt_task(struct rq *this_rq)
 				WALT_RT_PULL_THRESHOLD_NS)
 		goto unlock;
 
+	pulled = true;
 	deactivate_task(src_rq, p, 0);
 	set_task_cpu(p, this_cpu);
 	activate_task(this_rq, p, 0);
 unlock:
 	double_unlock_balance(this_rq, src_rq);
+	return pulled;
 }
 #endif
 
@@ -1711,14 +1714,7 @@ static int balance_rt(struct rq *rq, struct task_struct *p, struct rq_flags *rf)
 		 * not yet started the picking loop.
 		 */
 		rq_unpin_lock(rq, rf);
-#ifndef CONFIG_SCHED_WALT
 		pull_rt_task(rq);
-#else
-		if (rt_overloaded(rq))
-			pull_rt_task(rq);
-		else
-			try_pull_rt_task(rq);
-#endif
 		rq_repin_lock(rq, rf);
 	}
 
