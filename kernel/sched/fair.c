@@ -11511,6 +11511,13 @@ int newidle_balance(struct rq *this_rq, struct rq_flags *rf)
 	 */
 	rq_unpin_lock(this_rq, rf);
 
+	/*
+	 * check if any of the CPUs can't run RT tasks right away
+	 * and help them.
+	 */
+	if (walt_try_pull_rt_task(this_rq))
+		goto out;
+
 	if (avg_idle < sysctl_sched_migration_cost ||
 	    !READ_ONCE(this_rq->rd->overload)) {
 
