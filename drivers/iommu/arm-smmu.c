@@ -5317,7 +5317,7 @@ static int __init arm_smmu_init(void)
 	trace_smmu_init(ktime_us_delta(ktime_get(), cur));
 	return ret;
 }
-early_subsys_initcall(arm_smmu_init, EARLY_SUBSYS_PLATFORM, EARLY_INIT_LEVEL2);
+early_subsys_initcall(arm_smmu_init, EARLY_SUBSYS_PLATFORM, EARLY_INIT_LEVEL1);
 
 static void __exit arm_smmu_exit(void)
 {
