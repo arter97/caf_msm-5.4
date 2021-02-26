@@ -1585,6 +1585,6 @@ static struct i2c_driver anx7625_driver = {
 };
 
 early_module_i2c_driver(anx7625_driver, EARLY_SUBSYS_PLATFORM,
-EARLY_INIT_LEVEL3);
+EARLY_INIT_LEVEL4);
 MODULE_DESCRIPTION("anx7625 driver");
 MODULE_LICENSE("GPL v2");
