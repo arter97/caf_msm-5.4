@@ -3372,40 +3372,6 @@ static int msm_geni_serial_startup(struct uart_port *uport)
 	if (uart_console(uport))
 		enable_irq(uport->irq);
 
-	if (msm_port->wakeup_irq > 0 && uart_console(uport)) {
-		ret = request_irq(msm_port->wakeup_irq, msm_geni_console_wakeup_isr,
-				IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
-				"console_uart_wakeup", uport);
-		if (unlikely(ret)) {
-			dev_err(uport->dev, "%s:Failed to get console WakeIRQ ret%d\n",
-								__func__, ret);
-			goto exit_startup;
-		}
-		disable_irq(msm_port->wakeup_irq);
-		ret = irq_set_irq_wake(msm_port->wakeup_irq, 1);
-		if (unlikely(ret)) {
-			dev_err(uport->dev, "%s:Failed to set console IRQ wake:%d\n",
-					__func__, ret);
-			goto exit_startup;
-		}
-	} else if (msm_port->wakeup_irq > 0 && !uart_console(uport)) {
-		irq_set_status_flags(msm_port->wakeup_irq, IRQ_NOAUTOEN);
-		ret = request_irq(msm_port->wakeup_irq, msm_geni_hs_wakeup_isr,
-				IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
-				"hs_uart_wakeup", uport);
-		if (unlikely(ret)) {
-			dev_err(uport->dev, "%s:Failed to get HS WakeIRQ ret%d\n",
-								__func__, ret);
-			goto exit_startup;
-		}
-		disable_irq(msm_port->wakeup_irq);
-		ret = irq_set_irq_wake(msm_port->wakeup_irq, 1);
-		if (unlikely(ret)) {
-			dev_err(uport->dev, "%s:Failed to set HS IRQ wake:%d\n",
-					__func__, ret);
-			goto exit_startup;
-		}
-	}
 exit_startup:
 	if (likely(!uart_console(uport)))
 		msm_geni_serial_power_off(&msm_port->uport);
@@ -4182,22 +4148,13 @@ static int msm_geni_serial_get_irq_pinctrl(struct platform_device *pdev,
 			return PTR_ERR(dev_port->serial_rsc.geni_gpio_active);
 		}
 	}
-	/*
-	 * For clients who setup an Inband wakeup, leave the GPIO pins
-	 * always connected to the core, else move the pins to their
-	 * defined "sleep" state.
-	 */
-	if (dev_port->wakeup_irq > 0) {
-		dev_port->serial_rsc.geni_gpio_sleep =
-			dev_port->serial_rsc.geni_gpio_active;
-	} else {
-		dev_port->serial_rsc.geni_gpio_sleep =
-			pinctrl_lookup_state(dev_port->serial_rsc.geni_pinctrl,
-							PINCTRL_SLEEP);
-		if (IS_ERR_OR_NULL(dev_port->serial_rsc.geni_gpio_sleep)) {
-			dev_err(&pdev->dev, "No sleep config specified!\n");
-			return PTR_ERR(dev_port->serial_rsc.geni_gpio_sleep);
-		}
+
+	dev_port->serial_rsc.geni_gpio_sleep =
+		pinctrl_lookup_state(dev_port->serial_rsc.geni_pinctrl,
+						PINCTRL_SLEEP);
+	if (IS_ERR_OR_NULL(dev_port->serial_rsc.geni_gpio_sleep)) {
+		dev_err(&pdev->dev, "No sleep config specified!\n");
+		return PTR_ERR(dev_port->serial_rsc.geni_gpio_sleep);
 	}
 
 	ret = platform_get_irq(pdev, 0);
@@ -4216,6 +4173,37 @@ static int msm_geni_serial_get_irq_pinctrl(struct platform_device *pdev,
 		dev_err(uport->dev, "%s: Failed to get IRQ ret %d\n",
 							__func__, ret);
 		return ret;
+	}
+
+	if (dev_port->wakeup_irq > 0 && uart_console(uport)) {
+		irq_set_status_flags(dev_port->wakeup_irq, IRQ_NOAUTOEN);
+		ret = devm_request_irq(uport->dev, dev_port->wakeup_irq,
+				msm_geni_console_wakeup_isr,
+				IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+				"console_uart_wakeup", uport);
+		if (unlikely(ret)) {
+			dev_err(uport->dev, "%s:Failed to get console WakeIRQ ret%d\n",
+								__func__, ret);
+			return ret;
+		}
+		disable_irq(dev_port->wakeup_irq);
+		ret = irq_set_irq_wake(dev_port->wakeup_irq, 1);
+		if (unlikely(ret)) {
+			dev_err(uport->dev, "%s:Failed to set console IRQ wake:%d\n",
+					__func__, ret);
+			return ret;
+		}
+	} else if (dev_port->wakeup_irq > 0 && !uart_console(uport)) {
+		irq_set_status_flags(dev_port->wakeup_irq, IRQ_NOAUTOEN);
+		ret = devm_request_irq(uport->dev, dev_port->wakeup_irq,
+				msm_geni_hs_wakeup_isr,
+				IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+				"hs_uart_wakeup", uport);
+		if (unlikely(ret)) {
+			dev_err(uport->dev, "%s:Failed to get HS WakeIRQ ret%d\n",
+								__func__, ret);
+			return ret;
+		}
 	}
 
 	return ret;
