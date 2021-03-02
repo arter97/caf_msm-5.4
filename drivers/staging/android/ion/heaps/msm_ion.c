@@ -655,6 +655,12 @@ static int __init msm_ion_init(void)
 }
 subsys_initcall_sync(msm_ion_init);
 
+static int __init msm_ion_init_sync(void) {
+	msm_ion_driver.driver.probe_type = PROBE_PREFER_ASYNCHRONOUS;
+	return 0;
+}
+early_init(msm_ion_init_sync, EARLY_SUBSYS_PLATFORM, EARLY_INIT_LEVEL8);
+
 static void __exit msm_ion_exit(void)
 {
 	return platform_driver_unregister(&msm_ion_driver);

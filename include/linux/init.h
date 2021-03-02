@@ -298,6 +298,8 @@ extern bool is_early_userspace;
 	type(_##fn); \
 	__define_early_initcall(fn, subsys, level)
 
+#define early_arch_initcall(fn, subsys, level) \
+	early_initcall_type(arch_initcall, fn, subsys, level)
 #define early_subsys_initcall(fn, subsys, level) \
 	early_initcall_type(subsys_initcall, fn, subsys, level)
 #define early_device_initcall(fn, subsys, level) \
