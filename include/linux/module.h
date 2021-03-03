@@ -131,6 +131,7 @@ extern void cleanup_module(void);
 
 #define console_initcall(fn)		module_init(fn)
 
+#define early_arch_initcall(fn, subsys, level) module_init(fn)
 #define early_subsys_initcall(fn, subsys, level) module_init(fn)
 #define early_device_initcall(fn, subsys, level) module_init(fn)
 #define early_rootfs_initcall(fn, subsys, level) module_init(fn)

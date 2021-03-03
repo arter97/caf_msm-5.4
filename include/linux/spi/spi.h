@@ -298,6 +298,10 @@ static inline void spi_unregister_driver(struct spi_driver *sdrv)
 	module_driver(__spi_driver, spi_register_driver, \
 			spi_unregister_driver)
 
+#define early_module_spi_driver(__spi_driver, subsys, level) \
+	early_module_driver(__spi_driver, subsys, level, spi_register_driver, \
+			spi_unregister_driver)
+
 /**
  * struct spi_controller - interface to SPI master or slave controller
  * @dev: device interface to this driver
