@@ -1101,7 +1101,7 @@ static int hgsl_context_destroy(struct file *filep, unsigned long arg,
 		return -ENODEV;
 	}
 
-	if (force_cleanup == false)
+	if (!force_cleanup)
 		copy_from_user(&context_id, USRPTR(arg),
 						sizeof(context_id));
 	else
@@ -1251,7 +1251,7 @@ static int hgsl_dbq_release(struct file *filep, unsigned long arg,
 
 	rel_info.ref_count = (dbq->state == DB_STATE_Q_INIT_DONE) ? 1 : 0;
 
-	if (force_cleanup == false)
+	if (!force_cleanup)
 		ret = copy_to_user(USRPTR(arg), &rel_info, sizeof(rel_info));
 
 	return priv->dbq_idx;
@@ -1286,7 +1286,7 @@ static int hgsl_release(struct inode *inodep, struct file *filep)
 			(hgsl->contexts[i] != NULL) &&
 			(priv->pid == hgsl->contexts[i]->pid)) {
 			rel_info.ctxt_id = hgsl->contexts[i]->context_id;
-			if (hgsl->contexts[i]->dbq_assigned == true)
+			if (hgsl->contexts[i]->dbq_assigned)
 				hgsl_dbq_release(filep,
 						(unsigned long)&rel_info,
 						true);
@@ -1400,7 +1400,8 @@ static int hgsl_ioctl_isync_fence_create(struct file *filep,
 
 	copy_from_user(&param, USRPTR(arg), sizeof(param));
 
-	ret = hgsl_isync_fence_create(priv, param.timeline_id, &fence);
+	ret = hgsl_isync_fence_create(priv, param.timeline_id,
+				               param.ts, &fence);
 
 	if (ret == 0) {
 		param.fence_id = fence;
@@ -1421,6 +1422,21 @@ static int hgsl_ioctl_isync_fence_signal(struct file *filep,
 
 	ret = hgsl_isync_fence_signal(priv, param.timeline_id,
 						  param.fence_id);
+
+	return ret;
+}
+
+static int hgsl_ioctl_isync_forward(struct file *filep,
+					   unsigned long arg)
+{
+	struct hgsl_priv *priv = filep->private_data;
+	struct hgsl_isync_forward param;
+	int ret = 0;
+
+	copy_from_user(&param, USRPTR(arg), sizeof(param));
+
+	ret = hgsl_isync_forward(priv, param.timeline_id,
+						  param.ts);
 
 	return ret;
 }
@@ -1468,6 +1484,9 @@ static long hgsl_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 		break;
 	case HGSL_IOCTL_ISYNC_FENCE_SIGNAL:
 		ret = hgsl_ioctl_isync_fence_signal(filep, arg);
+		break;
+	case HGSL_IOCTL_ISYNC_FORWARD:
+		ret = hgsl_ioctl_isync_forward(filep, arg);
 		break;
 
 	default:
@@ -1558,7 +1577,7 @@ static void qcom_hgsl_deregister(struct platform_device *pdev)
 
 static bool hgsl_is_db_off(struct platform_device *pdev)
 {
-	uint32_t db_off;
+	uint32_t db_off = 0;
 
 	if (pdev == NULL)
 		return true;

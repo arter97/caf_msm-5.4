@@ -1,14 +1,6 @@
-/* Copyright (c) 2020, The Linux Foundation. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
+/* SPDX-License-Identifier: GPL-2.0-only */
+/*
+ * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  */
 #ifndef __HGSL_H_
 #define __HGSL_H_
@@ -107,12 +99,14 @@ struct hgsl_isync_timeline {
 	struct hgsl_priv *priv;
 	struct list_head fence_list;
 	spinlock_t lock;
+	u32 last_ts;
 };
 
 struct hgsl_isync_fence {
 	struct dma_fence fence;
 	struct hgsl_isync_timeline *timeline;
 	struct list_head child_list;
+	u32 ts;
 };
 
 /* Fence for commands. */
@@ -131,8 +125,10 @@ int hgsl_isync_timeline_create(struct hgsl_priv *priv,
 				    uint32_t *timeline_id);
 int hgsl_isync_timeline_destroy(struct hgsl_priv *priv, uint32_t id);
 int hgsl_isync_fence_create(struct hgsl_priv *priv, uint32_t timeline_id,
-							int *fence);
+						    uint32_t ts, int *fence);
 int hgsl_isync_fence_signal(struct hgsl_priv *priv, uint32_t timeline_id,
-					int fence_fd);
+							       int fence_fd);
+int hgsl_isync_forward(struct hgsl_priv *priv, uint32_t timeline_id,
+								uint32_t ts);
 
 #endif /* __HGSL_H_ */

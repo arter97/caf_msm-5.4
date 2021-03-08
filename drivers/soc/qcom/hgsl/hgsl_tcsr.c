@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -237,7 +237,6 @@ static int hgsl_tcsr_probe(struct platform_device *pdev)
 		tcsr->role = HGSL_TCSR_ROLE_SENDER;
 	} else {
 		dev_err(dev, "Not compatible device\n");
-		devm_kfree(dev, tcsr);
 		return -ENODEV;
 	}
 
@@ -253,7 +252,6 @@ static int hgsl_tcsr_remove(struct platform_device *pdev)
 	struct hgsl_tcsr *tcsr = platform_get_drvdata(pdev);
 
 	mutex_destroy(&tcsr->dev_mutex);
-	devm_kfree(&pdev->dev, tcsr);
 
 	return 0;
 }
@@ -262,7 +260,6 @@ static struct platform_driver hgsl_tcsr_driver = {
 	.probe = hgsl_tcsr_probe,
 	.remove = hgsl_tcsr_remove,
 	.driver = {
-		.owner = THIS_MODULE,
 		.name = "hgsl-tcsr",
 		.of_match_table = hgsl_tcsr_match_table,
 	}
