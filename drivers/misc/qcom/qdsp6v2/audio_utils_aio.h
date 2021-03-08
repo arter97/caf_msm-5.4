@@ -1,6 +1,6 @@
 /* Copyright (C) 2008 Google, Inc.
  * Copyright (C) 2008 HTC Corporation
- * Copyright (c) 2009-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2016, 2021, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -199,6 +199,7 @@ struct q6audio_aio {
 	int feedback;
 	int rflush;             /* Read  flush */
 	int wflush;             /* Write flush */
+	bool reset_event;
 	long (*codec_ioctl)(struct file *, unsigned int, unsigned long);
 	long (*codec_compat_ioctl)(struct file *, unsigned int, unsigned long);
 };
@@ -212,7 +213,7 @@ void audio_aio_async_read_ack(struct q6audio_aio *audio, uint32_t token,
 int insert_eos_buf(struct q6audio_aio *audio,
 		struct audio_aio_buffer_node *buf_node);
 
-void extract_meta_out_info(struct q6audio_aio *audio,
+int extract_meta_out_info(struct q6audio_aio *audio,
 		struct audio_aio_buffer_node *buf_node, int dir);
 
 int audio_aio_open(struct q6audio_aio *audio, struct file *file);
