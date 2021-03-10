@@ -98,6 +98,7 @@ struct hgsl_isync_timeline {
 	int id;
 	struct hgsl_priv *priv;
 	struct list_head fence_list;
+	u64 context;
 	spinlock_t lock;
 	u32 last_ts;
 };
