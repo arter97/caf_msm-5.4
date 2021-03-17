@@ -40,9 +40,9 @@
 		#size-cells = <1>;
 		ranges;
 
-		peripheral1_mem: peripheral1_region@0x81800000 {
+		peripheral1_mem: peripheral1_region@0x88400000 {
 			compatible = "removed-dma-pool";
-			reg = <0x81800000 0x6400000>;
+			reg = <0x88400000 0x6800000>;
 			no-map;
 			label = "peripheral1_mem";
 		};
