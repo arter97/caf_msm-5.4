@@ -26,6 +26,7 @@
 #include <linux/reboot.h>
 #include <asm/current.h>
 #include <soc/qcom/restart.h>
+#include <linux/vmalloc.h>
 #ifdef CONFIG_DIAG_OVER_USB
 #include <linux/usb/usbdiag.h>
 #endif
@@ -229,7 +230,7 @@ static int diag_dci_init_buffer(struct diag_dci_buffer_t *buffer, int type)
 	switch (type) {
 	case DCI_BUF_PRIMARY:
 		buffer->capacity = IN_BUF_SIZE;
-		buffer->data = kzalloc(buffer->capacity, GFP_KERNEL);
+		buffer->data = vzalloc(buffer->capacity);
 		if (!buffer->data)
 			return -ENOMEM;
 		break;
@@ -239,7 +240,7 @@ static int diag_dci_init_buffer(struct diag_dci_buffer_t *buffer, int type)
 		break;
 	case DCI_BUF_CMD:
 		buffer->capacity = DIAG_MAX_REQ_SIZE + DCI_BUF_SIZE;
-		buffer->data = kzalloc(buffer->capacity, GFP_KERNEL);
+		buffer->data = vzalloc(buffer->capacity);
 		if (!buffer->data)
 			return -ENOMEM;
 		break;
@@ -2542,7 +2543,7 @@ static int diag_dci_init_remote(void)
 		create_dci_event_mask_tbl(temp->event_mask_composite);
 	}
 
-	partial_pkt.data = kzalloc(MAX_DCI_PACKET_SZ, GFP_KERNEL);
+	partial_pkt.data = vzalloc(MAX_DCI_PACKET_SZ);
 	if (!partial_pkt.data) {
 		pr_err("diag: Unable to create partial pkt data\n");
 		return -ENOMEM;
@@ -2598,7 +2599,7 @@ int diag_dci_init(void)
 		goto err;
 
 	if (driver->apps_dci_buf == NULL) {
-		driver->apps_dci_buf = kzalloc(DCI_BUF_SIZE, GFP_KERNEL);
+		driver->apps_dci_buf = vzalloc(DCI_BUF_SIZE);
 		if (driver->apps_dci_buf == NULL)
 			goto err;
 	}
@@ -2615,11 +2616,11 @@ int diag_dci_init(void)
 	return DIAG_DCI_NO_ERROR;
 err:
 	pr_err("diag: Could not initialize diag DCI buffers");
-	kfree(driver->apps_dci_buf);
+	vfree(driver->apps_dci_buf);
 
 	if (driver->diag_dci_wq)
 		destroy_workqueue(driver->diag_dci_wq);
-	kfree(partial_pkt.data);
+	vfree(partial_pkt.data);
 	mutex_destroy(&driver->dci_mutex);
 	mutex_destroy(&dci_log_mask_mutex);
 	mutex_destroy(&dci_event_mask_mutex);
@@ -2638,8 +2639,8 @@ void diag_dci_channel_init(void)
 
 void diag_dci_exit(void)
 {
-	kfree(partial_pkt.data);
-	kfree(driver->apps_dci_buf);
+	vfree(partial_pkt.data);
+	vfree(driver->apps_dci_buf);
 	mutex_destroy(&driver->dci_mutex);
 	mutex_destroy(&dci_log_mask_mutex);
 	mutex_destroy(&dci_event_mask_mutex);
@@ -2775,7 +2776,7 @@ int diag_dci_register_client(struct diag_dci_reg_tbl_t *reg_entry)
 	new_entry->in_service = 0;
 	INIT_LIST_HEAD(&new_entry->list_write_buf);
 	mutex_init(&new_entry->write_buf_mutex);
-	new_entry->dci_log_mask =  kzalloc(DCI_LOG_MASK_SIZE, GFP_KERNEL);
+	new_entry->dci_log_mask =  vzalloc(DCI_LOG_MASK_SIZE);
 	if (!new_entry->dci_log_mask) {
 		pr_err("diag: Unable to create log mask for client, %d",
 							driver->dci_client_id);
@@ -2783,7 +2784,7 @@ int diag_dci_register_client(struct diag_dci_reg_tbl_t *reg_entry)
 	}
 	create_dci_log_mask_tbl(new_entry->dci_log_mask, DCI_LOG_MASK_CLEAN);
 
-	new_entry->dci_event_mask =  kzalloc(DCI_EVENT_MASK_SIZE, GFP_KERNEL);
+	new_entry->dci_event_mask =  vzalloc(DCI_EVENT_MASK_SIZE);
 	if (!new_entry->dci_event_mask) {
 		pr_err("diag: Unable to create event mask for client, %d",
 							driver->dci_client_id);
@@ -2793,7 +2794,7 @@ int diag_dci_register_client(struct diag_dci_reg_tbl_t *reg_entry)
 
 	new_entry->buffers = kzalloc(new_entry->num_buffers *
 				     sizeof(struct diag_dci_buf_peripheral_t),
-				     GFP_KERNEL);
+				     	GFP_KERNEL);
 	if (!new_entry->buffers) {
 		pr_err("diag: Unable to allocate buffers for peripherals in %s\n",
 								__func__);
@@ -2817,7 +2818,7 @@ int diag_dci_register_client(struct diag_dci_reg_tbl_t *reg_entry)
 		if (!proc_buf->buf_primary)
 			goto fail_alloc;
 		proc_buf->buf_cmd = kzalloc(sizeof(struct diag_dci_buffer_t),
-					    GFP_KERNEL);
+					GFP_KERNEL);
 		if (!proc_buf->buf_cmd)
 			goto fail_alloc;
 		err = diag_dci_init_buffer(proc_buf->buf_primary,
@@ -2849,21 +2850,21 @@ fail_alloc:
 			if (proc_buf) {
 				mutex_destroy(&proc_buf->health_mutex);
 				if (proc_buf->buf_primary) {
-					kfree(proc_buf->buf_primary->data);
+					vfree(proc_buf->buf_primary->data);
 					mutex_destroy(
 					   &proc_buf->buf_primary->data_mutex);
 				}
 				kfree(proc_buf->buf_primary);
 				if (proc_buf->buf_cmd) {
-					kfree(proc_buf->buf_cmd->data);
+					vfree(proc_buf->buf_cmd->data);
 					mutex_destroy(
 					   &proc_buf->buf_cmd->data_mutex);
 				}
 				kfree(proc_buf->buf_cmd);
 			}
 		}
-		kfree(new_entry->dci_event_mask);
-		kfree(new_entry->dci_log_mask);
+		vfree(new_entry->dci_event_mask);
+		vfree(new_entry->dci_log_mask);
 	}
 	kfree(new_entry);
 	mutex_unlock(&driver->dci_mutex);
@@ -2895,7 +2896,7 @@ int diag_dci_deinit_client(struct diag_dci_client_tbl *entry)
 	 * Clear the client's log and event masks, update the cumulative
 	 * masks and send the masks to peripherals
 	 */
-	kfree(entry->dci_log_mask);
+	vfree(entry->dci_log_mask);
 	diag_dci_invalidate_cumulative_log_mask(token);
 	if (token == DCI_LOCAL_PROC)
 		diag_update_userspace_clients(DCI_LOG_MASKS_TYPE);
@@ -2904,7 +2905,7 @@ int diag_dci_deinit_client(struct diag_dci_client_tbl *entry)
 		mutex_unlock(&driver->dci_mutex);
 		return ret;
 	}
-	kfree(entry->dci_event_mask);
+	vfree(entry->dci_event_mask);
 	diag_dci_invalidate_cumulative_event_mask(token);
 	if (token == DCI_LOCAL_PROC)
 		diag_update_userspace_clients(DCI_EVENT_MASKS_TYPE);
@@ -2963,11 +2964,11 @@ int diag_dci_deinit_client(struct diag_dci_client_tbl *entry)
 		}
 
 		mutex_lock(&proc_buf->buf_primary->data_mutex);
-		kfree(proc_buf->buf_primary->data);
+		vfree(proc_buf->buf_primary->data);
 		mutex_unlock(&proc_buf->buf_primary->data_mutex);
 
 		mutex_lock(&proc_buf->buf_cmd->data_mutex);
-		kfree(proc_buf->buf_cmd->data);
+		vfree(proc_buf->buf_cmd->data);
 		mutex_unlock(&proc_buf->buf_cmd->data_mutex);
 
 		mutex_destroy(&proc_buf->health_mutex);
