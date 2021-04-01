@@ -86,8 +86,6 @@ u64 __cacheline_aligned boot_args[4];
 unsigned int logical_bootcpu_id __read_mostly;
 EXPORT_SYMBOL(logical_bootcpu_id);
 
-extern void *__init fixmap_remap_fdt(phys_addr_t dt_phys, int *size,
-				       pgprot_t prot);
 /*
  * Parse the device tree cpu nodes and enumerate logical cpu number for
  * the boot cpu based on the mpidr value and reg value from the cpu node.
