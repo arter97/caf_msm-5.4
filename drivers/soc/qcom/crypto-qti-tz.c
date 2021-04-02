@@ -2,13 +2,14 @@
 /*
  * Crypto TZ library for storage encryption.
  *
- * Copyright (c) 2020, Linux Foundation. All rights reserved.
+ * Copyright (c) 2020-2021, Linux Foundation. All rights reserved.
  */
 
 #include <asm/cacheflush.h>
 #include <linux/qcom_scm.h>
 #include <linux/qtee_shmbridge.h>
 #include <linux/crypto-qti-common.h>
+#include <linux/init.h>
 #include <linux/module.h>
 #include "crypto-qti-platform.h"
 
@@ -16,6 +17,15 @@
 #define UFS_CE 10
 #define SDCC_CE 20
 #define UFS_CARD_CE 30
+
+static bool is_storage_type_emmc(void)
+{
+	if (strnstr(saved_command_line, "sdhci",
+					strlen(saved_command_line)))
+		return true;
+
+	return false;
+}
 
 int crypto_qti_program_key(struct crypto_vops_qti_entry *ice_entry,
 			   const struct blk_crypto_key *key, unsigned int slot,
@@ -31,9 +41,14 @@ int crypto_qti_program_key(struct crypto_vops_qti_entry *ice_entry,
 	memcpy(shm.vaddr, key->raw, key->size);
 	qtee_shmbridge_flush_shm_buf(&shm);
 
-	err = qcom_scm_config_set_ice_key(slot, shm.paddr, key->size,
-					ICE_CIPHER_MODE_XTS_256,
-					data_unit_mask, UFS_CE);
+	if (is_storage_type_emmc())
+		err = qcom_scm_config_set_ice_key(slot, shm.paddr, key->size,
+						ICE_CIPHER_MODE_XTS_256,
+						data_unit_mask, SDCC_CE);
+	else
+		err = qcom_scm_config_set_ice_key(slot, shm.paddr, key->size,
+						ICE_CIPHER_MODE_XTS_256,
+						data_unit_mask, UFS_CE);
 	if (err)
 		pr_err("%s:SCM call Error: 0x%x slot %d\n",
 				__func__, err, slot);
@@ -50,7 +65,11 @@ int crypto_qti_invalidate_key(struct crypto_vops_qti_entry *ice_entry,
 {
 	int err = 0;
 
-	err = qcom_scm_clear_ice_key(slot, UFS_CE);
+	if (is_storage_type_emmc())
+		err = qcom_scm_clear_ice_key(slot, SDCC_CE);
+	else
+		err = qcom_scm_clear_ice_key(slot, UFS_CE);
+
 	if (err)
 		pr_err("%s:SCM call Error: 0x%x\n", __func__, err);
 
