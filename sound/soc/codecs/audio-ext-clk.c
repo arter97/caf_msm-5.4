@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2018, 2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -63,25 +63,6 @@ static struct afe_clk_set clk2_config = {
 	Q6AFE_LPASS_CLK_CONFIG_API_VERSION,
 	Q6AFE_LPASS_CLK_ID_SPEAKER_I2S_OSR,
 	Q6AFE_LPASS_IBIT_CLK_11_P2896_MHZ,
-	Q6AFE_LPASS_CLK_ATTRIBUTE_COUPLE_NO,
-	Q6AFE_LPASS_CLK_ROOT_DEFAULT,
-	0,
-};
-
-static const struct afe_clk_cfg lpass_default = {
-	AFE_API_VERSION_I2S_CONFIG,
-	Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ,
-	Q6AFE_LPASS_OSR_CLK_12_P288_MHZ,
-	Q6AFE_LPASS_CLK_SRC_INTERNAL,
-	Q6AFE_LPASS_CLK_ROOT_DEFAULT,
-	Q6AFE_LPASS_MODE_BOTH_VALID,
-	0,
-};
-
-static struct afe_clk_set lpass_default2 = {
-	Q6AFE_LPASS_CLK_CONFIG_API_VERSION,
-	Q6AFE_LPASS_CLK_ID_SPEAKER_I2S_OSR,
-	Q6AFE_LPASS_IBIT_CLK_12_P288_MHZ,
 	Q6AFE_LPASS_CLK_ATTRIBUTE_COUPLE_NO,
 	Q6AFE_LPASS_CLK_ROOT_DEFAULT,
 	0,
@@ -158,134 +139,6 @@ static void audio_ext_clk2_unprepare(struct clk *clk)
 		pr_err("%s: failed to reset clock, ret = %d\n", __func__, ret);
 }
 
-static int audio_ext_lpass_mclk_prepare(struct clk *clk)
-{
-	struct audio_ext_lpass_mclk *audio_lpass_mclk;
-	struct pinctrl_info *pnctrl_info;
-	struct afe_clk_cfg *lpass_clk = NULL;
-	int ret;
-
-	audio_lpass_mclk = container_of(clk, struct audio_ext_lpass_mclk, c);
-	pnctrl_info = &audio_lpass_mclk->pnctrl_info;
-
-	lpass_clk = kzalloc(sizeof(struct afe_clk_cfg), GFP_KERNEL);
-	if (!lpass_clk)
-		return -ENOMEM;
-
-	if (pnctrl_info->pinctrl) {
-		ret = pinctrl_select_state(pnctrl_info->pinctrl,
-					   pnctrl_info->active);
-		if (ret) {
-			pr_err("%s: active state select failed with %d\n",
-				__func__, ret);
-			ret = -EIO;
-			goto err;
-		}
-	}
-
-	memcpy(lpass_clk, &lpass_default, sizeof(struct afe_clk_cfg));
-	lpass_clk->clk_val2 = Q6AFE_LPASS_OSR_CLK_12_P288_MHZ;
-	lpass_clk->clk_set_mode = Q6AFE_LPASS_MODE_CLK2_VALID;
-	ret = afe_set_lpass_clock(AFE_PORT_ID_SECONDARY_MI2S_RX, lpass_clk);
-	if (ret < 0) {
-		pr_err("%s afe_set_lpass_clock failed, ret = %d\n",
-			__func__, ret);
-		kfree(lpass_clk);
-		return -EINVAL;
-	}
-err:
-	kfree(lpass_clk);
-	return 0;
-}
-
-static void audio_ext_lpass_mclk_unprepare(struct clk *clk)
-{
-	struct audio_ext_lpass_mclk *audio_lpass_mclk;
-	struct pinctrl_info *pnctrl_info;
-	struct afe_clk_cfg *lpass_clk = NULL;
-	int ret;
-
-	audio_lpass_mclk = container_of(clk, struct audio_ext_lpass_mclk, c);
-	pnctrl_info = &audio_lpass_mclk->pnctrl_info;
-
-	lpass_clk = kzalloc(sizeof(struct afe_clk_cfg), GFP_KERNEL);
-	if (!lpass_clk)
-		return;
-
-	if (pnctrl_info->pinctrl) {
-		ret = pinctrl_select_state(pnctrl_info->pinctrl,
-					   pnctrl_info->active);
-		if (ret) {
-			pr_err("%s: active state select failed with %d\n",
-				__func__, ret);
-			ret = -EIO;
-			goto err;
-		}
-	}
-
-	memcpy(lpass_clk, &lpass_default, sizeof(struct afe_clk_cfg));
-	lpass_clk->clk_val2 = 0;
-	lpass_clk->clk_set_mode = Q6AFE_LPASS_MODE_CLK2_VALID;
-	ret = afe_set_lpass_clock(AFE_PORT_ID_SECONDARY_MI2S_RX, lpass_clk);
-	if (ret < 0)
-		pr_err("%s: afe_set_lpass_clock failed, ret = %d\n",
-			__func__, ret);
-err:
-	kfree(lpass_clk);
-}
-
-static int audio_ext_lpass_mclk2_prepare(struct clk *clk)
-{
-	struct audio_ext_lpass_mclk *audio_lpass_mclk2;
-	struct pinctrl_info *pnctrl_info;
-	int ret;
-
-	audio_lpass_mclk2 = container_of(clk, struct audio_ext_lpass_mclk, c);
-	pnctrl_info = &audio_lpass_mclk2->pnctrl_info;
-
-	if (pnctrl_info->pinctrl) {
-		ret = pinctrl_select_state(pnctrl_info->pinctrl,
-					   pnctrl_info->active);
-		if (ret) {
-			pr_err("%s: active state select failed with %d\n",
-				__func__, ret);
-			return -EIO;
-		}
-	}
-
-	lpass_default2.enable = 1;
-	ret = afe_set_lpass_clk_cfg(IDX_RSVD_3, &lpass_default2);
-	if (ret < 0) {
-		pr_err("%s: failed to set clock, ret = %d\n", __func__, ret);
-		return -EINVAL;
-	}
-
-	return 0;
-}
-
-static void audio_ext_lpass_mclk2_unprepare(struct clk *clk)
-{
-	struct audio_ext_lpass_mclk *audio_lpass_mclk2;
-	struct pinctrl_info *pnctrl_info;
-	int ret;
-
-	audio_lpass_mclk2 = container_of(clk, struct audio_ext_lpass_mclk, c);
-	pnctrl_info = &audio_lpass_mclk2->pnctrl_info;
-
-	if (pnctrl_info->pinctrl) {
-		ret = pinctrl_select_state(pnctrl_info->pinctrl,
-					   pnctrl_info->sleep);
-		if (ret)
-			pr_err("%s: sleep state select failed with %d\n",
-				__func__, ret);
-	}
-
-	lpass_default2.enable = 0;
-	ret = afe_set_lpass_clk_cfg(IDX_RSVD_3, &lpass_default2);
-	if (ret < 0)
-		pr_err("%s: failed to reset clock, ret = %d\n", __func__, ret);
-}
-
 static struct clk_ops audio_ext_ap_clk_ops = {
 	.prepare = audio_ext_clk_prepare,
 	.unprepare = audio_ext_clk_unprepare,
@@ -294,16 +147,6 @@ static struct clk_ops audio_ext_ap_clk_ops = {
 static struct clk_ops audio_ext_ap_clk2_ops = {
 	.prepare = audio_ext_clk2_prepare,
 	.unprepare = audio_ext_clk2_unprepare,
-};
-
-static struct clk_ops audio_ext_lpass_mclk_ops = {
-	.prepare = audio_ext_lpass_mclk_prepare,
-	.unprepare = audio_ext_lpass_mclk_unprepare,
-};
-
-static struct clk_ops audio_ext_lpass_mclk2_ops = {
-	.prepare = audio_ext_lpass_mclk2_prepare,
-	.unprepare = audio_ext_lpass_mclk2_unprepare,
 };
 
 static struct audio_ext_pmi_clk audio_pmi_clk = {
@@ -332,28 +175,10 @@ static struct audio_ext_ap_clk2 audio_ap_clk2 = {
 	},
 };
 
-static struct audio_ext_lpass_mclk audio_lpass_mclk = {
-	.c = {
-		.dbg_name = "audio_ext_lpass_mclk",
-		.ops = &audio_ext_lpass_mclk_ops,
-		CLK_INIT(audio_lpass_mclk.c),
-	},
-};
-
-static struct audio_ext_lpass_mclk audio_lpass_mclk2 = {
-	.c = {
-		.dbg_name = "audio_ext_lpass_mclk2",
-		.ops = &audio_ext_lpass_mclk2_ops,
-		CLK_INIT(audio_lpass_mclk2.c),
-	},
-};
-
 static struct clk_lookup audio_ref_clock[] = {
 	CLK_LIST(audio_ap_clk),
 	CLK_LIST(audio_pmi_clk),
 	CLK_LIST(audio_ap_clk2),
-	CLK_LIST(audio_lpass_mclk),
-	CLK_LIST(audio_lpass_mclk2),
 };
 
 static int audio_get_pinctrl(struct platform_device *pdev, enum clk_mux mux)
@@ -365,12 +190,6 @@ static int audio_get_pinctrl(struct platform_device *pdev, enum clk_mux mux)
 	switch (mux) {
 	case AP_CLK2:
 		pnctrl_info = &audio_ap_clk2.pnctrl_info;
-		break;
-	case LPASS_MCLK:
-		pnctrl_info = &audio_lpass_mclk.pnctrl_info;
-		break;
-	case LPASS_MCLK2:
-		pnctrl_info = &audio_lpass_mclk2.pnctrl_info;
 		break;
 	default:
 		dev_err(&pdev->dev, "%s Not a valid MUX ID: %d\n",
@@ -536,17 +355,6 @@ static int audio_ref_clk_remove(struct platform_device *pdev)
 		pnctrl_info->pinctrl = NULL;
 	}
 
-	pnctrl_info = &audio_lpass_mclk.pnctrl_info;
-	if (pnctrl_info->pinctrl) {
-		devm_pinctrl_put(pnctrl_info->pinctrl);
-		pnctrl_info->pinctrl = NULL;
-	}
-
-	pnctrl_info = &audio_lpass_mclk2.pnctrl_info;
-	if (pnctrl_info->pinctrl) {
-		devm_pinctrl_put(pnctrl_info->pinctrl);
-		pnctrl_info->pinctrl = NULL;
-	}
 
 	return 0;
 }
