@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, 2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -29,8 +29,18 @@
 
 #include "msm-pcm-voice-v2.h"
 #include "q6voice.h"
+#include "msm-qti-pp-config.h"
+
+#define NUM_CHANNELS_MONO   1
+#define NUM_CHANNELS_STEREO 2
 
 static struct msm_voice voice_info[VOICE_SESSION_INDEX_MAX];
+
+struct msm_dtmf_detected_event_data {
+	uint32_t event_type;
+	uint32_t payload_len;
+	struct vss_istream_evt_rx_dtmf_detected dtmf_payload;
+};
 
 static struct snd_pcm_hardware msm_pcm_hardware = {
 
@@ -52,6 +62,66 @@ static struct snd_pcm_hardware msm_pcm_hardware = {
 
 	.fifo_size =            0,
 };
+
+static int is_valid_session_id(uint32_t session_id)
+{
+	int idx = 0;
+
+	switch (session_id) {
+	case VOICE_SESSION_VSID:
+	case VOICE2_SESSION_VSID:
+	case VOLTE_SESSION_VSID:
+	case QCHAT_SESSION_VSID:
+	case VOWLAN_SESSION_VSID:
+	case VOICEMMODE1_VSID:
+	case VOICEMMODE2_VSID:
+	case ALL_SESSION_VSID:
+		idx = 1;
+		break;
+	default:
+		pr_debug("%s: Invalid session_id : %x\n", __func__, session_id);
+		break;
+	}
+	return idx;
+}
+
+static int get_idx_for_session(uint32_t session_id)
+{
+	int idx = 0;
+
+	switch (session_id) {
+	case VOICE_SESSION_VSID:
+		idx = VOICE_SESSION_INDEX;
+		break;
+	case VOICE2_SESSION_VSID:
+		idx = VOICE2_SESSION_INDEX;
+		break;
+	case VOLTE_SESSION_VSID:
+		idx = VOLTE_SESSION_INDEX;
+		break;
+	case QCHAT_SESSION_VSID:
+		idx = QCHAT_SESSION_INDEX;
+		break;
+	case VOWLAN_SESSION_VSID:
+		idx = VOWLAN_SESSION_INDEX;
+		break;
+	case VOICEMMODE1_VSID:
+		idx = VOICEMMODE1_INDEX;
+		break;
+	case VOICEMMODE2_VSID:
+		idx = VOICEMMODE2_INDEX;
+		break;
+	case ALL_SESSION_VSID:
+		idx = VOICE_SESSION_INDEX_MAX - 1;
+		break;
+	default:
+		pr_err("%s: Invalid session_id : %x\n", __func__, session_id);
+		break;
+	}
+
+	return idx;
+}
+
 static bool is_volte(struct msm_voice *pvolte)
 {
 	if (pvolte == &voice_info[VOLTE_SESSION_INDEX])
@@ -122,6 +192,39 @@ static uint32_t get_session_id(struct msm_voice *pvoc)
 	return session_id;
 }
 
+static void dtmf_rx_detected_evt_hdlr(uint8_t *pkt,
+				char *session,
+				void *private_data)
+{
+	int ret = 0;
+	struct snd_soc_pcm_runtime *soc_prtd = private_data;
+	struct msm_dtmf_detected_event_data event_data = {ADSP_STREAM_PP_EVENT,
+		(sizeof(struct vss_istream_evt_rx_dtmf_detected) +
+		 sizeof(struct msm_adsp_event_data)),
+		{0} };
+
+	if (!pkt) {
+		pr_err("%s: packet is NULL\n",
+			__func__);
+		return;
+	}
+
+	if (!private_data) {
+		pr_err("%s: private_data is NULL\n",
+			__func__);
+		return;
+	}
+
+	memcpy(&event_data.dtmf_payload, pkt,
+		sizeof(struct vss_istream_evt_rx_dtmf_detected));
+
+	ret = msm_adsp_inform_mixer_ctl(soc_prtd, (uint32_t *)&event_data);
+	if (ret) {
+		pr_err("%s: failed to inform mixer ctl. err = %d\n",
+			__func__, ret);
+		return;
+	}
+}
 
 static int msm_pcm_playback_prepare(struct snd_pcm_substream *substream)
 {
@@ -151,6 +254,7 @@ static int msm_pcm_capture_prepare(struct snd_pcm_substream *substream)
 static int msm_pcm_open(struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
+	struct snd_soc_pcm_runtime *soc_prtd = substream->private_data;
 	struct msm_voice *voice;
 
 	if (!strncmp("VoLTE", substream->pcm->id, 5)) {
@@ -193,10 +297,11 @@ static int msm_pcm_open(struct snd_pcm_substream *substream)
 
 	voice->instance++;
 	pr_debug("%s: Instance = %d, Stream ID = %s\n",
-			__func__ , voice->instance, substream->pcm->id);
+			__func__, voice->instance, substream->pcm->id);
 	runtime->private_data = voice;
 
 	mutex_unlock(&voice->lock);
+	msm_adsp_init_mixer_ctl_pp_event_queue(soc_prtd);
 
 	return 0;
 }
@@ -231,6 +336,7 @@ static int msm_pcm_close(struct snd_pcm_substream *substream)
 {
 
 	struct snd_pcm_runtime *runtime = substream->runtime;
+	struct snd_soc_pcm_runtime *soc_prtd = substream->private_data;
 	struct msm_voice *prtd = runtime->private_data;
 	uint32_t session_id = 0;
 	int ret = 0;
@@ -250,6 +356,7 @@ static int msm_pcm_close(struct snd_pcm_substream *substream)
 			voc_end_voice_call(session_id);
 	}
 	mutex_unlock(&prtd->lock);
+	msm_adsp_clean_mixer_ctl_pp_event_queue(soc_prtd);
 
 	return ret;
 }
@@ -390,6 +497,33 @@ static int msm_pcm_ioctl(struct snd_pcm_substream *substream,
 	return ret;
 }
 
+static int msm_voice_sidetone_put(struct snd_kcontrol *kcontrol,
+					struct snd_ctl_elem_value *ucontrol)
+{
+	int ret;
+	long value = ucontrol->value.integer.value[0];
+	bool sidetone_enable = value;
+	uint32_t session_id = ALL_SESSION_VSID;
+
+	if (value < 0) {
+		pr_err("%s: Invalid arguments sidetone enable %ld\n",
+			 __func__, value);
+		ret = -EINVAL;
+		return ret;
+	}
+	ret = voc_set_afe_sidetone(session_id, sidetone_enable);
+	pr_debug("%s: AFE Sidetone enable=%d session_id=0x%x ret=%d\n",
+		 __func__, sidetone_enable, session_id, ret);
+	return ret;
+}
+
+static int msm_voice_sidetone_get(struct snd_kcontrol *kcontrol,
+					struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.integer.value[0] = voc_get_afe_sidetone();
+	return 0;
+}
+
 static int msm_voice_gain_put(struct snd_kcontrol *kcontrol,
 			      struct snd_ctl_elem_value *ucontrol)
 {
@@ -492,9 +626,25 @@ done:
 	return ret;
 }
 
+static int msm_voice_mbd_get(struct snd_kcontrol *kcontrol,
+			      struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.integer.value[0] = voc_get_mbd_enable();
+	return 0;
+}
+
+static int msm_voice_mbd_put(struct snd_kcontrol *kcontrol,
+			      struct snd_ctl_elem_value *ucontrol)
+{
+	bool enable = ucontrol->value.integer.value[0];
+
+	voc_set_mbd_enable(enable);
+
+	return 0;
+}
 
 
-static const char const *tty_mode[] = {"OFF", "HCO", "VCO", "FULL"};
+static const char * const tty_mode[] = {"OFF", "HCO", "VCO", "FULL"};
 static const struct soc_enum msm_tty_mode_enum[] = {
 		SOC_ENUM_SINGLE_EXT(4, tty_mode),
 };
@@ -529,12 +679,29 @@ static int msm_voice_slowtalk_put(struct snd_kcontrol *kcontrol,
 {
 	int st_enable = ucontrol->value.integer.value[0];
 	uint32_t session_id = ucontrol->value.integer.value[1];
+	struct module_instance_info mod_inst_info;
 
+	memset(&mod_inst_info, 0, sizeof(mod_inst_info));
 	pr_debug("%s: st enable=%d session_id=%#x\n", __func__, st_enable,
 		 session_id);
 
-	voc_set_pp_enable(session_id,
-			  MODULE_ID_VOICE_MODULE_ST, st_enable);
+	mod_inst_info.module_id = MODULE_ID_VOICE_MODULE_ST;
+	mod_inst_info.instance_id = INSTANCE_ID_0;
+	voc_set_pp_enable(session_id, mod_inst_info, st_enable);
+
+	return 0;
+}
+
+static int msm_voice_ecns_put(struct snd_kcontrol *kcontrol,
+			      struct snd_ctl_elem_value *ucontrol)
+{
+	uint32_t enable = ucontrol->value.integer.value[0];
+	uint32_t session_id = ucontrol->value.integer.value[1];
+	uint32_t module_id = ucontrol->value.integer.value[2];
+
+	pr_debug("%s: ecns enable=%d session_id=%#x\n", __func__, enable,
+		 session_id);
+	voc_set_ecns_enable(session_id, module_id, enable);
 
 	return 0;
 }
@@ -552,6 +719,46 @@ static int msm_voice_hd_voice_put(struct snd_kcontrol *kcontrol,
 	ret = voc_set_hd_enable(session_id, hd_enable);
 
 	return ret;
+}
+
+static int msm_dtmf_detect_rx_vsid_put(struct snd_kcontrol *kcontrol,
+					struct snd_ctl_elem_value *ucontrol)
+{
+	uint32_t session_id = ucontrol->value.integer.value[0];
+	uint32_t enable = ucontrol->value.integer.value[1];
+
+	if (enable)
+		enable = 1;
+
+	pr_debug("%s: sess_id=%d enable=%d\n", __func__, session_id, enable);
+
+	return voc_enable_dtmf_rx_detection(session_id, enable);
+}
+
+static int msm_dtmf_detect_rx_vsid_cb_put(struct snd_kcontrol *kcontrol,
+					struct snd_ctl_elem_value *ucontrol)
+{
+	struct msm_voice *dtmf_voice_info = NULL;
+	uint32_t session_id = ucontrol->value.integer.value[0];
+	uint32_t enable = ucontrol->value.integer.value[1];
+
+	if (!is_valid_session_id(session_id)) {
+		pr_err(" %s Invalid session_id : %x\n", __func__, session_id);
+		return -EINVAL;
+	}
+
+	if (enable)
+		enable = 1;
+
+	pr_debug("%s: enable dtmf detect cb =%d for session_id=%d\n",
+		__func__, enable, session_id);
+
+	dtmf_voice_info = &voice_info[get_idx_for_session(session_id)];
+	voc_register_dtmf_rx_detection_cb
+		((dtmf_rx_det_cb_fn) dtmf_rx_detected_evt_hdlr,
+		(void *) dtmf_voice_info->capture_substream->private_data);
+
+	return 0;
 }
 
 static int msm_voice_topology_disable_put(struct snd_kcontrol *kcontrol,
@@ -574,6 +781,38 @@ static int msm_voice_topology_disable_put(struct snd_kcontrol *kcontrol,
 
 done:
 	return ret;
+}
+
+static int msm_voice_rec_config_put(struct snd_kcontrol *kcontrol,
+				  struct snd_ctl_elem_value *ucontrol)
+{
+	int ret = 0;
+	int voc_rec_config_channels = ucontrol->value.integer.value[0];
+
+	if (voc_rec_config_channels < NUM_CHANNELS_MONO ||
+			voc_rec_config_channels > NUM_CHANNELS_STEREO) {
+		pr_err("%s: Invalid channel config (%d)\n", __func__,
+			voc_rec_config_channels);
+		ret = -EINVAL;
+		goto done;
+	}
+	voc_set_incall_capture_channel_config(voc_rec_config_channels);
+
+done:
+	pr_debug("%s: voc_rec_config_channels = %d, ret = %d\n", __func__,
+		voc_rec_config_channels, ret);
+	return ret;
+}
+
+static int msm_voice_rec_config_get(struct snd_kcontrol *kcontrol,
+				  struct snd_ctl_elem_value *ucontrol)
+{
+
+	ucontrol->value.integer.value[0] =
+		voc_get_incall_capture_channel_config();
+	pr_debug("%s: rec_config_channels = %ld\n", __func__,
+		ucontrol->value.integer.value[0]);
+	return 0;
 }
 
 static int msm_voice_cvd_version_info(struct snd_kcontrol *kcontrol,
@@ -607,6 +846,7 @@ static int msm_voice_cvd_version_get(struct snd_kcontrol *kcontrol,
 
 	return 0;
 }
+
 static struct snd_kcontrol_new msm_voice_controls[] = {
 	SOC_SINGLE_MULTI_EXT("Voice Rx Device Mute", SND_SOC_NOPM, 0, VSID_MAX,
 				0, 3, NULL, msm_voice_rx_device_mute_put),
@@ -620,11 +860,19 @@ static struct snd_kcontrol_new msm_voice_controls[] = {
 				msm_voice_tty_mode_put),
 	SOC_SINGLE_MULTI_EXT("Slowtalk Enable", SND_SOC_NOPM, 0, VSID_MAX, 0, 2,
 				NULL, msm_voice_slowtalk_put),
+	SOC_SINGLE_MULTI_EXT("Voice ECNS Enable", SND_SOC_NOPM, 0, VSID_MAX, 0, 3,
+				NULL, msm_voice_ecns_put),
 	SOC_SINGLE_MULTI_EXT("Voice Topology Disable", SND_SOC_NOPM, 0,
 			     VSID_MAX, 0, 2, NULL,
 			     msm_voice_topology_disable_put),
 	SOC_SINGLE_MULTI_EXT("HD Voice Enable", SND_SOC_NOPM, 0, VSID_MAX, 0, 2,
 			     NULL, msm_voice_hd_voice_put),
+	SOC_SINGLE_MULTI_EXT("DTMF_Detect Rx VSID enable",
+				SND_SOC_NOPM, 0, VSID_MAX, 0, 2,
+				NULL, msm_dtmf_detect_rx_vsid_put),
+	SOC_SINGLE_MULTI_EXT("DTMF_Detect Rx Callback VSID enable",
+				SND_SOC_NOPM, 0, VSID_MAX, 0, 2,
+				NULL, msm_dtmf_detect_rx_vsid_cb_put),
 	{
 		.access = SNDRV_CTL_ELEM_ACCESS_READ,
 		.iface	= SNDRV_CTL_ELEM_IFACE_MIXER,
@@ -632,9 +880,131 @@ static struct snd_kcontrol_new msm_voice_controls[] = {
 		.info	= msm_voice_cvd_version_info,
 		.get	= msm_voice_cvd_version_get,
 	},
+	SOC_SINGLE_MULTI_EXT("Voice Sidetone Enable", SND_SOC_NOPM, 0, 1, 0, 1,
+			     msm_voice_sidetone_get, msm_voice_sidetone_put),
+	SOC_SINGLE_BOOL_EXT("Voice Mic Break Enable", 0, msm_voice_mbd_get,
+				msm_voice_mbd_put),
 };
 
-static struct snd_pcm_ops msm_pcm_ops = {
+static struct snd_kcontrol_new msm_voice_rec_config_controls[] = {
+	SOC_SINGLE_MULTI_EXT("Voc Rec Config", SND_SOC_NOPM, 0,
+			     2, 0, 1, msm_voice_rec_config_get,
+			     msm_voice_rec_config_put),
+};
+
+static int msm_pcm_adsp_stream_cmd_put(struct snd_kcontrol *kcontrol,
+					  struct snd_ctl_elem_value *ucontrol)
+{
+	return 0;
+}
+
+static int msm_pcm_add_voice_adsp_stream_cmd_control(
+			struct snd_soc_pcm_runtime *rtd)
+{
+	const char *mixer_ctl_name = DSP_STREAM_CMD;
+	const char *deviceNo = "NN";
+	char *mixer_str = NULL;
+	int ctl_len = 0, ret = 0;
+	struct snd_kcontrol_new fe_voice_adsp_stream_cmd_config_control[1] = {
+		{
+		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+		.name = "?",
+		.access = SNDRV_CTL_ELEM_ACCESS_READWRITE,
+		.info = msm_adsp_stream_cmd_info,
+		.put = msm_pcm_adsp_stream_cmd_put,
+		.private_value = 0,
+		}
+	};
+
+	if (!rtd) {
+		pr_err("%s rtd is NULL\n", __func__);
+		return -EINVAL;
+	}
+
+	ctl_len = strlen(mixer_ctl_name) + 1 + strlen(deviceNo) + 1;
+	mixer_str = kzalloc(ctl_len, GFP_KERNEL);
+	if (!mixer_str)
+		return -ENOMEM;
+
+	snprintf(mixer_str, ctl_len, "%s %d", mixer_ctl_name, rtd->pcm->device);
+	fe_voice_adsp_stream_cmd_config_control[0].name = mixer_str;
+	fe_voice_adsp_stream_cmd_config_control[0].private_value =
+		rtd->dai_link->be_id;
+	pr_debug("%s: Registering new mixer ctl %s\n", __func__, mixer_str);
+	ret = snd_soc_add_platform_controls(rtd->platform,
+		fe_voice_adsp_stream_cmd_config_control,
+		ARRAY_SIZE(fe_voice_adsp_stream_cmd_config_control));
+	if (ret < 0)
+		pr_err("%s: failed add ctl %s. err = %d\n",
+			__func__, mixer_str, ret);
+
+	kfree(mixer_str);
+	return ret;
+}
+
+static int msm_pcm_add_voice_adsp_stream_callback_control(
+			struct snd_soc_pcm_runtime *rtd)
+{
+	const char *mixer_ctl_name = DSP_STREAM_CALLBACK;
+	const char *deviceNo = "NN";
+	char *mixer_str = NULL;
+	int ctl_len = 0, ret = 0;
+	struct snd_kcontrol *kctl;
+
+	struct snd_kcontrol_new fe_voice_adsp_callback_config_control[1] = {
+		{
+		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+		.name = "?",
+		.access = SNDRV_CTL_ELEM_ACCESS_READWRITE,
+		.info = msm_adsp_stream_callback_info,
+		.get = msm_adsp_stream_callback_get,
+		.private_value = 0,
+		}
+	};
+
+	if (!rtd) {
+		pr_err("%s NULL rtd\n", __func__);
+		return -EINVAL;
+	}
+
+	ctl_len = strlen(mixer_ctl_name) + 1 + strlen(deviceNo) + 1;
+	mixer_str = kzalloc(ctl_len, GFP_KERNEL);
+	if (!mixer_str)
+		return -ENOMEM;
+
+	snprintf(mixer_str, ctl_len, "%s %d", mixer_ctl_name, rtd->pcm->device);
+	fe_voice_adsp_callback_config_control[0].name = mixer_str;
+	fe_voice_adsp_callback_config_control[0].private_value =
+		rtd->dai_link->be_id;
+	pr_debug("%s: Registering new mixer ctl %s\n", __func__, mixer_str);
+	ret = snd_soc_add_platform_controls(rtd->platform,
+			fe_voice_adsp_callback_config_control,
+			ARRAY_SIZE(fe_voice_adsp_callback_config_control));
+	if (ret < 0) {
+		pr_err("%s: failed to add ctl %s. err = %d\n",
+			__func__, mixer_str, ret);
+		ret = -EINVAL;
+		goto free_mixer_str;
+	}
+
+	 pr_debug("%s: added new pcm FE with name %s, id %d, cpu dai %s, device no %d\n",
+		__func__, rtd->dai_link->name, rtd->dai_link->be_id,
+		rtd->dai_link->cpu_dai_name, rtd->pcm->device);
+	kctl = snd_soc_card_get_kcontrol(rtd->card, mixer_str);
+	if (!kctl) {
+		pr_err("%s: failed to get kctl %s.\n", __func__, mixer_str);
+		ret = -EINVAL;
+		goto free_mixer_str;
+	}
+
+	kctl->private_data = NULL;
+
+free_mixer_str:
+	kfree(mixer_str);
+	return ret;
+}
+
+static const struct snd_pcm_ops msm_pcm_ops = {
 	.open			= msm_pcm_open,
 	.hw_params		= msm_pcm_hw_params,
 	.close			= msm_pcm_close,
@@ -652,6 +1022,15 @@ static int msm_asoc_pcm_new(struct snd_soc_pcm_runtime *rtd)
 
 	if (!card->dev->coherent_dma_mask)
 		card->dev->coherent_dma_mask = DMA_BIT_MASK(32);
+	ret = msm_pcm_add_voice_adsp_stream_cmd_control(rtd);
+	if (ret)
+		pr_err("%s: Could not add pcm ADSP Stream Cmd Control\n",
+			__func__);
+
+	ret = msm_pcm_add_voice_adsp_stream_callback_control(rtd);
+	if (ret)
+		pr_err("%s: Could not add pcm ADSP Stream Callback Control\n",
+			__func__);
 	return ret;
 }
 
@@ -659,7 +1038,8 @@ static int msm_pcm_voice_probe(struct snd_soc_platform *platform)
 {
 	snd_soc_add_platform_controls(platform, msm_voice_controls,
 					ARRAY_SIZE(msm_voice_controls));
-
+	snd_soc_add_platform_controls(platform, msm_voice_rec_config_controls,
+				    ARRAY_SIZE(msm_voice_rec_config_controls));
 	return 0;
 }
 
@@ -673,9 +1053,7 @@ static int msm_pcm_probe(struct platform_device *pdev)
 {
 	int rc;
 	bool destroy_cvd = false;
-	bool vote_bms = false;
 	const char *is_destroy_cvd = "qcom,destroy-cvd";
-	const char *is_vote_bms = "qcom,vote-bms";
 
 	if (!is_voc_initialized()) {
 		pr_debug("%s: voice module not initialized yet, deferring probe()\n",
@@ -702,10 +1080,6 @@ static int msm_pcm_probe(struct platform_device *pdev)
 						is_destroy_cvd);
 	voc_set_destroy_cvd_flag(destroy_cvd);
 
-	vote_bms = of_property_read_bool(pdev->dev.of_node,
-					 is_vote_bms);
-	voc_set_vote_bms_flag(vote_bms);
-
 	rc = snd_soc_register_platform(&pdev->dev,
 				       &msm_soc_platform);
 
@@ -730,6 +1104,7 @@ static struct platform_driver msm_pcm_driver = {
 		.name = "msm-pcm-voice",
 		.owner = THIS_MODULE,
 		.of_match_table = msm_voice_dt_match,
+		.suppress_bind_attrs = true,
 	},
 	.probe = msm_pcm_probe,
 	.remove = msm_pcm_remove,
