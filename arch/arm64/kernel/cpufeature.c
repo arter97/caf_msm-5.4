@@ -1404,7 +1404,7 @@ static const struct arm64_cpu_capabilities arm64_features[] = {
 		.field_pos = ID_AA64PFR0_CSV3_SHIFT,
 		.min_field_value = 1,
 		.matches = unmap_kernel_at_el0,
-		.cpu_enable = kpti_install_ng_mappings,
+		//.cpu_enable = kpti_install_ng_mappings,
 	},
 	{
 		/* FP/SIMD is not implemented */
