@@ -677,4 +677,4 @@ done:
 	flush_delayed_fput();
 	return 0;
 }
-rootfs_initcall(populate_rootfs);
+subsys_initcall(populate_rootfs);

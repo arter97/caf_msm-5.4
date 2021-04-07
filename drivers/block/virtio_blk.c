@@ -860,8 +860,9 @@ static const struct blk_mq_ops virtio_mq_ops = {
 
 static unsigned int virtblk_queue_depth;
 module_param_named(queue_depth, virtblk_queue_depth, uint, 0444);
+extern void early_prepare_namespace(char *name);
 
-static int virtblk_probe(struct virtio_device *vdev)
+static int __ref virtblk_probe(struct virtio_device *vdev)
 {
 	struct virtio_blk *vblk;
 	struct request_queue *q;
@@ -1059,6 +1060,7 @@ static int virtblk_probe(struct virtio_device *vdev)
 #endif
 	virtio_device_ready(vdev);
 	device_add_disk(&vdev->dev, vblk->disk, virtblk_attr_groups);
+	early_prepare_namespace(vblk->disk->disk_name);
 	return 0;
 
 out_free_tags:
@@ -1215,7 +1217,7 @@ static void __exit fini(void)
 	unregister_blkdev(major, "virtblk");
 	destroy_workqueue(virtblk_wq);
 }
-module_init(init);
+subsys_initcall(init);
 module_exit(fini);
 
 MODULE_DEVICE_TABLE(virtio, id_table);
