@@ -9838,6 +9838,7 @@ static struct platform_driver qseecom_plat_driver = {
 	.driver = {
 		.name = "qseecom",
 		.of_match_table = qseecom_match,
+		.probe_type		= PROBE_PREFER_ASYNCHRONOUS,
 	},
 };
 

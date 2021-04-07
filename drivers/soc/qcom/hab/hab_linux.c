@@ -3,6 +3,7 @@
  * Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
  */
 #include "hab.h"
+#include <linux/async.h>
 
 unsigned int get_refcnt(struct kref ref)
 {
@@ -348,6 +349,20 @@ err:
 	return result;
 }
 
+extern int __init qcom_scm_init(void);
+
+static void __init _hab_init(void *data, async_cookie_t cookie)
+{
+	hab_init();
+	qcom_scm_init();
+}
+
+static int __init hab_init_async(void)
+{
+	async_schedule(_hab_init, NULL);
+	return 0;
+}
+
 static void __exit hab_exit(void)
 {
 	dev_t dev;
@@ -364,7 +379,7 @@ static void __exit hab_exit(void)
 	pr_debug("hab exit called\n");
 }
 
-subsys_initcall(hab_init);
+subsys_initcall(hab_init_async);
 module_exit(hab_exit);
 
 MODULE_DESCRIPTION("Hypervisor abstraction layer");
