@@ -756,6 +756,8 @@ void emac_update_hw_stats(struct emac_adapter *adpt);
 int emac_resize_rings(struct net_device *netdev);
 int emac_mac_up(struct emac_adapter *adpt);
 void emac_mac_down(struct emac_adapter *adpt, u32 ctrl);
+void emac_phy_down(struct emac_adapter *adpt);
+void emac_phy_up(struct emac_adapter *adpt);
 int emac_clk_set_rate(struct emac_adapter *adpt, enum emac_clk_id id,
 		      enum emac_clk_rate rate);
 void emac_task_schedule(struct emac_adapter *adpt);
