@@ -1,0 +1,17 @@
+* Neutrino2 Ethernet *
+
+This driver implements Ethernet driver for Neutrino2 ethernet controller
+
+Required properties:
+  - compatible: Should be "qcom,ntn2_avb"
+  - ntn-rc-num: PCIe root complex number on which Neutrino is connected
+
+Optional properties:
+  - ntn-supply-enable-gpio: GPIO used to control power supply to Neutrino
+
+Example:
+	qcom,ntn2_avb {
+		compatible = "qcom,ntn2_avb";
+		ntn-supply-enable-gpio = <&pmd9635_gpios 3 0>;
+		qcom,ntn-rc-num = <0>;
+	};
