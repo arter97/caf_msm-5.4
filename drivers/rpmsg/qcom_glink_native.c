@@ -1308,6 +1308,8 @@ static irqreturn_t qcom_glink_native_intr(int irq, void *data)
 			break;
 	}
 
+	if (should_wake)
+		pm_system_cancel_wakeup();
 	return IRQ_HANDLED;
 }
 
