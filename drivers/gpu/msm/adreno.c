@@ -16,6 +16,7 @@
 #include <linux/nvmem-consumer.h>
 #include <linux/soc/qcom/llcc-qcom.h>
 #include <soc/qcom/subsystem_restart.h>
+#include <soc/qcom/boot_stats.h>
 
 #include "adreno.h"
 #include "adreno_a3xx.h"
@@ -1541,6 +1542,8 @@ static void adreno_unbind(struct device *dev)
 	struct kgsl_device *device;
 	const struct adreno_gpudev *gpudev;
 
+	place_marker("M - DRIVER GPU Init");
+
 	device = dev_get_drvdata(dev);
 	if (!device)
 		return;
@@ -1558,6 +1561,9 @@ static void adreno_unbind(struct device *dev)
 	if (adreno_input_handler.private)
 		input_unregister_handler(&adreno_input_handler);
 #endif
+
+	place_marker("M - DRIVER GPU Ready");
+
 	adreno_sysfs_close(adreno_dev);
 
 	adreno_coresight_remove(adreno_dev);
@@ -1711,6 +1717,8 @@ static int adreno_init(struct kgsl_device *device)
 	if (test_bit(ADRENO_DEVICE_INITIALIZED, &adreno_dev->priv))
 		return 0;
 
+	place_marker("M - DRIVER ADRENO Init");
+
 	ret = adreno_dispatcher_init(adreno_dev);
 	if (ret)
 		return ret;
@@ -1777,6 +1785,8 @@ static int adreno_init(struct kgsl_device *device)
 			set_bit(ADRENO_DEVICE_DRAWOBJ_PROFILE,
 				&adreno_dev->priv);
 	}
+
+	place_marker("M - DRIVER ADRENO Ready");
 
 	return 0;
 }
