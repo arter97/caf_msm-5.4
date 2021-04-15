@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2002,2007-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2002,2007-2021, The Linux Foundation. All rights reserved.
  */
 #include <linux/component.h>
 #include <linux/delay.h>
@@ -1357,6 +1357,8 @@ int adreno_device_probe(struct platform_device *pdev,
 	int status;
 	u32 size;
 
+	place_marker("M - DRIVER GPU Init");
+
 	/* Initialize the adreno device structure */
 	adreno_setup_device(adreno_dev);
 
@@ -1489,6 +1491,8 @@ int adreno_device_probe(struct platform_device *pdev,
 		}
 	}
 #endif
+
+	place_marker("M - DRIVER GPU Ready");
 
 	return 0;
 err:
