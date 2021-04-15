@@ -341,8 +341,8 @@ static int __snd_ctl_add_replace(struct snd_card *card,
 	struct snd_ctl_elem_id id;
 	unsigned int idx;
 	unsigned int count;
-	struct snd_kcontrol *old;
-	int err;
+	//struct snd_kcontrol *old;
+	//int err;
 
 	id = kcontrol->id;
 	if (id.index > UINT_MAX - kcontrol->count)
