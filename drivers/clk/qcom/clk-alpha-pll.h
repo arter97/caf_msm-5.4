@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2015-2016, 2018-2020 The Linux Foundation.
+ * Copyright (c) 2015-2016, 2018-2021 The Linux Foundation.
  * All rights reserved.
  */
 
@@ -215,5 +215,7 @@ int clk_lucid_evo_pll_configure(struct clk_alpha_pll *pll,
 				const struct alpha_pll_config *config);
 int clk_zonda_evo_pll_configure(struct clk_alpha_pll *pll,
 				struct regmap *regmap,
+				const struct alpha_pll_config *config);
+void clk_huayra_pll_configure(struct clk_alpha_pll *pll, struct regmap *regmap,
 				const struct alpha_pll_config *config);
 #endif
