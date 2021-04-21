@@ -558,8 +558,6 @@ acpi_map_gic_cpu_interface(struct acpi_madt_generic_interrupt *processor)
 		}
 		bootcpu_valid = true;
 		cpu_madt_gicc[0] = *processor;
-		early_map_cpu_to_node(logical_bootcpu_id,
-					acpi_numa_get_nid(0, hwid));
 		return;
 	}
 
@@ -657,7 +655,7 @@ static void __init of_parse_and_init_cpus(void)
 			if (bootcpu_valid) {
 				pr_err("%pOF: duplicate boot cpu reg property in DT\n",
 					dn);
-				continue;
+				goto next;
 			}
 
 			bootcpu_valid = true;
