@@ -1580,9 +1580,12 @@ EXPORT_SYMBOL(subsys_unregister);
 static int subsys_panic(struct device *dev, void *data)
 {
 	struct subsys_device *subsys = to_subsys(dev);
-
-	if (subsys->desc->crash_shutdown)
+	if (subsys->desc->crash_shutdown) {
+	  if (!strcmp(subsys->desc->name,"cdsp"))
+		return 0;
+	  else
 		subsys->desc->crash_shutdown(subsys->desc);
+	}
 	return 0;
 }
 
