@@ -340,7 +340,7 @@
 #define AN_END					BIT(1)
 #define AN_REQUEST				BIT(0)
 
-#define SGMII_PHY_IRQ_CLR_WAIT_TIME		10
+#define SGMII_PHY_IRQ_CLR_WAIT_TIME		30
 
 #define SGMII_PHY_INTERRUPT_ERR (\
 	DECODE_CODE_ERR         |\
