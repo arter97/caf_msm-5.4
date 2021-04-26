@@ -15,6 +15,7 @@
 #include <linux/pm.h>
 #include "adsp_lpm_voting_v01.h"
 #include <linux/debugfs.h>
+#include <linux/suspend.h>
 
 #define PGS_TIMEOUT			msecs_to_jiffies(3000)
 
@@ -96,6 +97,7 @@ static int send_adsp_manual_unvote(struct device *dev)
 
 	pr_info("ADSP unvoting initiated\n");
 	ret = pgs_vote_send_sync_msg(qmi_dev, 0);
+	pm_system_cancel_wakeup();
 
 	if (ret < 0)
 		pr_err("ADSP Unvoting is failed\n");
