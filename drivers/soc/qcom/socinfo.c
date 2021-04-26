@@ -6,6 +6,7 @@
 
 #include <linux/err.h>
 #include <linux/module.h>
+#include <linux/of_fdt.h>
 #include <linux/platform_device.h>
 #include <linux/random.h>
 #include <linux/slab.h>
@@ -1282,6 +1283,80 @@ static struct platform_driver qcom_socinfo_driver = {
 		.name = "qcom-socinfo",
 	},
 };
+
+static struct socinfo dummy_socinfo = {
+	.fmt = SOCINFO_VERSION(0, 1),
+	.ver = 1,
+};
+
+#define early_machine_is_sa8195p() \
+		of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,sa8195p")
+#define early_machine_is_direwolf() \
+		of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,direwolf")
+#define early_machine_is_sa8155() \
+		of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,sa8155")
+
+static struct socinfo * __init setup_dummy_socinfo(void)
+{
+	if (early_machine_is_direwolf()) {
+		dummy_socinfo.id = 460;
+		strlcpy(dummy_socinfo.build_id, "direwolf - ",
+		sizeof(dummy_socinfo.build_id));
+	} else if (early_machine_is_sa8195p()) {
+		dummy_socinfo.id = 405;
+		strlcpy(dummy_socinfo.build_id, "sa8195p - ",
+		sizeof(dummy_socinfo.build_id));
+        } else if (early_machine_is_sa8155()) {
+		dummy_socinfo.id = 362;
+		strlcpy(dummy_socinfo.build_id, "sa8155 - ",
+		sizeof(dummy_socinfo.build_id));
+	} else
+		strlcat(dummy_socinfo.build_id, "Dummy socinfo",
+			sizeof(dummy_socinfo.build_id));
+
+	return &dummy_socinfo;
+}
+
+int __init socinfo_init(void)
+{
+	struct qcom_socinfo *qs;
+	size_t size;
+	struct socinfo *info;
+
+	info = qcom_smem_get(QCOM_SMEM_HOST_ANY, SMEM_HW_SW_BUILD_ID, &size);
+	if (!IS_ERR_OR_NULL(info))
+		return 0;
+
+	pr_err("Couldn't found socinfo, use dummy_socinfo\n");
+	socinfo = info = setup_dummy_socinfo();
+	socinfo_format = le32_to_cpu(info->fmt);
+
+	qs = kzalloc(sizeof(*qs), GFP_KERNEL);
+	if (!qs)
+		return -ENOMEM;
+
+	qs->attr.machine = socinfo_machine(le32_to_cpu(info->id));
+	qs->attr.family = "Snapdragon";
+	qs->attr.soc_id = kasprintf(GFP_KERNEL, "%u",
+					 le32_to_cpu(info->id));
+	qs->attr.revision = kasprintf(GFP_KERNEL, "%u.%u",
+					   SOCINFO_MAJOR(le32_to_cpu(info->ver)),
+					   SOCINFO_MINOR(le32_to_cpu(info->ver)));
+	qs->attr.soc_id = kasprintf(GFP_KERNEL, "%d", socinfo_get_id());
+
+	qsocinfo = qs;
+	init_rwsem(&qs->current_image_rwsem);
+	socinfo_populate_sysfs(qs);
+	socinfo_print();
+
+	qs->soc_dev = soc_device_register(&qs->attr);
+	if (IS_ERR(qs->soc_dev))
+		return PTR_ERR(qs->soc_dev);
+
+	return 0;
+}
+
+subsys_initcall(socinfo_init);
 
 module_platform_driver(qcom_socinfo_driver);
 
