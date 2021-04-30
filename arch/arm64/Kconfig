@@ -1801,6 +1801,16 @@ config ARCH_ENABLE_HUGEPAGE_MIGRATION
 	def_bool y
 	depends on HUGETLB_PAGE && MIGRATION
 
+config FIX_BOOT_CPU_LOGICAL_MAPPING
+	bool "Fix Boot CPU Logical Map Hardcoding"
+	depends on QGKI
+	help
+	  This option fixes the logical cpu map of
+	  of boot cpu which is otherwise considered
+	  to be logical cpu 0. High performance core
+	  for logical cpu 0 will increase idle power
+	  consumption for the system.
+
 menu "Power management options"
 
 source "kernel/power/Kconfig"
