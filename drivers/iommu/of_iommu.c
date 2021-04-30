@@ -195,7 +195,7 @@ const struct iommu_ops *of_iommu_configure(struct device *dev,
 		struct of_phandle_args iommu_spec;
 		int idx = 0;
 
-		while (!of_parse_phandle_with_args(master_np, "iommus",
+		while (!of_parse_phandle_with_args(master_np, "qcomiommu",
 						   "#iommu-cells",
 						   idx, &iommu_spec)) {
 			err = of_iommu_xlate(dev, &iommu_spec);

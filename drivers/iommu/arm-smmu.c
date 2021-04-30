@@ -1697,10 +1697,19 @@ static void arm_smmu_write_context_bank(struct arm_smmu_device *smmu, int idx,
 		arm_smmu_cb_write(smmu, idx, ARM_SMMU_CB_TTBR0, cb->ttbr[0]);
 		arm_smmu_cb_write(smmu, idx, ARM_SMMU_CB_TTBR1, cb->ttbr[1]);
 	} else {
+#if 0
 		arm_smmu_cb_writeq(smmu, idx, ARM_SMMU_CB_TTBR0, cb->ttbr[0]);
 		if (stage1)
 			arm_smmu_cb_writeq(smmu, idx, ARM_SMMU_CB_TTBR1,
 					   cb->ttbr[1]);
+#else
+		arm_smmu_cb_write(smmu, idx, ARM_SMMU_CB_TTBR0, (uint32_t)(cb->ttbr[0] & 0x00000000FFFFFFFF));
+		arm_smmu_cb_write(smmu, idx, ARM_SMMU_CB_TTBR0 + 4, (uint32_t)(cb->ttbr[0] >> 32));
+		if (stage1) {
+			arm_smmu_cb_write(smmu, idx, ARM_SMMU_CB_TTBR1, (uint32_t)(cb->ttbr[1] & 0x00000000FFFFFFFF));
+			arm_smmu_cb_write(smmu, idx, ARM_SMMU_CB_TTBR1 + 4, (uint32_t)(cb->ttbr[1] >> 32));
+		}
+#endif
 	}
 
 	/* MAIRs (stage-1 only) */
@@ -5065,7 +5074,6 @@ static int arm_smmu_device_dt_probe(struct platform_device *pdev)
 				"found %d context interrupt(s) but have %d context banks. assuming %d context interrupts.\n",
 				smmu->num_context_irqs, smmu->num_context_banks,
 				smmu->num_context_banks);
-			return -ENODEV;
 		}
 		/* Ignore superfluous interrupts */
 		smmu->num_context_irqs = smmu->num_context_banks;
