@@ -9,6 +9,8 @@
 #include "ufs.h"
 #include "ufs-sysfs.h"
 
+#define MAX_SIZE 20
+
 static const char *ufschd_uic_link_state_to_string(
 			enum uic_link_state state)
 {
@@ -58,9 +60,11 @@ static inline ssize_t ufs_sysfs_pm_lvl_store(struct device *dev,
 static ssize_t rpm_lvl_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
+	size_t size = MAX_SIZE;
+
 	struct ufs_hba *hba = dev_get_drvdata(dev);
 
-	return sprintf(buf, "%d\n", hba->rpm_lvl);
+	return snprintf(buf, size, "%d\n", hba->rpm_lvl);
 }
 
 static ssize_t rpm_lvl_store(struct device *dev,
@@ -72,27 +76,33 @@ static ssize_t rpm_lvl_store(struct device *dev,
 static ssize_t rpm_target_dev_state_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
+	size_t size = MAX_SIZE;
+
 	struct ufs_hba *hba = dev_get_drvdata(dev);
 
-	return sprintf(buf, "%s\n", ufschd_ufs_dev_pwr_mode_to_string(
+	return snprintf(buf, size, "%s\n", ufschd_ufs_dev_pwr_mode_to_string(
 			ufs_pm_lvl_states[hba->rpm_lvl].dev_state));
 }
 
 static ssize_t rpm_target_link_state_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
+	size_t size = MAX_SIZE;
+
 	struct ufs_hba *hba = dev_get_drvdata(dev);
 
-	return sprintf(buf, "%s\n", ufschd_uic_link_state_to_string(
+	return snprintf(buf, size, "%s\n", ufschd_uic_link_state_to_string(
 			ufs_pm_lvl_states[hba->rpm_lvl].link_state));
 }
 
 static ssize_t spm_lvl_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
+	size_t size = MAX_SIZE;
+
 	struct ufs_hba *hba = dev_get_drvdata(dev);
 
-	return sprintf(buf, "%d\n", hba->spm_lvl);
+	return snprintf(buf, size, "%d\n", hba->spm_lvl);
 }
 
 static ssize_t spm_lvl_store(struct device *dev,
@@ -104,18 +114,22 @@ static ssize_t spm_lvl_store(struct device *dev,
 static ssize_t spm_target_dev_state_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
+	size_t size = MAX_SIZE;
+
 	struct ufs_hba *hba = dev_get_drvdata(dev);
 
-	return sprintf(buf, "%s\n", ufschd_ufs_dev_pwr_mode_to_string(
+	return snprintf(buf, size, "%s\n", ufschd_ufs_dev_pwr_mode_to_string(
 				ufs_pm_lvl_states[hba->spm_lvl].dev_state));
 }
 
 static ssize_t spm_target_link_state_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
+	size_t size = MAX_SIZE;
+
 	struct ufs_hba *hba = dev_get_drvdata(dev);
 
-	return sprintf(buf, "%s\n", ufschd_uic_link_state_to_string(
+	return snprintf(buf, size, "%s\n", ufschd_uic_link_state_to_string(
 				ufs_pm_lvl_states[hba->spm_lvl].link_state));
 }
 
@@ -214,6 +228,7 @@ static ssize_t ufs_sysfs_read_desc_param(struct ufs_hba *hba,
 {
 	u8 desc_buf[8] = {0};
 	int ret;
+	size_t size = MAX_SIZE;
 
 	if (param_size > 8)
 		return -EINVAL;
@@ -225,20 +240,21 @@ static ssize_t ufs_sysfs_read_desc_param(struct ufs_hba *hba,
 
 	if (ret)
 		return -EINVAL;
+
 	switch (param_size) {
 	case 1:
-		ret = sprintf(sysfs_buf, "0x%02X\n", *desc_buf);
+		ret = snprintf(sysfs_buf, size, "0x%02X\n", *desc_buf);
 		break;
 	case 2:
-		ret = sprintf(sysfs_buf, "0x%04X\n",
+		ret = snprintf(sysfs_buf, size, "0x%04X\n",
 			get_unaligned_be16(desc_buf));
 		break;
 	case 4:
-		ret = sprintf(sysfs_buf, "0x%08X\n",
+		ret = snprintf(sysfs_buf, size, "0x%08X\n",
 			get_unaligned_be32(desc_buf));
 		break;
 	case 8:
-		ret = sprintf(sysfs_buf, "0x%016llX\n",
+		ret = snprintf(sysfs_buf, size, "0x%016llX\n",
 			get_unaligned_be64(desc_buf));
 		break;
 	}
@@ -838,6 +854,7 @@ const struct attribute_group ufs_sysfs_unit_descriptor_group = {
 static ssize_t dyn_cap_needed_attribute_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
+	size_t size = MAX_SIZE;
 	u32 value;
 	struct scsi_device *sdev = to_scsi_device(dev);
 	struct ufs_hba *hba = shost_priv(sdev->host);
@@ -851,7 +868,7 @@ static ssize_t dyn_cap_needed_attribute_show(struct device *dev,
 	if (ret)
 		return -EINVAL;
 
-	return sprintf(buf, "0x%08X\n", value);
+	return snprintf(buf, size, "0x%08X\n", value);
 }
 static DEVICE_ATTR_RO(dyn_cap_needed_attribute);
 
