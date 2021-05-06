@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2019-20, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2021, The Linux Foundation. All rights reserved.
  */
 #include <linux/module.h>
 #include <linux/of.h>
@@ -148,25 +148,21 @@ void ethqos_disable_regulators(struct qcom_ethqos *ethqos)
 {
 	if (ethqos->reg_rgmii) {
 		regulator_disable(ethqos->reg_rgmii);
-		devm_regulator_put(ethqos->reg_rgmii);
 		ethqos->reg_rgmii = NULL;
 	}
 
 	if (ethqos->reg_emac_phy) {
 		regulator_disable(ethqos->reg_emac_phy);
-		devm_regulator_put(ethqos->reg_emac_phy);
 		ethqos->reg_emac_phy = NULL;
 	}
 
 	if (ethqos->reg_rgmii_io_pads) {
 		regulator_disable(ethqos->reg_rgmii_io_pads);
-		devm_regulator_put(ethqos->reg_rgmii_io_pads);
 		ethqos->reg_rgmii_io_pads = NULL;
 	}
 
 	if (ethqos->gdsc_emac) {
 		regulator_disable(ethqos->gdsc_emac);
-		devm_regulator_put(ethqos->gdsc_emac);
 		ethqos->gdsc_emac = NULL;
 	}
 }

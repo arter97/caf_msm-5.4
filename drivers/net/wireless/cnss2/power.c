@@ -1,16 +1,21 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2016-2019, The Linux Foundation. All rights reserved. */
+/* Copyright (c) 2016-2021, The Linux Foundation. All rights reserved. */
 
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/of.h>
+#include <linux/of_gpio.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/regulator/consumer.h>
+#if IS_ENABLED(CONFIG_QCOM_COMMAND_DB)
 #include <soc/qcom/cmd-db.h>
+#endif
 
 #include "main.h"
 #include "debug.h"
+#include "bus.h"
 
+#if IS_ENABLED(CONFIG_ARCH_QCOM)
 static struct cnss_vreg_cfg cnss_vreg_list[] = {
 	{"vdd-wlan-core", 1300000, 1300000, 0, 0, 0},
 	{"vdd-wlan-io", 1800000, 1800000, 0, 0, 0},
@@ -32,6 +37,13 @@ static struct cnss_vreg_cfg cnss_vreg_list[] = {
 static struct cnss_clk_cfg cnss_clk_list[] = {
 	{"rf_clk", 0, 0},
 };
+#else
+static struct cnss_vreg_cfg cnss_vreg_list[] = {
+};
+
+static struct cnss_clk_cfg cnss_clk_list[] = {
+};
+#endif
 
 #define CNSS_VREG_INFO_SIZE		ARRAY_SIZE(cnss_vreg_list)
 #define CNSS_CLK_INFO_SIZE		ARRAY_SIZE(cnss_clk_list)
@@ -40,6 +52,9 @@ static struct cnss_clk_cfg cnss_clk_list[] = {
 #define BOOTSTRAP_GPIO			"qcom,enable-bootstrap-gpio"
 #define BOOTSTRAP_ACTIVE		"bootstrap_active"
 #define WLAN_EN_GPIO			"wlan-en-gpio"
+#define BT_EN_GPIO			"qcom,bt-en-gpio"
+#define XO_CLK_GPIO			"qcom,xo-clk-gpio"
+#define SW_CTRL_GPIO			"qcom,sw-ctrl-gpio"
 #define WLAN_EN_ACTIVE			"wlan_en_active"
 #define WLAN_EN_SLEEP			"wlan_en_sleep"
 #define WLAN_VREGS_PROP			"wlan_vregs"
@@ -53,6 +68,56 @@ static struct cnss_clk_cfg cnss_clk_list[] = {
 #define MAX_TCS_NUM			8
 #define MAX_TCS_CMD_NUM			5
 #define BT_CXMX_VOLTAGE_MV		950
+
+static int cnss_get_vreg_single(struct cnss_plat_data *plat_priv,
+				struct cnss_vreg_info *vreg)
+{
+	int ret = 0;
+	struct device *dev;
+	struct regulator *reg;
+	const __be32 *prop;
+	char prop_name[MAX_PROP_SIZE] = {0};
+	int len;
+
+	dev = &plat_priv->plat_dev->dev;
+	reg = devm_regulator_get_optional(dev, vreg->cfg.name);
+	if (IS_ERR(reg)) {
+		ret = PTR_ERR(reg);
+		if (ret == -ENODEV)
+			return ret;
+		else if (ret == -EPROBE_DEFER)
+			cnss_pr_info("EPROBE_DEFER for regulator: %s\n",
+				     vreg->cfg.name);
+		else
+			cnss_pr_err("Failed to get regulator %s, err = %d\n",
+				    vreg->cfg.name, ret);
+		return ret;
+	}
+
+	vreg->reg = reg;
+
+	snprintf(prop_name, MAX_PROP_SIZE, "qcom,%s-config",
+		 vreg->cfg.name);
+
+	prop = of_get_property(plat_priv->dev_node, prop_name, &len);
+	if (!prop || len != (5 * sizeof(__be32))) {
+		cnss_pr_dbg("Property %s %s, use default\n", prop_name,
+			    prop ? "invalid format" : "doesn't exist");
+	} else {
+		vreg->cfg.min_uv = be32_to_cpup(&prop[0]);
+		vreg->cfg.max_uv = be32_to_cpup(&prop[1]);
+		vreg->cfg.load_ua = be32_to_cpup(&prop[2]);
+		vreg->cfg.delay_us = be32_to_cpup(&prop[3]);
+		vreg->cfg.need_unvote = be32_to_cpup(&prop[4]);
+	}
+
+	cnss_pr_dbg("Got regulator: %s, min_uv: %u, max_uv: %u, load_ua: %u, delay_us: %u, need_unvote: %u\n",
+		    vreg->cfg.name, vreg->cfg.min_uv,
+		    vreg->cfg.max_uv, vreg->cfg.load_ua,
+		    vreg->cfg.delay_us, vreg->cfg.need_unvote);
+
+	return 0;
+}
 
 static void cnss_put_vreg_single(struct cnss_plat_data *plat_priv,
 				 struct cnss_vreg_info *vreg)
@@ -183,23 +248,30 @@ static int cnss_vreg_off_single(struct cnss_vreg_info *vreg)
 	return ret;
 }
 
-/**
- * For converged dt node, get the required vregs from property 'wlan_vregs',
- * which is string array; if the property is present but no value is set,
- * means no additional wlan verg is required.
- * For non-converged dt, go through all vregs in static array 'cnss_vreg_list'.
- */
-int cnss_get_vreg(struct cnss_plat_data *plat_priv)
+static struct cnss_vreg_cfg *get_vreg_list(u32 *vreg_list_size,
+					   enum cnss_vreg_type type)
+{
+	switch (type) {
+	case CNSS_VREG_PRIM:
+		*vreg_list_size = CNSS_VREG_INFO_SIZE;
+		return cnss_vreg_list;
+	default:
+		cnss_pr_err("Unsupported vreg type 0x%x\n", type);
+		*vreg_list_size = 0;
+		return NULL;
+	}
+}
+
+static int cnss_get_vreg(struct cnss_plat_data *plat_priv,
+			 struct list_head *vreg_list,
+			 struct cnss_vreg_cfg *vreg_cfg,
+			 u32 vreg_list_size)
 {
 	int ret = 0;
 	int i;
 	struct cnss_vreg_info *vreg;
-	struct device *dev;
-	struct regulator *reg;
-	const __be32 *prop;
-	char prop_name[MAX_PROP_SIZE] = {0};
-	int len, id_n;
-	struct device_node *dt_node;
+	struct device *dev = &plat_priv->plat_dev->dev;
+	int id_n;
 
 	if (!list_empty(&plat_priv->vreg_list) &&
 	    !plat_priv->is_converged_dt) {
@@ -207,92 +279,57 @@ int cnss_get_vreg(struct cnss_plat_data *plat_priv)
 		return 0;
 	}
 
-	dev = &plat_priv->plat_dev->dev;
-	dt_node = (plat_priv->dev_node ? plat_priv->dev_node : dev->of_node);
-
 	if (plat_priv->is_converged_dt) {
-		id_n = of_property_count_strings(dt_node, WLAN_VREGS_PROP);
+		id_n = of_property_count_strings(plat_priv->dev_node,
+						 WLAN_VREGS_PROP);
 		if (id_n <= 0) {
 			if (id_n == -ENODATA) {
 				cnss_pr_dbg("No additional vregs for: %s:%lx\n",
-					    dt_node->name,
+					    plat_priv->dev_node->name,
 					    plat_priv->device_id);
 				return 0;
 			}
 
 			cnss_pr_err("property %s is invalid or missed: %s:%lx\n",
-				    WLAN_VREGS_PROP, dt_node->name,
+				    WLAN_VREGS_PROP, plat_priv->dev_node->name,
 				    plat_priv->device_id);
 			return -EINVAL;
 		}
 	} else {
-		id_n = CNSS_VREG_INFO_SIZE;
+		id_n = vreg_list_size;
 	}
 
 	for (i = 0; i < id_n; i++) {
 		vreg = devm_kzalloc(dev, sizeof(*vreg), GFP_KERNEL);
-		if (!vreg) {
-			ret = -ENOMEM;
-			goto out;
-		}
+		if (!vreg)
+			return -ENOMEM;
 
 		if (plat_priv->is_converged_dt) {
-			ret = of_property_read_string_index(dt_node,
+			ret = of_property_read_string_index(plat_priv->dev_node,
 							    WLAN_VREGS_PROP, i,
 							    &vreg->cfg.name);
 			if (ret) {
-				devm_kfree(dev, vreg);
 				cnss_pr_err("Failed to read vreg ids\n");
-				goto out;
+				return ret;
 			}
 		} else {
-			memcpy(&vreg->cfg, &cnss_vreg_list[i],
-			       sizeof(vreg->cfg));
+			memcpy(&vreg->cfg, &vreg_cfg[i], sizeof(vreg->cfg));
 		}
 
-		reg = devm_regulator_get_optional(dev, vreg->cfg.name);
-		if (IS_ERR(reg)) {
-			ret = PTR_ERR(reg);
+		ret = cnss_get_vreg_single(plat_priv, vreg);
+		if (ret != 0) {
 			if (ret == -ENODEV) {
 				devm_kfree(dev, vreg);
 				continue;
-			} else if (ret == -EPROBE_DEFER)
-				cnss_pr_info("EPROBE_DEFER for regulator: %s\n",
-					     vreg->cfg.name);
-			else
-				cnss_pr_err("Failed to get regulator %s, err = %d\n",
-					    vreg->cfg.name, ret);
-
-			devm_kfree(dev, vreg);
-			goto out;
+			} else {
+				devm_kfree(dev, vreg);
+				return ret;
+			}
 		}
-
-		vreg->reg = reg;
-		snprintf(prop_name, MAX_PROP_SIZE, "qcom,%s-config",
-			 vreg->cfg.name);
-		prop = of_get_property(dt_node, prop_name, &len);
-		if (!prop || len != (5 * sizeof(__be32))) {
-			cnss_pr_dbg("Property %s %s, use default\n", prop_name,
-				    prop ? "invalid format" : "doesn't exist");
-		} else {
-			vreg->cfg.min_uv = be32_to_cpup(&prop[0]);
-			vreg->cfg.max_uv = be32_to_cpup(&prop[1]);
-			vreg->cfg.load_ua = be32_to_cpup(&prop[2]);
-			vreg->cfg.delay_us = be32_to_cpup(&prop[3]);
-			vreg->cfg.need_unvote = be32_to_cpup(&prop[4]);
-		}
-
-		list_add_tail(&vreg->list, &plat_priv->vreg_list);
-		cnss_pr_dbg("Got regulator: %s, min_uv: %u, max_uv: %u, load_ua: %u, delay_us: %u, need_unvote: %u\n",
-			    vreg->cfg.name, vreg->cfg.min_uv,
-			    vreg->cfg.max_uv, vreg->cfg.load_ua,
-			    vreg->cfg.delay_us, vreg->cfg.need_unvote);
-
+		list_add_tail(&vreg->list, vreg_list);
 	}
 
 	return 0;
-out:
-	return ret;
 }
 
 static void cnss_put_vreg(struct cnss_plat_data *plat_priv,
@@ -371,11 +408,18 @@ static int cnss_vreg_unvote(struct cnss_plat_data *plat_priv,
 int cnss_get_vreg_type(struct cnss_plat_data *plat_priv,
 		       enum cnss_vreg_type type)
 {
+	struct cnss_vreg_cfg *vreg_cfg;
+	u32 vreg_list_size = 0;
 	int ret = 0;
+
+	vreg_cfg = get_vreg_list(&vreg_list_size, type);
+	if (!vreg_cfg)
+		return -EINVAL;
 
 	switch (type) {
 	case CNSS_VREG_PRIM:
-		ret = cnss_get_vreg(plat_priv);
+		ret = cnss_get_vreg(plat_priv, &plat_priv->vreg_list,
+				    vreg_cfg, vreg_list_size);
 		break;
 	default:
 		cnss_pr_err("Unsupported vreg type 0x%x\n", type);
@@ -446,6 +490,27 @@ int cnss_vreg_unvote_type(struct cnss_plat_data *plat_priv,
 	}
 
 	return ret;
+}
+
+void cnss_disable_redundant_vreg(struct cnss_plat_data *plat_priv)
+{
+	struct cnss_vreg_info *vreg, *vreg_tmp;
+	struct list_head *vreg_list = &plat_priv->vreg_list;
+
+	list_for_each_entry_safe(vreg, vreg_tmp, vreg_list, list) {
+		if (IS_ERR_OR_NULL(vreg->reg))
+			continue;
+
+		if ((!strcmp("wlan-ant-switch", vreg->cfg.name) ||
+		     !strcmp("vdd-wlan-aon", vreg->cfg.name)) &&
+		    vreg->enabled) {
+			cnss_pr_dbg("Disable Regulator %s\n", vreg->cfg.name);
+
+			list_del(&vreg->list);
+			cnss_vreg_off_single(vreg);
+			cnss_put_vreg_single(plat_priv, vreg);
+		}
+	}
 }
 
 static int cnss_get_clk_single(struct cnss_plat_data *plat_priv,
@@ -704,9 +769,75 @@ int cnss_get_pinctrl(struct cnss_plat_data *plat_priv)
 		}
 	}
 
+	/* Added for QCA6490 PMU delayed WLAN_EN_GPIO */
+	if (of_find_property(dev->of_node, BT_EN_GPIO, NULL)) {
+		pinctrl_info->bt_en_gpio = of_get_named_gpio(dev->of_node,
+							     BT_EN_GPIO, 0);
+		cnss_pr_dbg("BT GPIO: %d\n", pinctrl_info->bt_en_gpio);
+	} else {
+		pinctrl_info->bt_en_gpio = -EINVAL;
+	}
+
+	/* Added for QCA6490 to minimize XO CLK selection leakage prevention */
+	if (of_find_property(dev->of_node, XO_CLK_GPIO, NULL)) {
+		pinctrl_info->xo_clk_gpio = of_get_named_gpio(dev->of_node,
+							      XO_CLK_GPIO, 0);
+		cnss_pr_dbg("QCA6490 XO_CLK GPIO: %d\n",
+			    pinctrl_info->xo_clk_gpio);
+	} else {
+		pinctrl_info->xo_clk_gpio = -EINVAL;
+	}
+
+	if (of_find_property(dev->of_node, SW_CTRL_GPIO, NULL)) {
+		pinctrl_info->sw_ctrl_gpio = of_get_named_gpio(dev->of_node,
+							       SW_CTRL_GPIO,
+							       0);
+		cnss_pr_dbg("Switch control GPIO: %d\n",
+			    pinctrl_info->sw_ctrl_gpio);
+	} else {
+		pinctrl_info->sw_ctrl_gpio = -EINVAL;
+	}
+
 	return 0;
 out:
 	return ret;
+}
+
+#define CNSS_XO_CLK_RETRY_COUNT_MAX 5
+static void cnss_set_xo_clk_gpio_state(struct cnss_plat_data *plat_priv,
+				       bool enable)
+{
+	int xo_clk_gpio = plat_priv->pinctrl_info.xo_clk_gpio, retry = 0, ret;
+
+	if (xo_clk_gpio < 0 || plat_priv->device_id != QCA6490_DEVICE_ID)
+		return;
+
+retry_gpio_req:
+	ret = gpio_request(xo_clk_gpio, "XO_CLK_GPIO");
+	if (ret) {
+		if (retry++ < CNSS_XO_CLK_RETRY_COUNT_MAX) {
+			/* wait for ~(10 - 20) ms */
+			usleep_range(10000, 20000);
+			goto retry_gpio_req;
+		}
+	}
+
+	if (ret) {
+		cnss_pr_err("QCA6490 XO CLK Gpio request failed\n");
+		return;
+	}
+
+	if (enable) {
+		gpio_direction_output(xo_clk_gpio, 1);
+		/*XO CLK must be asserted for some time before WLAN_EN */
+		usleep_range(100, 200);
+	} else {
+		/* Assert XO CLK ~(2-5)ms before off for valid latch in HW */
+		usleep_range(2000, 5000);
+		gpio_direction_output(xo_clk_gpio, 0);
+	}
+
+	gpio_free(xo_clk_gpio);
 }
 
 static int cnss_select_pinctrl_state(struct cnss_plat_data *plat_priv,
@@ -735,7 +866,7 @@ static int cnss_select_pinctrl_state(struct cnss_plat_data *plat_priv,
 			}
 			udelay(BOOTSTRAP_DELAY);
 		}
-
+		cnss_set_xo_clk_gpio_state(plat_priv, true);
 		if (!IS_ERR_OR_NULL(pinctrl_info->wlan_en_active)) {
 			ret = pinctrl_select_state
 				(pinctrl_info->pinctrl,
@@ -747,6 +878,7 @@ static int cnss_select_pinctrl_state(struct cnss_plat_data *plat_priv,
 			}
 			udelay(WLAN_ENABLE_DELAY);
 		}
+		cnss_set_xo_clk_gpio_state(plat_priv, false);
 	} else {
 		if (!IS_ERR_OR_NULL(pinctrl_info->wlan_en_sleep)) {
 			ret = pinctrl_select_state(pinctrl_info->pinctrl,
@@ -759,9 +891,78 @@ static int cnss_select_pinctrl_state(struct cnss_plat_data *plat_priv,
 		}
 	}
 
+	cnss_pr_dbg("%s WLAN_EN GPIO successfully\n",
+		    state ? "Assert" : "De-assert");
+
 	return 0;
 out:
 	return ret;
+}
+
+/**
+ * cnss_select_pinctrl_enable - select WLAN_GPIO for Active pinctrl status
+ * @plat_priv: Platform private data structure pointer
+ *
+ * For QCA6390/QCA6490, PMU requires minimum 100ms delay between BT_EN_GPIO off and
+ * WLAN_EN_GPIO on. This is done to avoid power up issues.
+ *
+ * Return: Status of pinctrl select operation. 0 - Success.
+ */
+static int cnss_select_pinctrl_enable(struct cnss_plat_data *plat_priv)
+{
+	int ret = 0, bt_en_gpio = plat_priv->pinctrl_info.bt_en_gpio;
+	u8 wlan_en_state = 0;
+
+	if (bt_en_gpio < 0)
+		goto set_wlan_en;
+
+	switch (plat_priv->device_id) {
+	case QCA6390_DEVICE_ID:
+	case QCA6490_DEVICE_ID:
+		break;
+	default:
+		goto set_wlan_en;
+	}
+
+	if (gpio_get_value(bt_en_gpio)) {
+		cnss_pr_dbg("BT_EN_GPIO State: On\n");
+		ret = cnss_select_pinctrl_state(plat_priv, true);
+		if (!ret)
+			return ret;
+		wlan_en_state = 1;
+	}
+	if (!gpio_get_value(bt_en_gpio)) {
+		cnss_pr_dbg("BT_EN_GPIO State: Off. Delay WLAN_GPIO enable\n");
+		/* check for BT_EN_GPIO down race during above operation */
+		if (wlan_en_state) {
+			cnss_pr_dbg("Reset WLAN_EN as BT got turned off during enable\n");
+			cnss_select_pinctrl_state(plat_priv, false);
+			wlan_en_state = 0;
+		}
+		/* 100 ms delay for BT_EN and WLAN_EN QCA6490/QCA6390 PMU sequencing */
+		msleep(100);
+	}
+set_wlan_en:
+	if (!wlan_en_state)
+		ret = cnss_select_pinctrl_state(plat_priv, true);
+	return ret;
+}
+
+int cnss_gpio_get_value(struct cnss_plat_data *plat_priv, int gpio_num)
+{
+	int ret;
+
+	if (gpio_num < 0)
+		return -EINVAL;
+
+	ret = gpio_direction_input(gpio_num);
+	if (ret) {
+		cnss_pr_err("Failed to set direction of GPIO(%d), err = %d",
+			    gpio_num, ret);
+		return -EINVAL;
+	}
+
+	return gpio_get_value(gpio_num);
 }
 
 int cnss_power_on_device(struct cnss_plat_data *plat_priv)
@@ -785,7 +986,7 @@ int cnss_power_on_device(struct cnss_plat_data *plat_priv)
 		goto vreg_off;
 	}
 
-	ret = cnss_select_pinctrl_state(plat_priv, true);
+	ret = cnss_select_pinctrl_enable(plat_priv);
 	if (ret) {
 		cnss_pr_err("Failed to select pinctrl state, err = %d\n", ret);
 		goto clk_off;
@@ -837,21 +1038,73 @@ void cnss_set_pin_connect_status(struct cnss_plat_data *plat_priv)
 	plat_priv->pin_result.host_pin_result = pin_status;
 }
 
-int cnss_get_cpr_info(struct cnss_plat_data *plat_priv)
+#if IS_ENABLED(CONFIG_QCOM_COMMAND_DB)
+static int cnss_cmd_db_ready(struct cnss_plat_data *plat_priv)
+{
+	return cmd_db_ready();
+}
+
+static u32 cnss_cmd_db_read_addr(struct cnss_plat_data *plat_priv,
+				 const char *res_id)
+{
+	return cmd_db_read_addr(res_id);
+}
+#else
+static int cnss_cmd_db_ready(struct cnss_plat_data *plat_priv)
+{
+	return -EOPNOTSUPP;
+}
+
+static u32 cnss_cmd_db_read_addr(struct cnss_plat_data *plat_priv,
+				 const char *res_id)
+{
+	return 0;
+}
+#endif
+
+int cnss_get_tcs_info(struct cnss_plat_data *plat_priv)
 {
 	struct platform_device *plat_dev = plat_priv->plat_dev;
-	struct cnss_cpr_info *cpr_info = &plat_priv->cpr_info;
 	struct resource *res;
 	resource_size_t addr_len;
 	void __iomem *tcs_cmd_base_addr;
-	const char *cmd_db_name;
-	u32 cpr_pmic_addr = 0;
 	int ret = 0;
 
 	res = platform_get_resource_byname(plat_dev, IORESOURCE_MEM, "tcs_cmd");
 	if (!res) {
 		cnss_pr_dbg("TCS CMD address is not present for CPR\n");
 		goto out;
+	}
+
+	plat_priv->tcs_info.cmd_base_addr = res->start;
+	addr_len = resource_size(res);
+	cnss_pr_dbg("TCS CMD base address is %pa with length %pa\n",
+		    &plat_priv->tcs_info.cmd_base_addr, &addr_len);
+
+	tcs_cmd_base_addr = devm_ioremap(&plat_dev->dev, res->start, addr_len);
+	if (!tcs_cmd_base_addr) {
+		ret = -EINVAL;
+		cnss_pr_err("Failed to map TCS CMD address, err = %d\n",
+			    ret);
+		goto out;
+	}
+	plat_priv->tcs_info.cmd_base_addr_io = tcs_cmd_base_addr;
+	return 0;
+out:
+	return ret;
+}
+
+int cnss_get_cpr_info(struct cnss_plat_data *plat_priv)
+{
+	struct platform_device *plat_dev = plat_priv->plat_dev;
+	struct cnss_cpr_info *cpr_info = &plat_priv->cpr_info;
+	const char *cmd_db_name;
+	u32 cpr_pmic_addr = 0;
+	int ret = 0;
+
+	if (plat_priv->tcs_info.cmd_base_addr == 0) {
+		cnss_pr_dbg("TCS CMD not configured\n");
+		return 0;
 	}
 
 	ret = of_property_read_string(plat_dev->dev.of_node,
@@ -861,13 +1114,13 @@ int cnss_get_cpr_info(struct cnss_plat_data *plat_priv)
 		goto out;
 	}
 
-	ret = cmd_db_ready();
+	ret = cnss_cmd_db_ready(plat_priv);
 	if (ret) {
-		cnss_pr_err("CommandDB is not ready\n");
+		cnss_pr_err("CommandDB is not ready, err = %d\n", ret);
 		goto out;
 	}
 
-	cpr_pmic_addr = cmd_db_read_addr(cmd_db_name);
+	cpr_pmic_addr = cnss_cmd_db_read_addr(plat_priv, cmd_db_name);
 	if (cpr_pmic_addr > 0) {
 		cpr_info->cpr_pmic_addr = cpr_pmic_addr;
 		cnss_pr_dbg("Get CPR PMIC address 0x%x from %s\n",
@@ -878,24 +1131,7 @@ int cnss_get_cpr_info(struct cnss_plat_data *plat_priv)
 		ret = -EINVAL;
 		goto out;
 	}
-
-	cpr_info->tcs_cmd_base_addr = res->start;
-	addr_len = resource_size(res);
-	cnss_pr_dbg("TCS CMD base address is %pa with length %pa\n",
-		    &cpr_info->tcs_cmd_base_addr, &addr_len);
-
-	tcs_cmd_base_addr = devm_ioremap_resource(&plat_dev->dev, res);
-	if (IS_ERR(tcs_cmd_base_addr)) {
-		ret = PTR_ERR(tcs_cmd_base_addr);
-		cnss_pr_err("Failed to map TCS CMD address, err = %d\n",
-			    ret);
-		goto out;
-	}
-
-	cpr_info->tcs_cmd_base_addr_io = tcs_cmd_base_addr;
-
 	return 0;
-
 out:
 	return ret;
 }
@@ -907,8 +1143,8 @@ int cnss_update_cpr_info(struct cnss_plat_data *plat_priv)
 	void __iomem *tcs_cmd_addr, *tcs_cmd_data_addr;
 	int i, j;
 
-	if (cpr_info->tcs_cmd_base_addr == 0) {
-		cnss_pr_dbg("CPR is not enabled\n");
+	if (plat_priv->tcs_info.cmd_base_addr == 0) {
+		cnss_pr_dbg("TCS CMD not configured\n");
 		return 0;
 	}
 
@@ -924,7 +1160,8 @@ int cnss_update_cpr_info(struct cnss_plat_data *plat_priv)
 	for (i = 0; i < MAX_TCS_NUM; i++) {
 		for (j = 0; j < MAX_TCS_CMD_NUM; j++) {
 			offset = i * TCS_OFFSET + j * TCS_CMD_OFFSET;
-			tcs_cmd_addr = cpr_info->tcs_cmd_base_addr_io + offset;
+			tcs_cmd_addr = plat_priv->tcs_info.cmd_base_addr_io +
+									offset;
 			pmic_addr = readl_relaxed(tcs_cmd_addr);
 			if (pmic_addr == cpr_info->cpr_pmic_addr) {
 				tcs_cmd_data_addr = tcs_cmd_addr +
@@ -936,9 +1173,8 @@ int cnss_update_cpr_info(struct cnss_plat_data *plat_priv)
 				if (voltage_tmp > voltage) {
 					voltage = voltage_tmp;
 					cpr_info->tcs_cmd_data_addr =
-						cpr_info->tcs_cmd_base_addr +
-						offset +
-						TCS_CMD_DATA_ADDR_OFFSET;
+					plat_priv->tcs_info.cmd_base_addr +
+					offset + TCS_CMD_DATA_ADDR_OFFSET;
 					cpr_info->tcs_cmd_data_addr_io =
 						tcs_cmd_data_addr;
 				}
@@ -961,9 +1197,40 @@ update_cpr:
 	return 0;
 }
 
-/**
- * If it's converged dt, get device specific regulators and enable them.
- */
+int cnss_enable_int_pow_amp_vreg(struct cnss_plat_data *plat_priv)
+{
+	struct platform_device *plat_dev = plat_priv->plat_dev;
+	u32 offset, addr_val, data_val;
+	void __iomem *tcs_cmd;
+	int ret;
+
+	if (!plat_priv->tcs_info.cmd_base_addr_io) {
+		cnss_pr_err("TCS CMD not configured\n");
+		return -EINVAL;
+	}
+
+	if (plat_priv->device_id != QCA6490_DEVICE_ID)
+		return -EINVAL;
+
+	ret = of_property_read_u32(plat_dev->dev.of_node,
+				   "qcom,tcs_offset_int_pow_amp_vreg",
+				   &offset);
+	if (ret) {
+		cnss_pr_dbg("Internal Power Amp Vreg not configured\n");
+		return -EINVAL;
+	}
+	tcs_cmd = plat_priv->tcs_info.cmd_base_addr_io + offset;
+	addr_val = readl_relaxed(tcs_cmd);
+	tcs_cmd += TCS_CMD_DATA_ADDR_OFFSET;
+
+	/* 1 = enable Vreg */
+	writel_relaxed(1, tcs_cmd);
+
+	data_val = readl_relaxed(tcs_cmd);
+	cnss_pr_dbg("Setup S3E TCS Addr: %x Data: %d\n", addr_val, data_val);
+	return 0;
+}
+
 int cnss_dev_specific_power_on(struct cnss_plat_data *plat_priv)
 {
 	int ret;
@@ -971,11 +1238,10 @@ int cnss_dev_specific_power_on(struct cnss_plat_data *plat_priv)
 	if (!plat_priv->is_converged_dt)
 		return 0;
 
-	ret = cnss_get_vreg(plat_priv);
+	ret = cnss_get_vreg_type(plat_priv, CNSS_VREG_PRIM);
 	if (ret)
 		return ret;
 
 	plat_priv->powered_on = false;
 	return cnss_power_on_device(plat_priv);
 }
-

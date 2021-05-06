@@ -920,7 +920,7 @@ static void mhi_netdev_create_debugfs_dir(void)
 
 static void mhi_netdev_debugfs_remove(void)
 {
-         debugfs_remove_recursive(dentry);
+	debugfs_remove_recursive(dentry);
 }
 
 #else

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/clk-provider.h>
@@ -1933,7 +1933,7 @@ static struct clk_branch gcc_aggre_noc_pcie_tbu_clk = {
 
 static struct clk_branch gcc_aggre_ufs_card_2_axi_clk = {
 	.halt_reg = 0xa20c0,
-	.halt_check = BRANCH_HALT,
+	.halt_check = BRANCH_HALT_VOTED,
 	.hwcg_reg = 0xa20c0,
 	.hwcg_bit = 1,
 	.clkr = {
@@ -1953,7 +1953,7 @@ static struct clk_branch gcc_aggre_ufs_card_2_axi_clk = {
 
 static struct clk_branch gcc_aggre_ufs_card_axi_clk = {
 	.halt_reg = 0x750c0,
-	.halt_check = BRANCH_HALT,
+	.halt_check = BRANCH_HALT_VOTED,
 	.hwcg_reg = 0x750c0,
 	.hwcg_bit = 1,
 	.clkr = {
@@ -1973,7 +1973,7 @@ static struct clk_branch gcc_aggre_ufs_card_axi_clk = {
 
 static struct clk_branch gcc_aggre_ufs_card_axi_hw_ctl_clk = {
 	.halt_reg = 0x750c0,
-	.halt_check = BRANCH_HALT,
+	.halt_check = BRANCH_HALT_VOTED,
 	.hwcg_reg = 0x750c0,
 	.hwcg_bit = 1,
 	.clkr = {
@@ -1993,7 +1993,7 @@ static struct clk_branch gcc_aggre_ufs_card_axi_hw_ctl_clk = {
 
 static struct clk_branch gcc_aggre_ufs_phy_axi_clk = {
 	.halt_reg = 0x770c0,
-	.halt_check = BRANCH_HALT,
+	.halt_check = BRANCH_HALT_VOTED,
 	.hwcg_reg = 0x770c0,
 	.hwcg_bit = 1,
 	.clkr = {
@@ -2013,7 +2013,7 @@ static struct clk_branch gcc_aggre_ufs_phy_axi_clk = {
 
 static struct clk_branch gcc_aggre_ufs_phy_axi_hw_ctl_clk = {
 	.halt_reg = 0x770c0,
-	.halt_check = BRANCH_HALT,
+	.halt_check = BRANCH_HALT_VOTED,
 	.hwcg_reg = 0x770c0,
 	.hwcg_bit = 1,
 	.clkr = {
@@ -2806,7 +2806,7 @@ static struct clk_branch gcc_pcie_0_mstr_axi_clk = {
 
 static struct clk_branch gcc_pcie_0_pipe_clk = {
 	.halt_reg = 0x6b024,
-	.halt_check = BRANCH_HALT_DELAY,
+	.halt_check = BRANCH_HALT_SKIP,
 	.clkr = {
 		.enable_reg = 0x5200c,
 		.enable_mask = BIT(4),
@@ -5375,8 +5375,7 @@ static int __init gcc_scshrike_init(void)
 {
 	return platform_driver_register(&gcc_scshrike_driver);
 }
-early_subsys_initcall(gcc_scshrike_init,  EARLY_SUBSYS_PLATFORM,
-EARLY_INIT_LEVEL0);
+subsys_initcall(gcc_scshrike_init);
 
 static void __exit gcc_scshrike_exit(void)
 {

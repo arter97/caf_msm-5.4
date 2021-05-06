@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved. */
+/* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved. */
 
 #ifndef _CNSS_BUS_H
 #define _CNSS_BUS_H
@@ -19,13 +19,8 @@
 #define QCN7605_DEVICE_ID		0x1102
 #define QCA6490_VENDOR_ID		0x17CB
 #define QCA6490_DEVICE_ID		0x1103
-
-#define QCN7605_USB_VENDOR_ID			0x05C6
-#define QCN7605_STANDALONE_PRODUCT_ID	0x9900
-#define QCN7605_COMPOSITE_PRODUCT_ID	0x9901
-
-#define QCN7605_COMPOSITE_DEVICE_ID		QCN7605_COMPOSITE_PRODUCT_ID
-#define QCN7605_STANDALONE_DEVICE_ID	QCN7605_STANDALONE_PRODUCT_ID
+#define WCN7850_VENDOR_ID		0x17CB
+#define WCN7850_DEVICE_ID		0x1107
 
 enum cnss_dev_bus_type cnss_get_dev_bus_type(struct device *dev);
 enum cnss_dev_bus_type cnss_get_bus_type(struct cnss_plat_data *plat_priv);
@@ -33,6 +28,8 @@ void *cnss_bus_dev_to_bus_priv(struct device *dev);
 struct cnss_plat_data *cnss_bus_dev_to_plat_priv(struct device *dev);
 int cnss_bus_init(struct cnss_plat_data *plat_priv);
 void cnss_bus_deinit(struct cnss_plat_data *plat_priv);
+void cnss_bus_add_fw_prefix_name(struct cnss_plat_data *plat_priv,
+				 char *prefix_name, char *name);
 int cnss_bus_load_m3(struct cnss_plat_data *plat_priv);
 int cnss_bus_alloc_fw_mem(struct cnss_plat_data *plat_priv);
 int cnss_bus_alloc_qdss_mem(struct cnss_plat_data *plat_priv);
@@ -44,6 +41,7 @@ int cnss_bus_qmi_send_put(struct cnss_plat_data *plat_priv);
 void cnss_bus_fw_boot_timeout_hdlr(struct timer_list *t);
 void cnss_bus_collect_dump_info(struct cnss_plat_data *plat_priv,
 				bool in_panic);
+void cnss_bus_device_crashed(struct cnss_plat_data *plat_priv);
 int cnss_bus_call_driver_probe(struct cnss_plat_data *plat_priv);
 int cnss_bus_call_driver_remove(struct cnss_plat_data *plat_priv);
 int cnss_bus_dev_powerup(struct cnss_plat_data *plat_priv);
@@ -56,8 +54,11 @@ int cnss_bus_call_driver_modem_status(struct cnss_plat_data *plat_priv,
 				      int modem_current_status);
 int cnss_bus_update_status(struct cnss_plat_data *plat_priv,
 			   enum cnss_driver_status status);
+int cnss_bus_update_uevent(struct cnss_plat_data *plat_priv,
+			   enum cnss_driver_status status, void *data);
 int cnss_bus_is_device_down(struct cnss_plat_data *plat_priv);
 int cnss_bus_check_link_status(struct cnss_plat_data *plat_priv);
+int cnss_bus_recover_link_down(struct cnss_plat_data *plat_priv);
 int cnss_bus_debug_reg_read(struct cnss_plat_data *plat_priv, u32 offset,
 			    u32 *val);
 int cnss_bus_debug_reg_write(struct cnss_plat_data *plat_priv, u32 offset,

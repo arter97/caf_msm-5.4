@@ -925,8 +925,7 @@ static int __init disp_cc_sm6150_init(void)
 {
 	return platform_driver_register(&disp_cc_sm6150_driver);
 }
-early_subsys_initcall(disp_cc_sm6150_init, EARLY_SUBSYS_PLATFORM,
-EARLY_INIT_LEVEL5);
+subsys_initcall(disp_cc_sm6150_init);
 
 static void __exit disp_cc_sm6150_exit(void)
 {

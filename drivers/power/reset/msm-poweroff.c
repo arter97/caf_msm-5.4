@@ -111,18 +111,6 @@ static struct attribute_group reset_attr_group = {
 	.attrs = reset_attrs,
 };
 
-static int __init minidump_setup(char *str)
-{
-	unsigned long enabled;
-	int error = kstrtoul(str, 0, &enabled);
-
-	if (!error)
-		dload_type = enabled ? SCM_DLOAD_MINIDUMP : SCM_DLOAD_FULLDUMP;
-	return 1;
-}
-
-__setup("minidump=", minidump_setup);
-
 static int dload_set(const char *val, const struct kernel_param *kp);
 module_param_call(download_mode, dload_set, param_get_int,
 			&download_mode, 0644);

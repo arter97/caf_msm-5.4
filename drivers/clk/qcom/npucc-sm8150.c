@@ -667,12 +667,6 @@ static int npu_cc_sm8150_probe(struct platform_device *pdev)
 	struct regmap *regmap;
 	int ret;
 
-	regmap = qcom_cc_map(pdev, &npu_cc_sm8150_desc);
-	if (IS_ERR(regmap)) {
-		pr_err("Failed to map the npu CC registers\n");
-		return PTR_ERR(regmap);
-	}
-
 	vdd_cx.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_cx");
 	if (IS_ERR(vdd_cx.regulator[0])) {
 		if (PTR_ERR(vdd_cx.regulator[0]) != -EPROBE_DEFER)
@@ -686,6 +680,12 @@ static int npu_cc_sm8150_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev,
 				"Unable to get vdd_gdsc regulator\n");
 		return PTR_ERR(vdd_gdsc);
+	}
+
+	regmap = qcom_cc_map(pdev, &npu_cc_sm8150_desc);
+	if (IS_ERR(regmap)) {
+		pr_err("Failed to map the npu CC registers\n");
+		return PTR_ERR(regmap);
 	}
 
 	ret = npu_cc_sm8150_fixup(pdev, regmap);
@@ -731,8 +731,7 @@ static int __init npu_cc_sm8150_init(void)
 {
 	return platform_driver_register(&npu_cc_sm8150_driver);
 }
-early_subsys_initcall(npu_cc_sm8150_init, EARLY_SUBSYS_PLATFORM,
-EARLY_INIT_LEVEL5);
+subsys_initcall(npu_cc_sm8150_init);
 
 static void __exit npu_cc_sm8150_exit(void)
 {

@@ -326,7 +326,7 @@ static int __init hab_init(void)
 	if (!result) {
 		hab_driver.kctx = hab_ctx_alloc(1);
 		if (!hab_driver.kctx) {
-			pr_err("hab_ctx_alloc failed");
+			pr_err("hab_ctx_alloc failed\n");
 			result = -ENOMEM;
 			hab_hypervisor_unregister();
 			goto err;

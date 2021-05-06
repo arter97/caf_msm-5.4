@@ -653,7 +653,7 @@ static vm_fault_t hab_map_fault(struct vm_fault *vmf)
 	pglist  = vma->vm_private_data;
 
 	if (page_idx < 0 || page_idx >= pglist->npages) {
-		pr_err("Out of page array! page_idx %d, pg cnt %ld",
+		pr_err("Out of page array! page_idx %d, pg cnt %ld\n",
 			page_idx, pglist->npages);
 		return VM_FAULT_SIGBUS;
 	}

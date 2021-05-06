@@ -121,14 +121,7 @@ SECTIONS
 		__pv_table_end = .;
 	}
 
-	.init.data : {
-		INIT_DATA
-		INIT_SETUP(16)
-		INIT_CALLS
-		EARLY_INIT_CALLS
-		CON_INITCALL
-		INIT_RAM_FS
-	}
+	INIT_DATA_SECTION(16)
 
 	.exit.data : {
 		ARM_EXIT_KEEP(EXIT_DATA)

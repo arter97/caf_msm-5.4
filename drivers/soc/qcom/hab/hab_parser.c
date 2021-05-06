@@ -13,7 +13,6 @@ static int fill_vmid_mmid_tbl(struct vmid_mmid_desc *tbl, int32_t vm_start,
 				   int32_t vm_range, int32_t mmid_start,
 				   int32_t mmid_range, int32_t be)
 {
-	int ret = 0;
 	int i, j;
 
 	for (i = vm_start; i < vm_start+vm_range; i++) {
@@ -29,7 +28,7 @@ static int fill_vmid_mmid_tbl(struct vmid_mmid_desc *tbl, int32_t vm_start,
 		}
 	}
 
-	return ret;
+	return 0;
 }
 
 void dump_settings(struct local_vmid *settings)

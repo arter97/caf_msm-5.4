@@ -131,7 +131,8 @@ int qcom_icc_bcm_init(struct qcom_icc_bcm *bcm, struct device *dev)
 	size_t data_count;
 	int i;
 
-	if (bcm->inited)
+	/* BCM is already initialised*/
+	if (bcm->addr)
 		return 0;
 
 	bcm->addr = cmd_db_read_addr(bcm->name);
@@ -171,8 +172,6 @@ int qcom_icc_bcm_init(struct qcom_icc_bcm *bcm, struct device *dev)
 		qn->bcms[qn->num_bcms] = bcm;
 		qn->num_bcms++;
 	}
-
-	bcm->inited = true;
 
 	return 0;
 }

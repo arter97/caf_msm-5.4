@@ -89,7 +89,7 @@ static const struct parent_map gpu_cc_parent_map_0[] = {
 
 static const struct clk_parent_data gpu_cc_parent_data_0[] = {
 	{ .fw_name = "bi_tcxo" },
-	{ .fw_name = "gpu_cc_pll0", .name ="gpu_cc_pll0" },
+	{ .fw_name = "gpu_cc_pll0", .name = "gpu_cc_pll0" },
 	{ .hw = &gpu_cc_pll1.clkr.hw },
 	{ .fw_name = "gcc_gpu_gpll0_clk_src" },
 	{ .fw_name = "gcc_gpu_gpll0_div_clk_src" },
@@ -357,8 +357,7 @@ static int __init gpu_cc_sm8150_init(void)
 {
 	return platform_driver_register(&gpu_cc_sm8150_driver);
 }
-early_subsys_initcall(gpu_cc_sm8150_init, EARLY_SUBSYS_PLATFORM,
-EARLY_INIT_LEVEL5);
+subsys_initcall(gpu_cc_sm8150_init);
 
 static void __exit gpu_cc_sm8150_exit(void)
 {

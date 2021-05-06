@@ -3,13 +3,14 @@
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
  */
 
-#include <linux/clk.h>
 #include <linux/clk-provider.h>
 #include <linux/err.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/of_device.h>
 #include <linux/of.h>
+#include <linux/pm_clock.h>
+#include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 
 #include <dt-bindings/clock/qcom,videocc-sm8150.h>
@@ -302,22 +303,7 @@ static int video_cc_sm8150_fixup(struct platform_device *pdev,
 static int video_cc_sm8150_probe(struct platform_device *pdev)
 {
 	struct regmap *regmap;
-	struct clk *clk;
 	int ret;
-
-	regmap = qcom_cc_map(pdev, &video_cc_sm8150_desc);
-	if (IS_ERR(regmap)) {
-		pr_err("Failed to map the Video CC registers\n");
-		return PTR_ERR(regmap);
-	}
-
-	clk = clk_get(&pdev->dev, "cfg_ahb_clk");
-	if (IS_ERR(clk)) {
-		if (PTR_ERR(clk) != -EPROBE_DEFER)
-			dev_err(&pdev->dev, "Unable to get ahb clock handle\n");
-		return PTR_ERR(clk);
-	}
-	clk_put(clk);
 
 	vdd_mm.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_mm");
 	if (IS_ERR(vdd_mm.regulator[0])) {
@@ -326,28 +312,59 @@ static int video_cc_sm8150_probe(struct platform_device *pdev)
 		return PTR_ERR(vdd_mm.regulator[0]);
 	}
 
+	pm_runtime_enable(&pdev->dev);
+	ret = pm_clk_create(&pdev->dev);
+	if (ret)
+		goto disable_pm_runtime;
+
+	ret = pm_clk_add(&pdev->dev, "cfg_ahb_clk");
+	if (ret < 0) {
+		dev_err(&pdev->dev, "Unable to get ahb clock handle\n");
+		goto destroy_pm_clk;
+	}
+
+	regmap = qcom_cc_map(pdev, &video_cc_sm8150_desc);
+	if (IS_ERR(regmap)) {
+		pr_err("Failed to map the Video CC registers\n");
+		ret = PTR_ERR(regmap);
+		goto destroy_pm_clk;
+	}
+
 	ret = video_cc_sm8150_fixup(pdev, regmap);
 	if (ret)
-		return ret;
+		goto destroy_pm_clk;
 
 	clk_trion_pll_configure(&video_pll0, regmap, video_pll0.config);
 
 	ret = qcom_cc_really_probe(pdev, &video_cc_sm8150_desc, regmap);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register VIDEO CC clocks\n");
-		return ret;
+		goto destroy_pm_clk;
 	}
 
 	dev_info(&pdev->dev, "Registered VIDEO CC clocks\n");
 
+	return 0;
+
+destroy_pm_clk:
+	pm_clk_destroy(&pdev->dev);
+
+disable_pm_runtime:
+	pm_runtime_disable(&pdev->dev);
+
 	return ret;
 }
+
+static const struct dev_pm_ops video_cc_sm8150_pm_ops = {
+	SET_RUNTIME_PM_OPS(pm_clk_suspend, pm_clk_resume, NULL)
+};
 
 static struct platform_driver video_cc_sm8150_driver = {
 	.probe = video_cc_sm8150_probe,
 	.driver = {
 		.name = "video_cc-sm8150",
 		.of_match_table = video_cc_sm8150_match_table,
+		.pm = &video_cc_sm8150_pm_ops,
 	},
 };
 
@@ -355,8 +372,7 @@ static int __init video_cc_sm8150_init(void)
 {
 	return platform_driver_register(&video_cc_sm8150_driver);
 }
-early_subsys_initcall(video_cc_sm8150_init, EARLY_SUBSYS_PLATFORM,
-EARLY_INIT_LEVEL5);
+subsys_initcall(video_cc_sm8150_init);
 
 static void __exit video_cc_sm8150_exit(void)
 {

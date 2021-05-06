@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/init.h>
@@ -43,7 +43,7 @@ static int rename_blk_dev_init(void)
 							&modified_name)) {
 			device_rename(disk_to_dev(disk), modified_name);
 		} else {
-			pr_err("rename-dev for actual-dev = %s is missing",
+			pr_err("rename-dev for actual-dev = %s is missing\n",
 								 actual_name);
 			return -ENXIO;
 		}

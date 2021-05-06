@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -1843,7 +1843,7 @@ static const struct msm_pingroup shima_groups[] = {
 	[203] = PINGROUP(203, NA, NA, NA, NA, NA, NA, NA, NA, NA,
 			 0, -1),
 	[204] = UFS_RESET(ufs_reset, 0x1db000),
-	[205] = SDC_QDSD_PINGROUP(sdc1_rclk, 0x1d0000, 15, 0),
+	[205] = SDC_QDSD_PINGROUP(sdc1_rclk, 0x1d0004, 0, 0),
 	[206] = SDC_QDSD_PINGROUP(sdc1_clk, 0x1d0000, 13, 6),
 	[207] = SDC_QDSD_PINGROUP(sdc1_cmd, 0x1d0000, 11, 3),
 	[208] = SDC_QDSD_PINGROUP(sdc1_data, 0x1d0000, 9, 0),
@@ -1899,9 +1899,31 @@ static const struct msm_pinctrl_soc_data shima_pinctrl = {
 	.nwakeirq_map = ARRAY_SIZE(shima_pdc_map),
 };
 
+/* By default, all the gpios that are mpm wake capable are enabled.
+ * The following list disables the gpios explicitly
+ */
+static const unsigned int config_mpm_wake_disable_gpios[] = { 151, 202 };
+
+static void shima_pinctrl_config_mpm_wake_disable_gpios(void)
+{
+	unsigned int i;
+	unsigned int n_gpios = ARRAY_SIZE(config_mpm_wake_disable_gpios);
+
+	for (i = 0; i < n_gpios; i++)
+		msm_gpio_mpm_wake_set(config_mpm_wake_disable_gpios[i], false);
+}
+
 static int shima_pinctrl_probe(struct platform_device *pdev)
 {
-	return msm_pinctrl_probe(pdev, &shima_pinctrl);
+	int ret;
+
+	ret = msm_pinctrl_probe(pdev, &shima_pinctrl);
+	if (ret)
+		return ret;
+
+	shima_pinctrl_config_mpm_wake_disable_gpios();
+
+	return 0;
 }
 
 static const struct of_device_id shima_pinctrl_of_match[] = {

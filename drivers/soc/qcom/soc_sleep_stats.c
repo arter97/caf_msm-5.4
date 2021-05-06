@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
 /*
- * Copyright (c) 2011-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2021, The Linux Foundation. All rights reserved.
  */
 
 #define pr_fmt(fmt) "%s: " fmt, __func__
@@ -60,9 +60,6 @@ struct stats_entry {
 	struct appended_entry appended_entry;
 };
 
-static struct soc_sleep_stats_data *gdata;
-static u64 deep_sleep_last_exited_time;
-
 static inline u64 get_time_in_sec(u64 counter)
 {
 	do_div(counter, arch_timer_get_rate());
@@ -90,53 +87,6 @@ static inline ssize_t append_data_to_buf(char *buf, int length,
 			 data->entry.accumulated,
 			 data->appended_entry.client_votes);
 }
-
-uint64_t get_sleep_exit_time(void)
-{
-	int i;
-	uint32_t offset;
-	__le64 last_exited_at;
-	__le32 count;
-	static u32 saved_deep_sleep_count;
-	u32 s_type = 0;
-	char stat_type[5] = {0};
-	void __iomem *reg;
-	struct soc_sleep_stats_data *drv = gdata;
-
-	if (!drv) {
-		pr_err("ERROR could not get rpm data memory\n");
-		return -ENOMEM;
-	}
-
-	reg = drv->reg;
-
-	for (i = 0; i < drv->config->num_records; i++) {
-		offset = offsetof(struct entry, stat_type);
-		s_type = le32_to_cpu(readl_relaxed(reg + offset));
-		memcpy(stat_type, &s_type, sizeof(u32));
-
-		if (!memcmp((const void *)stat_type, (const void *)"aosd", 4)) {
-			offset = offsetof(struct entry, count);
-			count = le32_to_cpu(readl_relaxed(reg + offset));
-			if (saved_deep_sleep_count == count)
-				deep_sleep_last_exited_time = 0;
-			else {
-				saved_deep_sleep_count = count;
-				offset = offsetof(struct entry, last_exited_at);
-				last_exited_at = le64_to_cpu(readq_relaxed(reg
-							+ offset));
-				deep_sleep_last_exited_time = last_exited_at;
-			}
-			break;
-		} else {
-			reg += sizeof(struct entry);
-			if (drv->config->appended_stats_avail)
-				reg += sizeof(struct appended_entry);
-		}
-	}
-	return deep_sleep_last_exited_time;
-}
-EXPORT_SYMBOL(get_sleep_exit_time);
 
 static ssize_t stats_show(struct kobject *obj, struct kobj_attribute *attr,
 			  char *buf)
@@ -209,6 +159,11 @@ static int soc_sleep_stats_create_sysfs(struct platform_device *pdev,
 	return sysfs_create_file(drv->kobj, &drv->ka.attr);
 }
 
+static const struct stats_config legacy_rpm_data = {
+	.num_records = 2,
+	.appended_stats_avail = true,
+};
+
 static const struct stats_config rpm_data = {
 	.offset_addr = 0x14,
 	.num_records = 2,
@@ -224,6 +179,7 @@ static const struct stats_config rpmh_data = {
 static const struct of_device_id soc_sleep_stats_table[] = {
 	{ .compatible = "qcom,rpm-sleep-stats", .data = &rpm_data},
 	{ .compatible = "qcom,rpmh-sleep-stats", .data = &rpmh_data},
+	{ .compatible = "qcom,legacy-rpm-sleep-stats", .data = &legacy_rpm_data},
 	{ },
 };
 
@@ -232,6 +188,7 @@ static int soc_sleep_stats_probe(struct platform_device *pdev)
 	struct soc_sleep_stats_data *drv;
 	struct resource *res;
 	void __iomem *offset_addr;
+	uint32_t offset = 0;
 	int ret;
 
 	drv = devm_kzalloc(&pdev->dev, sizeof(*drv), GFP_KERNEL);
@@ -246,21 +203,24 @@ static int soc_sleep_stats_probe(struct platform_device *pdev)
 	if (!res)
 		return PTR_ERR(res);
 
-	offset_addr = ioremap_nocache(res->start + drv->config->offset_addr,
-				      sizeof(u32));
-	if (IS_ERR(offset_addr))
-		return PTR_ERR(offset_addr);
+	if (drv->config->offset_addr) {
+		offset_addr = devm_ioremap_nocache(&pdev->dev, res->start +
+						   drv->config->offset_addr,
+						   sizeof(u32));
+		if (!offset_addr)
+			return -ENOMEM;
 
-	drv->stats_base = res->start | readl_relaxed(offset_addr);
+		offset = readl_relaxed(offset_addr);
+	}
+
+	drv->stats_base = res->start | offset;
 	drv->stats_size = resource_size(res);
-	iounmap(offset_addr);
 
 	ret = soc_sleep_stats_create_sysfs(pdev, drv);
 	if (ret) {
 		pr_err("Failed to create sysfs interface\n");
 		return ret;
 	}
-	gdata = drv;
 
 	drv->reg = devm_ioremap(&pdev->dev, drv->stats_base, drv->stats_size);
 	if (!drv->reg) {

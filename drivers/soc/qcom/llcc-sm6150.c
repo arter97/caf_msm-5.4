@@ -70,7 +70,6 @@ static const struct of_device_id sm6150_qcom_llcc_of_match[] = {
 static struct platform_driver sm6150_qcom_llcc_driver = {
 	.driver = {
 		.name = "sm6150-llcc",
-		.owner = THIS_MODULE,
 		.of_match_table = sm6150_qcom_llcc_of_match,
 	},
 	.probe = sm6150_qcom_llcc_probe,

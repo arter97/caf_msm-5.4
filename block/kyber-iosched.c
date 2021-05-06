@@ -1042,7 +1042,7 @@ static void __exit kyber_exit(void)
 	elv_unregister(&kyber_sched);
 }
 
-early_module_init(kyber_init, EARLY_SUBSYS_PLATFORM, EARLY_INIT_LEVEL8);
+module_init(kyber_init);
 module_exit(kyber_exit);
 
 MODULE_AUTHOR("Omar Sandoval");

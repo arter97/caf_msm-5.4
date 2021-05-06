@@ -134,6 +134,11 @@ static inline int crypto_qti_derive_raw_secret(void *priv_data,
 {
 	return -EOPNOTSUPP;
 }
+static inline int crypto_qti_ice_setup_ice_hw(const char *storage_type, int enable)
+{
+	return 0;
+}
+static inline void crypto_qti_ice_set_fde_flag(int flag) {}
 
 #endif /* CONFIG_QTI_CRYPTO_COMMON */
 

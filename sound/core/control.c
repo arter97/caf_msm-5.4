@@ -341,13 +341,13 @@ static int __snd_ctl_add_replace(struct snd_card *card,
 	struct snd_ctl_elem_id id;
 	unsigned int idx;
 	unsigned int count;
-	//struct snd_kcontrol *old;
-	//int err;
+	struct snd_kcontrol *old;
+	int err;
 
 	id = kcontrol->id;
 	if (id.index > UINT_MAX - kcontrol->count)
 		return -EINVAL;
-#if 0
+
 	old = snd_ctl_find_id(card, &id);
 	if (!old) {
 		if (mode == CTL_REPLACE)
@@ -366,9 +366,9 @@ static int __snd_ctl_add_replace(struct snd_card *card,
 			return err;
 	}
 
-#endif
 	if (snd_ctl_find_hole(card, kcontrol->count) < 0)
 		return -ENOMEM;
+
 	list_add_tail(&kcontrol->list, &card->controls);
 	card->controls_count += kcontrol->count;
 	kcontrol->id.numid = card->last_numid + 1;
@@ -1350,7 +1350,7 @@ static int snd_ctl_elem_add(struct snd_ctl_file *file,
 
  unlock:
 	up_write(&card->controls_rwsem);
-	return 0;
+	return err;
 }
 
 static int snd_ctl_elem_add_user(struct snd_ctl_file *file,

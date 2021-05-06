@@ -188,7 +188,7 @@ static int subsys_notif_virt_probe(struct platform_device *pdev)
 	int ret = 0;
 
 	if (!pdev) {
-		dev_err(&pdev->dev, "pdev is NULL\n");
+		pr_err("%s: pdev is NULL\n", __func__);
 		return -EINVAL;
 	}
 
@@ -223,7 +223,6 @@ static struct platform_driver subsys_notif_virt_driver = {
 	.remove = subsys_notif_virt_remove,
 	.driver = {
 		.name = "subsys_notif_virt",
-		.owner = THIS_MODULE,
 		.of_match_table = match_table,
 	},
 };

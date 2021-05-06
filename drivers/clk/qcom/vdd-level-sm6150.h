@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Copyright (c) 2020, The Linux Foundation. All rights reserved. */
+/* Copyright (c) 2021, The Linux Foundation. All rights reserved. */
 
 #ifndef __DRIVERS_CLK_QCOM_VDD_LEVEL_SM6150_H
 #define __DRIVERS_CLK_QCOM_VDD_LEVEL_SM6150_H

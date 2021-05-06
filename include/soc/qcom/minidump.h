@@ -31,7 +31,7 @@ struct md_region {
  *	region number: entry position in minidump table.
  *	Negative error number on failures.
  */
-#if (IS_ENABLED(CONFIG_QCOM_MINIDUMP) || IS_ENABLED(CONFIG_QCOM_VIRT_MINIDUMP))
+#if IS_ENABLED(CONFIG_QCOM_MINIDUMP)
 extern struct seq_buf *md_meminfo_seq_buf;
 extern struct seq_buf *md_slabinfo_seq_buf;
 

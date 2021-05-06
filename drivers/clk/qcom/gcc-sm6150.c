@@ -1674,7 +1674,7 @@ static struct clk_branch gcc_cpuss_gnoc_clk = {
 
 static struct clk_branch gcc_ddrss_gpu_axi_clk = {
 	.halt_reg = 0x71154,
-	.halt_check = BRANCH_VOTED,
+	.halt_check = BRANCH_HALT_VOTED,
 	.clkr = {
 		.enable_reg = 0x71154,
 		.enable_mask = BIT(0),
@@ -1719,7 +1719,7 @@ static struct clk_branch gcc_disp_gpll0_div_clk_src = {
 
 static struct clk_branch gcc_disp_hf_axi_clk = {
 	.halt_reg = 0xb038,
-	.halt_check = BRANCH_HALT,
+	.halt_check = BRANCH_HALT_VOTED,
 	.clkr = {
 		.enable_reg = 0xb038,
 		.enable_mask = BIT(0),
@@ -1925,7 +1925,7 @@ static struct clk_branch gcc_gpu_iref_clk = {
 
 static struct clk_branch gcc_gpu_memnoc_gfx_clk = {
 	.halt_reg = 0x7100c,
-	.halt_check = BRANCH_VOTED,
+	.halt_check = BRANCH_HALT_VOTED,
 	.clkr = {
 		.enable_reg = 0x7100c,
 		.enable_mask = BIT(0),
@@ -3296,7 +3296,7 @@ static struct clk_branch gcc_video_xo_clk = {
 	},
 };
 
-struct clk_hw *gcc_sm6150_hws[] = {
+static struct clk_hw *gcc_sm6150_hws[] = {
 	[GPLL0_OUT_AUX2_DIV] = &gpll0_out_aux2_div.hw,
 	[GPLL3_OUT_AUX2_DIV] = &gpll3_out_aux2_div.hw,
 };
@@ -3618,8 +3618,7 @@ static int __init gcc_sm6150_init(void)
 {
 	return platform_driver_register(&gcc_sm6150_driver);
 }
-early_subsys_initcall(gcc_sm6150_init, EARLY_SUBSYS_PLATFORM,
-EARLY_INIT_LEVEL0);
+subsys_initcall(gcc_sm6150_init);
 
 static void __exit gcc_sm6150_exit(void)
 {

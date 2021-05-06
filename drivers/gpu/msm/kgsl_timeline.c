@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/dma-fence.h>
@@ -8,7 +8,6 @@
 #include <linux/list.h>
 #include <linux/kref.h>
 #include <linux/sync_file.h>
-#include <linux/xarray.h>
 
 #include "kgsl_device.h"
 #include "kgsl_sharedmem.h"
@@ -118,29 +117,34 @@ struct kgsl_timeline *kgsl_timeline_get(struct kgsl_timeline *timeline)
 	return timeline;
 }
 
-static struct kgsl_timeline *kgsl_timeline_alloc(struct kgsl_device *device,
+static struct kgsl_timeline *kgsl_timeline_alloc(struct kgsl_device_private *dev_priv,
 		u64 initial)
 {
+	struct kgsl_device *device = dev_priv->device;
 	struct kgsl_timeline *timeline;
-	u32 id;
-	int ret;
+	int id;
 
 	timeline = kzalloc(sizeof(*timeline), GFP_KERNEL);
 	if (!timeline)
 		return ERR_PTR(-ENOMEM);
 
-	ret = xa_alloc(&device->timelines, &id,
-		timeline, xa_limit_32b, GFP_KERNEL);
+	idr_preload(GFP_KERNEL);
+	spin_lock(&device->timelines_lock);
+	/* Allocate the ID but don't attach the pointer just yet */
+	id = idr_alloc(&device->timelines, NULL, 1, 0, GFP_NOWAIT);
+	spin_unlock(&device->timelines_lock);
+	idr_preload_end();
 
-	if (ret) {
+	if (id < 0) {
 		kfree(timeline);
-		return ERR_PTR(ret);
+		return ERR_PTR(id);
 	}
 
 	timeline->context = dma_fence_context_alloc(1);
 	timeline->id = id;
 	INIT_LIST_HEAD(&timeline->fences);
 	timeline->value = initial;
+	timeline->dev_priv = dev_priv;
 
 	snprintf((char *) timeline->name, sizeof(timeline->name),
 		"kgsl-sw-timeline-%d", id);
@@ -166,7 +170,8 @@ static void timeline_fence_release(struct dma_fence *fence)
 	struct kgsl_timeline_fence *cur, *temp;
 	unsigned long flags;
 
-	spin_lock_irqsave(&fence_lock, flags);
+	spin_lock_irqsave(&timeline->lock, flags);
+	spin_lock(&fence_lock);
 
 	/* If the fence is still on the active list, remove it */
 	list_for_each_entry_safe(cur, temp, &timeline->fences, node) {
@@ -176,8 +181,8 @@ static void timeline_fence_release(struct dma_fence *fence)
 		list_del_init(&f->node);
 		break;
 	}
-	spin_unlock_irqrestore(&fence_lock, flags);
-
+	spin_unlock(&fence_lock);
+	spin_unlock_irqrestore(&timeline->lock, flags);
 	trace_kgsl_timeline_fence_release(f->timeline->id, fence->seqno);
 
 	kgsl_timeline_put(f->timeline);
@@ -190,6 +195,16 @@ static bool timeline_fence_signaled(struct dma_fence *fence)
 
 	return !__dma_fence_is_later(fence->seqno, f->timeline->value,
 		fence->ops);
+}
+
+static bool timeline_fence_enable_signaling(struct dma_fence *fence)
+{
+	/*
+	 * Return value of false indicates the fence already passed.
+	 * When fence is not passed we return true indicating successful
+	 * enabling.
+	 */
+	return !timeline_fence_signaled(fence);
 }
 
 static const char *timeline_get_driver_name(struct dma_fence *fence)
@@ -217,6 +232,7 @@ static const struct dma_fence_ops timeline_fence_ops = {
 	.get_timeline_name = timeline_get_timeline_name,
 	.signaled = timeline_fence_signaled,
 	.release = timeline_fence_release,
+	.enable_signaling = timeline_fence_enable_signaling,
 	.timeline_value_str = timeline_get_value_str,
 	.use_64bit_seqno = true,
 };
@@ -288,16 +304,27 @@ struct dma_fence *kgsl_timeline_fence_alloc(struct kgsl_timeline *timeline,
 		return ERR_PTR(-ENOMEM);
 
 	fence->timeline = kgsl_timeline_get(timeline);
+	if (!fence->timeline) {
+		kfree(fence);
+		return ERR_PTR(-ENOENT);
+	}
 
 	dma_fence_init(&fence->base, &timeline_fence_ops,
 		&timeline->lock, timeline->context, seqno);
 
 	INIT_LIST_HEAD(&fence->node);
 
-	if (!dma_fence_is_signaled(&fence->base))
+	/*
+	 * Once fence is checked as not signaled, allow it to be added
+	 * in the list before other thread such as kgsl_timeline_signal
+	 * can get chance to signal.
+	 */
+	spin_lock_irq(&timeline->lock);
+	if (!dma_fence_is_signaled_locked(&fence->base))
 		kgsl_timeline_add_fence(timeline, fence);
 
 	trace_kgsl_timeline_fence_alloc(timeline->id, seqno);
+	spin_unlock_irq(&timeline->lock);
 
 	return &fence->base;
 }
@@ -309,20 +336,32 @@ long kgsl_ioctl_timeline_create(struct kgsl_device_private *dev_priv,
 	struct kgsl_timeline_create *param = data;
 	struct kgsl_timeline *timeline;
 
-	timeline = kgsl_timeline_alloc(device, param->seqno);
+	timeline = kgsl_timeline_alloc(dev_priv, param->seqno);
 	if (IS_ERR(timeline))
 		return PTR_ERR(timeline);
 
+	/* Commit the pointer to the timeline in timline idr */
+	spin_lock(&device->timelines_lock);
+	idr_replace(&device->timelines, timeline, timeline->id);
 	param->id = timeline->id;
+	spin_unlock(&device->timelines_lock);
 	return 0;
 }
 
 struct kgsl_timeline *kgsl_timeline_by_id(struct kgsl_device *device,
 		u32 id)
 {
-	struct kgsl_timeline *timeline = xa_load(&device->timelines, id);
+	struct kgsl_timeline *timeline;
+	int ret = 0;
 
-	return kgsl_timeline_get(timeline);
+	spin_lock(&device->timelines_lock);
+	timeline = idr_find(&device->timelines, id);
+
+	if (timeline)
+		ret = kref_get_unless_zero(&timeline->ref);
+	spin_unlock(&device->timelines_lock);
+
+	return ret ? timeline : NULL;
 }
 
 long kgsl_ioctl_timeline_wait(struct kgsl_device_private *dev_priv,
@@ -492,28 +531,54 @@ long kgsl_ioctl_timeline_destroy(struct kgsl_device_private *dev_priv,
 	if (*param == 0)
 		return -ENODEV;
 
-	timeline = xa_erase(&device->timelines, *param);
-	if (!timeline)
+	spin_lock(&device->timelines_lock);
+	timeline = idr_find(&device->timelines, *param);
+
+	if (timeline == NULL) {
+		spin_unlock(&device->timelines_lock);
 		return -ENODEV;
+	}
+
+	/*
+	 * Validate that the id given is owned by the dev_priv
+	 * instance that is passed in. If not, abort.
+	 */
+	if (timeline->dev_priv != dev_priv) {
+		spin_unlock(&device->timelines_lock);
+		return -EINVAL;
+	}
+
+	idr_remove(&device->timelines, timeline->id);
+	spin_unlock(&device->timelines_lock);
 
 	INIT_LIST_HEAD(&temp);
 
 	spin_lock_irq(&timeline->lock);
 
 	/* Copy any still pending fences to a temporary list */
+	spin_lock(&fence_lock);
 	list_replace_init(&timeline->fences, &temp);
+	spin_unlock(&fence_lock);
 
+	/*
+	 * Set an error on each still pending fence and signal
+	 * them to release any callbacks. Hold the refcount
+	 * to avoid fence getting destroyed during signaling.
+	 */
+	list_for_each_entry_safe(fence, tmp, &temp, node) {
+		dma_fence_get(&fence->base);
+		dma_fence_set_error(&fence->base, -ENOENT);
+		dma_fence_signal_locked(&fence->base);
+	}
 	spin_unlock_irq(&timeline->lock);
 
 	/*
-	 * Set an error on each still pending fence and signal them outside of
-	 * the lock so we don't get a spinlock recursion if the fences get
-	 * destroyed inside of the signal callback
+	 * Put the fence refcount taken above outside lock
+	 * to avoid spinlock recursion during fence release.
 	 */
 	list_for_each_entry_safe(fence, tmp, &temp, node) {
 		list_del_init(&fence->node);
-		dma_fence_set_error(&fence->base, -ENOENT);
-		dma_fence_signal(&fence->base);
+		dma_fence_put(&fence->base);
 	}
 
 	kgsl_timeline_put(timeline);

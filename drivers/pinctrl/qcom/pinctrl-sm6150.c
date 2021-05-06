@@ -1,5 +1,7 @@
-// SPDX-License-Identifier: GPL-2.0
-// Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
+ */
 
 #include <linux/module.h>
 #include <linux/of.h>
@@ -1612,8 +1614,55 @@ static struct msm_pinctrl_soc_data sm6150_pinctrl = {
 #endif
 };
 
+static int sm6150_pinctrl_gpio_irq_map_probe(struct platform_device *pdev)
+{
+	int ret, n, gpio_irq_map_count;
+	struct device_node *np = pdev->dev.of_node;
+	struct msm_gpio_wakeirq_map *gpio_irq_map;
+
+	n = of_property_count_elems_of_size(np, "qcom,gpio-irq-map",
+					sizeof(u32));
+	if (n <= 0 || n % 2)
+		return -EINVAL;
+
+	gpio_irq_map_count = n / 2;
+	gpio_irq_map = devm_kcalloc(&pdev->dev, gpio_irq_map_count,
+				sizeof(*gpio_irq_map), GFP_KERNEL);
+	if (!gpio_irq_map)
+		return -ENOMEM;
+
+	for (n = 0; n < gpio_irq_map_count; n++) {
+		ret = of_property_read_u32_index(np, "qcom,gpio-irq-map",
+						n * 2 + 0,
+						&gpio_irq_map[n].gpio);
+		if (ret)
+			return ret;
+		ret = of_property_read_u32_index(np, "qcom,gpio-irq-map",
+						n * 2 + 1,
+						&gpio_irq_map[n].wakeirq);
+		if (ret)
+			return ret;
+	}
+
+	sm6150_pinctrl.wakeirq_map = gpio_irq_map;
+	sm6150_pinctrl.nwakeirq_map = gpio_irq_map_count;
+
+	return 0;
+}
+
 static int sm6150_pinctrl_probe(struct platform_device *pdev)
 {
+	int len, ret;
+
+	if (of_find_property(pdev->dev.of_node, "qcom,gpio-irq-map", &len)) {
+		ret = sm6150_pinctrl_gpio_irq_map_probe(pdev);
+		if (ret) {
+			dev_err(&pdev->dev,
+				"Unable to parse GPIO IRQ map\n");
+			return ret;
+		}
+	}
+
 	return msm_pinctrl_probe(pdev, &sm6150_pinctrl);
 }
 
@@ -1625,7 +1674,6 @@ static const struct of_device_id sm6150_pinctrl_of_match[] = {
 static struct platform_driver sm6150_pinctrl_driver = {
 	.driver = {
 		.name = "sm6150-pinctrl",
-		.owner = THIS_MODULE,
 		.of_match_table = sm6150_pinctrl_of_match,
 	},
 	.probe = sm6150_pinctrl_probe,

@@ -5,6 +5,19 @@ config INTERCONNECT_QCOM
 	help
 	  Support for Qualcomm's Network-on-Chip interconnect hardware.
 
+config INTERCONNECT_QCOM_DIREWOLF
+	tristate "DIREWOLF interconnect driver"
+	depends on INTERCONNECT_QCOM
+	depends on QCOM_RPMH && QCOM_COMMAND_DB && OF
+	select INTERCONNECT_QCOM_BCM_VOTER
+	select INTERCONNECT_QCOM_RPMH
+	select INTERCONNECT_QCOM_QOS
+	help
+	  This is a driver for the Qualcomm Technologies, Inc. Network-on-Chip
+	  on direwolf-based platforms. The interconnect provider collects and
+	  aggregates the consumers bandwidth requests to satisfy constraints
+	  placed on Network-on-Chip performance states.
+
 config INTERCONNECT_QCOM_HOLI
 	tristate "Qualcomm HOLI interconnect driver"
 	depends on INTERCONNECT_QCOM
@@ -14,6 +27,18 @@ config INTERCONNECT_QCOM_HOLI
 	help
 	  This is a driver for the Qualcomm Technologies, Inc. Network-on-Chip
 	  on holi-based platforms. The interconnect provider collects and
+	  aggreagates the cosumer bandwidth requests to satisfy constraints
+	  placed on Network-on-Chip performance states.
+
+config INTERCONNECT_QCOM_MONACO
+	tristate "MONACO interconnect driver"
+	depends on INTERCONNECT_QCOM
+	depends on MSM_RPM_SMD
+	select INTERCONNECT_QCOM_RPM
+	select INTERCONNECT_QCOM_QOS
+	help
+	  This is a driver for the Qualcomm Technologies, Inc. Network-on-Chip
+	  on monaco-based platforms. The interconnect provider collects and
 	  aggreagates the cosumer bandwidth requests to satisfy constraints
 	  placed on Network-on-Chip performance states.
 
@@ -32,7 +57,6 @@ config INTERCONNECT_QCOM_SCSHRIKE
 	depends on QCOM_RPMH && QCOM_COMMAND_DB && OF
 	select INTERCONNECT_QCOM_BCM_VOTER
 	select INTERCONNECT_QCOM_RPMH
-	select INTERCONNECT_QCOM_QOS
 	help
 	  This is a driver for the Qualcomm Technologies, Inc. Network-on-Chip
 	  on scshrike-based platforms. The interconnect provider collects and
@@ -130,12 +154,24 @@ config INTERCONNECT_QCOM_CPUCP_L3
 
 config INTERCONNECT_QCOM_OSM_L3
 	tristate "QTI OSM L3 interconnect driver"
-	depends on INTERCONNECT_QCOM || COMPILE_TEST
+	depends on INTERCONNECT_QCOM
 	help
 	  This is a driver for the Qualcomm Technologies, Inc. Network-on-Chip
 	  on osm-based platforms.
 	  Say y here to support the Operating State Manager (OSM) interconnect
 	  driver which controls the scaling of L3 caches on QTI SoCs.
+
+config INTERCONNECT_QCOM_SDXNIGHTJAR
+	tristate "SDXNIGHTJAR interconnect driver"
+	depends on INTERCONNECT_QCOM
+	depends on MSM_RPM_SMD
+	select INTERCONNECT_QCOM_RPM
+	select INTERCONNECT_QCOM_QOS
+	help
+	  This is a driver for the Qualcomm Technologies, Inc. Network-on-Chip
+	  on sdxnightjar-based platforms. The interconnect provider collects and
+	  aggreagates the cosumer bandwidth requests to satisfy constraints
+	  placed on Network-on-Chip performance states.
 
 config INTERCONNECT_QCOM_SMD_RPM
 	tristate

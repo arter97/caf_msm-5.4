@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only WITH Linux-syscall-note */
 /*
- * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  */
 
 #ifndef _UAPI_MSM_NPU_H_
@@ -102,50 +102,50 @@
  */
 struct msm_npu_patch_info {
 	/* chunk id */
-	uint32_t chunk_id;
-	/* instruction size in bytes */
-	uint16_t instruction_size_in_bytes;
-	/* variable size in bits */
-	uint16_t variable_size_in_bits;
-	/* shift value in bits */
-	uint16_t shift_value_in_bits;
+	__u32 chunk_id;
 	/* location offset */
-	uint32_t loc_offset;
+	__u32 loc_offset;
+	/* instruction size in bytes */
+	__u16 instruction_size_in_bytes;
+	/* variable size in bits */
+	__u16 variable_size_in_bits;
+	/* shift value in bits */
+	__u16 shift_value_in_bits;
 };
 
 struct msm_npu_layer {
+	/* physical address */
+	__u64 buf_phys_addr;
 	/* layer id */
-	uint32_t layer_id;
+	__u32 layer_id;
 	/* patch information*/
 	struct msm_npu_patch_info patch_info;
 	/* buffer handle */
-	int32_t buf_hdl;
+	__s32 buf_hdl;
 	/* buffer size */
-	uint32_t buf_size;
-	/* physical address */
-	uint64_t buf_phys_addr;
+	__u32 buf_size;
 };
 
 struct msm_npu_patch_info_v2 {
 	/* patch value */
-	uint32_t value;
+	__u32 value;
 	/* chunk id */
-	uint32_t chunk_id;
+	__u32 chunk_id;
 	/* instruction size in bytes */
-	uint32_t instruction_size_in_bytes;
+	__u32 instruction_size_in_bytes;
 	/* variable size in bits */
-	uint32_t variable_size_in_bits;
+	__u32 variable_size_in_bits;
 	/* shift value in bits */
-	uint32_t shift_value_in_bits;
+	__u32 shift_value_in_bits;
 	/* location offset */
-	uint32_t loc_offset;
+	__u32 loc_offset;
 };
 
 struct msm_npu_patch_buf_info {
 	/* physical address to be patched */
-	uint64_t buf_phys_addr;
+	__u64 buf_phys_addr;
 	/* buffer id */
-	uint32_t buf_id;
+	__u32 buf_id;
 };
 
 /* -------------------------------------------------------------------------
@@ -153,149 +153,149 @@ struct msm_npu_patch_buf_info {
  * -------------------------------------------------------------------------
  */
 struct msm_npu_map_buf_ioctl {
-	/* buffer ion handle */
-	int32_t buf_ion_hdl;
-	/* buffer size */
-	uint32_t size;
 	/* iommu mapped physical address */
-	uint64_t npu_phys_addr;
+	__u64 npu_phys_addr;
+	/* buffer ion handle */
+	__s32 buf_ion_hdl;
+	/* buffer size */
+	__u32 size;
 };
 
 struct msm_npu_unmap_buf_ioctl {
-	/* buffer ion handle */
-	int32_t buf_ion_hdl;
 	/* iommu mapped physical address */
-	uint64_t npu_phys_addr;
+	__u64 npu_phys_addr;
+	/* buffer ion handle */
+	__s32 buf_ion_hdl;
 };
 
 struct msm_npu_get_info_ioctl {
 	/* firmware version */
-	uint32_t firmware_version;
+	__u32 firmware_version;
 	/* reserved */
-	uint32_t flags;
+	__u32 flags;
 };
 
 struct msm_npu_load_network_ioctl {
-	/* buffer ion handle */
-	int32_t buf_ion_hdl;
 	/* physical address */
-	uint64_t buf_phys_addr;
+	__u64 buf_phys_addr;
+	/* buffer ion handle */
+	__s32 buf_ion_hdl;
 	/* buffer size */
-	uint32_t buf_size;
+	__u32 buf_size;
 	/* first block size */
-	uint32_t first_block_size;
+	__u32 first_block_size;
 	/* reserved */
-	uint32_t flags;
+	__u32 flags;
 	/* network handle */
-	uint32_t network_hdl;
+	__u32 network_hdl;
 	/* priority */
-	uint32_t priority;
+	__u32 priority;
 	/* perf mode */
-	uint32_t perf_mode;
+	__u32 perf_mode;
 };
 
 struct msm_npu_load_network_ioctl_v2 {
 	/* physical address */
-	uint64_t buf_phys_addr;
+	__u64 buf_phys_addr;
 	/* patch info(v2) for all input/output layers */
-	uint64_t patch_info;
+	__u64 patch_info;
 	/* buffer ion handle */
-	int32_t buf_ion_hdl;
+	__s32 buf_ion_hdl;
 	/* buffer size */
-	uint32_t buf_size;
+	__u32 buf_size;
 	/* first block size */
-	uint32_t first_block_size;
+	__u32 first_block_size;
 	/* load flags */
-	uint32_t flags;
+	__u32 flags;
 	/* network handle */
-	uint32_t network_hdl;
+	__u32 network_hdl;
 	/* priority */
-	uint32_t priority;
+	__u32 priority;
 	/* perf mode */
-	uint32_t perf_mode;
+	__u32 perf_mode;
 	/* number of layers in the network */
-	uint32_t num_layers;
+	__u32 num_layers;
 	/* number of layers to be patched */
-	uint32_t patch_info_num;
+	__u32 patch_info_num;
 	/* reserved */
-	uint32_t reserved;
+	__u32 reserved;
 };
 
 struct msm_npu_unload_network_ioctl {
 	/* network handle */
-	uint32_t network_hdl;
+	__u32 network_hdl;
 };
 
 struct msm_npu_exec_network_ioctl {
 	/* network handle */
-	uint32_t network_hdl;
+	__u32 network_hdl;
 	/* input layer number */
-	uint32_t input_layer_num;
+	__u32 input_layer_num;
 	/* input layer info */
 	struct msm_npu_layer input_layers[MSM_NPU_MAX_INPUT_LAYER_NUM];
 	/* output layer number */
-	uint32_t output_layer_num;
+	__u32 output_layer_num;
 	/* output layer info */
 	struct msm_npu_layer output_layers[MSM_NPU_MAX_OUTPUT_LAYER_NUM];
 	/* patching is required */
-	uint32_t patching_required;
+	__u32 patching_required;
 	/* asynchronous execution */
-	uint32_t async;
+	__u32 async;
 	/* reserved */
-	uint32_t flags;
+	__u32 flags;
 };
 
 struct msm_npu_exec_network_ioctl_v2 {
 	/* stats buffer to be filled with execution stats */
-	uint64_t stats_buf_addr;
+	__u64 stats_buf_addr;
 	/* patch buf info for both input and output layers */
-	uint64_t patch_buf_info;
+	__u64 patch_buf_info;
 	/* network handle */
-	uint32_t network_hdl;
+	__u32 network_hdl;
 	/* asynchronous execution */
-	uint32_t async;
+	__u32 async;
 	/* execution flags */
-	uint32_t flags;
+	__u32 flags;
 	/* stats buf size allocated */
-	uint32_t stats_buf_size;
+	__u32 stats_buf_size;
 	/* number of layers to be patched */
-	uint32_t patch_buf_info_num;
+	__u32 patch_buf_info_num;
 	/* reserved */
-	uint32_t reserved;
+	__u32 reserved;
 };
 
 struct msm_npu_event_execute_done {
-	uint32_t network_hdl;
-	int32_t exec_result;
+	__u32 network_hdl;
+	__s32 exec_result;
 };
 
 struct msm_npu_event_execute_v2_done {
-	uint32_t network_hdl;
-	int32_t exec_result;
+	__u32 network_hdl;
+	__s32 exec_result;
 	/* stats buf size filled */
-	uint32_t stats_buf_size;
+	__u32 stats_buf_size;
 };
 
 struct msm_npu_event_ssr {
-	uint32_t network_hdl;
+	__u32 network_hdl;
 };
 
 struct msm_npu_event {
-	uint32_t type;
+	__u32 type;
 	union {
 		struct msm_npu_event_execute_done exec_done;
 		struct msm_npu_event_execute_v2_done exec_v2_done;
 		struct msm_npu_event_ssr ssr;
-		uint8_t data[128];
+		__u8 data[128];
 	} u;
-	uint32_t reserved[4];
+	__u32 reserved[4];
 };
 
 struct msm_npu_property {
-	uint32_t prop_id;
-	uint32_t num_of_params;
-	uint32_t network_hdl;
-	uint32_t prop_param[PROP_PARAM_MAX_SIZE];
+	__u32 prop_id;
+	__u32 num_of_params;
+	__u32 network_hdl;
+	__u32 prop_param[PROP_PARAM_MAX_SIZE];
 };
 
 #endif /*_UAPI_MSM_NPU_H_*/

@@ -33,7 +33,6 @@
 #include <linux/wakeup_reason.h>
 
 #include "power.h"
-#include <soc/qcom/boot_stats.h>
 
 const char * const pm_labels[] = {
 	[PM_SUSPEND_TO_IDLE] = "freeze",

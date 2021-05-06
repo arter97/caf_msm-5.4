@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
@@ -210,7 +210,6 @@ static struct platform_driver npu_driver = {
 #endif
 	.driver = {
 		.name = "msm_npu",
-		.owner = THIS_MODULE,
 		.of_match_table = npu_dt_match,
 		.pm = NULL,
 	},
@@ -1480,7 +1479,7 @@ static int npu_exec_network(struct npu_client *client,
 	}
 
 	if (!req.patching_required) {
-		pr_err("Only support patched network");
+		pr_err("Only support patched network\n");
 		return -EINVAL;
 	}
 
@@ -1567,7 +1566,7 @@ static int npu_process_kevent(struct npu_kevent *kevt)
 	switch (kevt->evt.type) {
 	case MSM_NPU_EVENT_TYPE_EXEC_V2_DONE:
 		ret = copy_to_user((void __user *)kevt->reserved[1],
-			(void *)&kevt->reserved[0],
+			(void *)kevt->reserved[0],
 			kevt->evt.u.exec_v2_done.stats_buf_size);
 		if (ret) {
 			pr_err("fail to copy to user\n");
@@ -1634,7 +1633,7 @@ static int npu_set_fw_state(struct npu_client *client, uint32_t enable)
 				host_ctx->npu_init_cnt);
 			/* set npu to lowest power level */
 			if (npu_set_uc_power_level(npu_dev, 1))
-				pr_warn("Failed to set uc power level");
+				pr_warn("Failed to set uc power level\n");
 		}
 	} else if (host_ctx->npu_init_cnt > 0) {
 		pr_debug("disable fw\n");

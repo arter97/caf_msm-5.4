@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.*/
+/* Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.*/
 
 #ifndef __EP_PCIE_COM_H
 #define __EP_PCIE_COM_H
@@ -176,8 +176,8 @@
 #define MAX_IATU_ENTRY_NUM 2
 
 #define EP_PCIE_LOG_PAGES 50
-#define EP_PCIE_MAX_VREG 3
-#define EP_PCIE_MAX_CLK 9
+#define EP_PCIE_MAX_VREG 4
+#define EP_PCIE_MAX_CLK 10
 #define EP_PCIE_MAX_PIPE_CLK 1
 #define EP_PCIE_MAX_RESET 2
 
@@ -187,6 +187,7 @@
 #define EP_PCIE_OATU_INDEX_MSI 1
 #define EP_PCIE_OATU_INDEX_CTRL 2
 #define EP_PCIE_OATU_INDEX_DATA 3
+#define EP_PCIE_OATU_INDEX_IPA_MSI 4
 
 #define EP_PCIE_OATU_UPPER 0x100
 
@@ -315,7 +316,6 @@ struct ep_pcie_phy_info_t {
 	u32	offset;
 	u32	val;
 	u32	delay;
-	u32	direction;
 };
 
 /* pcie endpoint device structure */
@@ -367,6 +367,7 @@ struct ep_pcie_dev_t {
 
 	u32                          rev;
 	u32                          phy_rev;
+	u32			     aux_clk_val;
 	void                         *ipc_log_sel;
 	void                         *ipc_log_ful;
 	void                         *ipc_log_dump;
@@ -402,6 +403,9 @@ struct ep_pcie_dev_t {
 	bool                         client_ready;
 	atomic_t		     ep_pcie_dev_wake;
 	atomic_t                     perst_deast;
+	int                          perst_irq;
+	atomic_t                     host_wake_pending;
+	bool			     conf_ipa_msi_iatu;
 
 	struct ep_pcie_register_event *event_reg;
 	struct work_struct	     handle_perst_work;

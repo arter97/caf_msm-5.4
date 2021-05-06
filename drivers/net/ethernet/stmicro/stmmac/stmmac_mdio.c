@@ -264,10 +264,10 @@ int stmmac_mdio_reset(struct mii_bus *bus)
 	struct net_device *ndev = bus->priv;
 	struct stmmac_priv *priv = netdev_priv(ndev);
 	unsigned int mii_address = priv->hw->mii.addr;
-	bool active_high = 1;
+	bool active_high = true;
 
 #ifdef CONFIG_DWMAC_QCOM_ETHQOS
-	active_high = 0;
+	active_high = false;
 #endif
 	if (priv->plat->early_eth)
 		return 0;

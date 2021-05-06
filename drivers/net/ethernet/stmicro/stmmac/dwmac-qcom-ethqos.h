@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Copyright (c) 2019-20, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2021, The Linux Foundation. All rights reserved.
  */
 #ifndef	_DWMAC_QCOM_ETHQOS_H
 #define	_DWMAC_QCOM_ETHQOS_H
@@ -160,8 +160,8 @@ struct qcom_ethqos {
 	struct regulator *reg_emac_phy;
 	struct regulator *reg_rgmii_io_pads;
 
-	u32 pps_class_a_irq;
-	u32 pps_class_b_irq;
+	int pps_class_a_irq;
+	int pps_class_b_irq;
 
 	struct pinctrl_state *emac_pps_0;
 

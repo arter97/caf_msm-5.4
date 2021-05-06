@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2019-2020,21 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -127,7 +127,7 @@ static irqreturn_t ethqos_pps_avb_class_a(int irq, void *dev_id)
 	struct qcom_ethqos *ethqos = priv->plat->bsp_priv;
 
 	ethqos->avb_class_a_intr_cnt++;
-	avb_class_a_msg_wq_flag = 1;
+	avb_class_a_msg_wq_flag = true;
 	wake_up_interruptible(&avb_class_a_msg_wq);
 
 	return IRQ_HANDLED;
@@ -141,7 +141,7 @@ static irqreturn_t ethqos_pps_avb_class_b(int irq, void *dev_id)
 	struct qcom_ethqos *ethqos = priv->plat->bsp_priv;
 
 	ethqos->avb_class_b_intr_cnt++;
-	avb_class_b_msg_wq_flag = 1;
+	avb_class_b_msg_wq_flag = true;
 	wake_up_interruptible(&avb_class_b_msg_wq);
 	return IRQ_HANDLED;
 }
@@ -289,7 +289,7 @@ static ssize_t pps_fops_read(struct file *filp, char __user *buf,
 	info = filp->private_data;
 
 	if (info->channel_no == AVB_CLASS_A_CHANNEL_NUM) {
-		avb_class_a_msg_wq_flag = 0;
+		avb_class_a_msg_wq_flag = false;
 		temp_buf = kzalloc(buf_len, GFP_KERNEL);
 		if (!temp_buf)
 			return -ENOMEM;
@@ -307,7 +307,7 @@ static ssize_t pps_fops_read(struct file *filp, char __user *buf,
 			ETHQOSERR("poll pps2intr info=%d sent by kernel\n",
 				  pethqos->avb_class_a_intr_cnt);
 	} else if (info->channel_no == AVB_CLASS_B_CHANNEL_NUM) {
-		avb_class_b_msg_wq_flag = 0;
+		avb_class_b_msg_wq_flag = false;
 		temp_buf = kzalloc(buf_len, GFP_KERNEL);
 		if (!temp_buf)
 			return -ENOMEM;
@@ -339,14 +339,14 @@ static unsigned int pps_fops_poll(struct file *file, poll_table *wait)
 
 		poll_wait(file, &avb_class_a_msg_wq, wait);
 
-		if (avb_class_a_msg_wq_flag == 1) {
+		if (avb_class_a_msg_wq_flag) {
 			//Sending read mask
 			mask |= POLLIN | POLLRDNORM;
 		}
 	} else if (info->channel_no == AVB_CLASS_B_CHANNEL_NUM) {
 		poll_wait(file, &avb_class_b_msg_wq, wait);
 
-		if (avb_class_b_msg_wq_flag == 1) {
+		if (avb_class_b_msg_wq_flag) {
 			//Sending read mask
 			mask |= POLLIN | POLLRDNORM;
 		}

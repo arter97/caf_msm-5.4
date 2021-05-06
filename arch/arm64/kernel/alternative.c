@@ -203,8 +203,8 @@ static int __apply_alternatives_multi_stop(void *unused)
 		.end	= (struct alt_instr *)__alt_instructions_end,
 	};
 
-	/* We always have a Logical Boot CPU ID at this point (__init) */
-	if (smp_processor_id() != logical_bootcpu_id) {
+	/* We always have a CPU 0 at this point (__init) */
+	if (smp_processor_id()) {
 		while (!READ_ONCE(all_alternatives_applied))
 			cpu_relax();
 		isb();
@@ -242,7 +242,7 @@ void __init apply_boot_alternatives(void)
 	};
 
 	/* If called on non-boot cpu things could go wrong */
-	WARN_ON(smp_processor_id() != logical_bootcpu_id);
+	WARN_ON(smp_processor_id() != 0);
 
 	__apply_alternatives(&region, false, &boot_capabilities[0]);
 }

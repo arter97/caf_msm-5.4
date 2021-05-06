@@ -23,7 +23,6 @@
 #include <linux/ioctl.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/slab.h>
-#include <linux/early_async.h>
 #include <soc/qcom/boot_stats.h>
 
 #define SE_I2C_TX_TRANS_LEN		(0x26C)
@@ -1185,8 +1184,6 @@ static const struct i2c_algorithm geni_i2c_algo = {
 	.functionality	= geni_i2c_func,
 };
 
-static DECLARE_COMPLETION(geni_i2c_ready);
-
 static int geni_i2c_probe(struct platform_device *pdev)
 {
 	struct geni_i2c_dev *gi2c;
@@ -1199,13 +1196,16 @@ static int geni_i2c_probe(struct platform_device *pdev)
 	gi2c = devm_kzalloc(&pdev->dev, sizeof(*gi2c), GFP_KERNEL);
 	if (!gi2c)
 		return -ENOMEM;
-	snprintf(boot_marker, sizeof(boot_marker), "M - DRIVER GENI_I2C Init");
-	place_marker(boot_marker);
+
 	if (arr_idx < MAX_SE)
 		/* Debug purpose */
 		gi2c_dev_dbg[arr_idx++] = gi2c;
 
 	gi2c->dev = &pdev->dev;
+
+	snprintf(boot_marker, sizeof(boot_marker),
+				"M - DRIVER GENI_I2C Init");
+	place_marker(boot_marker);
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!res)
@@ -1237,6 +1237,9 @@ static int geni_i2c_probe(struct platform_device *pdev)
 		dev_info(&pdev->dev, "LE-VM usecase\n");
 	}
 
+	gi2c->i2c_rsc.wrapper_dev = &wrapper_pdev->dev;
+	gi2c->i2c_rsc.ctrl_dev = gi2c->dev;
+
 	/*
 	 * For LE, clocks, gpio and icb voting will be provided by
 	 * by LA. The I2C operates in GSI mode only for LE usecase,
@@ -1244,8 +1247,6 @@ static int geni_i2c_probe(struct platform_device *pdev)
 	 * in I2C LE dt.
 	 */
 	if (!gi2c->is_le_vm) {
-		gi2c->i2c_rsc.wrapper_dev = &wrapper_pdev->dev;
-		gi2c->i2c_rsc.ctrl_dev = gi2c->dev;
 		gi2c->i2c_rsc.se_clk = devm_clk_get(&pdev->dev, "se-clk");
 		if (IS_ERR(gi2c->i2c_rsc.se_clk)) {
 			ret = PTR_ERR(gi2c->i2c_rsc.se_clk);
@@ -1361,10 +1362,12 @@ static int geni_i2c_probe(struct platform_device *pdev)
 		dev_err(gi2c->dev, "Add adapter failed, ret=%d\n", ret);
 		return ret;
 	}
-	snprintf(boot_marker, sizeof(boot_marker), "M - DRIVER GENI_I2C_%d Ready", gi2c->adap.nr);
+
+	snprintf(boot_marker, sizeof(boot_marker),
+				"M - DRIVER GENI_I2C_%d Ready", gi2c->adap.nr);
 	place_marker(boot_marker);
+
 	dev_info(gi2c->dev, "I2C probed\n");
-	complete(&geni_i2c_ready);
 	return 0;
 }
 
@@ -1548,14 +1551,7 @@ static void __exit i2c_dev_exit(void)
 	platform_driver_unregister(&geni_i2c_driver);
 }
 
-static int __init i2c_dev_ready_wait(void)
-{
-	wait_for_completion(&geni_i2c_ready);
-	return 0;
-}
-
-early_module_init(i2c_dev_init, EARLY_SUBSYS_PLATFORM, EARLY_INIT_LEVEL2);
-early_init(i2c_dev_ready_wait, EARLY_SUBSYS_2, EARLY_INIT_LEVEL0);
+module_init(i2c_dev_init);
 module_exit(i2c_dev_exit);
 MODULE_LICENSE("GPL v2");
 MODULE_ALIAS("platform:i2c_geni");

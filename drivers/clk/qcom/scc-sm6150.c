@@ -302,8 +302,7 @@ static struct clk_branch scc_qupv3_2xcore_clk = {
 			.name = "scc_qupv3_2xcore_clk",
 			.parent_data = &(const struct clk_parent_data){
 				.hw =
-					&scc_cdiv_qupv3_2xcore_div_clk_src.clkr.
-						hw,
+				&scc_cdiv_qupv3_2xcore_div_clk_src.clkr.hw,
 			},
 			.num_parents = 1,
 			.flags = CLK_SET_RATE_PARENT,
@@ -342,8 +341,7 @@ static struct clk_branch scc_qupv3_m_hclk_clk = {
 			.name = "scc_qupv3_m_hclk_clk",
 			.parent_data = &(const struct clk_parent_data){
 				.hw =
-					&scc_main_rcg_cdiv_bus_div_clk_src.clkr.
-						hw,
+				&scc_main_rcg_cdiv_bus_div_clk_src.clkr.hw,
 			},
 			.num_parents = 1,
 			.flags = CLK_SET_RATE_PARENT,
@@ -364,8 +362,7 @@ static struct clk_branch scc_qupv3_s_hclk_clk = {
 			.name = "scc_qupv3_s_hclk_clk",
 			.parent_data = &(const struct clk_parent_data){
 				.hw =
-					&scc_main_rcg_cdiv_bus_div_clk_src.clkr.
-						hw,
+				&scc_main_rcg_cdiv_bus_div_clk_src.clkr.hw,
 			},
 			.num_parents = 1,
 			.flags = CLK_SET_RATE_PARENT,
@@ -585,8 +582,7 @@ static int __init scc_sm6150_init(void)
 {
 	return platform_driver_register(&scc_sm6150_driver);
 }
-early_subsys_initcall(scc_sm6150_init, EARLY_SUBSYS_PLATFORM,
-EARLY_INIT_LEVEL3);
+subsys_initcall(scc_sm6150_init);
 
 static void __exit scc_sm6150_exit(void)
 {

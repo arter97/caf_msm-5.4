@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 #include "hab.h"
 #include "hab_grantable.h"
@@ -241,7 +241,8 @@ int hab_mem_export(struct uhab_context *ctx,
 	int page_count;
 	int compressed = 0;
 
-	if (!ctx || !param || !param->buffer)
+	if (!ctx || !param || !param->buffer || !param->sizebytes
+		|| ((param->sizebytes % PAGE_SIZE) != 0))
 		return -EINVAL;
 
 	vchan = hab_get_vchan_fromvcid(param->vcid, ctx, 0);
@@ -325,7 +326,7 @@ int hab_mem_unexport(struct uhab_context *ctx,
 
 	ret = habmem_hyp_revoke(exp->payload, exp->payload_count);
 	if (ret) {
-		pr_err("Error found in revoke grant with ret %d", ret);
+		pr_err("Error found in revoke grant with ret %d\n", ret);
 		goto err_novchan;
 	}
 	habmem_remove_export(exp);

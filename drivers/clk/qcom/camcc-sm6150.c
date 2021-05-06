@@ -1003,19 +1003,6 @@ static struct clk_branch cam_cc_bps_clk = {
 	},
 };
 
-static struct clk_branch cam_cc_camnoc_atb_clk = {
-	.halt_reg = 0xb12c,
-	.halt_check = BRANCH_HALT,
-	.clkr = {
-		.enable_reg = 0xb12c,
-		.enable_mask = BIT(0),
-		.hw.init = &(struct clk_init_data){
-			.name = "cam_cc_camnoc_atb_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
 static struct clk_branch cam_cc_camnoc_axi_clk = {
 	.halt_reg = 0xb124,
 	.halt_check = BRANCH_HALT,
@@ -1191,19 +1178,6 @@ static struct clk_branch cam_cc_csiphy2_clk = {
 	},
 };
 
-static struct clk_branch cam_cc_icp_atb_clk = {
-	.halt_reg = 0xb078,
-	.halt_check = BRANCH_HALT,
-	.clkr = {
-		.enable_reg = 0xb078,
-		.enable_mask = BIT(0),
-		.hw.init = &(struct clk_init_data){
-			.name = "cam_cc_icp_atb_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
 static struct clk_branch cam_cc_icp_clk = {
 	.halt_reg = 0xb0a0,
 	.halt_check = BRANCH_HALT,
@@ -1217,19 +1191,6 @@ static struct clk_branch cam_cc_icp_clk = {
 			},
 			.num_parents = 1,
 			.flags = CLK_SET_RATE_PARENT,
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
-static struct clk_branch cam_cc_icp_cti_clk = {
-	.halt_reg = 0xb07c,
-	.halt_check = BRANCH_HALT,
-	.clkr = {
-		.enable_reg = 0xb07c,
-		.enable_mask = BIT(0),
-		.hw.init = &(struct clk_init_data){
-			.name = "cam_cc_icp_cti_clk",
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -1666,7 +1627,6 @@ static struct clk_regmap *cam_cc_sm6150_clocks[] = {
 	[CAM_CC_BPS_AXI_CLK] = &cam_cc_bps_axi_clk.clkr,
 	[CAM_CC_BPS_CLK] = &cam_cc_bps_clk.clkr,
 	[CAM_CC_BPS_CLK_SRC] = &cam_cc_bps_clk_src.clkr,
-	[CAM_CC_CAMNOC_ATB_CLK] = &cam_cc_camnoc_atb_clk.clkr,
 	[CAM_CC_CAMNOC_AXI_CLK] = &cam_cc_camnoc_axi_clk.clkr,
 	[CAM_CC_CCI_CLK] = &cam_cc_cci_clk.clkr,
 	[CAM_CC_CCI_CLK_SRC] = &cam_cc_cci_clk_src.clkr,
@@ -1683,10 +1643,8 @@ static struct clk_regmap *cam_cc_sm6150_clocks[] = {
 	[CAM_CC_CSIPHY1_CLK] = &cam_cc_csiphy1_clk.clkr,
 	[CAM_CC_CSIPHY2_CLK] = &cam_cc_csiphy2_clk.clkr,
 	[CAM_CC_FAST_AHB_CLK_SRC] = &cam_cc_fast_ahb_clk_src.clkr,
-	[CAM_CC_ICP_ATB_CLK] = &cam_cc_icp_atb_clk.clkr,
 	[CAM_CC_ICP_CLK] = &cam_cc_icp_clk.clkr,
 	[CAM_CC_ICP_CLK_SRC] = &cam_cc_icp_clk_src.clkr,
-	[CAM_CC_ICP_CTI_CLK] = &cam_cc_icp_cti_clk.clkr,
 	[CAM_CC_IFE_0_AXI_CLK] = &cam_cc_ife_0_axi_clk.clkr,
 	[CAM_CC_IFE_0_CLK] = &cam_cc_ife_0_clk.clkr,
 	[CAM_CC_IFE_0_CLK_SRC] = &cam_cc_ife_0_clk_src.clkr,
@@ -1820,8 +1778,7 @@ static int __init cam_cc_sm6150_init(void)
 {
 	return platform_driver_register(&cam_cc_sm6150_driver);
 }
-early_subsys_initcall(cam_cc_sm6150_init, EARLY_SUBSYS_PLATFORM,
-EARLY_INIT_LEVEL5);
+subsys_initcall(cam_cc_sm6150_init);
 
 static void __exit cam_cc_sm6150_exit(void)
 {

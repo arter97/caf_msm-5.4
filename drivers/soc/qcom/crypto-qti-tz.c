@@ -9,8 +9,8 @@
 #include <linux/qcom_scm.h>
 #include <linux/qtee_shmbridge.h>
 #include <linux/crypto-qti-common.h>
-#include <linux/init.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include "crypto-qti-platform.h"
 
 #define ICE_CIPHER_MODE_XTS_256 3
@@ -18,13 +18,22 @@
 #define SDCC_CE 20
 #define UFS_CARD_CE 30
 
-static bool is_storage_type_emmc(void)
+static bool is_boot_dev_type_emmc(void)
 {
-	if (strnstr(saved_command_line, "sdhci",
-					strlen(saved_command_line)))
+	struct device_node *np;
+	const char *bootparams;
+
+	np = of_find_node_by_path("/chosen");
+	of_property_read_string(np, "bootargs", &bootparams);
+	if (!bootparams)
+		pr_err("%s: failed to get bootargs property\n", __func__);
+	else if (strnstr(bootparams, "androidboot.bootdevice",
+			strlen(bootparams)) &&
+			strnstr(bootparams, "sdhci", strlen(bootparams)))
 		return true;
 
 	return false;
+
 }
 
 int crypto_qti_program_key(struct crypto_vops_qti_entry *ice_entry,
@@ -41,7 +50,7 @@ int crypto_qti_program_key(struct crypto_vops_qti_entry *ice_entry,
 	memcpy(shm.vaddr, key->raw, key->size);
 	qtee_shmbridge_flush_shm_buf(&shm);
 
-	if (is_storage_type_emmc())
+	if (is_boot_dev_type_emmc())
 		err = qcom_scm_config_set_ice_key(slot, shm.paddr, key->size,
 						ICE_CIPHER_MODE_XTS_256,
 						data_unit_mask, SDCC_CE);
@@ -65,7 +74,7 @@ int crypto_qti_invalidate_key(struct crypto_vops_qti_entry *ice_entry,
 {
 	int err = 0;
 
-	if (is_storage_type_emmc())
+	if (is_boot_dev_type_emmc())
 		err = qcom_scm_clear_ice_key(slot, SDCC_CE);
 	else
 		err = qcom_scm_clear_ice_key(slot, UFS_CE);

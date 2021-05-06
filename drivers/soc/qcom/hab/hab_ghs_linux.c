@@ -144,11 +144,9 @@ void habhyp_commdev_dealloc_os(void *commdev)
 
 int hab_hypervisor_register_os(void)
 {
-	int ret = 0;
-
 	ghs_vmm_plugin_info.probe_cnt = ARRAY_SIZE(dt_gipc_path_name);
 
 	hab_driver.b_server_dom = 0;
 
-	return ret;
+	return 0;
 }

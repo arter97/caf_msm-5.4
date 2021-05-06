@@ -1,6 +1,15 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  */
 #include <linux/debugfs.h>
 #include <linux/errno.h>
@@ -23,6 +32,8 @@
 
 #define NO_FLAGS 0x0
 
+MODULE_LICENSE("GPL v2");
+
 /** veth_alloc_emac_export_mem() - Called when allocating the
  *  exported memory to the BE driver.
  *  @veth_emac_mem: Consists of all the export memory and
@@ -40,8 +51,6 @@ int veth_alloc_emac_export_mem(
 	phys_addr_t  rx_buf_mem_paddr;
 	phys_addr_t  tx_buf_pool_paddr;
 	phys_addr_t  rx_buf_pool_paddr;
-	void         *tx_buf_pool_va;
-	void         *rx_buf_pool_va;
 
 	int i = 0;
 
@@ -119,16 +128,16 @@ int veth_alloc_emac_export_mem(
 		__func__, veth_emac_mem->tx_buf_mem_paddr);
 
 	/*transport minimum 4k*/
-	tx_buf_pool_va =
-			dma_alloc_coherent(&pdata->pdev->dev,
+	veth_emac_mem->tx_buff_pool_base_va = dma_alloc_coherent(&pdata->pdev->dev,
 			sizeof(uint32_t) * (VETH_TX_DESC_CNT * 4),
 			&tx_buf_pool_paddr,
 			GFP_KERNEL | GFP_DMA);
-	veth_emac_mem->tx_buff_pool_base_va = (uint32_t *)tx_buf_pool_va;
+
 	if (!veth_emac_mem->tx_buff_pool_base_va) {
 		VETH_IPA_DEBUG("%s: No memory for rx_buf_mem_va\n", __func__);
 		goto free_tx_buff_pool_base;
 	}
+
 	veth_emac_mem->tx_buff_pool_base_pa = tx_buf_pool_paddr;
 
 	//Allocate RX buffers
@@ -150,13 +159,11 @@ int veth_alloc_emac_export_mem(
 	VETH_IPA_DEBUG("%s: physical addr: rx_buf_mem_addr 0x%x\n",
 		__func__, veth_emac_mem->rx_buf_mem_paddr);
 
-	rx_buf_pool_va =
-			dma_alloc_coherent(&pdata->pdev->dev,
+	veth_emac_mem->rx_buff_pool_base_va = dma_alloc_coherent(&pdata->pdev->dev,
 			sizeof(uint32_t) * VETH_RX_DESC_CNT*4,
 			&rx_buf_pool_paddr,
 			GFP_KERNEL | GFP_DMA | __GFP_ZERO);
 
-	veth_emac_mem->rx_buff_pool_base_va = (uint32_t *)rx_buf_pool_va;
 	if (!veth_emac_mem->rx_buff_pool_base_va) {
 		VETH_IPA_DEBUG("%s: No memory for rx_buf_mem_va\n", __func__);
 		goto free_rx_buff_pool_base;
@@ -352,7 +359,7 @@ int veth_emac_ipa_hab_init(int mmid)
 	ret = habmm_socket_send(vc_id, pdata_send, veth_hab_pdata_size, 0);
 
 	if (ret) {
-		VETH_IPA_ERROR("%s: Send failed failed %d returned\n",
+		VETH_IPA_ERROR("%s: Send failed %d returned\n",
 			__func__, ret);
 		ret = -1;
 		goto err;
@@ -636,14 +643,13 @@ int veth_emac_ipa_send_exp_id(
 	VETH_IPA_INFO("TX Descriptor export id sent %x",
 			veth_emac_mem->exp_id.tx_desc_exp_id);
 	if (ret) {
-		VETH_IPA_ERROR("%s: Send failed failed %d returned\n",
+		VETH_IPA_ERROR("%s: Send failed %d returned\n",
 		__func__,
 		ret);
 		ret = -1;
 		return ret;
-}
-
-	return 0;
+	}
+return 0;
 }
 
 int veth_emac_init(struct veth_emac_export_mem *veth_emac_mem,
@@ -749,7 +755,7 @@ int veth_emac_ipa_setup_complete(struct veth_emac_export_mem *veth_emac_mem,
 					sizeof(veth_emac_mem->exp_id),
 					NO_FLAGS);
 	if (ret) {
-		VETH_IPA_ERROR("%s: Send failed failed %d returned\n",
+		VETH_IPA_ERROR("%s: Send failed %d returned\n",
 						__func__, ret);
 		ret = -1;
 		return ret;
@@ -782,7 +788,7 @@ int veth_emac_start_offload(struct veth_emac_export_mem *veth_emac_mem,
 					sizeof(veth_emac_mem->exp_id),
 					NO_FLAGS);
 	if (ret) {
-		VETH_IPA_ERROR("%s: Send failed failed %d returned\n",
+		VETH_IPA_ERROR("%s: Send failed %d returned\n",
 						__func__, ret);
 		ret = -1;
 		return ret;
@@ -815,7 +821,7 @@ int veth_emac_stop_offload(struct veth_emac_export_mem *veth_emac_mem,
 					sizeof(veth_emac_mem->exp_id),
 					NO_FLAGS);
 	if (ret) {
-		VETH_IPA_ERROR("%s: Send failed failed %d returned\n",
+		VETH_IPA_ERROR("%s: Send failed %d returned\n",
 						__func__, ret);
 		ret = -1;
 		return ret;
@@ -846,7 +852,7 @@ int veth_emac_setup_be(struct veth_emac_export_mem *veth_emac_mem,
 					sizeof(veth_emac_mem->exp_id),
 					NO_FLAGS);
 	if (ret) {
-		VETH_IPA_ERROR("%s: Send failed failed %d returned\n",
+		VETH_IPA_ERROR("%s: Send failed %d returned\n",
 						__func__, ret);
 		ret = -1;
 		return ret;
@@ -878,10 +884,11 @@ int veth_emac_open_notify(struct veth_emac_export_mem *veth_emac_mem,
 					sizeof(veth_emac_mem->exp_id),
 					NO_FLAGS);
 	if (ret) {
-		VETH_IPA_ERROR("%s: Send failed failed %d returned\n",
+		VETH_IPA_ERROR("%s: Send failed %d returned\n",
 						__func__, ret);
 		ret = -1;
 		return ret;
 	}
 	return 0;
 }
+

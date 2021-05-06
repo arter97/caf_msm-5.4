@@ -167,6 +167,7 @@ struct spi_geni_master {
 	bool shared_ee; /* Dual EE use case */
 	bool shared_se; /* True Multi EE use case */
 	bool is_le_vm;	/* LE VM usecase */
+	bool is_la_vm;	/* LA VM property */
 	bool dis_autosuspend;
 	bool cmd_done;
 	bool set_miso_sampling;
@@ -532,7 +533,7 @@ static struct msm_gpi_tre *setup_go_tre(int cmd, int cs, int rx_len, int flags,
 	if (cmd == SPI_RX_ONLY) {
 		eot = 0;
 		chain = 0;
-		eob = 0;
+		eob = 1;	/* GO TRE on TX: processing needed */
 	} else {
 		eot = 0;
 		chain = 1;
@@ -1359,6 +1360,10 @@ static int spi_geni_unprepare_transfer_hardware(struct spi_master *spi)
 	if (mas->shared_ee || mas->is_le_vm)
 		return 0;
 
+	if (mas->is_la_vm)
+		/* Client on LA VM to controls resources, hence return */
+		return 0;
+
 	if (mas->gsi_mode) {
 		struct se_geni_rsc *rsc;
 		int ret = 0;
@@ -1935,6 +1940,11 @@ static int spi_geni_probe(struct platform_device *pdev)
 		dev_info(&pdev->dev, "LE-VM usecase\n");
 	}
 
+	if (of_property_read_bool(pdev->dev.of_node, "qcom,la-vm")) {
+		geni_mas->is_la_vm = true;
+		dev_info(&pdev->dev, "LA-VM usecase\n");
+	}
+
 	/*
 	 * For LE, clocks, gpio and icb voting will be provided by
 	 * by LA. The SPI operates in GSI mode only for LE usecase,
@@ -2010,6 +2020,7 @@ static int spi_geni_probe(struct platform_device *pdev)
 			goto spi_geni_probe_unmap;
 		}
 
+		irq_set_status_flags(geni_mas->irq, IRQ_NOAUTOEN);
 		ret = devm_request_irq(&pdev->dev, geni_mas->irq,
 			geni_spi_irq, IRQF_TRIGGER_HIGH, "spi_geni", geni_mas);
 		if (ret) {
@@ -2311,7 +2322,7 @@ static void __exit spi_dev_exit(void)
 	platform_driver_unregister(&spi_geni_driver);
 }
 
-early_module_init(spi_dev_init, EARLY_SUBSYS_4, EARLY_INIT_LEVEL2);
+module_init(spi_dev_init);
 module_exit(spi_dev_exit);
 
 MODULE_LICENSE("GPL v2");

@@ -221,10 +221,8 @@ void dwmac_qcom_program_avb_algorithm(struct stmmac_priv *priv,
 
 unsigned int dwmac_qcom_get_plat_tx_coal_frames(struct sk_buff *skb)
 {
-	unsigned int eth_type;
-#ifdef CONFIG_PTPSUPPORT_OBJ
 	bool is_udp;
-#endif
+	unsigned int eth_type;
 
 	eth_type = dwmac_qcom_get_eth_type(skb->data);
 
@@ -347,12 +345,11 @@ __setup("eipv6=", set_early_ethernet_ipv6);
 
 static int __init set_early_ethernet_mac(char *mac_addr)
 {
-	int ret = 1;
 	bool valid_mac = false;
 
 	pparams.is_valid_mac_addr = false;
 	if (!mac_addr)
-		return ret;
+		return 1;
 
 	valid_mac = mac_pton(mac_addr, pparams.mac_addr);
 	if (!valid_mac)
@@ -363,11 +360,11 @@ static int __init set_early_ethernet_mac(char *mac_addr)
 		goto fail;
 
 	pparams.is_valid_mac_addr = true;
-	return ret;
+	return 0;
 
 fail:
 	ETHQOSERR("Invalid Mac address programmed: %s\n", mac_addr);
-	return ret;
+	return 1;
 }
 
 __setup("ermac=", set_early_ethernet_mac);
@@ -408,7 +405,7 @@ static int qcom_ethqos_add_ipaddr(struct ip_params *ip_info,
 		} else {
 			ETHQOSINFO("Assigned IPv4 address: %s\r\n",
 				   ip_info->ipv4_addr_str);
-#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+#ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
 place_marker("M - Etherent Assigned IPv4 address");
 #endif
 		}
@@ -456,7 +453,7 @@ static int qcom_ethqos_add_ipv6addr(struct ip_params *ip_info,
 		} else {
 			ETHQOSDBG("Assigned IPv6 address: %s\r\n",
 				  ip_info->ipv6_addr_str);
-#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+#ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
 		place_marker("M - Ethernet Assigned IPv6 address");
 #endif
 		}
@@ -516,7 +513,6 @@ static void
 ethqos_update_rgmii_clk_and_bus_cfg(struct qcom_ethqos *ethqos,
 				    unsigned int speed)
 {
-
 	switch (speed) {
 	case SPEED_1000:
 		ethqos->rgmii_clk_rate =  RGMII_1000_NOM_CLK_FREQ;
@@ -546,7 +542,6 @@ ethqos_update_rgmii_clk_and_bus_cfg(struct qcom_ethqos *ethqos,
 		ethqos->rgmii_clk_rate = 0;
 		break;
 	}
-
 	clk_set_rate(ethqos->rgmii_clk, ethqos->rgmii_clk_rate);
 }
 
@@ -1509,7 +1504,7 @@ static int ethqos_create_debugfs(struct qcom_ethqos        *ethqos)
 					   ethqos->debugfs_dir, ethqos,
 					   &fops_phy_reg_dump);
 	if (!phy_reg_dump || IS_ERR(phy_reg_dump)) {
-		ETHQOSERR("Can't create phy_dump %d\n", (int)phy_reg_dump);
+		ETHQOSERR("Can't create phy_dump %p\n", phy_reg_dump);
 		goto fail;
 	}
 
@@ -1517,7 +1512,7 @@ static int ethqos_create_debugfs(struct qcom_ethqos        *ethqos)
 					     ethqos->debugfs_dir, ethqos,
 					     &fops_rgmii_reg_dump);
 	if (!rgmii_reg_dump || IS_ERR(rgmii_reg_dump)) {
-		ETHQOSERR("Can't create rgmii_dump %d\n", (int)rgmii_reg_dump);
+		ETHQOSERR("Can't create rgmii_dump %p\n", rgmii_reg_dump);
 		goto fail;
 	}
 	return 0;
@@ -1542,7 +1537,7 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 				    "qcom,emac-smmu-embedded"))
 		return emac_emb_smmu_cb_probe(pdev);
 
-#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+#ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
 	place_marker("M - Ethernet probe start");
 #endif
 
@@ -1580,13 +1575,13 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		goto err_mem;
 	}
 
-	ethqos->por = of_device_get_match_data(&pdev->dev);
-
 	ethqos->rgmii_clk = devm_clk_get(&pdev->dev, "rgmii");
 	if (IS_ERR(ethqos->rgmii_clk)) {
 		ret = PTR_ERR(ethqos->rgmii_clk);
 		goto err_mem;
 	}
+
+	ethqos->por = of_device_get_match_data(&pdev->dev);
 
 	ret = clk_prepare_enable(ethqos->rgmii_clk);
 	if (ret)
@@ -1604,7 +1599,7 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		 * disable as link up takes more time with autoneg
 		 * enabled.
 		 */
-		ethqos->early_eth_enabled = 1;
+		ethqos->early_eth_enabled = true;
 		ETHQOSINFO("Early ethernet is enabled\n");
 	}
 
@@ -1689,7 +1684,7 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		/*Set early eth parameters*/
 		ethqos_set_early_eth_param(priv, ethqos);
 	}
-#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+#ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
 	place_marker("M - Ethernet probe end");
 #endif
 

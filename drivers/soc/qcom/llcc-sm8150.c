@@ -25,7 +25,7 @@
  * cache_mode: Each slice operates as a cache, this controls the mode of the
  *             slice normal or TCM
  * probe_target_ways: Determines what ways to probe for access hit. When
- *                    configured to 1 only bonus and reseved ways are probed.
+ *                    configured to 1 only bonus and reserved ways are probed.
  *                    when configured to 0 all ways in llcc are probed.
  * dis_cap_alloc: Disable capacity based allocation for a client
  * retain_on_pc: If this bit is set and client has maitained active vote
@@ -67,7 +67,7 @@ static struct llcc_slice_config sm8150_data[] =  {
 	SCT_ENTRY(LLCC_MDMPNG,   21,  1024, 0, 1, 0xF,  0x0, 0, 0, 0, 0, 1, 0),
 	SCT_ENTRY(LLCC_AUDHW,    22,  1024, 1, 1, 0xFFF, 0x0, 0, 0, 0,  0, 1, 0),
 	SCT_ENTRY(LLCC_NPU,      23,  3072, 1, 1, 0xFFF, 0x0, 0, 0, 0, 0, 1, 0),
-	SCT_ENTRY(LLCC_WLANHW,   24,  3072, 1, 1, 0xFFF, 0x0, 0, 0, 0, 0, 1, 0),
+	SCT_ENTRY(LLCC_WLNHW,   24,  3072, 1, 1, 0xFFF, 0x0, 0, 0, 0, 0, 1, 0),
 	SCT_ENTRY(LLCC_MDMVPE,   29,  256, 1, 1, 0xF,  0x0, 0, 0, 0, 0, 1, 0),
 	SCT_ENTRY(LLCC_APTCM,    30,  256, 3, 1, 0x0,  0x1, 1, 0, 0, 0, 0, 0),
 	SCT_ENTRY(LLCC_WRTCH,    31,  128, 1, 1, 0xFFF, 0x0, 0, 0, 0, 0, 0, 0),
@@ -87,7 +87,6 @@ static const struct of_device_id sm8150_qcom_llcc_of_match[] = {
 static struct platform_driver sm8150_qcom_llcc_driver = {
 	.driver = {
 		.name = "sm8150-llcc",
-		.owner = THIS_MODULE,
 		.of_match_table = sm8150_qcom_llcc_of_match,
 	},
 	.probe = sm8150_qcom_llcc_probe,
@@ -96,7 +95,6 @@ static struct platform_driver sm8150_qcom_llcc_driver = {
 
 static int __init sm8150_init_qcom_llcc_init(void)
 {
-	pr_err("sm8150_init_qcom_llcc_init called\n");
 	return platform_driver_register(&sm8150_qcom_llcc_driver);
 }
 module_init(sm8150_init_qcom_llcc_init);

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved. */
+/* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved. */
 
 #include "bus.h"
 #include "debug.h"
@@ -29,7 +29,7 @@ enum cnss_dev_bus_type cnss_get_bus_type(struct cnss_plat_data *plat_priv)
 		dev = &plat_priv->plat_dev->dev;
 		ret = of_property_read_u32(dev->of_node, "qcom,bus-type",
 					   &bus_type);
-		if (!ret)
+		if (!ret && bus_type <= CNSS_BUS_USB)
 			cnss_pr_dbg("Got bus type[%u] from dt\n", bus_type);
 		else
 			cnss_pr_err("No bus type for converged dt\n");
@@ -44,11 +44,8 @@ enum cnss_dev_bus_type cnss_get_bus_type(struct cnss_plat_data *plat_priv)
 	case QCA6390_DEVICE_ID:
 	case QCN7605_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
+	case WCN7850_DEVICE_ID:
 		bus_type = CNSS_BUS_PCI;
-		break;
-	case QCN7605_COMPOSITE_DEVICE_ID:
-	case QCN7605_STANDALONE_DEVICE_ID:
-		bus_type = CNSS_BUS_USB;
 		break;
 	default:
 		cnss_pr_err("Unknown device: 0x%lx\n", plat_priv->device_id);
@@ -113,6 +110,23 @@ void cnss_bus_deinit(struct cnss_plat_data *plat_priv)
 	switch (plat_priv->bus_type) {
 	case CNSS_BUS_PCI:
 		cnss_pci_deinit(plat_priv);
+	default:
+		cnss_pr_err("Unsupported bus type: %d\n",
+			    plat_priv->bus_type);
+		return;
+	}
+}
+
+void cnss_bus_add_fw_prefix_name(struct cnss_plat_data *plat_priv,
+				 char *prefix_name, char *name)
+{
+	if (!plat_priv)
+		return;
+
+	switch (plat_priv->bus_type) {
+	case CNSS_BUS_PCI:
+		return cnss_pci_add_fw_prefix_name(plat_priv->bus_priv,
+						   prefix_name, name);
 	default:
 		cnss_pr_err("Unsupported bus type: %d\n",
 			    plat_priv->bus_type);
@@ -275,6 +289,21 @@ void cnss_bus_collect_dump_info(struct cnss_plat_data *plat_priv, bool in_panic)
 	}
 }
 
+void cnss_bus_device_crashed(struct cnss_plat_data *plat_priv)
+{
+	if (!plat_priv)
+		return;
+
+	switch (plat_priv->bus_type) {
+	case CNSS_BUS_PCI:
+		return cnss_pci_device_crashed(plat_priv->bus_priv);
+	default:
+		cnss_pr_err("Unsupported bus type: %d\n",
+			    plat_priv->bus_type);
+		return;
+	}
+}
+
 int cnss_bus_call_driver_probe(struct cnss_plat_data *plat_priv)
 {
 	if (!plat_priv)
@@ -428,6 +457,23 @@ int cnss_bus_update_status(struct cnss_plat_data *plat_priv,
 	}
 }
 
+int cnss_bus_update_uevent(struct cnss_plat_data *plat_priv,
+			   enum cnss_driver_status status, void *data)
+{
+	if (!plat_priv)
+		return -ENODEV;
+
+	switch (plat_priv->bus_type) {
+	case CNSS_BUS_PCI:
+		return cnss_pci_call_driver_uevent(plat_priv->bus_priv,
+						   status, data);
+	default:
+		cnss_pr_err("Unsupported bus type: %d\n",
+			    plat_priv->bus_type);
+		return -EINVAL;
+	}
+}
+
 int cnss_bus_is_device_down(struct cnss_plat_data *plat_priv)
 {
 	if (!plat_priv)
@@ -455,6 +501,21 @@ int cnss_bus_check_link_status(struct cnss_plat_data *plat_priv)
 		cnss_pr_dbg("Unsupported bus type: %d\n",
 			    plat_priv->bus_type);
 		return 0;
+	}
+}
+
+int cnss_bus_recover_link_down(struct cnss_plat_data *plat_priv)
+{
+	if (!plat_priv)
+		return -ENODEV;
+
+	switch (plat_priv->bus_type) {
+	case CNSS_BUS_PCI:
+		return cnss_pci_recover_link_down(plat_priv->bus_priv);
+	default:
+		cnss_pr_dbg("Unsupported bus type: %d\n",
+			    plat_priv->bus_type);
+		return -EINVAL;
 	}
 }
 
@@ -529,15 +590,12 @@ int cnss_bus_get_msi_assignment(struct cnss_plat_data *plat_priv,
 				u32 *user_base_data,
 				u32 *base_vector)
 {
-	struct cnss_pci_data *pci_priv;
-
 	if (!plat_priv)
 		return -ENODEV;
 
 	switch (plat_priv->bus_type) {
 	case CNSS_BUS_PCI:
-		pci_priv = plat_priv->bus_priv;
-		return cnss_get_user_msi_assignment(&pci_priv->pci_dev->dev,
+		return cnss_pci_get_user_msi_assignment(plat_priv->bus_priv,
 						    msi_name,
 						    num_vectors,
 						    user_base_data,

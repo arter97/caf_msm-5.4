@@ -69,7 +69,6 @@ static const char *const cam_cc_debug_mux_parent_names[] = {
 	"cam_cc_bps_areg_clk",
 	"cam_cc_bps_axi_clk",
 	"cam_cc_bps_clk",
-	"cam_cc_camnoc_atb_clk",
 	"cam_cc_camnoc_axi_clk",
 	"cam_cc_cci_clk",
 	"cam_cc_core_ahb_clk",
@@ -80,9 +79,7 @@ static const char *const cam_cc_debug_mux_parent_names[] = {
 	"cam_cc_csiphy0_clk",
 	"cam_cc_csiphy1_clk",
 	"cam_cc_csiphy2_clk",
-	"cam_cc_icp_atb_clk",
 	"cam_cc_icp_clk",
-	"cam_cc_icp_cti_clk",
 	"cam_cc_ife_0_axi_clk",
 	"cam_cc_ife_0_clk",
 	"cam_cc_ife_0_cphy_rx_clk",
@@ -115,7 +112,6 @@ static int cam_cc_debug_mux_sels[] = {
 	0xD,		/* cam_cc_bps_areg_clk */
 	0xC,		/* cam_cc_bps_axi_clk */
 	0xB,		/* cam_cc_bps_clk */
-	0x34,		/* cam_cc_camnoc_atb_clk */
 	0x2D,		/* cam_cc_camnoc_axi_clk */
 	0x2A,		/* cam_cc_cci_clk */
 	0x3A,		/* cam_cc_core_ahb_clk */
@@ -126,9 +122,7 @@ static int cam_cc_debug_mux_sels[] = {
 	0x6,		/* cam_cc_csiphy0_clk */
 	0x8,		/* cam_cc_csiphy1_clk */
 	0xA,		/* cam_cc_csiphy2_clk */
-	0x2F,		/* cam_cc_icp_atb_clk */
 	0x26,		/* cam_cc_icp_clk */
-	0x30,		/* cam_cc_icp_cti_clk */
 	0x1B,		/* cam_cc_ife_0_axi_clk */
 	0x17,		/* cam_cc_ife_0_clk */
 	0x1A,		/* cam_cc_ife_0_cphy_rx_clk */

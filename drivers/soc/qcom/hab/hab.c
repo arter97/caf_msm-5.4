@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 #include "hab.h"
+
+#define CREATE_TRACE_POINTS
+#include "hab_trace_os.h"
 
 #define HAB_DEVICE_CNSTR(__name__, __id__, __num__) { \
 	.name = __name__,\
@@ -108,7 +111,7 @@ void hab_ctx_free(struct kref *ref)
 	struct physical_channel *pchan;
 	int i;
 	struct uhab_context *ctxdel, *ctxtmp;
-	struct hab_open_node *node;
+	struct hab_open_node *open_node;
 	struct export_desc *exp = NULL, *exp_tmp = NULL;
 
 	/* garbage-collect exp/imp buffers */
@@ -168,11 +171,12 @@ void hab_ctx_free(struct kref *ref)
 			ctx->pending_cnt);
 
 	write_lock_bh(&ctx->ctx_lock);
-	list_for_each_entry(node, &ctx->pending_open, node) {
+	list_for_each_entry(open_node, &ctx->pending_open, node) {
 		pr_warn("leak pending open vcid %X type %d subid %d openid %d\n",
-			node->request.xdata.vchan_id, node->request.type,
-			node->request.xdata.sub_id,
-			node->request.xdata.open_id);
+			open_node->request.xdata.vchan_id,
+			open_node->request.type,
+			open_node->request.xdata.sub_id,
+			open_node->request.xdata.open_id);
 	}
 	write_unlock_bh(&ctx->ctx_lock);
 
@@ -554,6 +558,9 @@ long hab_vchan_send(struct uhab_context *ctx,
 		goto err;
 	}
 
+	/* log msg send timestamp: enter hab_vchan_send */
+	trace_hab_vchan_send_start(vchan);
+
 	HAB_HEADER_SET_SIZE(header, sizebytes);
 	if (flags & HABMM_SOCKET_SEND_FLAGS_XING_VM_STAT) {
 		HAB_HEADER_SET_TYPE(header, HAB_PAYLOAD_TYPE_PROFILE);
@@ -586,7 +593,18 @@ long hab_vchan_send(struct uhab_context *ctx,
 
 		schedule();
 	}
+
+	/*
+	 * The ret here as 0 indicates the message was already sent out
+	 * from the hab_vchan_send()'s perspective.
+	 */
+	if (!ret)
+		vchan->tx_cnt++;
 err:
+
+	/* log msg send timestamp: exit hab_vchan_send */
+	trace_hab_vchan_send_done(vchan);
+
 	if (vchan)
 		hab_vchan_put(vchan);
 
@@ -610,6 +628,8 @@ int hab_vchan_recv(struct uhab_context *ctx,
 		return -ENODEV;
 	}
 
+	vchan->rx_inflight = 1;
+
 	if (nonblocking_flag) {
 		/*
 		 * Try to pull data from the ring in this context instead of
@@ -627,7 +647,19 @@ int hab_vchan_recv(struct uhab_context *ctx,
 			ret = -ENODEV;
 		else if (ret == -ERESTARTSYS)
 			ret = -EINTR;
+	} else if (!ret) {
+		/* log msg recv timestamp: exit hab_vchan_recv */
+		trace_hab_vchan_recv_done(vchan, *message);
+
+		/*
+		 * Here, it is for sure that a message was received from the
+		 * hab_vchan_recv()'s view w/ the ret as 0 and *message as
+		 * non-zero.
+		 */
+		vchan->rx_cnt++;
 	}
+
+	vchan->rx_inflight = 0;
 
 	hab_vchan_put(vchan);
 	return ret;
@@ -673,7 +705,7 @@ int hab_vchan_open(struct uhab_context *ctx,
 					vchan = frontend_open(ctx, mmid,
 							HABCFG_VMID_DONT_CARE);
 			} else {
-				pr_err("open on nonexistent pchan (mmid %x)",
+				pr_err("open on nonexistent pchan (mmid %x)\n",
 					mmid);
 				return -ENODEV;
 			}

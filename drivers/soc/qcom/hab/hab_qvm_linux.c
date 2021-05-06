@@ -15,11 +15,9 @@
 
 int hab_hypervisor_register_os(void)
 {
-	int ret = 0;
-
 	hab_driver.b_server_dom = 0;
 
-	return ret;
+	return 0;
 }
 
 void habhyp_commdev_dealloc_os(void *commdev)
@@ -71,7 +69,7 @@ int habhyp_commdev_create_dispatcher(struct physical_channel *pchan)
 	dev->wdata.data = 0; /* let the caller wait */
 	dev->side_buf = kzalloc(PIPE_SHMEM_SIZE, GFP_KERNEL);
 
-	pr_debug("request_irq: irq = %d, pchan name = %s",
+	pr_debug("request_irq: irq = %d, pchan name = %s\n",
 			dev->irq, pchan->name);
 	ret = request_irq(dev->irq, shm_irq_handler, IRQF_SHARED |
 			IRQF_NO_SUSPEND, pchan->name, pchan);

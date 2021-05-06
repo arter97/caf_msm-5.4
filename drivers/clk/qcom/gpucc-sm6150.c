@@ -595,8 +595,7 @@ static int __init gpu_cc_sm6150_init(void)
 {
 	return platform_driver_register(&gpu_cc_sm6150_driver);
 }
-early_subsys_initcall(gpu_cc_sm6150_init, EARLY_SUBSYS_PLATFORM,
-EARLY_INIT_LEVEL5);
+subsys_initcall(gpu_cc_sm6150_init);
 
 static void __exit gpu_cc_sm6150_exit(void)
 {

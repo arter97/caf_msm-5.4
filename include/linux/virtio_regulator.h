@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Copyright (c) 2019, The Linux Foundation. All rights reserved. */
+/* Copyright (c) 2019-2020, The Linux Foundation. All rights reserved. */
 
 #ifndef _LINUX_VIRTIO_REGULATOR_H
 #define _LINUX_VIRTIO_REGULATOR_H
@@ -16,6 +16,9 @@ struct virtio_regulator_msg {
 	__virtio32 result;
 	__virtio32 data[4];
 };
+
+/* Virtio ID of regulator */
+#define VIRTIO_ID_REGULATOR    31
 
 /* Request type */
 #define VIRTIO_REGULATOR_T_ENABLE	0

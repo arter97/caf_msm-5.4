@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2019-2020, The Linux Foundation. All rights reserved. */
+/* Copyright (c) 2019-2021, The Linux Foundation. All rights reserved. */
 #include <linux/bitmap.h>
 #include <linux/delay.h>
 #include <linux/err.h>
@@ -20,6 +20,8 @@
 #include <linux/virtio.h>
 #include <linux/virtio_spmi.h>
 #include <linux/scatterlist.h>
+
+#define VIRTIO_ID_SPMI			33
 
 /* Mapping Table */
 #define PMIC_ARB_MAX_PPID		BIT(12) /* PPID is 12bit */
@@ -225,7 +227,7 @@ static int pmic_arb_read_cmd(struct spmi_controller *ctrl, u8 opc, u8 sid,
 
 	if (bc >= PMIC_ARB_MAX_TRANS_BYTES) {
 		dev_err(&ctrl->dev,
-			"pmic-arb supports 1..%d bytes per trans, but:%zu requested",
+			"pmic-arb supports 1..%d bytes per trans, but:%zu requested\n",
 			PMIC_ARB_MAX_TRANS_BYTES, len);
 		return  -EINVAL;
 	}
@@ -289,7 +291,7 @@ static int pmic_arb_write_cmd(struct spmi_controller *ctrl, u8 opc,
 
 	if (bc >= PMIC_ARB_MAX_TRANS_BYTES) {
 		dev_err(&ctrl->dev,
-			"pmic-arb supports 1..%d bytes per trans, but:%zu requested",
+			"pmic-arb supports 1..%d bytes per trans, but:%zu requested\n",
 			PMIC_ARB_MAX_TRANS_BYTES, len);
 		return  -EINVAL;
 	}
@@ -831,17 +833,13 @@ err_put_ctrl:
 
 err_init_vq:
 	virtio_spmi_del_vqs(vs);
-	devm_kfree(&vdev->dev, vs);
 	return ret;
 }
 
 static void virtio_spmi_remove(struct virtio_device *vdev)
 {
-	struct virtio_spmi *vs = vdev->priv;
-
 	vdev->config->reset(vdev);
 	vdev->config->del_vqs(vdev);
-	devm_kfree(&vdev->dev, vs);
 }
 
 static unsigned int features[] = {

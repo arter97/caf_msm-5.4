@@ -569,9 +569,8 @@ static void __qmp_rx_worker(struct qmp_mbox *mbox)
 		}
 		init_mcore_state(mbox);
 		mbox->local_state = LINK_NEGOTIATION;
-		mbox->rx_pkt.data = devm_kzalloc(mdev->dev,
-						 desc.ucore.mailbox_size,
-						 GFP_KERNEL);
+		mbox->rx_pkt.data = kzalloc(desc.ucore.mailbox_size,
+					    GFP_KERNEL);
 		if (!mbox->rx_pkt.data) {
 			QMP_ERR(mdev->ilc, "Failed to allocate rx pkt\n");
 			break;
@@ -593,7 +592,7 @@ static void __qmp_rx_worker(struct qmp_mbox *mbox)
 		 * manualy trigger the channel open procedure since client
 		 * won't try to re-open the channel
 		 */
-		if (mbox->suspend_flag == true) {
+		if (mbox->suspend_flag) {
 			set_mcore_ch(mbox, QMP_MBOX_CH_CONNECTED);
 			mbox->local_state = LOCAL_CONNECTING;
 			send_irq(mbox->mdev);
@@ -741,6 +740,7 @@ static int qmp_mbox_remove(struct platform_device *pdev)
 
 	list_for_each_entry(mbox, &mdev->mboxes, list) {
 		mbox_controller_unregister(&mbox->ctrl);
+		kfree(mbox->rx_pkt.data);
 	}
 	return 0;
 }
@@ -1006,7 +1006,7 @@ static int qmp_mbox_probe(struct platform_device *pdev)
 								mdev->name);
 
 	ret = devm_request_irq(&pdev->dev, mdev->rx_irq_line, qmp_irq_handler,
-		IRQF_TRIGGER_RISING | IRQF_NO_SUSPEND | IRQF_SHARED,
+		IRQF_TRIGGER_RISING | IRQF_SHARED,
 		edge_node->name, mdev);
 	if (ret < 0) {
 		qmp_mbox_remove(pdev);
@@ -1049,10 +1049,8 @@ static int qmp_mbox_restore(struct device *dev)
 		 */
 		mbox->suspend_flag = true;
 		/* Release rx packet buffer */
-		if (mbox->rx_pkt.data) {
-			devm_kfree(mdev->dev, mbox->rx_pkt.data);
-			mbox->rx_pkt.data = NULL;
-		}
+		kfree(mbox->rx_pkt.data);
+		mbox->rx_pkt.data = NULL;
 	}
 	if (mdev->early_boot)
 		qmp_irq_handler(0, mdev);

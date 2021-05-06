@@ -1,5 +1,14 @@
 /* SPDX-License-Identifier: GPL-2.0-only
- * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  */
 
 /* This file contain content copied from Synopsis driver,
@@ -7,7 +16,7 @@
  */
 /* =========================================================================
  * The Synopsys DWC ETHER QOS Software Driver and documentation (hereinafter
- * "Software") is an unsupported proprietary work of Synopsys, Inc. unless
+ * "Software") is an unsupported work of Synopsys, Inc. unless
  * otherwise expressly agreed to in writing between Synopsys and you.
  *
  * The Software IS NOT an item of Licensed Software or Licensed Product under

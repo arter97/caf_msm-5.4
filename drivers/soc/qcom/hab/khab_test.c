@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  */
 #include "hab.h"
 #if !defined CONFIG_GHS_VMM && defined(CONFIG_QTI_QUIN_GVM)
@@ -271,7 +271,7 @@ static ssize_t vchan_store(struct kobject *kobj, struct kobj_attribute *attr,
 
 	ret = sscanf(buf, "%du", &vchan_stat);
 	if (ret < 1) {
-		pr_err("failed to read anything from input %d", ret);
+		pr_err("failed to read anything from input %d\n", ret);
 		return 0;
 	} else
 		return vchan_stat;
@@ -290,7 +290,7 @@ static ssize_t ctx_store(struct kobject *kobj, struct kobj_attribute *attr,
 
 	ret = sscanf(buf, "%du", &context_stat);
 	if (ret < 1) {
-		pr_err("failed to read anything from input %d", ret);
+		pr_err("failed to read anything from input %d\n", ret);
 		return 0;
 	} else
 		return context_stat;
@@ -310,7 +310,7 @@ static ssize_t expimp_store(struct kobject *kobj, struct kobj_attribute *attr,
 
 	ret = sscanf(buf, "%35s", str);
 	if (ret < 1)
-		pr_err("failed to read anything from input %d", ret);
+		pr_err("failed to read anything from input %d\n", ret);
 
 	if (strnlen(str, strlen("dump_pipe")) == strlen("dump_pipe") &&
 		strcmp(str, "dump_pipe") == 0) {
@@ -321,7 +321,7 @@ static ssize_t expimp_store(struct kobject *kobj, struct kobj_attribute *attr,
 
 	ret = sscanf(buf, "%du", &pid_stat);
 	if (ret < 1)
-		pr_err("failed to read anything from input %d", ret);
+		pr_err("failed to read anything from input %d\n", ret);
 	else
 		return pid_stat; /* good result stored */
 	return -EEXIST;
