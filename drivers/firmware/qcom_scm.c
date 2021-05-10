@@ -1245,7 +1245,8 @@ static int __init qcom_scm_init(void)
 
 	return qtee_shmbridge_driver_init();
 }
-subsys_initcall(qcom_scm_init);
+early_subsys_initcall(qcom_scm_init, EARLY_SUBSYS_PLATFORM,
+		EARLY_INIT_LEVEL2);
 
 #ifdef CONFIG_QCOM_RTIC
 static int __init scm_mem_protection_init(void)
