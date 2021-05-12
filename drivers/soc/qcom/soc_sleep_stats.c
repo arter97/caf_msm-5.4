@@ -60,6 +60,11 @@ struct stats_entry {
 	struct appended_entry appended_entry;
 };
 
+#ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
+static struct soc_sleep_stats_data *gdata;
+static u64 deep_sleep_last_exited_time;
+#endif
+
 static inline u64 get_time_in_sec(u64 counter)
 {
 	do_div(counter, arch_timer_get_rate());
@@ -87,6 +92,60 @@ static inline ssize_t append_data_to_buf(char *buf, int length,
 			 data->entry.accumulated,
 			 data->appended_entry.client_votes);
 }
+
+#ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
+uint64_t get_sleep_exit_time(void)
+{
+	int i;
+	uint32_t offset;
+	__le64 last_exited_at;
+	__le32 count;
+	static u32 saved_deep_sleep_count;
+	u32 s_type = 0;
+	char stat_type[5] = {0};
+	void __iomem *reg;
+	struct soc_sleep_stats_data *drv = gdata;
+
+	if (!drv) {
+		pr_err("ERROR could not get rpm data memory\n");
+		return -ENOMEM;
+	}
+
+	reg = drv->reg;
+
+	for (i = 0; i < drv->config->num_records; i++) {
+
+		offset = offsetof(struct entry, stat_type);
+		s_type = le32_to_cpu(readl_relaxed(reg + offset));
+		memcpy(stat_type, &s_type, sizeof(u32));
+
+		if (!memcmp((const void *)stat_type, (const void *)"aosd", 4)) {
+
+			offset = offsetof(struct entry, count);
+			count = le32_to_cpu(readl_relaxed(reg + offset));
+
+			if (saved_deep_sleep_count == count)
+				deep_sleep_last_exited_time = 0;
+			else {
+				saved_deep_sleep_count = count;
+				offset = offsetof(struct entry, last_exited_at);
+				last_exited_at = le64_to_cpu(readq_relaxed(reg
+							+ offset));
+				deep_sleep_last_exited_time = last_exited_at;
+			}
+			break;
+
+		} else {
+			reg += sizeof(struct entry);
+			if (drv->config->appended_stats_avail)
+				reg += sizeof(struct appended_entry);
+		}
+	}
+
+	return deep_sleep_last_exited_time;
+}
+EXPORT_SYMBOL(get_sleep_exit_time);
+#endif
 
 static ssize_t stats_show(struct kobject *obj, struct kobj_attribute *attr,
 			  char *buf)
@@ -221,6 +280,10 @@ static int soc_sleep_stats_probe(struct platform_device *pdev)
 		pr_err("Failed to create sysfs interface\n");
 		return ret;
 	}
+
+#ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
+	gdata = drv;
+#endif
 
 	drv->reg = devm_ioremap(&pdev->dev, drv->stats_base, drv->stats_size);
 	if (!drv->reg) {
