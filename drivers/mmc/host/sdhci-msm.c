@@ -4146,6 +4146,8 @@ static void sdhci_msm_set_caps(struct sdhci_msm_host *msm_host)
 	msm_host->mmc->caps |= MMC_CAP_WAIT_WHILE_BUSY | MMC_CAP_NEED_RSP_BUSY;
 }
 
+static DECLARE_COMPLETION(root_dev_ready);
+
 static int sdhci_msm_probe(struct platform_device *pdev)
 {
 	struct sdhci_host *host;
@@ -4443,6 +4445,8 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	pm_runtime_mark_last_busy(&pdev->dev);
 	pm_runtime_put_autosuspend(&pdev->dev);
 
+	complete(&root_dev_ready);
+
 	return 0;
 
 pm_runtime_disable:
@@ -4599,7 +4603,17 @@ static struct platform_driver sdhci_msm_driver = {
 	},
 };
 
-module_platform_driver(sdhci_msm_driver);
+static int root_dev_ready_wait(void)
+{
+	if (strnstr(saved_command_line, ".sdhci",
+		strlen(saved_command_line)))
+		wait_for_completion(&root_dev_ready);
+	return 0;
+}
+early_init(root_dev_ready_wait, EARLY_SUBSYS_1, EARLY_INIT_LEVEL3);
+
+early_module_platform_driver(sdhci_msm_driver, EARLY_SUBSYS_1,
+EARLY_INIT_LEVEL2);
 
 MODULE_DESCRIPTION("Qualcomm Secure Digital Host Controller Interface driver");
 MODULE_LICENSE("GPL v2");
