@@ -3753,7 +3753,8 @@ void sd_print_result(const struct scsi_disk *sdkp, const char *msg, int result)
 
 static int __init early_rootdev_wait(void)
 {
-	wait_for_completion(&scsi_sd_probe_domain);
+	if (!strnstr(saved_command_line, ".sdhci", strlen(saved_command_line)))
+		wait_for_completion(&scsi_sd_probe_domain);
 	return 0;
 }
 
