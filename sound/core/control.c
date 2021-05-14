@@ -341,13 +341,13 @@ static int __snd_ctl_add_replace(struct snd_card *card,
 	struct snd_ctl_elem_id id;
 	unsigned int idx;
 	unsigned int count;
-	struct snd_kcontrol *old;
-	int err;
+	//struct snd_kcontrol *old;
+	//int err;
 
 	id = kcontrol->id;
 	if (id.index > UINT_MAX - kcontrol->count)
 		return -EINVAL;
-
+#if 0
 	old = snd_ctl_find_id(card, &id);
 	if (!old) {
 		if (mode == CTL_REPLACE)
@@ -365,7 +365,7 @@ static int __snd_ctl_add_replace(struct snd_card *card,
 		if (err < 0)
 			return err;
 	}
-
+#endif
 	if (snd_ctl_find_hole(card, kcontrol->count) < 0)
 		return -ENOMEM;
 
