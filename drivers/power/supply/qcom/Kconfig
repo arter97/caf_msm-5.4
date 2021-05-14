@@ -113,4 +113,9 @@ config QTI_QBG
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called qti-qbg-main.
+
+config SUPPORT_BOTH_SMB5_SMBLITE
+	bool "Support both SMB5 and SMBLITE"
+	help
+	  Say Y represents that you need to use both SMB5 and SMBLITE in the same image.
 endif
