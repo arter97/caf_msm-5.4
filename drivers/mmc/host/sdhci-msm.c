@@ -4146,6 +4146,28 @@ static void sdhci_msm_set_caps(struct sdhci_msm_host *msm_host)
 	msm_host->mmc->caps |= MMC_CAP_WAIT_WHILE_BUSY | MMC_CAP_NEED_RSP_BUSY;
 }
 
+static bool sdhci_msm_is_bootdevice(struct device *dev)
+{
+	if (strnstr(saved_command_line, "androidboot.bootdevice=",
+				strlen(saved_command_line))) {
+		char search_string[50];
+
+		snprintf(search_string, ARRAY_SIZE(search_string),
+				 "androidboot.bootdevice=%s", dev_name(dev));
+		if (strnstr(saved_command_line, search_string,
+					strlen(saved_command_line)))
+			return true;
+		else
+			return false;
+	}
+
+	/*
+	 * "androidboot.bootdevice=" argument is not present then
+	 * return true as we don't know the boot device anyways.
+	 */
+	return true;
+}
+
 static DECLARE_COMPLETION(root_dev_ready);
 
 static int sdhci_msm_probe(struct platform_device *pdev)
@@ -4445,7 +4467,10 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	pm_runtime_mark_last_busy(&pdev->dev);
 	pm_runtime_put_autosuspend(&pdev->dev);
 
-	complete(&root_dev_ready);
+	if (sdhci_msm_is_bootdevice(&pdev->dev)) {
+		flush_delayed_work(&host->mmc->detect);
+		complete(&root_dev_ready);
+	}
 
 	return 0;
 
@@ -4606,7 +4631,7 @@ static struct platform_driver sdhci_msm_driver = {
 static int root_dev_ready_wait(void)
 {
 	if (strnstr(saved_command_line, ".sdhci",
-		strlen(saved_command_line)))
+				strlen(saved_command_line)))
 		wait_for_completion(&root_dev_ready);
 	return 0;
 }
