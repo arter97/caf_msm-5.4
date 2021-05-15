@@ -56,6 +56,10 @@ static unsigned int adreno_ft_regs_default[] = {
 	ADRENO_REG_CP_IB2_BUFSZ,
 };
 
+/* used to identify A640R_V0 device */
+#define ADRENO_FEATURE_ID_A640R_V0 6
+#define ADRENO_SPEED_BIN_A640R_V0  105
+
 /* Nice level for the higher priority GPU start thread */
 int adreno_wake_nice = -7;
 
@@ -1188,6 +1192,28 @@ static int adreno_read_speed_bin_legacy(struct platform_device *pdev)
 	return (val & bin[1]) >> bin[2];
 }
 
+static int adreno_read_feature_id(struct platform_device *pdev)
+{
+	u32 bin[3] = {0};
+	u32 val = 0;
+	int ret = 0;
+
+	if (of_property_read_u32_array(pdev->dev.of_node,
+		"qcom,feature-id", bin, 3))
+		return 0;
+
+	if (adreno_efuse_map(pdev))
+		return 0;
+
+	ret = adreno_efuse_read_u32(bin[0], &val);
+	adreno_efuse_unmap();
+
+	if (ret)
+		return 0;
+
+	return (val >> bin[1]) & bin[2];
+}
+
 /* Read the efuse through the new and fancy nvmem method */
 static int adreno_read_speed_bin(struct platform_device *pdev)
 {
@@ -1215,6 +1241,16 @@ static int adreno_read_speed_bin(struct platform_device *pdev)
 	kfree(buf);
 
 	return val;
+}
+
+static int adreno_get_speed_bin(struct platform_device *pdev)
+{
+	/* Because the speed bin value of A640R_V0 device in efuse is
+	 * same as that of A640R_V1, so read feature id from efuse to
+	 * identify A640R_V0 device, and set different power level
+	 * for A640R_V0. */
+	return (ADRENO_FEATURE_ID_A640R_V0 == adreno_read_feature_id(pdev)) ?
+			ADRENO_SPEED_BIN_A640R_V0 : adreno_read_speed_bin(pdev);
 }
 
 static int adreno_read_gpu_model_fuse(struct platform_device *pdev)
@@ -1419,7 +1455,7 @@ int adreno_device_probe(struct platform_device *pdev,
 
 	adreno_update_soc_hw_revision_quirks(adreno_dev, pdev);
 
-	status = adreno_read_speed_bin(pdev);
+	status = adreno_get_speed_bin(pdev);
 	if (status < 0)
 		return status;
 
