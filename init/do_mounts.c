@@ -568,10 +568,12 @@ void __init mount_root(void)
 /*
  * Prepare the namespace - decide what/where to mount, load ramdisks, etc.
  */
+static DEFINE_MUTEX(namespace_mutex);
 void __init prepare_namespace(void)
 {
 	int is_floppy;
 	static int first_time = 1;
+	mutex_lock(&namespace_mutex);
 
 	if ((!is_early_userspace) || (is_early_userspace && (!first_time))) {
 		if (root_delay) {
@@ -637,6 +639,7 @@ out:
 		ksys_chroot((char __user *)".");
 	}
 	first_time = 0;
+	mutex_unlock(&namespace_mutex);
 }
 
 static bool is_tmpfs;
