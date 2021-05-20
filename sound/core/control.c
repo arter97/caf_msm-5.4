@@ -32,6 +32,17 @@ static LIST_HEAD(snd_control_ioctls);
 static LIST_HEAD(snd_control_compat_ioctls);
 #endif
 
+
+char tmp_kctl_name[50] = {'\0'};
+unsigned int kctl_strtoint(const char *s)
+{
+        unsigned int res = 0;
+        while (*s) {
+                res = (res << 5) - res + (*s++);
+        }
+        return (res & 0x7FFFFFFF);
+}
+
 static int snd_ctl_open(struct inode *inode, struct file *file)
 {
 	unsigned long flags;
@@ -333,6 +344,32 @@ enum snd_ctl_add_mode {
 	CTL_ADD_EXCLUSIVE, CTL_REPLACE, CTL_ADD_ON_REPLACE,
 };
 
+static struct snd_kcontrol *hash_snd_ctl_find_id(struct snd_card *card,
+                               unsigned int nametoint, struct snd_ctl_elem_id *id)
+{
+        struct snd_kcontrol *kctl = NULL;
+
+        if (snd_BUG_ON(!card || !id))
+                return NULL;
+	hash_for_each_possible(card->ctl_htab, kctl, hnode, nametoint) {
+		if (strncmp(kctl->id.name, id->name, sizeof(kctl->id.name)))
+			continue;
+		if (kctl->id.iface != id->iface)
+			continue;
+		if (kctl->id.device != id->device)
+			continue;
+		if (kctl->id.subdevice != id->subdevice)
+			continue;
+		if (kctl->id.index > id->index)
+			continue;
+		if (kctl->id.index + kctl->count <= id->index)
+			continue;
+		return kctl;
+	}
+        return NULL;
+}
+
+
 /* add/replace a new kcontrol object; call with card->controls_rwsem locked */
 static int __snd_ctl_add_replace(struct snd_card *card,
 				 struct snd_kcontrol *kcontrol,
@@ -341,31 +378,39 @@ static int __snd_ctl_add_replace(struct snd_card *card,
 	struct snd_ctl_elem_id id;
 	unsigned int idx;
 	unsigned int count;
-	//struct snd_kcontrol *old;
-	//int err;
+	struct snd_kcontrol *old;
+	int err;
 
 	id = kcontrol->id;
 	if (id.index > UINT_MAX - kcontrol->count)
 		return -EINVAL;
-#if 0
-	old = snd_ctl_find_id(card, &id);
-	if (!old) {
-		if (mode == CTL_REPLACE)
-			return -EINVAL;
-	} else {
-		if (mode == CTL_ADD_EXCLUSIVE) {
-			dev_err(card->dev,
-				"control %i:%i:%i:%s:%i is already present\n",
-				id.iface, id.device, id.subdevice, id.name,
-				id.index);
-			return -EBUSY;
-		}
 
-		err = snd_ctl_remove(card, old);
-		if (err < 0)
-			return err;
+	snprintf(tmp_kctl_name, strlen(kcontrol->id.name) + 6, "%s%d%d%d", kcontrol->id.name, kcontrol->id.iface, kcontrol->id.device, kcontrol->id.subdevice);
+
+	kcontrol->knametoint = kctl_strtoint(tmp_kctl_name);
+	if (kcontrol->knametoint < 0)
+		return -EINVAL;
+
+         old = hash_snd_ctl_find_id(card, kcontrol->knametoint, &id);
+         if (old) {
+		old = snd_ctl_find_id(card, &id);
+		if (!old) {
+			if (mode == CTL_REPLACE)
+				return -EINVAL;
+		} else {
+			if (mode == CTL_ADD_EXCLUSIVE) {
+				dev_err(card->dev,
+					"control %i:%i:%i:%s:%i is already present\n",
+					id.iface, id.device, id.subdevice, id.name,
+					id.index);
+				return -EBUSY;
+			}
+
+			err = snd_ctl_remove(card, old);
+			if (err < 0)
+				return err;
+		}
 	}
-#endif
 	if (snd_ctl_find_hole(card, kcontrol->count) < 0)
 		return -ENOMEM;
 
@@ -373,6 +418,8 @@ static int __snd_ctl_add_replace(struct snd_card *card,
 	card->controls_count += kcontrol->count;
 	kcontrol->id.numid = card->last_numid + 1;
 	card->last_numid += kcontrol->count;
+
+	hash_add(card->ctl_htab, &kcontrol->hnode, kcontrol->knametoint);
 
 	id = kcontrol->id;
 	count = kcontrol->count;
