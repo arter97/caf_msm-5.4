@@ -3385,8 +3385,10 @@ static int msm_pcie_clk_init(struct msm_pcie_dev_t *dev)
 	if (dev->pipe_clk_mux && dev->pipe_clk_ext_src)
 		clk_set_parent(dev->pipe_clk_mux, dev->pipe_clk_ext_src);
 
-	PCIE_INFO(dev, "RC%d: Switching to external clock\n", dev->rc_idx);
-	msm_pcie_write_reg(dev->pipe_mux, 0, 0);
+	if(dev->pipe_mux) {
+		PCIE_INFO(dev, "RC%d: Switching to external clock\n", dev->rc_idx);
+		msm_pcie_write_reg(dev->pipe_mux, 0, 0);
+	}
 
 	if (dev->icc_path) {
 		PCIE_DBG(dev, "PCIe: RC%d: setting ICC path vote\n",
@@ -3514,9 +3516,11 @@ static void msm_pcie_clk_deinit(struct msm_pcie_dev_t *dev)
 	if (dev->pipe_clk_mux && dev->ref_clk_src)
 		clk_set_parent(dev->pipe_clk_mux, dev->ref_clk_src);
 
-	PCIE_INFO(dev, "PCIe: RC%d: Setting RPMh CXO as supply\n",
-			dev->rc_idx);
-	msm_pcie_write_reg(dev->pipe_mux, 0, 2);
+	if (dev->pipe_mux) {
+		PCIE_INFO(dev, "PCIe: RC%d: Setting RPMh CXO as supply\n",
+				dev->rc_idx);
+		msm_pcie_write_reg(dev->pipe_mux, 0, 2);
+	}
 
 	regulator_disable(dev->gdsc);
 
@@ -4206,9 +4210,11 @@ static int msm_pcie_get_reg(struct msm_pcie_dev_t *pcie_dev)
 	pcie_dev->rumi = pcie_dev->res[MSM_PCIE_RES_RUMI].base;
 	pcie_dev->pipe_mux = pcie_dev->res[MSM_PCIE_RES_PIPE_MUX].base;
 
-	PCIE_INFO(pcie_dev, "PCIe: RC%d: Setting RPMh CXO as supply\n",
-			pcie_dev->rc_idx);
-	msm_pcie_write_reg(pcie_dev->pipe_mux, 0, 2);
+	if (pcie_dev->pipe_mux) {
+		PCIE_INFO(pcie_dev, "PCIe: RC%d: Setting RPMh CXO as supply\n",
+				pcie_dev->rc_idx);
+		msm_pcie_write_reg(pcie_dev->pipe_mux, 0, 2);
+	}
 
 	return 0;
 }
