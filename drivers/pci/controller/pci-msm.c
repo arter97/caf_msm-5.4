@@ -6976,6 +6976,7 @@ static struct platform_driver msm_pcie_driver = {
 	.driver	= {
 		.name		= "pci-msm",
 		.of_match_table	= msm_pcie_match,
+		.probe_type		= PROBE_PREFER_ASYNCHRONOUS,
 	},
 };
 

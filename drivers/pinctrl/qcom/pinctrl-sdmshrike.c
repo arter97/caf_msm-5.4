@@ -2375,6 +2375,7 @@ static struct platform_driver sdmshrike_pinctrl_driver = {
 	.driver = {
 		.name = "sdmshrike-pinctrl",
 		.of_match_table = sdmshrike_pinctrl_of_match,
+		.probe_type		= PROBE_PREFER_ASYNCHRONOUS,
 	},
 	.probe = sdmshrike_pinctrl_probe,
 	.remove = msm_pinctrl_remove,

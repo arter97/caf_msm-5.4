@@ -445,6 +445,7 @@ static struct platform_driver rng_driver = {
 	.driver     = {
 		.name   = DRIVER_NAME,
 		.of_match_table = qrng_match,
+		.probe_type		= PROBE_PREFER_ASYNCHRONOUS,
 	},
 };
 
