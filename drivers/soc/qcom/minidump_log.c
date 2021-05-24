@@ -28,6 +28,7 @@
 #include <linux/sched/task.h>
 #include <linux/suspend.h>
 #include <linux/vmalloc.h>
+#include <linux/async.h>
 
 #ifdef CONFIG_QCOM_MINIDUMP_PANIC_DUMP
 #include <linux/bits.h>
@@ -1339,7 +1340,7 @@ static void md_register_module_data(void)
 #endif	/* CONFIG_MODULES */
 #endif	/* CONFIG_QCOM_MINIDUMP_PANIC_DUMP */
 
-static int __init msm_minidump_log_init(void)
+static void __init msm_minidump_log_init(void *data, async_cookie_t cookie)
 {
 	register_kernel_sections();
 	is_vmap_stack = IS_ENABLED(CONFIG_VMAP_STACK);
@@ -1363,6 +1364,12 @@ static int __init msm_minidump_log_init(void)
 	register_die_notifier(&md_die_context_nb);
 #endif
 #endif
+}
+
+static int __init msm_minidump_log_init_async(void)
+{
+	async_schedule(msm_minidump_log_init, NULL);
 	return 0;
 }
-late_initcall(msm_minidump_log_init);
+
+device_initcall(msm_minidump_log_init_async);
