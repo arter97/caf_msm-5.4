@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2080,8 +2080,6 @@ int ipa3_set_flt_tuple_mask(int pipe_idx, struct ipahal_reg_hash_tuple *tuple);
 int ipa3_set_rt_tuple_mask(int tbl_idx, struct ipahal_reg_hash_tuple *tuple);
 void ipa3_set_resorce_groups_min_max_limits(void);
 void ipa3_suspend_apps_pipes(bool suspend);
-void ipa3_flow_control(enum ipa_client_type ipa_client, bool enable,
-			uint32_t qmap_id);
 int ipa3_generate_eq_from_hw_rule(
 	struct ipa_ipfltri_rule_eq *attrib, u8 *buf, u8 *rule_size);
 int ipa3_flt_read_tbl_from_hw(u32 pipe_idx,
