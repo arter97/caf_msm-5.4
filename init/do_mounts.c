@@ -577,9 +577,9 @@ static DEFINE_MUTEX(namespace_mutex);
 void __init prepare_namespace(void)
 {
 	int is_floppy;
-	mutex_lock(&namespace_mutex);
 	static int first_time = 1;
 
+	mutex_lock(&namespace_mutex);
 	if ((!is_early_userspace) || (is_early_userspace && (!first_time))) {
 		if (root_delay) {
 			pr_info(
