@@ -249,7 +249,7 @@ static ssize_t bootkpi_reader(struct kobject *obj, struct kobj_attribute *attr,
 				  * 1000) / TIMER_KHZ));
 	}
 	spin_unlock(&boot_marker_list.slock);
-	rc = scnprintf(user_buffer, temp + 1, "%s\n", buf);
+	rc = scnprintf(user_buffer, PAGE_SIZE - 1, "%s\n", buf);
 	kfree(buf);
 	return rc;
 }
