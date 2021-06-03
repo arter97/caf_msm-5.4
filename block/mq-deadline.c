@@ -809,7 +809,7 @@ static void __exit deadline_exit(void)
 	elv_unregister(&mq_deadline);
 }
 
-module_init(deadline_init);
+subsys_initcall(deadline_init);
 module_exit(deadline_exit);
 
 MODULE_AUTHOR("Jens Axboe");

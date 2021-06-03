@@ -27,8 +27,9 @@
 #include <soc/qcom/boot_stats.h>
 #endif
 #include <uapi/linux/mount.h>
-
+#include <linux/dirent.h>
 #include "do_mounts.h"
+#include "prefetch.h"
 
 int __initdata rd_doload;	/* 1 = load RAM disk, 0 = don't load */
 
@@ -578,13 +579,89 @@ void __init mount_root(void)
 #endif
 }
 
+#define PREFETCH_NUM 16
+#define PREFETCH_BUF_LEN 8096
+
+static inline void prefetch_read_file(void *name, char *buf, int len)
+{
+	int fd;
+	int num;
+
+	fd = ksys_open(name, O_RDONLY, 0);
+	if (fd >= 0) {
+		do {
+			num = ksys_read(fd, buf, len);
+		} while (num);
+		ksys_close(fd);
+	}
+}
+
+static inline void prefetch_read_dir(void *name, char *buf, int len)
+{
+	int fd;
+
+	fd = ksys_open(name, O_RDONLY, 0);
+	if (fd >= 0) {
+		ksys_getdents64(fd, (struct linux_dirent64 *)buf, len);
+		ksys_close(fd);
+	}
+}
+
+static atomic_t prefetch_index;
+
+static int prefetch_thread(void *unused)
+{
+	struct cpumask cpumask;
+	int thread_num = (int)unused;
+	char *buf;
+	int index;
+	char *name;
+	char **p_name;
+
+	cpumask_clear(&cpumask);
+	cpumask_set_cpu((thread_num%4)+1, &cpumask);
+	if (sched_setaffinity(0, &cpumask))
+		printk("sched_setaffinity fails\n");
+
+	buf = kzalloc(PREFETCH_BUF_LEN, GFP_KERNEL);
+	printk("prefetchs%d %d\n", thread_num, smp_processor_id());
+
+	index = atomic_inc_return(&prefetch_index);
+	while (index <= (sizeof(prefetch_files)>>3)) {
+		name = prefetch_files[index-1];
+
+		if (name) {
+			if (*name == 'f')
+				prefetch_read_file((void *)(name+1),
+						buf, PREFETCH_BUF_LEN);
+			else if (*name == 'd')
+				prefetch_read_dir((void *)(name+1),
+						buf, PREFETCH_BUF_LEN);
+			else
+				pr_err("invalid name %s\n", name);
+		}
+		index = atomic_inc_return(&prefetch_index);
+	}
+	printk("prefetche%d %d\n", thread_num, smp_processor_id());
+
+	kfree(buf);
+	return 0;
+}
+
 /*
  * Prepare the namespace - decide what/where to mount, load ramdisks, etc.
  */
 void __init prepare_namespace(void)
 {
 	int is_floppy;
+	int index;
+	char name[16];
+	static int first_time = 1;
 
+	while (first_time == -1)
+		msleep(50);
+
+	if (!first_time) {
 	if (root_delay) {
 		printk(KERN_INFO "Waiting %d sec before mounting root device...\n",
 		       root_delay);
@@ -599,7 +676,10 @@ void __init prepare_namespace(void)
 	 * for the touchpad of a laptop to initialize.
 	 */
 	wait_for_device_probe();
+	}
 
+	if (first_time) {
+	first_time = -1;
 	md_run_setup();
 
 	if (saved_root_name[0]) {
@@ -633,10 +713,27 @@ void __init prepare_namespace(void)
 		ROOT_DEV = Root_RAM0;
 
 	mount_root();
+	}
 out:
+	if (first_time) {
 	devtmpfs_mount("dev");
 	ksys_mount(".", "/", NULL, MS_MOVE, NULL);
 	ksys_chroot(".");
+
+	for (index = 0; index < PREFETCH_NUM; index++) {
+		snprintf(name, 16, "prefetch%d", index);
+		kthread_run(prefetch_thread, (void *)index, name);
+	}
+	}
+	first_time = 0;
+}
+
+void __init early_prepare_namespace(char *name)
+{
+	int err;
+
+	if (strstr(saved_root_name, name))
+		prepare_namespace();
 }
 
 static bool is_tmpfs;
