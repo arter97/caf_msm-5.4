@@ -573,6 +573,9 @@ USER(\label, ic	ivau, \tmp2)			// invalidate I line PoU
 	orr	\ttbr, \ttbr, #TTBR1_BADDR_4852_OFFSET
 .Lskipoffs_\@ :
 #endif
+#ifdef CONFIG_ARM64_CNP
+	orr	\ttbr, \ttbr, #1
+#endif
 	.endm
 
 /*
