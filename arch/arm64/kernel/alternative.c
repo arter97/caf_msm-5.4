@@ -148,7 +148,7 @@ static void __nocfi __apply_alternatives(void *alt_region,  bool is_module,
 
 		/* Use ARM64_CB_PATCH as an unconditional patch */
 		if (alt->cpufeature < ARM64_CB_PATCH &&
-		    !cpus_have_cap(alt->cpufeature))
+		    !cpus_have_cap(alt->cpufeature) && is_module)
 			continue;
 
 		if (alt->cpufeature == ARM64_CB_PATCH)
@@ -226,7 +226,7 @@ static int __apply_alternatives_multi_stop(void *unused)
 void __init apply_alternatives_all(void)
 {
 	/* better not try code patching on a live SMP system */
-	stop_machine(__apply_alternatives_multi_stop, NULL, cpu_online_mask);
+	//stop_machine(__apply_alternatives_multi_stop, NULL, cpu_online_mask);
 }
 
 /*
@@ -244,7 +244,18 @@ void __init apply_boot_alternatives(void)
 	/* If called on non-boot cpu things could go wrong */
 	WARN_ON(smp_processor_id() != 0);
 
-	__apply_alternatives(&region, false, &boot_capabilities[0]);
+	//__apply_alternatives(&region, false, &boot_capabilities[0]);
+	DECLARE_BITMAP(capabilities, ARM64_NPATCHABLE);
+	bitmap_zero(capabilities, ARM64_NPATCHABLE);
+	set_bit(ARM64_HAS_PAN, capabilities);
+	set_bit(ARM64_HAS_UAO, capabilities);
+	set_bit(ARM64_HAS_CNP, capabilities);
+	set_bit(ARM64_UNMAP_KERNEL_AT_EL0, capabilities);
+	set_bit(ARM64_HAS_RAS_EXTN, capabilities);
+	set_bit(ARM64_HAS_CACHE_IDC, capabilities);
+	set_bit(ARM64_HAS_CRC32, capabilities);
+	set_bit(ARM64_NCAPS, capabilities);
+	__apply_alternatives(&region, false, &capabilities[0]);
 }
 
 #ifdef CONFIG_MODULES
