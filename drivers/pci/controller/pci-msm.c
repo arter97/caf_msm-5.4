@@ -351,6 +351,7 @@ enum msm_pcie_res {
 	MSM_PCIE_RES_TCSR,
 	MSM_PCIE_RES_RUMI,
 	MSM_PCIE_RES_PIPE_MUX,
+	MSM_PCIE_RES_PHY_RESET,
 	MSM_PCIE_MAX_RES,
 };
 
@@ -757,6 +758,7 @@ struct msm_pcie_dev_t {
 	void __iomem *tcsr;
 	void __iomem *rumi;
 	void __iomem *pipe_mux;
+	void __iomem *phy_reset;
 
 	uint32_t axi_bar_start;
 	uint32_t axi_bar_end;
@@ -1166,7 +1168,8 @@ static const struct msm_pcie_res_info_t msm_pcie_res_info[MSM_PCIE_MAX_RES] = {
 	{"mhi", NULL, NULL},
 	{"tcsr", NULL, NULL},
 	{"rumi", NULL, NULL},
-	{"pipe_mux", NULL, NULL}
+	{"pipe_mux", NULL, NULL},
+	{"phy_reset", NULL, NULL}
 };
 
 /* irqs */
@@ -3420,6 +3423,17 @@ static int msm_pcie_clk_init(struct msm_pcie_dev_t *dev)
 		}
 	}
 
+	if(dev->phy_reset) {
+		PCIE_INFO(dev, "RC%d Asserting PHY reset\n", dev->rc_idx);
+		msm_pcie_write_reg(dev->phy_reset, 0, 1);
+
+		/* add a 1ms delay to ensure the reset is asserted */
+		usleep_range(1000, 1005);
+
+		PCIE_INFO(dev, "RC%d Deasserting PHY reset\n", dev->rc_idx);
+		msm_pcie_write_reg(dev->phy_reset, 0, 0);
+	}
+
 	PCIE_DBG(dev, "RC%d: exit\n", dev->rc_idx);
 
 	return rc;
@@ -4248,6 +4262,7 @@ static int msm_pcie_get_reg(struct msm_pcie_dev_t *pcie_dev)
 	pcie_dev->tcsr = pcie_dev->res[MSM_PCIE_RES_TCSR].base;
 	pcie_dev->rumi = pcie_dev->res[MSM_PCIE_RES_RUMI].base;
 	pcie_dev->pipe_mux = pcie_dev->res[MSM_PCIE_RES_PIPE_MUX].base;
+	pcie_dev->phy_reset = pcie_dev->res[MSM_PCIE_RES_PHY_RESET].base;
 
 	if (pcie_dev->pipe_mux) {
 		PCIE_INFO(pcie_dev, "PCIe: RC%d: Setting RPMh CXO as supply\n",
@@ -4372,6 +4387,7 @@ static void msm_pcie_release_resources(struct msm_pcie_dev_t *dev)
 	dev->tcsr = NULL;
 	dev->rumi = NULL;
 	dev->pipe_mux = NULL;
+	dev->phy_reset = NULL;
 }
 
 static void msm_pcie_scale_link_bandwidth(struct msm_pcie_dev_t *pcie_dev,
