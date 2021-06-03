@@ -16,6 +16,7 @@
 #include <linux/kmemleak.h>
 #include <linux/seq_file.h>
 #include <linux/memblock.h>
+#include <linux/memory.h>
 
 #include <asm/sections.h>
 #include <linux/io.h>
@@ -1995,6 +1996,181 @@ unsigned long __init memblock_free_all(void)
 
 	return pages;
 }
+
+#ifdef CONFIG_MEMORY_HOTPLUG
+#define NUM_NOHP 8
+#define NUM_ALIGN_BLK 64
+static phys_addr_t no_hotplug_area[NUM_NOHP];
+static phys_addr_t aligned_blocks[NUM_ALIGN_BLK];
+
+/**
+ * early_no_hotplug_area - cmdline to indicate address ranges
+ *  that should not be carved out for memory hotplug
+ * @p: cmdline input string
+ *
+ * parse cmdline and record valid address ranges that should
+ * not be carved out for memory hotplug
+ *
+ * Return:
+ * always 0.
+ */
+static int __init early_no_hotplug_area(char *p)
+{
+	phys_addr_t base, size;
+	int idx = 0;
+	char *endp = p;
+
+	while (1) {
+		base = memparse(endp, &endp);
+		if (base && *endp == ',') {
+			size = memparse(endp + 1, &endp);
+			if (size) {
+				no_hotplug_area[idx++] = base;
+				no_hotplug_area[idx++] = base+size;
+
+				if (*endp == ';' && idx <= NUM_NOHP-2) {
+					endp++;
+				} else {
+					if (*endp == ';' && idx == NUM_NOHP)
+						pr_err("%s: nohp overflows\n",
+							__func__);
+					break;
+				}
+			} else
+				break;
+		} else
+			break;
+	}
+	return 0;
+}
+early_param("no_hotplug_area", early_no_hotplug_area);
+
+/**
+ * memblock_in_no_hotplug_area - check if an address is in any of
+ *  the ranges that do not support memory hotplug
+ * @addr: the address to check
+ *
+ * Return:
+ * True if addr is in non hotplug range, false if not.
+ */
+static bool __init memblock_in_no_hotplug_area(phys_addr_t addr)
+{
+	int idx = 0;
+
+	while (idx < NUM_NOHP) {
+		if (!no_hotplug_area[idx])
+			break;
+
+		if ((addr + MIN_MEMORY_BLOCK_SIZE <= no_hotplug_area[idx])
+			|| (addr >= no_hotplug_area[idx+1])) {
+			idx += 2;
+			continue;
+		}
+
+		return true;
+	}
+	return false;
+}
+
+/**
+ * early_dyn_memhotplug - cmdline to enable hotplug
+ * @p: cmdline input string
+ *
+ * dynamically carve out aligned memory blocks in ranges
+ * that support hotplug and record these block addresses
+ *
+ * Return:
+ * always 0.
+ */
+static int __init early_dyn_memhotplug(char *p)
+{
+	unsigned long idx = 0;
+	unsigned long old_cnt;
+	phys_addr_t addr, rgn_end;
+	struct memblock_region *rgn;
+	int blk = 0;
+
+	while (idx < memblock.memory.cnt) {
+		old_cnt = memblock.memory.cnt;
+		rgn = &memblock.memory.regions[idx++];
+		addr = ALIGN(rgn->base, MIN_MEMORY_BLOCK_SIZE);
+		rgn_end = rgn->base + rgn->size;
+		if (idx == memblock.memory.cnt)
+			rgn_end--;
+		while (addr + MIN_MEMORY_BLOCK_SIZE <= rgn_end) {
+			if (!memblock_in_no_hotplug_area(addr)) {
+				if (blk == NUM_ALIGN_BLK-1) {
+					pr_err("%s: aligned_blocks overflows\n",
+						__func__);
+					return 0;
+				}
+
+				aligned_blocks[blk++] = addr;
+				memblock_remove(addr, MIN_MEMORY_BLOCK_SIZE);
+			}
+			addr += MIN_MEMORY_BLOCK_SIZE;
+		}
+		if (old_cnt != memblock.memory.cnt)
+			idx--;
+	}
+	return 0;
+}
+early_param("dyn_memhotplug", early_dyn_memhotplug);
+
+/**
+ * memblock_dump_aligned_blocks_addr - dump aligned block addresses
+ * @buf: memory buffer to hold dump info
+ *
+ * dump all aligned block addresses carved out for meomry hotplug
+ *
+ * Return:
+ * length of dump info returned in buf.
+ */
+int memblock_dump_aligned_blocks_addr(char *buf)
+{
+	int idx = 0;
+	int size = 0;
+
+	if (aligned_blocks[idx]) {
+		size += snprintf(buf+size, 32, "0x%llx", aligned_blocks[idx]);
+		idx++;
+	}
+
+	while (aligned_blocks[idx]) {
+		size += snprintf(buf+size, 32, ",0x%llx", aligned_blocks[idx]);
+		idx++;
+	}
+	return size;
+}
+
+/**
+ * memblock_dump_aligned_blocks_num - dump aligned block numbers
+ * @buf: memory buffer to hold dump info
+ *
+ * dump all aligned block numbers carved out for meomry hotplug
+ *
+ * Return:
+ * length of dump info returned in buf.
+ */
+int memblock_dump_aligned_blocks_num(char *buf)
+{
+	int idx = 0;
+	int size = 0;
+
+	if (aligned_blocks[idx]) {
+		size += snprintf(buf+size, 16, "%d",
+			(int)(aligned_blocks[idx] >> SECTION_SIZE_BITS));
+		idx++;
+	}
+
+	while (aligned_blocks[idx]) {
+		size += snprintf(buf+size, 16, ",%d",
+			(int)(aligned_blocks[idx] >> SECTION_SIZE_BITS));
+		idx++;
+	}
+	return size;
+}
+#endif
 
 #if defined(CONFIG_DEBUG_FS) && defined(CONFIG_ARCH_KEEP_MEMBLOCK)
 
