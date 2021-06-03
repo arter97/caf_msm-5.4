@@ -1333,16 +1333,24 @@ static int of_link_to_suppliers(struct device *dev,
 static bool of_devlink = true;
 core_param(of_devlink, of_devlink, bool, 0);
 
+extern struct device_node *soc_dev_node;
+
 static int of_fwnode_add_links(const struct fwnode_handle *fwnode,
 			       struct device *dev)
 {
+	struct device_node *np;
+
 	if (!of_devlink)
 		return 0;
 
 	if (unlikely(!is_of_node(fwnode)))
 		return 0;
 
-	return of_link_to_suppliers(dev, to_of_node(fwnode));
+	np = to_of_node(fwnode);
+	if (np == soc_dev_node)
+		return 0;
+
+	return of_link_to_suppliers(dev, np);
 }
 
 const struct fwnode_operations of_fwnode_ops = {
