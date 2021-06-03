@@ -64,7 +64,6 @@
 
 #define FASTRPC_ENOSUCH 39
 #define DEBUGFS_SIZE 3072
-#define UL_SIZE 25
 #define PID_SIZE 10
 
 #define AUDIO_PDR_ADSP_DTSI_PROPERTY_NAME        "qcom,fastrpc-adsp-audio-pdr"
@@ -976,7 +975,7 @@ static int fastrpc_minidump_remove_region(struct fastrpc_mmap *map)
 			map->frpc_md_index = -1;
 		}
 	} else {
-		ADSPRPC_ERR("mini-dump enabled with invalid unique id: %d\n", map->frpc_md_index);
+		ADSPRPC_WARN("mini-dump enabled with invalid unique id: %d\n", map->frpc_md_index);
 	}
 	return err;
 }
@@ -1276,11 +1275,11 @@ static void fastrpc_mmap_free(struct fastrpc_mmap *map, uint32_t flags)
 			return;
 		}
 
-		if (msm_minidump_enabled()) {
+		if (msm_minidump_enabled() && !map->is_persistent)
 			err = fastrpc_minidump_remove_region(map);
-		}
-		trace_fastrpc_dma_free(-1, map->phys, map->size);
-		if (map->phys) {
+
+		if (map->phys && !map->is_persistent) {
+			trace_fastrpc_dma_free(-1, map->phys, map->size);
 			dma_free_attrs(me->dev, map->size, (void *)map->va,
 			(dma_addr_t)map->phys, (unsigned long)map->attr);
 		}
@@ -1325,7 +1324,9 @@ static void fastrpc_mmap_free(struct fastrpc_mmap *map, uint32_t flags)
 		if (!IS_ERR_OR_NULL(map->buf))
 			dma_buf_put(map->buf);
 	}
-	kfree(map);
+	if (!map->is_persistent) {
+		kfree(map);
+	}
 }
 
 static int fastrpc_session_alloc(struct fastrpc_channel_ctx *chan, int secure,
@@ -5235,8 +5236,8 @@ static ssize_t fastrpc_debugfs_read(struct file *filp, char __user *buffer,
 	unsigned int len = 0;
 	int i, j, sess_used = 0, ret = 0;
 	char *fileinfo = NULL;
-	char single_line[UL_SIZE] = "----------------";
-	char title[UL_SIZE] = "=========================";
+	char single_line[] = "----------------";
+	char title[] = "=========================";
 
 	fileinfo = kzalloc(DEBUGFS_SIZE, GFP_KERNEL);
 	if (!fileinfo) {
@@ -6062,7 +6063,7 @@ static long fastrpc_device_ioctl(struct file *file, unsigned int ioctl_num,
 		goto bail;
 
 	spin_lock(&fl->hlock);
-	if (fl->file_close == FASTRPC_PROCESS_EXIT_START) {
+	if (fl->file_close >= FASTRPC_PROCESS_EXIT_START) {
 		err = -ESHUTDOWN;
 		pr_warn("adsprpc: fastrpc_device_release is happening, So not sending any new requests to DSP\n");
 		spin_unlock(&fl->hlock);
