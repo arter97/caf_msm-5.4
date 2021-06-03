@@ -595,6 +595,7 @@ static struct virtio_driver virtio_regulator_driver = {
 	.feature_table_size		= ARRAY_SIZE(features),
 	.driver.name			= KBUILD_MODNAME,
 	.driver.owner			= THIS_MODULE,
+	.driver.probe_type		= PROBE_PREFER_ASYNCHRONOUS,
 	.id_table			= id_table,
 	.probe				= virtio_regulator_probe,
 	.remove				= virtio_regulator_remove,

@@ -1175,6 +1175,7 @@ static struct platform_driver pmic_gpio_driver = {
 	.driver = {
 		   .name = "qcom-spmi-gpio",
 		   .of_match_table = pmic_gpio_of_match,
+		   .probe_type		= PROBE_PREFER_ASYNCHRONOUS,
 	},
 	.probe	= pmic_gpio_probe,
 	.remove = pmic_gpio_remove,

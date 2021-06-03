@@ -600,6 +600,7 @@ static struct virtio_driver virtio_clk_driver = {
 	.feature_table_size		= ARRAY_SIZE(features),
 	.driver.name			= KBUILD_MODNAME,
 	.driver.owner			= THIS_MODULE,
+	.driver.probe_type		= PROBE_PREFER_ASYNCHRONOUS,
 	.id_table			= id_table,
 	.probe				= virtio_clk_probe,
 };
@@ -613,7 +614,7 @@ static void __exit virtio_clk_fini(void)
 {
 	unregister_virtio_driver(&virtio_clk_driver);
 }
-subsys_initcall_sync(virtio_clk_init);
+subsys_initcall(virtio_clk_init);
 module_exit(virtio_clk_fini);
 
 MODULE_DEVICE_TABLE(virtio, id_table);
