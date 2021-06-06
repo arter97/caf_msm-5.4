@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2020 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2021, The Linux Foundation. All rights reserved.
  * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
@@ -16,6 +16,9 @@
 
 #include <soc/qcom/qrtr_ethernet.h>
 #include "qrtr.h"
+
+#define QRTR_DBG(ctx, x, ...)	\
+	dev_dbg(ctx, x, ##__VA_ARGS__)
 
 struct qrtr_ethernet_dl_buf {
 	void *buf;
@@ -67,6 +70,7 @@ static void qrtr_ethernet_link_up(void)
 	struct qrtr_ethernet_dev *qdev = qrtr_ethernet_device_endpoint;
 	int rc;
 
+	QRTR_DBG(qdev->dev, "%s: Enter\n", __func__);
 	atomic_set(&qdev->in_reset, 0);
 
 	mutex_lock(&qdev->dlbuf.buf_lock);
@@ -82,12 +86,14 @@ static void qrtr_ethernet_link_up(void)
 		dev_err(qdev->dev, "%s: EP register fail: %d\n", __func__, rc);
 		return;
 	}
+	QRTR_DBG(qdev->dev, "%s: Exit\n", __func__);
 }
 
 static void qrtr_ethernet_link_down(void)
 {
 	struct qrtr_ethernet_dev *qdev = qrtr_ethernet_device_endpoint;
 
+	QRTR_DBG(qdev->dev, "%s: Enter\n", __func__);
 	atomic_inc(&qdev->in_reset);
 
 	kthread_flush_work(&qdev->send_data);
@@ -99,6 +105,7 @@ static void qrtr_ethernet_link_down(void)
 	mutex_unlock(&qdev->dlbuf.buf_lock);
 
 	qrtr_endpoint_unregister(&qdev->ep);
+	QRTR_DBG(qdev->dev, "%s: Exit\n", __func__);
 }
 
 static void eth_event_handler(struct kthread_work *work)
@@ -114,6 +121,7 @@ static void eth_event_handler(struct kthread_work *work)
 		return;
 	}
 
+	QRTR_DBG(qdev->dev, "%s: Enter\n", __func__);
 	spin_lock_irqsave(&qdev->event_lock, flags);
 	entry = list_first_entry(&qdev->event_q, struct qrtr_event_t, list);
 	spin_unlock_irqrestore(&qdev->event_lock, flags);
@@ -137,6 +145,7 @@ static void eth_event_handler(struct kthread_work *work)
 	list_del(&entry->list);
 	kfree(entry);
 	spin_unlock_irqrestore(&qdev->event_lock, flags);
+	QRTR_DBG(qdev->dev, "%s: Exit\n", __func__);
 }
 
 static void qrtr_queue_eth_event(unsigned int event)
@@ -230,6 +239,7 @@ void qcom_ethernet_qrtr_dl_cb(struct eth_adapt_result *eth_res)
 		return;
 	}
 
+	QRTR_DBG(qdev->dev, "%s: pkt start with len %d\n", __func__, len);
 	mutex_lock(&dlbuf->buf_lock);
 	while (len > 0) {
 		if (dlbuf->needed > 0) {
@@ -238,6 +248,8 @@ void qcom_ethernet_qrtr_dl_cb(struct eth_adapt_result *eth_res)
 				dlbuf->needed = set_cp_size(dlbuf->needed);
 				memcpy((dlbuf->buf + dlbuf->saved),
 				       src, dlbuf->needed);
+				QRTR_DBG(qdev->dev, "%s: full pkt rec1 %d\n",
+					 __func__, pkt_len);
 				rc = qrtr_endpoint_post(&qdev->ep, dlbuf->buf,
 							pkt_len);
 				if (rc == -EINVAL) {
@@ -256,6 +268,10 @@ void qcom_ethernet_qrtr_dl_cb(struct eth_adapt_result *eth_res)
 				memcpy(dlbuf->buf + dlbuf->saved, src, len);
 				dlbuf->saved = dlbuf->saved + len;
 				dlbuf->needed = dlbuf->needed - len;
+				QRTR_DBG(qdev->dev,
+					 "%s: part pkt1 saved %d need %d\n",
+					 __func__, dlbuf->saved,
+					 dlbuf->needed);
 				break;
 			}
 		} else {
@@ -277,6 +293,10 @@ void qcom_ethernet_qrtr_dl_cb(struct eth_adapt_result *eth_res)
 					dlbuf->head_required =
 						min_head_req - len;
 					memcpy(dlbuf->buf, src, dlbuf->saved);
+					QRTR_DBG(qdev->dev,
+						 "%s: part head saved %d req %d\n",
+						 __func__, dlbuf->saved,
+						 dlbuf->head_required);
 					break;
 				}
 			} else {
@@ -300,6 +320,10 @@ void qcom_ethernet_qrtr_dl_cb(struct eth_adapt_result *eth_res)
 					       src, len);
 					dlbuf->saved += len;
 					dlbuf->head_required -= len;
+					QRTR_DBG(qdev->dev,
+						 "%s: still part head saved %d req %d\n",
+						 __func__, dlbuf->saved,
+						 dlbuf->head_required);
 					break;
 				}
 			}
@@ -314,6 +338,8 @@ void qcom_ethernet_qrtr_dl_cb(struct eth_adapt_result *eth_res)
 			if ((int)pkt_len == 0) {
 				dlbuf->needed = 0;
 				dlbuf->pkt_len = 0;
+				QRTR_DBG(qdev->dev, "%s: zero length pkt\n",
+					 __func__);
 				break;
 			}
 
@@ -330,10 +356,16 @@ void qcom_ethernet_qrtr_dl_cb(struct eth_adapt_result *eth_res)
 				dlbuf->saved = len;
 				dlbuf->saved = set_cp_size(dlbuf->saved);
 				memcpy(dlbuf->buf, src, dlbuf->saved);
+				QRTR_DBG(qdev->dev,
+					 "%s: part pkt2 saved %d need %d pkt_len %d\n",
+					 __func__, dlbuf->saved,
+					 dlbuf->needed, pkt_len);
 				break;
 			}
 			pkt_len = set_cp_size(pkt_len);
 			memcpy(dlbuf->buf, src, pkt_len);
+			QRTR_DBG(qdev->dev, "%s: full pkt rec2 %d\n",
+				 __func__, pkt_len);
 			rc = qrtr_endpoint_post(&qdev->ep, dlbuf->buf, pkt_len);
 			if (rc == -EINVAL) {
 				dev_err(qdev->dev, "Invalid qrtr packet\n");
@@ -347,6 +379,7 @@ void qcom_ethernet_qrtr_dl_cb(struct eth_adapt_result *eth_res)
 		}
 	}
 exit:
+	QRTR_DBG(qdev->dev, "%s: pkt end\n", __func__);
 	kfree(nw_buf);
 	mutex_unlock(&dlbuf->buf_lock);
 }
@@ -354,6 +387,7 @@ EXPORT_SYMBOL(qcom_ethernet_qrtr_dl_cb);
 
 static void qrtr_ethernet_pkt_release(struct kref *ref)
 {
+	struct qrtr_ethernet_dev *qdev = qrtr_ethernet_device_endpoint;
 	struct qrtr_ethernet_pkt *pkt = container_of(ref,
 						     struct qrtr_ethernet_pkt,
 						     refcount);
@@ -363,6 +397,7 @@ static void qrtr_ethernet_pkt_release(struct kref *ref)
 	if (sk)
 		sock_put(sk);
 	kfree(pkt);
+	QRTR_DBG(qdev->dev, "%s: send done\n", __func__);
 }
 
 static void eth_tx_data(struct kthread_work *work)
@@ -385,6 +420,8 @@ static void eth_tx_data(struct kthread_work *work)
 		list_del(&pkt->node);
 		spin_unlock_irqrestore(&qdev->ul_lock, flags);
 
+		QRTR_DBG(qdev->dev, "%s: Sending %d\n", __func__,
+			 pkt->skb->len);
 		rc = qdev->cb_info->eth_send(pkt->skb);
 		if (rc)
 			dev_err(qdev->dev, "%s: eth_send failed: %d\n",
@@ -518,6 +555,7 @@ static int qcom_ethernet_qrtr_probe(struct platform_device *pdev)
 		sched_setscheduler(qdev->task, SCHED_FIFO, &param);
 
 	qrtr_ethernet_device_endpoint = qdev;
+	QRTR_DBG(qdev->dev, "%s: Success\n", __func__);
 
 	return 0;
 }
