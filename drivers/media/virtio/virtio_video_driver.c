@@ -18,11 +18,7 @@
  */
 #include <linux/module.h>
 #include <linux/version.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,10,0)
-#include <linux/dma-map-ops.h>
-#else
 #include <linux/dma-mapping.h>
-#endif
 
 #include "virtio_video.h"
 
@@ -109,11 +105,7 @@ static int virtio_video_probe(struct virtio_device *vdev)
 	if (virtio_has_feature(vdev, VIRTIO_VIDEO_F_RESOURCE_NON_CONTIG))
 		vvd->supp_non_contig = true;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,9,0)
-	vvd->has_iommu = !virtio_has_dma_quirk(vdev);
-#else
 	vvd->has_iommu = !virtio_has_iommu_quirk(vdev);
-#endif
 
 	if (!dev->dma_ops)
 		set_dma_ops(dev, pdev->dma_ops);
@@ -135,9 +127,8 @@ static int virtio_video_probe(struct virtio_device *vdev)
 	spin_lock_init(&vvd->commandq.qlock);
 	init_waitqueue_head(&vvd->commandq.reclaim_queue);
 
-	INIT_WORK(&vvd->eventq.work, virtio_video_process_events);
-
-	INIT_LIST_HEAD(&vvd->pending_vbuf_list);
+	spin_lock_init(&vvd->eventq.qlock);
+	INIT_WORK(&vvd->eventq.reclaim_work, virtio_video_reclaim_events);
 
 	ret = virtio_find_vqs(vdev, 2, vqs, callbacks, names, NULL);
 	if (ret) {
@@ -170,13 +161,12 @@ static int virtio_video_probe(struct virtio_device *vdev)
 		goto err_config;
 	}
 
-	ret = virtio_video_alloc_events(vvd);
+	ret = virtio_video_alloc_events(vvd, vvd->eventq.vq->num_free);
 	if (ret)
 		goto err_events;
 
 	virtio_device_ready(vdev);
-	vvd->commandq.ready = true;
-	vvd->eventq.ready = true;
+	vvd->vq_ready = true;
 
 	ret = virtio_video_device_init(vvd);
 	if (ret) {

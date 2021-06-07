@@ -17,7 +17,6 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <linux/version.h>
 #include <media/v4l2-event.h>
 #include <media/v4l2-ioctl.h>
 #include <media/videobuf2-dma-sg.h>
@@ -159,90 +158,72 @@ int virtio_video_queue_setup(struct vb2_queue *vq, unsigned int *num_buffers,
 	return 0;
 }
 
-static unsigned int
-build_virtio_video_sglist_contig(struct virtio_video_resource_sg_list *sgl,
-			         struct vb2_buffer *vb, unsigned int plane)
-{
-	sgl->entries[0].addr = cpu_to_le64(vb2_dma_contig_plane_dma_addr(vb, plane));
-	sgl->entries[0].length = cpu_to_le32(vb->planes[plane].length);
-
-	sgl->num_entries = 1;
-
-	return VIRTIO_VIDEO_RESOURCE_SG_SIZE(1);
-}
-
-static unsigned int
-build_virtio_video_sglist(struct virtio_video_resource_sg_list *sgl,
-			  struct vb2_buffer *vb, unsigned int plane,
-			  bool has_iommu)
-{
-	int i;
-	struct scatterlist *sg;
-	struct sg_table *sgt = vb2_dma_sg_plane_desc(vb, plane);
-
-	for_each_sg(sgt->sgl, sg, sgt->nents, i) {
-		sgl->entries[i].addr = cpu_to_le64(has_iommu
-							? sg_dma_address(sg)
-							: sg_phys(sg));
-		sgl->entries[i].length = cpu_to_le32(sg->length);
-	}
-
-	sgl->num_entries = sgt->nents;
-
-	return VIRTIO_VIDEO_RESOURCE_SG_SIZE(sgt->nents);
-}
-
 int virtio_video_buf_init(struct vb2_buffer *vb)
 {
 	int ret = 0;
-	void *buf;
-	size_t buf_size = 0;
-	struct virtio_video_resource_sg_list *sg_list;
-	unsigned int i, offset = 0, resource_id, nents = 0;
+	unsigned int i, j;
+	struct scatterlist *sg;
+	struct virtio_video_mem_entry *ents;
+	uint32_t num_ents[VIRTIO_VIDEO_MAX_PLANES];
+	struct sg_table *sgt[VIRTIO_VIDEO_MAX_PLANES];
+	uint32_t resource_id, nents = 0;
 	struct vb2_queue *vq = vb->vb2_queue;
 	enum v4l2_buf_type queue_type = vq->type;
 	struct virtio_video_stream *stream = vb2_get_drv_priv(vq);
 	struct virtio_video_buffer *virtio_vb = to_virtio_vb(vb);
 	struct virtio_video_device *vvd = to_virtio_vd(stream->video_dev);
 
+	virtio_video_resource_id_get(vvd, &resource_id);
+
 	if (vvd->supp_non_contig) {
 		for (i = 0; i < vb->num_planes; i++) {
-			nents = vb2_dma_sg_plane_desc(vb, i)->nents;
-			buf_size += VIRTIO_VIDEO_RESOURCE_SG_SIZE(nents);
+			sgt[i] = vb2_dma_sg_plane_desc(vb, i);
+			nents += sgt[i]->nents;
 		}
 
-		buf = kcalloc(1, buf_size, GFP_KERNEL);
-		if (!buf)
+		ents = kcalloc(nents, sizeof(*ents), GFP_KERNEL);
+		if (!ents)
 			return -ENOMEM;
 
-		for (i = 0; i < vb->num_planes; i++) {
-			sg_list = buf + offset;
-			offset += build_virtio_video_sglist(sg_list, vb, i,
-							    vvd->has_iommu);
+		for (i = 0; i < vb->num_planes; ++i) {
+			for_each_sg(sgt[i]->sgl, sg, sgt[i]->nents, j) {
+				ents[j].addr = cpu_to_le64(vvd->has_iommu
+							   ? sg_dma_address(sg)
+							   : sg_phys(sg));
+				ents[j].length = cpu_to_le32(sg->length);
+			}
+			num_ents[i] = sgt[i]->nents;
 		}
 	} else {
-		buf_size = vb->num_planes * VIRTIO_VIDEO_RESOURCE_SG_SIZE(nents);
+		nents = vb->num_planes;
 
-		buf = kcalloc(1, buf_size, GFP_KERNEL);
-		if (!buf)
+		ents = kcalloc(nents, sizeof(*ents), GFP_KERNEL);
+		if (!ents)
 			return -ENOMEM;
 
-		for (i = 0; i < vb->num_planes; i++) {
-			sg_list = buf + offset;
-			offset += build_virtio_video_sglist_contig(sg_list,
-								   vb, i);
+		for (i = 0; i < vb->num_planes; ++i) {
+			ents[i].addr =
+				cpu_to_le64(vb2_dma_contig_plane_dma_addr(vb, i));
+			ents[i].length = cpu_to_le32(vb->planes[i].length);
+			num_ents[i] = 1;
 		}
 	}
 
-	virtio_video_resource_id_get(vvd, &resource_id);
+	v4l2_dbg(1, vvd->debug, &vvd->v4l2_dev, "mem entries:\n");
+	if (vvd->debug >= 1) {
+		for (i = 0; i < nents; i++)
+			pr_debug("\t%03i: addr=%llx length=%u\n", i,
+					ents[i].addr, ents[i].length);
+	}
 
-	ret = virtio_video_cmd_resource_attach(vvd, stream->stream_id,
+	ret = virtio_video_cmd_resource_create(vvd, stream->stream_id,
 					       resource_id,
 					       to_virtio_queue_type(queue_type),
-					       buf, buf_size);
+					       ents, vb->num_planes,
+					       num_ents);
 	if (ret) {
 		virtio_video_resource_id_put(vvd, resource_id);
-		kfree(buf);
+		kfree(ents);
 		return ret;
 	}
 
@@ -697,7 +678,8 @@ static int virtio_video_queue_free(struct virtio_video_device *vvd,
 	int ret;
 	enum virtio_video_queue_type queue_type = to_virtio_queue_type(type);
 
-	ret = virtio_video_cmd_queue_detach_resources(vvd, stream, queue_type);
+	ret = virtio_video_cmd_resource_destroy_all(vvd, stream,
+						    queue_type);
 	if (ret) {
 		v4l2_warn(&vvd->v4l2_dev,
 			  "failed to destroy resources\n");
@@ -813,8 +795,7 @@ int virtio_video_queue_release_buffers(struct virtio_video_stream *stream,
 }
 
 void virtio_video_buf_done(struct virtio_video_buffer *virtio_vb,
-			   uint32_t flags, uint64_t timestamp,
-			   uint32_t data_sizes[])
+			   uint32_t flags, uint64_t timestamp, uint32_t size)
 {
 	int i;
 	enum vb2_buffer_state done_state = VB2_BUF_STATE_DONE;
@@ -827,26 +808,26 @@ void virtio_video_buf_done(struct virtio_video_buffer *virtio_vb,
 
 	virtio_vb->queued = false;
 
-	if (flags & VIRTIO_VIDEO_DEQUEUE_FLAG_ERR)
+	if (flags & VIRTIO_VIDEO_BUFFER_FLAG_ERR)
 		done_state = VB2_BUF_STATE_ERROR;
 
-	if (flags & VIRTIO_VIDEO_DEQUEUE_FLAG_KEY_FRAME)
+	if (flags & VIRTIO_VIDEO_BUFFER_FLAG_IFRAME)
 		v4l2_vb->flags |= V4L2_BUF_FLAG_KEYFRAME;
 
-	if (flags & VIRTIO_VIDEO_DEQUEUE_FLAG_BFRAME)
+	if (flags & VIRTIO_VIDEO_BUFFER_FLAG_BFRAME)
 		v4l2_vb->flags |= V4L2_BUF_FLAG_BFRAME;
 
-	if (flags & VIRTIO_VIDEO_DEQUEUE_FLAG_PFRAME)
+	if (flags & VIRTIO_VIDEO_BUFFER_FLAG_PFRAME)
 		v4l2_vb->flags |= V4L2_BUF_FLAG_PFRAME;
 
-	if (flags & VIRTIO_VIDEO_DEQUEUE_FLAG_EOS) {
+	if (flags & VIRTIO_VIDEO_BUFFER_FLAG_EOS) {
 		v4l2_vb->flags |= V4L2_BUF_FLAG_LAST;
 		virtio_video_state_update(stream, STREAM_STATE_STOPPED);
 		virtio_video_queue_eos_event(stream);
 	}
 
-	if ((flags & VIRTIO_VIDEO_DEQUEUE_FLAG_ERR) ||
-	    (flags & VIRTIO_VIDEO_DEQUEUE_FLAG_EOS)) {
+	if ((flags & VIRTIO_VIDEO_BUFFER_FLAG_ERR) ||
+	    (flags & VIRTIO_VIDEO_BUFFER_FLAG_EOS)) {
 		vb->planes[0].bytesused = 0;
 
 		if (!vvd->is_m2m_dev)
@@ -859,9 +840,7 @@ void virtio_video_buf_done(struct virtio_video_buffer *virtio_vb,
 	if (!V4L2_TYPE_IS_OUTPUT(vb2_queue->type)) {
 		switch (vvd->type) {
 		case VIRTIO_VIDEO_DEVICE_ENCODER:
-			for (i = 0; i < vb->num_planes; i++)
-				vb->planes[i].bytesused =
-					le32_to_cpu(data_sizes[i]);
+			vb->planes[0].bytesused = size;
 			break;
 		case VIRTIO_VIDEO_DEVICE_CAMERA:
 		case VIRTIO_VIDEO_DEVICE_DECODER:
@@ -1097,11 +1076,7 @@ static int virtio_video_device_register(struct virtio_video_device *vvd)
 
 	vd = &vvd->video_dev;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,7,0)
-	ret = video_register_device(vd, VFL_TYPE_VIDEO, vvd->vid_dev_nr);
-#else
 	ret = video_register_device(vd, VFL_TYPE_GRABBER, vvd->vid_dev_nr);
-#endif
 	if (ret) {
 		v4l2_err(&vvd->v4l2_dev, "failed to register video device\n");
 		return ret;
@@ -1271,9 +1246,6 @@ err_output_cap:
 
 void virtio_video_device_deinit(struct virtio_video_device *vvd)
 {
-	vvd->commandq.ready = false;
-	vvd->eventq.ready = false;
-
 	virtio_video_device_unregister(vvd);
 	if (vvd->is_m2m_dev)
 		v4l2_m2m_release(vvd->m2m_dev);
