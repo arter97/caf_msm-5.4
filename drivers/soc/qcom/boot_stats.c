@@ -430,6 +430,7 @@ static ssize_t mpm_dev_read(struct file *fp, char __user *user_buffer,
 	int rc = 0;
 	unsigned int ticks = (unsigned int)msm_timer_get_sclk_ticks();
 
+	*position = 0;
 	rc = simple_read_from_buffer(user_buffer, count, position, &ticks, 4);
 	return rc;
 }
@@ -442,6 +443,7 @@ static ssize_t mpm_dev_write(struct file *fp, const char __user *user_buffer,
 
 	if (count > MAX_STRING_LEN)
 		return -EINVAL;
+	*position = 0;
 	rc = simple_write_to_buffer(buf,
 			sizeof(buf) - 1, position, user_buffer, count);
 	if (rc < 0)
