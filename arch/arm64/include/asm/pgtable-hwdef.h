@@ -106,11 +106,7 @@
  *
  * Level 1 descriptor (PUD).
  */
-#ifdef CONFIG_UNMAP_KERNEL_AT_EL0
-#define PUD_TYPE_TABLE		(_AT(pudval_t, 3) << 0) | PTE_NG
-#else
 #define PUD_TYPE_TABLE		(_AT(pudval_t, 3) << 0)
-#endif
 #define PUD_TABLE_BIT		(_AT(pudval_t, 1) << 1)
 #define PUD_TYPE_MASK		(_AT(pudval_t, 3) << 0)
 #define PUD_TYPE_SECT		(_AT(pudval_t, 1) << 0)
@@ -119,13 +115,8 @@
  * Level 2 descriptor (PMD).
  */
 #define PMD_TYPE_MASK		(_AT(pmdval_t, 3) << 0)
-#ifdef CONFIG_UNMAP_KERNEL_AT_EL0
-#define PMD_TYPE_TABLE		(_AT(pmdval_t, 3) << 0) | PTE_NG
-#else
 #define PMD_TYPE_TABLE		(_AT(pmdval_t, 3) << 0)
-#endif
 #define PMD_TYPE_SECT		(_AT(pmdval_t, 1) << 0)
-#define PMD_TYPE_TABLE_RAW		(_AT(pmdval_t, 3) << 0)
 #define PMD_TABLE_BIT		(_AT(pmdval_t, 1) << 1)
 
 /*

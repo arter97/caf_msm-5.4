@@ -155,7 +155,7 @@ ENDPROC(preserve_boot_args)
 	.macro	create_table_entry, tbl, virt, shift, ptrs, tmp1, tmp2
 	add	\tmp1, \tbl, #PAGE_SIZE
 	phys_to_pte \tmp2, \tmp1
-	orr	\tmp2, \tmp2, #PMD_TYPE_TABLE_RAW	// address of next table and entry type
+	orr	\tmp2, \tmp2, #PMD_TYPE_TABLE	// address of next table and entry type
 	lsr	\tmp1, \virt, #\shift
 	sub	\ptrs, \ptrs, #1
 	and	\tmp1, \tmp1, \ptrs		// table index
@@ -247,20 +247,20 @@ ENDPROC(preserve_boot_args)
 	mov \sv, \rtbl
 	mov \count, #0
 	compute_indices \vstart, \vend, #PGDIR_SHIFT, \pgds, \istart, \iend, \count
-	populate_entries \tbl, \rtbl, \istart, \iend, #PMD_TYPE_TABLE_RAW, #PAGE_SIZE, \tmp
+	populate_entries \tbl, \rtbl, \istart, \iend, #PMD_TYPE_TABLE, #PAGE_SIZE, \tmp
 	mov \tbl, \sv
 	mov \sv, \rtbl
 
 #if SWAPPER_PGTABLE_LEVELS > 3
 	compute_indices \vstart, \vend, #PUD_SHIFT, #PTRS_PER_PUD, \istart, \iend, \count
-	populate_entries \tbl, \rtbl, \istart, \iend, #PMD_TYPE_TABLE_RAW, #PAGE_SIZE, \tmp
+	populate_entries \tbl, \rtbl, \istart, \iend, #PMD_TYPE_TABLE, #PAGE_SIZE, \tmp
 	mov \tbl, \sv
 	mov \sv, \rtbl
 #endif
 
 #if SWAPPER_PGTABLE_LEVELS > 2
 	compute_indices \vstart, \vend, #SWAPPER_TABLE_SHIFT, #PTRS_PER_PMD, \istart, \iend, \count
-	populate_entries \tbl, \rtbl, \istart, \iend, #PMD_TYPE_TABLE_RAW, #PAGE_SIZE, \tmp
+	populate_entries \tbl, \rtbl, \istart, \iend, #PMD_TYPE_TABLE, #PAGE_SIZE, \tmp
 	mov \tbl, \sv
 #endif
 
