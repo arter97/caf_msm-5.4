@@ -1,0 +1,10 @@
+config VIRTIO_VIDEO
+	tristate "Virtio multi-format V4L2 encoder/decoder driver"
+	depends on VIDEO_V4L2 && VIRTIO && MMU
+	select VIDEOBUF2_DMA_CONTIG
+	select VIDEOBUF2_DMA_SG
+	select V4L2_MEM2MEM_DEV
+	help
+	  This is a driver for virtio V4L2 video device.
+	  Enables guest access to host shared hw video accelerator.
+	  If unsure, say N.

@@ -165,6 +165,7 @@ comment "Media drivers"
 # V4L platform/mem2mem drivers
 #
 
+source "drivers/media/virtio/Kconfig"
 source "drivers/media/usb/Kconfig"
 source "drivers/media/pci/Kconfig"
 source "drivers/media/platform/Kconfig"
