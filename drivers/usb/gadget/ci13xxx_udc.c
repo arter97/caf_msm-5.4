@@ -2924,6 +2924,11 @@ static int ep_enable(struct usb_ep *ep,
 	if (ep == NULL || desc == NULL)
 		return -EINVAL;
 
+	if (pm_runtime_suspended(&_udc->gadget.dev)) {
+		err("fail ep_enable %s device is into LPM\n", mEp->name);
+		return -EINVAL;
+	}
+
 	spin_lock_irqsave(mEp->lock, flags);
 
 	/* only internal SW should enable ctrl endpts */
@@ -2989,6 +2994,7 @@ static int ep_disable(struct usb_ep *ep)
 	else if (mEp->desc == NULL)
 		return -EBUSY;
 
+	pm_runtime_get_sync(&_udc->gadget.dev);
 	spin_lock_irqsave(mEp->lock, flags);
 
 	/* only internal SW should disable ctrl endpts */
@@ -3016,6 +3022,9 @@ static int ep_disable(struct usb_ep *ep)
 	mEp->ep.maxpacket = USHRT_MAX;
 
 	spin_unlock_irqrestore(mEp->lock, flags);
+	pm_runtime_mark_last_busy(&_udc->gadget.dev);
+	pm_runtime_put_autosuspend(&_udc->gadget.dev);
+
 	return retval;
 }
 
