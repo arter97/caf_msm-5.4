@@ -24,6 +24,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "linux/irqflags.h"
 #include "soniclib.h"
 #include "chbsp_init.h"
 #include "chirp_bsp.h"
@@ -116,6 +117,8 @@ int chdrv_write_byte(struct ch_dev_t *dev_ptr, u16 mem_addr, u8 data_value)
 	// insert byte count (1) at start of data
 	u8 message[] = { sizeof(data_value), data_value };
 
+	printf("write_bytes: 0x%x, %d\n", mem_addr, data_value);
+
 	ch_err = chbsp_i2c_mem_write(dev_ptr, mem_addr, message,
 		sizeof(message));
 
@@ -166,6 +169,8 @@ int chdrv_write_word(struct ch_dev_t *dev_ptr, u16 mem_addr, u16 data_value)
 	int ch_err;
 	u8 message[] = { sizeof(data_value), (u8)data_value,
 			(u8)(data_value >> 8) };
+
+	printf("write_words: 0x%x, %d\n", mem_addr, data_value);
 
 	ch_err = chbsp_i2c_mem_write(dev_ptr, mem_addr, message,
 		sizeof(message));
@@ -647,17 +652,20 @@ int chdrv_group_hw_trigger(struct ch_group_t *grp_ptr)
 	int ch_err = !grp_ptr;
 	u8 dev_num;
 	struct ch_dev_t *dev_ptr;
+	unsigned long flags;
 
 	if (ch_err)
 		return ch_err;
 
+	local_irq_save(flags);    /* interrupts are now disabled */
+    /* CH 101 Rx only */
 	for (dev_num = 0; dev_num < ch_get_num_ports(grp_ptr); dev_num++) {
 		dev_ptr = ch_get_dev_ptr(grp_ptr, dev_num);
 		if (ch_sensor_is_connected(dev_ptr) && (dev_num < 3) &&
 			(ch_get_mode(dev_ptr) == CH_MODE_TRIGGERED_RX_ONLY))
 			ch_err |= chdrv_hw_trigger_up(dev_ptr);
 	}
-
+	/* Ch101 echo mode (since Rx only is already done above or ch201 echo mode */
 	for (dev_num = 0; dev_num < ch_get_num_ports(grp_ptr); dev_num++) {
 		dev_ptr = ch_get_dev_ptr(grp_ptr, dev_num);
 		if (ch_sensor_is_connected(dev_ptr) && ((dev_num >= 3) ||
@@ -665,24 +673,15 @@ int chdrv_group_hw_trigger(struct ch_group_t *grp_ptr)
 			ch_err |= chdrv_hw_trigger_up(dev_ptr);
 	}
 
-	chbsp_delay_us(5); // Pulse needs to be a minimum of 800ns long
-	/* we need to trigger TX_RX mode first in CH101. */
 	for (dev_num = 0; dev_num < ch_get_num_ports(grp_ptr); dev_num++) {
 		dev_ptr = ch_get_dev_ptr(grp_ptr, dev_num);
-		if (ch_sensor_is_connected(dev_ptr) && (dev_num < 3) &&
-			(ch_get_mode(dev_ptr) == CH_MODE_TRIGGERED_RX_ONLY))
-			ch_err |= chdrv_hw_trigger_down(dev_ptr);
+		ch_err |= chdrv_hw_trigger_down(dev_ptr);
 	}
+	local_irq_restore(flags); /* interrupts are restored to their previous state */
 
-	for (dev_num = 0; dev_num < ch_get_num_ports(grp_ptr); dev_num++) {
-		dev_ptr = ch_get_dev_ptr(grp_ptr, dev_num);
-		if (ch_sensor_is_connected(dev_ptr) && ((dev_num >= 3) ||
-			(ch_get_mode(dev_ptr) == CH_MODE_TRIGGERED_TX_RX)))
-			ch_err |= chdrv_hw_trigger_down(dev_ptr);
-	}
-	// Delay a bit before re-enabling pin interrupt to avoid
+	// Delay a bit before re-enabling pin interrupt as input pin to avoid
 	// possibly triggering on falling-edge noise
-	chbsp_delay_us(10);
+	chbsp_delay_us(1);
 
 	for (dev_num = 0; dev_num < ch_get_num_ports(grp_ptr); dev_num++) {
 		dev_ptr = ch_get_dev_ptr(grp_ptr, dev_num);
@@ -714,9 +713,9 @@ int chdrv_hw_trigger_up(struct ch_dev_t *dev_ptr)
 
 	if (!ch_err) {
 		// Disable pin interrupt before triggering pulse
-		chbsp_io_interrupt_disable(dev_ptr);
+//		chbsp_io_interrupt_disable(dev_ptr);
 		// Generate pulse
-		printf("%s: Generate pulse - Start %p", __func__, dev_ptr);
+//		printf("%s: Generate pulse - Start %p", __func__, dev_ptr);
 		chbsp_set_io_dir_out(dev_ptr);
 		chbsp_io_set(dev_ptr);
 
@@ -731,7 +730,7 @@ int chdrv_hw_trigger_down(struct ch_dev_t *dev_ptr)
 	if (!ch_err) {
 		chbsp_io_clear(dev_ptr);
 		chbsp_set_io_dir_in(dev_ptr);
-		printf("%s: Generate pulse - End %p", __func__, dev_ptr);
+//		printf("%s: Generate pulse - End %p", __func__, dev_ptr);
 	}
 	return ch_err;
 }
@@ -905,7 +904,6 @@ static int chdrv_write_firmware(struct ch_dev_t *dev_ptr)
 static int chdrv_init_ram(struct ch_dev_t *dev_ptr)
 {
 	int ch_err = !dev_ptr || !dev_ptr->sensor_connected;
-	int i;
 
 #ifdef CHDRV_DEBUG
 	u32 prog_time;
@@ -972,7 +970,7 @@ static int chdrv_reset_and_halt(struct ch_dev_t *dev_ptr)
  *
  * \return 1 if sensor is found, 0 if no sensor is found
  *
- * This function checks for a sensor sensor on the I2C bus by attempting
+ * This function checks for a sensor on the I2C bus by attempting
  * to reset, halt, and read from the device using the programming
  * interface I2C address (0x45).
  *
@@ -1475,4 +1473,3 @@ void chdrv_discovery_hook_set(struct ch_group_t *grp_ptr,
 {
 	grp_ptr->disco_hook = hook_func_ptr;
 }
-

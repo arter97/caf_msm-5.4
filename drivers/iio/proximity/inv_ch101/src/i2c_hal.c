@@ -34,8 +34,8 @@ unsigned long i2c_master_read_register(int bus_index, unsigned char Address,
 	res = data->cbk->read_reg((void *)client, (u16)Address, (u8)RegAddr,
 		(u16)RegLen, (u8 *)RegValue);
 
-	if (res)
-		printf("%s: res: %d", __func__, res);
+//	if (res)
+//		printf("%s: res: %d", __func__, res);
 
 //	{
 //	int i;
@@ -70,8 +70,8 @@ unsigned long i2c_master_write_register(int bus_index, unsigned char Address,
 	res = data->cbk->write_reg((void *)client, (u16)Address, (u8)RegAddr,
 		(u16)RegLen, (u8 *)RegValue);
 
-	if (res)
-		printf("%s: res: %d", __func__, res);
+//	if (res)
+//		printf("%s: res: %d", __func__, res);
 
 	return res;
 }
@@ -91,8 +91,8 @@ unsigned long i2c_master_read_sync(int bus_index, unsigned char Address,
 	res = data->cbk->read_sync((void *)client, (u16)Address,
 		(u16)RegLen, (u8 *)RegValue);
 
-	if (res)
-		printf("%s: res: %d", __func__, res);
+//	if (res)
+//		printf("%s: res: %d", __func__, res);
 
 //	{
 //	int i;
@@ -126,8 +126,8 @@ unsigned long i2c_master_write_sync(int bus_index, unsigned char Address,
 	res = data->cbk->write_sync((void *)client, (u16)Address,
 		(u16)RegLen, (u8 *)RegValue);
 
-	if (res)
-		printf("%s: res: %d", __func__, res);
+//	if (res)
+//		printf("%s: res: %d", __func__, res);
 
 	return (res == 0 ? RegLen : res);
 }

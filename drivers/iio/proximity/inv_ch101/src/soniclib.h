@@ -105,6 +105,7 @@
 /* Chirp sensor part numbers */
 #define	CH101_PART_NUMBER	(101)
 #define	CH201_PART_NUMBER	(201)
+#define CH101_PART_FLOOR_NUMBER (102)
 
 /* Max number of samples per measurement */
 #define CH101_MAX_NUM_SAMPLES	450
@@ -315,6 +316,8 @@ struct ch_dev_t { /* [note tag name matches type to help Doxygen linkage ] */
 	struct ch_group_t *group;
 	/* Sensor operating mode. */
 	enum ch_mode_t mode;
+	uint8_t freqLockValue; /*!< Value set when sensor has locked */
+	uint16_t freqCounterCycles;      /*!< Frequency counter cycles */
 	/* Maximum range, in mm */
 	u16 max_range;
 	/* Static target rejection range, in samples (0 if unused) */
@@ -721,7 +724,7 @@ u8 ch_set_mode(struct ch_dev_t *dev_ptr, enum ch_mode_t mode);
  *	free-running mode
  *
  * This function returns the interval between measurements, in milliseconds,
- * for for a sensor operating in free-running mode.  If the sensor is in a
+ * for a sensor operating in free-running mode.  If the sensor is in a
  * different operating mode (e.g. a triggered mode), zero is returned.
  */
 u16 ch_get_sample_interval(struct ch_dev_t *dev_ptr);
@@ -953,7 +956,7 @@ u16 ch_get_rtc_cal_result(struct ch_dev_t *dev_ptr);
  *
  * \return RTC pulse length, in ms
  *
- * This function returns the length (duration), in milliseconds, of the the
+ * This function returns the length (duration), in milliseconds, of the
  * real-time clock (RTC) calibration pulse used for the sensor.  The pulse is
  * applied to the sensor's INT line during \a ch_group_start() to calibrate the
  * sensor's internal clock.  The pulse length is specified by the board support

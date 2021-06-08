@@ -138,7 +138,7 @@
 #include "soniclib.h"
 
 #ifdef __GNUC__
-#define WEAK __attribute__((weak))
+#define WEAK __weak
 #else
 #define WEAK
 #endif
@@ -208,7 +208,7 @@ void chbsp_debug_on(u8 dbg_pin_num);
  *
  * \param dbg_pin_num  index value for debug pin to turn off
  *
- * This function should drive the the specified debug indicator pin low.
+ * This function should drive the specified debug indicator pin low.
  * The \a dbg_pin_num parameter is an index value that specifies which debug pin
  * should be controlled.
  *
@@ -1014,7 +1014,7 @@ void chbsp_printf(const char *fmt, ...);
  *
  * This function is RECOMMENDED.
  *
- * \note RECOMMENDED - This functions required in in multi task environment.
+ * \note RECOMMENDED - This functions required in multi task environment.
  */
 void chbsp_critical_section_enter(void);
 void chbsp_critical_section_leave(void);

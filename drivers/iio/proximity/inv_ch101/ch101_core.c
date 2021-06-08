@@ -47,7 +47,7 @@
 #define CH101_IRQ_NAME		"ch101_event"
 
 #define CH101_MIN_FREQ_HZ	1
-#define CH101_MAX_FREQ_HZ	10
+#define CH101_MAX_FREQ_HZ	100
 #define CH101_DEFAULT_FREQ	5
 
 #define CH101_IQ_PACK		7		     // Max 8 samples (256 bits)
@@ -359,7 +359,7 @@ static int ch101_write_raw(struct iio_dev *indio_dev,
 }
 
 static IIO_CONST_ATTR_SAMP_FREQ_AVAIL
-("1 2 5 10");
+("1 2 5 10 100");
 
 static struct attribute *ch101_attributes[] = {
 	&iio_const_attr_sampling_frequency_available.dev_attr.attr,
@@ -975,7 +975,7 @@ int ch101_core_probe(struct i2c_client *client, struct regmap *regmap,
 
 	dev = &client->dev;
 
-	dev_info(dev, "%s: Start v.1.63 s: %d", __func__, sizeof(*data));
+	dev_info(dev, "%s: Start v.1.65 s: %d", __func__, sizeof(*data));
 
 	if (ch101_store.i2c_client == NULL) {
 		ch101_store.i2c_client = client;

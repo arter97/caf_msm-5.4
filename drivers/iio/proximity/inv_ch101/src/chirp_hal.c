@@ -32,7 +32,7 @@ static struct ch101_client *_ch101_client;
 void set_chirp_gpios(struct ch101_client *client)
 {
 	_ch101_client = client;
-	printf("%s: data: %p\n", __func__, _ch101_client);
+//	printf("%s: data: %p\n", __func__, _ch101_client);
 }
 
 struct ch101_client *get_chirp_gpios(void)
@@ -63,7 +63,7 @@ struct gpio_desc *os_get_pin_desc(ioport_pin_t pin)
 	if (pin >= CHIRP0_PROG_0 && pin <= CHIRP2_PROG_2)
 		return 0;
 
-	printf("%s: pin: %d undefined\n", __func__, (u32)pin);
+//	printf("%s: pin: %d undefined\n", __func__, (u32)pin);
 
 	return 0;
 }
@@ -85,7 +85,7 @@ u32 os_get_pin_prog(ioport_pin_t pin)
 	if (pin == CHIRP1_PROG_2)
 		return _ch101_client->bus[1].gpio_exp_prog_pin[2];
 
-	printf("%s: pin: %d undefined\n", __func__, (u32)pin);
+//	printf("%s: pin: %d undefined\n", __func__, (u32)pin);
 
 	return 0;
 }
@@ -212,7 +212,7 @@ int32_t os_enable_interrupt(const uint32_t pin)
 	unsigned int irq = gpiod_to_irq(desc);
 	struct ch101_client *data = get_chirp_data();
 
-	printf("%s: irq: %d\n", __func__, irq);
+//	printf("%s: irq: %d\n", __func__, irq);
 
 	if (data && data->cbk->setup_int_gpio)
 		data->cbk->setup_int_gpio(data, pin);
@@ -226,7 +226,7 @@ int32_t os_disable_interrupt(const uint32_t pin)
 	unsigned int irq = gpiod_to_irq(desc);
 	struct ch101_client *data = get_chirp_data();
 
-	printf("%s: irq: %d\n", __func__, irq);
+//	printf("%s: irq: %d\n", __func__, irq);
 
 	if (data && data->cbk->free_int_gpio)
 		data->cbk->free_int_gpio(data, pin);

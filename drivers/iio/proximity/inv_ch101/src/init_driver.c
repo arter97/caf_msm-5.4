@@ -300,9 +300,10 @@ static struct ch_group_t *init_group(void)
 				connected_sensor_array[num_connected_device++] =
 					dev_num;
 
-				if (dev_num < 3)
+				/* dev_num == 2 is for floor type detection */
+				if (dev_num < 2)
 					num_connected_ch101_device++;
-				else
+				else if (dev_num > 2)
 					num_connected_ch201_device++;
 			}
 		}
@@ -409,8 +410,8 @@ static void ext_int_handler(u32 gpio_pin)
 	if (sensor_group_ptr == NULL) {
 		sensor_group_ptr = grp_ptr;
 		func_ptr = sensor_group_ptr->io_int_callback;
-		printf("%s: pin: %d func_ptr: %p\n",
-			__func__, gpio_pin, func_ptr);
+//		printf("%s: pin: %d func_ptr: %p\n",
+//			__func__, gpio_pin, func_ptr);
 	}
 
 	/* Clear the interrupt */
@@ -558,7 +559,7 @@ static void set_ch101_pitch_catch_config(void)
 		if (count >= CHIRP_MAX_NUM_SENSORS)
 			return;
 
-		for (dev_num = 0; dev_num < 3; dev_num++) {
+		for (dev_num = 0; dev_num < 2; dev_num++) {
 			// init struct in array
 			enum ch_mode_t mode;
 			struct ch_dev_t *dev_ptr = &chirp_devices[dev_num];
@@ -578,8 +579,8 @@ static void set_ch101_pitch_catch_config(void)
 		}
 	}
 
-	if (num_connected_ch201_device) {
-		for (dev_num = 3; dev_num < num_ports; dev_num++) {
+	/*if (num_connected_ch201_device) { */
+		for (dev_num = 2; dev_num < num_ports; dev_num++) {
 			// init struct in array
 			enum ch_mode_t mode;
 			struct ch_dev_t *dev_ptr = &chirp_devices[dev_num];
@@ -591,7 +592,7 @@ static void set_ch101_pitch_catch_config(void)
 			if (!ret_val)
 				dev_ptr->mode = mode;
 		}
-	}
+	/*} */
 	show_config();
 }
 
@@ -841,11 +842,11 @@ void single_shot_driver(void)
 
 	data_ready = false;
 
+
 	while (--count > 0) {
-		chbsp_proc_sleep(10); // 10 ms - put processor in sleep mode
+		chbsp_proc_sleep(1); // 10 ms - put processor in sleep mode
 		printf("%s: count: %d, taskflags: %02x\n",
 			__func__, count, taskflags);
-
 		/* Check for sensor data-ready interrupt(s) */
 		if ((taskflags & DATA_READY_FLAG) || (count == 1)) {
 			// All sensors have interrupted - handle sensor data
@@ -863,6 +864,11 @@ void single_shot_driver(void)
 			data_ready = true;
 			break;
 		}
+		chbsp_delay_us(5000);
+		//chbsp_proc_sleep(5); // 5 ms - put processor in sleep mode
+		printf("%s: count: %d, taskflags: %02x\n",
+			__func__, count, taskflags);
+
 	}
 
 	set_ch101_pitch_catch_config();
