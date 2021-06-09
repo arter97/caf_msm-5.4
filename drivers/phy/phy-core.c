@@ -1129,4 +1129,4 @@ static int __init phy_core_init(void)
 
 	return 0;
 }
-device_initcall(phy_core_init);
+early_device_initcall(phy_core_init, EARLY_SUBSYS_PLATFORM, EARLY_INIT_LEVEL8);

@@ -204,40 +204,29 @@ static void gsi_rw_timer_func(struct timer_list *t)
 static struct f_gsi *get_connected_gsi(void)
 {
 	struct f_gsi *connected_gsi;
-	bool gsi_connected = false;
 	int i;
 
 	for (i = 0; i < IPA_USB_MAX_TETH_PROT_SIZE; i++) {
 		if (inst_status[i].opts)
 			connected_gsi = inst_status[i].opts->gsi;
-		else
-			continue;
 
-		if (connected_gsi && atomic_read(&connected_gsi->connected)) {
-			gsi_connected = true;
-			break;
-		}
+		if (connected_gsi && atomic_read(&connected_gsi->connected))
+			return connected_gsi;
 	}
 
-	if (!gsi_connected)
-		connected_gsi = NULL;
-
-	return connected_gsi;
+	return NULL;
 }
 
 #define DEFAULT_RW_TIMER_INTERVAL 500 /* in ms */
 static ssize_t usb_gsi_rw_write(struct file *file,
 			const char __user *ubuf, size_t count, loff_t *ppos)
 {
-	struct f_gsi *gsi;
+	struct f_gsi *gsi = NULL;
+	struct usb_function *func;
+	struct usb_gadget *gadget;
 	u8 input;
+	int i;
 	int ret;
-
-	gsi = get_connected_gsi();
-	if (!gsi) {
-		log_event_dbg("%s: gsi not connected\n", __func__);
-		goto err;
-	}
 
 	if (ubuf == NULL) {
 		log_event_dbg("%s: buffer is Null.\n", __func__);
@@ -250,23 +239,35 @@ static ssize_t usb_gsi_rw_write(struct file *file,
 		goto err;
 	}
 
-	if (gsi->debugfs_rw_timer_enable == !!input) {
-		if (!!input)
-			log_event_dbg("%s: RW already enabled\n", __func__);
-		else
-			log_event_dbg("%s: RW already disabled\n", __func__);
-		goto err;
-	}
+	for (i = 0; i < IPA_USB_MAX_TETH_PROT_SIZE; i++) {
+		gsi = NULL;
+		if (inst_status[i].opts)
+			gsi = inst_status[i].opts->gsi;
 
-	gsi->debugfs_rw_timer_enable = !!input;
+		if (gsi && atomic_read(&gsi->connected)) {
+			func = &gsi->function;
+			gadget = func->config->cdev->gadget;
+			gsi->debugfs_rw_timer_enable = !!input;
+			if (gadget->speed >= USB_SPEED_SUPER &&
+					!gsi->func_is_suspended) {
+				gsi->debugfs_rw_timer_enable = 0;
+				del_timer_sync(&gsi->gsi_rw_timer);
+				continue;
+			}
 
-	if (gsi->debugfs_rw_timer_enable) {
-		mod_timer(&gsi->gsi_rw_timer, jiffies +
-			  msecs_to_jiffies(gsi->gsi_rw_timer_interval));
-		log_event_dbg("%s: timer initialized\n", __func__);
-	} else {
-		del_timer_sync(&gsi->gsi_rw_timer);
-		log_event_dbg("%s: timer deleted\n", __func__);
+			if (gsi->debugfs_rw_timer_enable) {
+				mod_timer(&gsi->gsi_rw_timer, jiffies +
+				  msecs_to_jiffies(gsi->gsi_rw_timer_interval));
+				log_event_dbg("%s: timer initialized\n",
+								__func__);
+			} else {
+				del_timer_sync(&gsi->gsi_rw_timer);
+				log_event_dbg("%s: timer deleted\n", __func__);
+			}
+
+			if (gadget->speed < USB_SPEED_SUPER)
+				break;
+		}
 	}
 
 err:
@@ -277,14 +278,19 @@ static int usb_gsi_rw_show(struct seq_file *s, void *unused)
 {
 
 	struct f_gsi *gsi;
+	int i;
+	u8 enable = 0;
 
-	gsi = get_connected_gsi();
-	if (!gsi) {
-		log_event_dbg("%s: gsi not connected\n", __func__);
-		return 0;
+	for (i = 0; i < IPA_USB_MAX_TETH_PROT_SIZE; i++) {
+		gsi = NULL;
+		if (inst_status[i].opts)
+			gsi = inst_status[i].opts->gsi;
+
+		if (gsi && atomic_read(&gsi->connected))
+			enable |= gsi->debugfs_rw_timer_enable;
 	}
 
-	seq_printf(s, "%d\n", gsi->debugfs_rw_timer_enable);
+	seq_printf(s, "%d\n", enable);
 
 	return 0;
 }
@@ -306,15 +312,10 @@ static const struct file_operations fops_usb_gsi_rw = {
 static ssize_t usb_gsi_rw_timer_write(struct file *file,
 			const char __user *ubuf, size_t count, loff_t *ppos)
 {
-	struct f_gsi *gsi;
+	struct f_gsi *gsi = NULL;
 	u16 timer_val;
+	int i;
 	int ret;
-
-	gsi = get_connected_gsi();
-	if (!gsi) {
-		log_event_dbg("%s: gsi not connected\n", __func__);
-		goto err;
-	}
 
 	if (ubuf == NULL) {
 		log_event_dbg("%s: buffer is NULL.\n", __func__);
@@ -332,7 +333,15 @@ static ssize_t usb_gsi_rw_timer_write(struct file *file,
 		goto err;
 	}
 
-	gsi->gsi_rw_timer_interval = timer_val;
+	for (i = 0; i < IPA_USB_MAX_TETH_PROT_SIZE; i++) {
+		gsi = NULL;
+		if (inst_status[i].opts)
+			gsi = inst_status[i].opts->gsi;
+
+		if (gsi && atomic_read(&gsi->connected))
+			gsi->gsi_rw_timer_interval = timer_val;
+	}
+
 err:
 	return count;
 }
@@ -492,8 +501,8 @@ static int ipa_connect_channels(struct gsi_data_port *d_port)
 	struct ipa_req_chan_out_params ipa_in_channel_out_params;
 	struct ipa_req_chan_out_params ipa_out_channel_out_params;
 
-	log_event_dbg("IN: num_bufs:=%zu, buf_len=%zu\n",
-		d_port->in_request.num_bufs, d_port->in_request.buf_len);
+	if (gsi->prot_id == IPA_USB_RMNET)
+		d_port->in_request.use_tcm_mem = gsi->rmnet_use_tcm_mem;
 
 	ret = usb_gsi_ep_op(d_port->in_ep, &d_port->in_request,
 			GSI_EP_OP_PREPARE_TRBS);
@@ -502,6 +511,9 @@ static int ipa_connect_channels(struct gsi_data_port *d_port)
 				__func__, ret);
 		return ret;
 	}
+
+	log_event_dbg("IN: num_bufs:=%zu, buf_len=%zu\n",
+		d_port->in_request.num_bufs, d_port->in_request.buf_len);
 
 	ret = usb_gsi_ep_op(d_port->in_ep, &d_port->in_request,
 			GSI_EP_OP_STARTXFER);
@@ -3000,6 +3012,7 @@ static int gsi_bind(struct usb_configuration *c, struct usb_function *f)
 	struct gsi_function_bind_info info = {0};
 	struct f_gsi *gsi = func_to_gsi(f);
 	struct rndis_params *params;
+	struct usb_os_desc *descs[1];
 	struct gsi_opts *opts;
 	int status;
 	__u8  class;
@@ -3202,6 +3215,14 @@ static int gsi_bind(struct usb_configuration *c, struct usb_function *f)
 			f->os_desc_n = 1;
 			f->os_desc_table[0].os_desc = &opts->os_desc;
 			f->os_desc_table[0].if_id = gsi->data_id;
+			opts->os_desc.ext_compat_id = opts->ext_compat_id;
+			descs[0] = &opts->os_desc;
+			snprintf(sub_compatible_id, sizeof(sub_compatible_id),
+					"%u", c->bConfigurationValue);
+			memcpy(descs[0]->ext_compat_id, compatible_id,
+					strlen(compatible_id));
+			memcpy(descs[0]->ext_compat_id + 8, sub_compatible_id,
+					strlen(sub_compatible_id));
 		}
 		break;
 	case IPA_USB_RMNET:
@@ -3779,6 +3800,40 @@ static struct config_item_type gsi_func_ecm_type = {
 	.ct_owner	= THIS_MODULE,
 };
 
+static ssize_t gsi_rmnet_use_tcm_mem_show(struct config_item *item, char *page)
+{
+	struct f_gsi *gsi = to_gsi_opts(item)->gsi;
+
+	return scnprintf(page, PAGE_SIZE, "%s\n",
+			gsi->rmnet_use_tcm_mem ? "Enabled" : "Disabled");
+}
+
+static ssize_t gsi_rmnet_use_tcm_mem_store(struct config_item *item,
+			const char *page, size_t len)
+{
+	struct f_gsi *gsi = to_gsi_opts(item)->gsi;
+	bool enable;
+
+	if (kstrtobool(page, &enable))
+		return -EINVAL;
+
+	gsi->rmnet_use_tcm_mem = enable;
+	return len;
+}
+CONFIGFS_ATTR(gsi_, rmnet_use_tcm_mem);
+
+static struct configfs_attribute *gsi_rmnet_attrs[] = {
+	&gsi_attr_info,
+	&gsi_attr_rmnet_use_tcm_mem,
+	NULL,
+};
+
+static struct config_item_type gsi_func_rmnet_type = {
+	.ct_item_ops	= &gsi_item_ops,
+	.ct_attrs	= gsi_rmnet_attrs,
+	.ct_owner	= THIS_MODULE,
+};
+
 static void gsi_inst_clean(struct gsi_opts *opts)
 {
 	if (opts->gsi->c_port.cdev.dev) {
@@ -3840,6 +3895,10 @@ static int gsi_set_inst_name(struct usb_function_instance *fi,
 	}
 	mutex_unlock(&inst_status[prot_id].gsi_lock);
 
+	if (prot_id == IPA_USB_RMNET)
+		config_group_init_type_name(&opts->func_inst.group,
+						fi->group.cg_item.ci_name,
+						&gsi_func_rmnet_type);
 	if (prot_id == IPA_USB_RNDIS)
 		config_group_init_type_name(&opts->func_inst.group,
 						fi->group.cg_item.ci_name,

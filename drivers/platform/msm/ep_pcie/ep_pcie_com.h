@@ -176,7 +176,7 @@
 #define MAX_IATU_ENTRY_NUM 2
 
 #define EP_PCIE_LOG_PAGES 50
-#define EP_PCIE_MAX_VREG 3
+#define EP_PCIE_MAX_VREG 4
 #define EP_PCIE_MAX_CLK 10
 #define EP_PCIE_MAX_PIPE_CLK 1
 #define EP_PCIE_MAX_RESET 2
@@ -330,7 +330,6 @@ struct ep_pcie_dev_t {
 	struct ep_pcie_irq_info_t    irq[EP_PCIE_MAX_IRQ];
 	struct ep_pcie_res_info_t    res[EP_PCIE_MAX_RES];
 
-	u32			     mmio_res_size;
 	void __iomem                 *parf;
 	void __iomem                 *phy;
 	void __iomem                 *mmio;
@@ -403,6 +402,7 @@ struct ep_pcie_dev_t {
 	bool                         client_ready;
 	atomic_t		     ep_pcie_dev_wake;
 	atomic_t                     perst_deast;
+	int                          perst_irq;
 	atomic_t                     host_wake_pending;
 	bool			     conf_ipa_msi_iatu;
 

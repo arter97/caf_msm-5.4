@@ -606,7 +606,7 @@
 #define BTF								\
 	.BTF : AT(ADDR(.BTF) - LOAD_OFFSET) {				\
 		__start_BTF = .;					\
-		*(.BTF)							\
+		KEEP(*(.BTF))						\
 		__stop_BTF = .;						\
 	}
 #else
@@ -843,6 +843,35 @@
 		INIT_CALLS_LEVEL(6)					\
 		INIT_CALLS_LEVEL(7)					\
 		__initcall_end = .;
+
+#define EARLY_INIT_CALLS_LEVEL(subsys, level)				\
+		__early##subsys##_initcall##level##_start = .; \
+		KEEP(*(.early##subsys##.initcall##level##.init))	\
+
+#define EARLY_INIT_CALLS_SUBSYS(subsys)					\
+		__early##subsys##_initcall_start = .;	\
+		EARLY_INIT_CALLS_LEVEL(subsys, 0)			\
+		EARLY_INIT_CALLS_LEVEL(subsys, 1)			\
+		EARLY_INIT_CALLS_LEVEL(subsys, 2)			\
+		EARLY_INIT_CALLS_LEVEL(subsys, 3)			\
+		EARLY_INIT_CALLS_LEVEL(subsys, 4)			\
+		EARLY_INIT_CALLS_LEVEL(subsys, 5)			\
+		EARLY_INIT_CALLS_LEVEL(subsys, 6)			\
+		EARLY_INIT_CALLS_LEVEL(subsys, 7)			\
+		EARLY_INIT_CALLS_LEVEL(subsys, 8)			\
+		__early##subsys##_initcall_end = .;	\
+
+#define EARLY_INIT_CALLS						\
+		__early_initcall_start = .;		\
+		EARLY_INIT_CALLS_SUBSYS(0)				\
+		EARLY_INIT_CALLS_SUBSYS(1)				\
+		EARLY_INIT_CALLS_SUBSYS(2)				\
+		EARLY_INIT_CALLS_SUBSYS(3)				\
+		EARLY_INIT_CALLS_SUBSYS(4)				\
+		EARLY_INIT_CALLS_SUBSYS(5)				\
+		EARLY_INIT_CALLS_SUBSYS(6)				\
+		EARLY_INIT_CALLS_SUBSYS(7)				\
+		__early_initcall_end = .;
 
 #define CON_INITCALL							\
 		__con_initcall_start = .;				\

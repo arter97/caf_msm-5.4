@@ -23,6 +23,8 @@
 #include <linux/ioctl.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/slab.h>
+#include <soc/qcom/boot_stats.h>
+#include <linux/early_async.h>
 
 #define SE_I2C_TX_TRANS_LEN		(0x26C)
 #define SE_I2C_RX_TRANS_LEN		(0x270)
@@ -1183,6 +1185,8 @@ static const struct i2c_algorithm geni_i2c_algo = {
 	.functionality	= geni_i2c_func,
 };
 
+static DECLARE_COMPLETION(geni_i2c_ready);
+
 static int geni_i2c_probe(struct platform_device *pdev)
 {
 	struct geni_i2c_dev *gi2c;
@@ -1190,6 +1194,7 @@ static int geni_i2c_probe(struct platform_device *pdev)
 	struct platform_device *wrapper_pdev;
 	struct device_node *wrapper_ph_node;
 	int ret;
+	char boot_marker[40];
 
 	gi2c = devm_kzalloc(&pdev->dev, sizeof(*gi2c), GFP_KERNEL);
 	if (!gi2c)
@@ -1200,6 +1205,10 @@ static int geni_i2c_probe(struct platform_device *pdev)
 		gi2c_dev_dbg[arr_idx++] = gi2c;
 
 	gi2c->dev = &pdev->dev;
+
+	snprintf(boot_marker, sizeof(boot_marker),
+				"M - DRIVER GENI_I2C Init");
+	place_marker(boot_marker);
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!res)
@@ -1357,7 +1366,12 @@ static int geni_i2c_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	snprintf(boot_marker, sizeof(boot_marker),
+				"M - DRIVER GENI_I2C_%d Ready", gi2c->adap.nr);
+	place_marker(boot_marker);
+
 	dev_info(gi2c->dev, "I2C probed\n");
+	complete(&geni_i2c_ready);
 	return 0;
 }
 
@@ -1541,7 +1555,14 @@ static void __exit i2c_dev_exit(void)
 	platform_driver_unregister(&geni_i2c_driver);
 }
 
-module_init(i2c_dev_init);
+static int __init i2c_dev_ready_wait(void)
+{
+	wait_for_completion(&geni_i2c_ready);
+	return 0;
+}
+
+early_module_init(i2c_dev_init, EARLY_SUBSYS_PLATFORM, EARLY_INIT_LEVEL2);
+early_init(i2c_dev_ready_wait, EARLY_SUBSYS_2, EARLY_INIT_LEVEL0);
 module_exit(i2c_dev_exit);
 MODULE_LICENSE("GPL v2");
 MODULE_ALIAS("platform:i2c_geni");

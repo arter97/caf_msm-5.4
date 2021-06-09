@@ -636,7 +636,7 @@ static int __mmc_blk_ioctl_cmd(struct mmc_card *card, struct mmc_blk_data *md,
 
 	memcpy(&(idata->ic.response), cmd.resp, sizeof(cmd.resp));
 
-	if (idata->rpmb || (cmd.flags & MMC_RSP_R1B)) {
+	if (idata->rpmb || (cmd.flags & MMC_RSP_R1B) == MMC_RSP_R1B) {
 		/*
 		 * Ensure RPMB/R1B command has completed by polling CMD13
 		 * "Send Status".
@@ -3164,7 +3164,7 @@ static void __exit mmc_blk_exit(void)
 	bus_unregister(&mmc_rpmb_bus_type);
 }
 
-module_init(mmc_blk_init);
+early_module_init(mmc_blk_init, EARLY_SUBSYS_1, EARLY_INIT_LEVEL2);
 module_exit(mmc_blk_exit);
 
 MODULE_LICENSE("GPL");

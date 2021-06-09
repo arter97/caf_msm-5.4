@@ -3,6 +3,9 @@
  * Copyright (c) 2020, Linux Foundation. All rights reserved.
  */
 
+#include <linux/ctype.h>
+#include <linux/cpu.h>
+
 #include "phy-qcom-ufs-qmp-v4.h"
 
 #define UFS_PHY_NAME "ufs_phy_qmp_v4"
@@ -327,7 +330,8 @@ static struct platform_driver ufs_qcom_phy_qmp_v4_driver = {
 	},
 };
 
-module_platform_driver(ufs_qcom_phy_qmp_v4_driver);
+early_module_platform_driver(ufs_qcom_phy_qmp_v4_driver, EARLY_SUBSYS_1,
+EARLY_INIT_LEVEL2);
 
 MODULE_DESCRIPTION("Universal Flash Storage (UFS) QCOM PHY QMP v4");
 MODULE_LICENSE("GPL v2");

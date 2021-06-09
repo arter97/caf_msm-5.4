@@ -1059,6 +1059,14 @@ int qcom_scm_qseecom_call_noretry(u32 cmd_id, struct scm_desc *desc)
 }
 EXPORT_SYMBOL(qcom_scm_qseecom_call_noretry);
 
+int qcom_scm_ddrbw_profiler(phys_addr_t in_buf,
+	size_t in_buf_size, phys_addr_t out_buf, size_t out_buf_size)
+{
+	return __qcom_scm_ddrbw_profiler(__scm ? __scm->dev : NULL, in_buf,
+			in_buf_size, out_buf, out_buf_size);
+}
+EXPORT_SYMBOL(qcom_scm_ddrbw_profiler);
+
 /**
  * qcom_scm_is_available() - Checks if SCM is available
  */
@@ -1237,7 +1245,8 @@ static int __init qcom_scm_init(void)
 
 	return qtee_shmbridge_driver_init();
 }
-subsys_initcall(qcom_scm_init);
+early_subsys_initcall(qcom_scm_init, EARLY_SUBSYS_PLATFORM,
+		EARLY_INIT_LEVEL2);
 
 #ifdef CONFIG_QCOM_RTIC
 static int __init scm_mem_protection_init(void)

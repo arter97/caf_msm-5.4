@@ -253,7 +253,7 @@ static void __free_fw_priv(struct kref *ref)
 	spin_unlock(&fwc->lock);
 
 	if (fw_is_paged_buf(fw_priv))
-		fw_free_paged_buf(fw_priv); /* free leftover pages */
+		fw_free_paged_buf(fw_priv);
 	else if (!fw_priv->allocated_size)
 		vfree(fw_priv->data);
 
@@ -1470,5 +1470,6 @@ static void __exit firmware_class_exit(void)
 	unregister_sysfs_loader();
 }
 
-fs_initcall(firmware_class_init);
+early_fs_initcall(firmware_class_init, EARLY_SUBSYS_PLATFORM,
+EARLY_INIT_LEVEL8);
 module_exit(firmware_class_exit);

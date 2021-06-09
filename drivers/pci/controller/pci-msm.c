@@ -193,7 +193,6 @@
 #define MAX_PROP_SIZE (32)
 #define MAX_RC_NAME_LEN (15)
 #define MSM_PCIE_MAX_VREG (5)
-#define MSM_PCIE_VREG_0P9 (2)
 #define MSM_PCIE_MAX_CLK (21)
 #define MSM_PCIE_MAX_PIPE_CLK (1)
 #define MAX_RC_NUM (5)
@@ -874,7 +873,6 @@ struct msm_pcie_dev_t {
 	struct msm_pcie_drv_info *drv_info;
 	struct work_struct drv_enable_pc_work;
 	struct work_struct drv_disable_pc_work;
-	int vreg_levels[3];
 
 	/* cache drv pc req from RC client, by default drv pc is enabled */
 	int drv_disable_pc_vote;
@@ -6424,22 +6422,6 @@ static int msm_pcie_probe(struct platform_device *pdev)
 	memcpy(pcie_dev->pipe_reset, msm_pcie_pipe_reset_info[rc_idx],
 		sizeof(msm_pcie_pipe_reset_info[rc_idx]));
 
-	ret = of_property_read_u32_array(of_node,
-				"qcom,vreg-0.9-voltage-level",
-				(u32 *) pcie_dev->vreg_levels,
-				ARRAY_SIZE(pcie_dev->vreg_levels));
-	if (ret) {
-		PCIE_DBG(pcie_dev,
-		"vreg-0.9-voltage-level missing, using default values\n");
-	} else {
-		pcie_dev->vreg[MSM_PCIE_VREG_0P9].max_v =
-						pcie_dev->vreg_levels[0];
-		pcie_dev->vreg[MSM_PCIE_VREG_0P9].min_v =
-						pcie_dev->vreg_levels[1];
-		pcie_dev->vreg[MSM_PCIE_VREG_0P9].opt_mode =
-						pcie_dev->vreg_levels[2];
-	}
-
 	for (i = 0; i < PCIE_CONF_SPACE_DW; i++)
 		pcie_dev->rc_shadow[i] = PCIE_CLEAR;
 	for (i = 0; i < MAX_DEVICE_NUM; i++)
@@ -7414,7 +7396,23 @@ static void __exit pcie_exit(void)
 		msm_pcie_sysfs_exit(&msm_pcie_dev[i]);
 }
 
-subsys_initcall_sync(pcie_init);
+static DECLARE_COMPLETION(pcie_init_start);
+
+static int __init pcie_init_sync(void)
+{
+	complete(&pcie_init_start);
+	return 0;
+}
+subsys_initcall_sync(pcie_init_sync);
+
+static int __init pcie_init_wait(void)
+{
+	wait_for_completion(&pcie_init_start);
+	return 0;
+}
+early_init(pcie_init_wait, EARLY_SUBSYS_5, EARLY_INIT_LEVEL3);
+
+early_subsys_initcall_sync(pcie_init, EARLY_SUBSYS_5, EARLY_INIT_LEVEL4);
 module_exit(pcie_exit);
 
 /* RC do not represent the right class; set it to PCI_CLASS_BRIDGE_PCI */
@@ -7503,6 +7501,8 @@ static int msm_pcie_pm_suspend(struct pci_dev *dev,
 	pcie_dev->cfg_access = false;
 	spin_unlock_irqrestore(&pcie_dev->cfg_lock,
 				pcie_dev->irqsave_flags);
+
+	msm_msi_config_access(dev_get_msi_domain(&pcie_dev->dev->dev), false);
 
 	writel_relaxed(BIT(4), pcie_dev->elbi + PCIE20_ELBI_SYS_CTRL);
 	wmb(); /* ensure changes propagated to the hardware */
@@ -7636,6 +7636,8 @@ static int msm_pcie_pm_resume(struct pci_dev *dev,
 			"RC%d: exit of PCIe recover config\n",
 			pcie_dev->rc_idx);
 	}
+
+	msm_msi_config_access(dev_get_msi_domain(&pcie_dev->dev->dev), true);
 
 	PCIE_DBG(pcie_dev, "RC%d: exit\n", pcie_dev->rc_idx);
 

@@ -15,6 +15,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/qcom-geni-se.h>
 #include <linux/spinlock.h>
+#include <linux/early_async.h>
 
 #define SE_I2C_TX_TRANS_LEN		0x26c
 #define SE_I2C_RX_TRANS_LEN		0x270
@@ -368,14 +369,13 @@ static int geni_i2c_rx_one_msg(struct geni_i2c_dev *gi2c, struct i2c_msg *msg,
 		geni_se_select_mode(se, GENI_SE_FIFO);
 
 	writel_relaxed(len, se->base + SE_I2C_RX_TRANS_LEN);
+	geni_se_setup_m_cmd(se, I2C_READ, m_param);
 
 	if (dma_buf && geni_se_rx_dma_prep(se, dma_buf, len, &rx_dma)) {
 		geni_se_select_mode(se, GENI_SE_FIFO);
 		i2c_put_dma_safe_msg_buf(dma_buf, msg, false);
 		dma_buf = NULL;
 	}
-
-	geni_se_setup_m_cmd(se, I2C_READ, m_param);
 
 	time_left = wait_for_completion_timeout(&gi2c->done, XFER_TIMEOUT);
 	if (!time_left)
@@ -410,14 +410,13 @@ static int geni_i2c_tx_one_msg(struct geni_i2c_dev *gi2c, struct i2c_msg *msg,
 		geni_se_select_mode(se, GENI_SE_FIFO);
 
 	writel_relaxed(len, se->base + SE_I2C_TX_TRANS_LEN);
+	geni_se_setup_m_cmd(se, I2C_WRITE, m_param);
 
 	if (dma_buf && geni_se_tx_dma_prep(se, dma_buf, len, &tx_dma)) {
 		geni_se_select_mode(se, GENI_SE_FIFO);
 		i2c_put_dma_safe_msg_buf(dma_buf, msg, false);
 		dma_buf = NULL;
 	}
-
-	geni_se_setup_m_cmd(se, I2C_WRITE, m_param);
 
 	if (!dma_buf) /* Get FIFO IRQ */
 		writel_relaxed(1, se->base + SE_GENI_TX_WATERMARK_REG);
@@ -684,7 +683,10 @@ static struct platform_driver geni_i2c_driver = {
 	},
 };
 
-module_platform_driver(geni_i2c_driver);
+early_module_platform_driver_async(geni_i2c_driver, EARLY_SUBSYS_PLATFORM,
+EARLY_INIT_LEVEL4);
+
+early_init(_geni_i2c_driver_init_sync, EARLY_SUBSYS_2, EARLY_INIT_LEVEL0);
 
 MODULE_DESCRIPTION("I2C Controller Driver for GENI based QUP cores");
 MODULE_LICENSE("GPL v2");

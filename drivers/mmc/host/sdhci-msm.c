@@ -1480,7 +1480,7 @@ static void sdhci_msm_set_cdr(struct sdhci_host *host, bool enable)
 static int sdhci_msm_execute_tuning(struct mmc_host *mmc, u32 opcode)
 {
 	struct sdhci_host *host = mmc_priv(mmc);
-	int tuning_seq_cnt = 3;
+	int tuning_seq_cnt = 10;
 	u8 phase, tuned_phases[16], tuned_phase_cnt = 0;
 	int rc = 0;
 	struct mmc_ios ios = host->mmc->ios;
@@ -1546,6 +1546,22 @@ retry:
 	} while (++phase < ARRAY_SIZE(tuned_phases));
 
 	if (tuned_phase_cnt) {
+		if (tuned_phase_cnt == ARRAY_SIZE(tuned_phases)) {
+			/*
+			 * All phases valid is _almost_ as bad as no phases
+			 * valid.  Probably all phases are not really reliable
+			 * but we didn't detect where the unreliable place is.
+			 * That means we'll essentially be guessing and hoping
+			 * we get a good phase.  Better to try a few times.
+			 */
+			dev_dbg(mmc_dev(mmc), "%s: All phases valid; try again\n",
+				mmc_hostname(mmc));
+			if (--tuning_seq_cnt) {
+				tuned_phase_cnt = 0;
+				goto retry;
+			}
+		}
+
 		rc = msm_find_most_appropriate_phase(host, tuned_phases,
 						     tuned_phase_cnt);
 		if (rc < 0)
@@ -4130,6 +4146,30 @@ static void sdhci_msm_set_caps(struct sdhci_msm_host *msm_host)
 	msm_host->mmc->caps |= MMC_CAP_WAIT_WHILE_BUSY | MMC_CAP_NEED_RSP_BUSY;
 }
 
+static bool sdhci_msm_is_bootdevice(struct device *dev)
+{
+	if (strnstr(saved_command_line, "androidboot.bootdevice=",
+				strlen(saved_command_line))) {
+		char search_string[50];
+
+		snprintf(search_string, ARRAY_SIZE(search_string),
+				 "androidboot.bootdevice=%s", dev_name(dev));
+		if (strnstr(saved_command_line, search_string,
+					strlen(saved_command_line)))
+			return true;
+		else
+			return false;
+	}
+
+	/*
+	 * "androidboot.bootdevice=" argument is not present then
+	 * return true as we don't know the boot device anyways.
+	 */
+	return true;
+}
+
+static DECLARE_COMPLETION(root_dev_ready);
+
 static int sdhci_msm_probe(struct platform_device *pdev)
 {
 	struct sdhci_host *host;
@@ -4427,6 +4467,11 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	pm_runtime_mark_last_busy(&pdev->dev);
 	pm_runtime_put_autosuspend(&pdev->dev);
 
+	if (sdhci_msm_is_bootdevice(&pdev->dev)) {
+		flush_delayed_work(&host->mmc->detect);
+		complete(&root_dev_ready);
+	}
+
 	return 0;
 
 pm_runtime_disable:
@@ -4583,7 +4628,17 @@ static struct platform_driver sdhci_msm_driver = {
 	},
 };
 
-module_platform_driver(sdhci_msm_driver);
+static int root_dev_ready_wait(void)
+{
+	if (strnstr(saved_command_line, ".sdhci",
+				strlen(saved_command_line)))
+		wait_for_completion(&root_dev_ready);
+	return 0;
+}
+early_init(root_dev_ready_wait, EARLY_SUBSYS_1, EARLY_INIT_LEVEL3);
+
+early_module_platform_driver(sdhci_msm_driver, EARLY_SUBSYS_1,
+EARLY_INIT_LEVEL2);
 
 MODULE_DESCRIPTION("Qualcomm Secure Digital Host Controller Interface driver");
 MODULE_LICENSE("GPL v2");

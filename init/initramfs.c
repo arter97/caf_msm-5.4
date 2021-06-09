@@ -527,7 +527,7 @@ extern unsigned long __initramfs_size;
 #include <linux/initrd.h>
 #include <linux/kexec.h>
 
-void __weak free_initrd_mem(unsigned long start, unsigned long end)
+void __weak __init free_initrd_mem(unsigned long start, unsigned long end)
 {
 	free_reserved_area((void *)start, (void *)end, POISON_FREE_INITMEM,
 			"initrd");
@@ -677,4 +677,4 @@ done:
 	flush_delayed_fput();
 	return 0;
 }
-rootfs_initcall(populate_rootfs);
+early_rootfs_initcall(populate_rootfs, EARLY_SUBSYS_1, EARLY_INIT_LEVEL4);

@@ -425,7 +425,7 @@ static int qcom_wdt_panic_handler(struct notifier_block *this,
 		pr_info("Triggering early bite\n");
 		qcom_wdt_trigger_bite();
 	}
-	if (panic_timeout == 0) {
+	if (panic_timeout == 0 || crash_kexec_post_notifiers) {
 		wdog_dd->ops->disable_wdt(wdog_dd);
 	} else {
 		qcom_wdt_reset_on_oops(wdog_dd, panic_timeout);

@@ -18,6 +18,7 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <soc/qcom/boot_stats.h>
+#include <linux/suspend.h>
 
 #define MAX_STRING_LEN 256
 #define BOOT_MARKER_MAX_LEN 50
@@ -30,13 +31,17 @@ struct boot_stats {
 	uint32_t bootloader_end;
 	uint32_t bootloader_display;
 	uint32_t bootloader_load_kernel;
+#ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
+	uint32_t bootloader_load_kernel_start;
+	uint32_t bootloader_load_kernel_end;
+#endif
 };
 
 static void __iomem *mpm_counter_base;
 static uint32_t mpm_counter_freq;
 static struct boot_stats __iomem *boot_stats;
 
-#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+#ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
 
 struct boot_marker {
 	char marker_name[BOOT_MARKER_MAX_LEN];
@@ -48,6 +53,56 @@ struct boot_marker {
 static struct boot_marker boot_marker_list;
 static struct kobject *bootkpi_obj;
 static struct attribute_group *attr_grp;
+
+static inline u64 get_time_in_msec(u64 counter)
+{
+	counter *= MSEC_PER_SEC;
+	do_div(counter, MSM_ARCH_TIMER_FREQ);
+	return counter;
+}
+
+static void measure_wake_up_time(void)
+{
+	u64 wake_up_time, deep_sleep_exit_time, current_time;
+	char wakeup_marker[50] = {0,};
+
+	current_time = arch_timer_read_counter();
+	deep_sleep_exit_time = get_sleep_exit_time();
+
+	if (deep_sleep_exit_time) {
+		wake_up_time = current_time - deep_sleep_exit_time;
+		wake_up_time = get_time_in_msec(wake_up_time);
+		pr_debug("Current= %llu, wakeup=%llu, kpi=%llu msec\n",
+				current_time, deep_sleep_exit_time,
+				wake_up_time);
+		snprintf(wakeup_marker, sizeof(wakeup_marker),
+				"M - STR Wakeup : %llu ms", wake_up_time);
+		destroy_marker("M - STR Wakeup");
+		place_marker(wakeup_marker);
+	} else
+		destroy_marker("M - STR Wakeup");
+}
+
+/**
+ * boot_kpi_pm_notifier() - PM notifier callback function.
+ * @nb:		Pointer to the notifier block.
+ * @event:	Suspend state event from PM module.
+ * @unused:	Null pointer from PM module.
+ *
+ * This function is register as callback function to get notifications
+ * from the PM module on the system suspend state.
+ */
+static int boot_kpi_pm_notifier(struct notifier_block *nb,
+				  unsigned long event, void *unused)
+{
+	if (event == PM_POST_SUSPEND)
+		measure_wake_up_time();
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block boot_kpi_pm_nb = {
+	.notifier_call = boot_kpi_pm_notifier,
+};
 
 unsigned long long msm_timer_get_sclk_ticks(void)
 {
@@ -152,6 +207,25 @@ void destroy_marker(const char *name)
 }
 EXPORT_SYMBOL(destroy_marker);
 
+static void set_bootloader_stats(void)
+{
+	if (IS_ERR_OR_NULL(boot_stats)) {
+		pr_err("boot_marker: imem not initialized!\n");
+		return;
+	}
+
+	_create_boot_marker("M - APPSBL Start - ",
+		readl_relaxed(&boot_stats->bootloader_start));
+	_create_boot_marker("M - APPSBL Kernel Load Start - ",
+		readl_relaxed(&boot_stats->bootloader_load_kernel_start));
+	_create_boot_marker("M - APPSBL Kernel Load End - ",
+		readl_relaxed(&boot_stats->bootloader_load_kernel_end));
+	_create_boot_marker("D - APPSBL Kernel Load Time - ",
+		readl_relaxed(&boot_stats->bootloader_load_kernel));
+	_create_boot_marker("M - APPSBL End - ",
+		readl_relaxed(&boot_stats->bootloader_end));
+}
+
 static ssize_t bootkpi_reader(struct kobject *obj, struct kobj_attribute *attr,
 		char *user_buffer)
 {
@@ -189,7 +263,7 @@ static ssize_t bootkpi_writer(struct kobject *obj, struct kobj_attribute *attr,
 	if (count >= MAX_STRING_LEN)
 		return -EINVAL;
 
-	rc = scnprintf(buf, count, "%s", user_buffer);
+	rc = scnprintf(buf, sizeof(buf) - 1, "%s", user_buffer);
 	if (rc < 0)
 		return rc;
 
@@ -266,6 +340,11 @@ static int init_bootkpi(void)
 
 	INIT_LIST_HEAD(&boot_marker_list.list);
 	spin_lock_init(&boot_marker_list.slock);
+
+	ret = register_pm_notifier(&boot_kpi_pm_nb);
+	if (ret)
+		pr_err("boot_marker: power state notif error\n");
+
 	return 0;
 }
 
@@ -353,6 +432,9 @@ static int __init boot_stats_init(void)
 			pr_err("boot_stats: BootKPI init failed %d\n");
 			return ret;
 		}
+#ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
+		set_bootloader_stats();
+#endif
 	} else {
 		iounmap(boot_stats);
 		iounmap(mpm_counter_base);
@@ -360,7 +442,7 @@ static int __init boot_stats_init(void)
 
 	return 0;
 }
-subsys_initcall(boot_stats_init);
+early_subsys_initcall(boot_stats_init, EARLY_SUBSYS_PLATFORM, EARLY_INIT_LEVEL0);
 
 static void __exit boot_stats_exit(void)
 {

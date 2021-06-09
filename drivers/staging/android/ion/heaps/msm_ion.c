@@ -645,6 +645,7 @@ static struct platform_driver msm_ion_driver = {
 	.driver = {
 		.name = "ion-msm",
 		.of_match_table = msm_ion_match_table,
+		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 	},
 };
 
@@ -653,6 +654,12 @@ static int __init msm_ion_init(void)
 	return platform_driver_register(&msm_ion_driver);
 }
 subsys_initcall_sync(msm_ion_init);
+
+static int __init msm_ion_init_sync(void) {
+	msm_ion_driver.driver.probe_type = PROBE_PREFER_ASYNCHRONOUS;
+	return 0;
+}
+early_init(msm_ion_init_sync, EARLY_SUBSYS_PLATFORM, EARLY_INIT_LEVEL8);
 
 static void __exit msm_ion_exit(void)
 {
