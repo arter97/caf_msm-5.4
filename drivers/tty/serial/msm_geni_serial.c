@@ -2596,18 +2596,62 @@ static void msm_geni_serial_termios_cfg(struct uart_port *uport,
 				bits_per_char, stop_bit_len);
 }
 
+static int get_clk_cfg(unsigned long clk_freq, unsigned long *ser_clk)
+{
+	unsigned long root_freq[] = {7372800, 14745600, 19200000, 29491200,
+		32000000, 48000000, 64000000, 80000000, 96000000, 100000000,
+		102400000, 112000000, 120000000, 128000000};
+	int i;
+	int match = -1;
+
+	for (i = 0; i < ARRAY_SIZE(root_freq); i++) {
+		if (clk_freq > root_freq[i])
+			continue;
+
+		if (!(root_freq[i] % clk_freq)) {
+			match = i;
+			break;
+		}
+	}
+	if (match != -1)
+		*ser_clk = root_freq[match];
+	else
+		pr_err("clk_freq %ld\n", clk_freq);
+	return match;
+}
+
+static int get_clk_div_rate(unsigned int baud, unsigned long *desired_clk_rate)
+{
+	unsigned long ser_clk;
+	int dfs_index;
+	int clk_div = 0;
+	int uart_sampling;
+
+	uart_sampling = IS_ENABLED(CONFIG_SERIAL_MSM_GENI_HALF_SAMPLING) ?
+				UART_OVERSAMPLING / 2 : UART_OVERSAMPLING;
+	*desired_clk_rate = baud * uart_sampling;
+	dfs_index = get_clk_cfg(*desired_clk_rate, &ser_clk);
+	if (dfs_index < 0) {
+		pr_err("%s: Can't find matching DFS entry for baud %d\n",
+								__func__, baud);
+		clk_div = -EINVAL;
+		goto exit_get_clk_div_rate;
+	}
+
+	clk_div = ser_clk / *desired_clk_rate;
+	*desired_clk_rate = ser_clk;
+exit_get_clk_div_rate:
+	return clk_div;
+}
+
 static void msm_geni_serial_set_termios(struct uart_port *uport,
 				struct ktermios *termios, struct ktermios *old)
 {
 	unsigned int baud;
-	int clk_div, ret;
+	int clk_div;
 	unsigned long ser_clk_cfg = 0;
 	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
 	unsigned long clk_rate;
-	unsigned long desired_rate;
-	unsigned int clk_idx;
-	int uart_sampling;
-	int clk_freq_diff;
 
 	/* QUP_2.5.0 and older RUMI has sampling rate as 32 */
 	if (IS_ENABLED(CONFIG_SERIAL_MSM_GENI_HALF_SAMPLING) &&
@@ -2631,33 +2675,11 @@ static void msm_geni_serial_set_termios(struct uart_port *uport,
 	/* baud rate */
 	baud = uart_get_baud_rate(uport, termios, old, 300, 4000000);
 	port->cur_baud = baud;
-	uart_sampling = IS_ENABLED(CONFIG_SERIAL_MSM_GENI_HALF_SAMPLING) ?
-				UART_OVERSAMPLING / 2 : UART_OVERSAMPLING;
-	desired_rate = baud * uart_sampling;
+	
+	clk_div = get_clk_div_rate(baud, &clk_rate);
 
-	/*
-	 * Request for nearest possible required frequency instead of the exact
-	 * required frequency.
-	 */
-	ret = geni_se_clk_freq_match(&port->serial_rsc, desired_rate,
-			&clk_idx, &clk_rate, false);
-	if (ret) {
-		dev_err(uport->dev, "%s: Failed(%d) to find src clk for 0x%x\n",
-				__func__, ret, baud);
-		msm_geni_update_uart_error_code(port, UART_ERROR_SE_CLK_RATE_FIND_FAIL);
-		goto exit_set_termios;
-	}
-
-	clk_div = DIV_ROUND_UP(clk_rate, desired_rate);
 	if (clk_div <= 0)
 		goto exit_set_termios;
-
-	clk_freq_diff =  (desired_rate - (clk_rate / clk_div));
-	if (clk_freq_diff)
-		IPC_LOG_MSG(port->ipc_log_misc,
-			"src_clk freq_diff:%d baud:%d clk_rate:%d clk_div:%d\n",
-			clk_freq_diff, baud, clk_rate, clk_div);
-
 	uport->uartclk = clk_rate;
 	clk_set_rate(port->serial_rsc.se_clk, clk_rate);
 	ser_clk_cfg |= SER_CLK_EN;
