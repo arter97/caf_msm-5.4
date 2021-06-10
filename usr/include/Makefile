@@ -62,6 +62,20 @@ header-test- += sound/sfnt_info.h
 header-test- += xen/evtchn.h
 header-test- += xen/gntdev.h
 header-test- += xen/privcmd.h
+header-test- += media/ais_isp.h
+header-test- += media/cam_lrme.h
+header-test- += media/cam_cpas.h
+header-test- += media/cam_fd.h
+header-test- += media/cam_jpeg.h
+header-test- += media/cam_sync.h
+header-test- += media/cam_isp.h
+header-test- += media/cam_icp.h
+header-test- += media/cam_req_mgr.h
+header-test- += media/cam_sensor.h
+header-test- += media/cam_defs.h
+header-test- += media/ais_sensor.h
+header-test- += display/media/msm_sde_rotator.h
+header-test- += vidc/media/msm_vidc_private.h
 
 # More headers are broken in some architectures
 
