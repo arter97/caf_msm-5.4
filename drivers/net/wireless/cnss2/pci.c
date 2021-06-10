@@ -1802,6 +1802,13 @@ static int cnss_wlan_adsp_pc_enable(struct cnss_pci_data *pci_priv,
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	int ret = 0;
 	u32 pm_options = PM_OPTIONS_DEFAULT;
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+
+	if (plat_priv->adsp_pc_enabled == control) {
+		cnss_pr_dbg("ADSP power collapse already %s\n",
+			    control ? "Enabled" : "Disabled");
+		return 0;
+	}
 
 	if (control)
 		pm_options &= ~MSM_PCIE_CONFIG_NO_DRV_PC;
@@ -1814,6 +1821,7 @@ static int cnss_wlan_adsp_pc_enable(struct cnss_pci_data *pci_priv,
 		return ret;
 
 	cnss_pr_dbg("%s ADSP power collapse\n", control ? "Enable" : "Disable");
+	plat_priv->adsp_pc_enabled = control;
 	return 0;
 }
 #else
@@ -2420,7 +2428,7 @@ static int cnss_qca6174_powerup(struct cnss_pci_data *pci_priv)
 	int ret = 0;
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 
-	ret = cnss_power_on_device(plat_priv);
+	ret = cnss_power_on_device(plat_priv, false);
 	if (ret) {
 		cnss_pr_err("Failed to power on device, err = %d\n", ret);
 		goto out;
@@ -2509,7 +2517,7 @@ static int cnss_qca6290_powerup(struct cnss_pci_data *pci_priv)
 
 	plat_priv->power_up_error = 0;
 retry:
-	ret = cnss_power_on_device(plat_priv);
+	ret = cnss_power_on_device(plat_priv, false);
 	if (ret) {
 		cnss_pr_err("Failed to power on device, err = %d\n", ret);
 		goto out;
@@ -2641,8 +2649,10 @@ skip_power_off:
 	clear_bit(CNSS_FW_READY, &plat_priv->driver_state);
 	clear_bit(CNSS_FW_MEM_READY, &plat_priv->driver_state);
 	if (test_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state) ||
-	    test_bit(CNSS_DRIVER_IDLE_SHUTDOWN, &plat_priv->driver_state))
+	    test_bit(CNSS_DRIVER_IDLE_SHUTDOWN, &plat_priv->driver_state)) {
 		clear_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state);
+		pci_priv->pci_link_down_ind = false;
+	}
 	clear_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state);
 	clear_bit(CNSS_DRIVER_IDLE_SHUTDOWN, &plat_priv->driver_state);
 
@@ -3899,8 +3909,7 @@ int cnss_pci_alloc_fw_mem(struct cnss_pci_data *pci_priv)
 			if (!fw_mem[i].va) {
 				cnss_pr_err("Failed to allocate memory for FW, size: 0x%zx, type: %u\n",
 					    fw_mem[i].size, fw_mem[i].type);
-
-				return -ENOMEM;
+				BUG();
 			}
 		}
 	}
@@ -4754,7 +4763,10 @@ int cnss_pci_force_fw_assert_hdlr(struct cnss_pci_data *pci_priv)
 		return -EINVAL;
 
 	cnss_auto_resume(&pci_priv->pci_dev->dev);
-	mhi_debug_reg_dump(pci_priv->mhi_ctrl);
+
+	if (!cnss_pci_check_link_status(pci_priv))
+		mhi_debug_reg_dump(pci_priv->mhi_ctrl);
+
 	cnss_pci_dump_misc_reg(pci_priv);
 	cnss_pci_dump_shadow_reg(pci_priv);
 
@@ -5981,7 +5993,7 @@ static int cnss_pci_enumerate(struct cnss_plat_data *plat_priv, u32 rc_num)
 				    rc_num, ret);
 	}
 
-	cnss_pr_err("Trying to enumerate with PCIe RC%x\n", rc_num);
+	cnss_pr_dbg("Trying to enumerate with PCIe RC%x\n", rc_num);
 retry:
 	ret = _cnss_pci_enumerate(plat_priv, rc_num);
 	if (ret) {
