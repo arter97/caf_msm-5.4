@@ -861,6 +861,7 @@ static const struct blk_mq_ops virtio_mq_ops = {
 static unsigned int virtblk_queue_depth;
 module_param_named(queue_depth, virtblk_queue_depth, uint, 0444);
 extern void early_prepare_namespace(char *name);
+extern int first_virtio_blk_index;
 
 static int __ref virtblk_probe(struct virtio_device *vdev)
 {
@@ -953,7 +954,8 @@ static int __ref virtblk_probe(struct virtio_device *vdev)
 
 	q->queuedata = vblk;
 
-	virtblk_name_format("vd", index, vblk->disk->disk_name, DISK_NAME_LEN);
+	virtblk_name_format("vd", vdev->index - first_virtio_blk_index,
+		vblk->disk->disk_name, DISK_NAME_LEN);
 
 	vblk->disk->major = major;
 	vblk->disk->first_minor = index_to_minor(index);
