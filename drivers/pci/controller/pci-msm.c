@@ -7184,6 +7184,7 @@ static void __exit pcie_exit(void)
 		msm_pcie_sysfs_exit(&msm_pcie_dev[i]);
 }
 
+#ifndef MODULE
 static DECLARE_COMPLETION(pcie_init_start);
 
 static int __init pcie_init_sync(void)
@@ -7201,6 +7202,9 @@ static int __init pcie_init_wait(void)
 early_init(pcie_init_wait, EARLY_SUBSYS_5, EARLY_INIT_LEVEL3);
 
 early_subsys_initcall_sync(pcie_init, EARLY_SUBSYS_5, EARLY_INIT_LEVEL4);
+#else
+subsys_initcall_sync(pcie_init);
+#endif
 module_exit(pcie_exit);
 
 /* RC do not represent the right class; set it to PCI_CLASS_BRIDGE_PCI */
