@@ -17,6 +17,8 @@
 
 #define PGD_SIZE	(PTRS_PER_PGD * sizeof(pgd_t))
 
+extern bool kpti_ng;
+
 #if CONFIG_PGTABLE_LEVELS > 2
 
 static inline pmd_t *pmd_alloc_one(struct mm_struct *mm, unsigned long addr)
@@ -46,7 +48,7 @@ static inline void pmd_free(struct mm_struct *mm, pmd_t *pmdp)
 
 static inline void __pud_populate(pud_t *pudp, phys_addr_t pmdp, pudval_t prot)
 {
-	set_pud(pudp, __pud(__phys_to_pud_val(pmdp) | prot));
+	set_pud(pudp, __pud(__phys_to_pud_val(pmdp) | prot | (kpti_ng?PTE_NG:0)));
 }
 
 static inline void pud_populate(struct mm_struct *mm, pud_t *pudp, pmd_t *pmdp)
@@ -75,7 +77,7 @@ static inline void pud_free(struct mm_struct *mm, pud_t *pudp)
 
 static inline void __pgd_populate(pgd_t *pgdp, phys_addr_t pudp, pgdval_t prot)
 {
-	set_pgd(pgdp, __pgd(__phys_to_pgd_val(pudp) | prot));
+	set_pgd(pgdp, __pgd(__phys_to_pgd_val(pudp) | prot | (kpti_ng?PTE_NG:0)));
 }
 
 static inline void pgd_populate(struct mm_struct *mm, pgd_t *pgdp, pud_t *pudp)
@@ -95,7 +97,7 @@ extern void pgd_free(struct mm_struct *mm, pgd_t *pgdp);
 static inline void __pmd_populate(pmd_t *pmdp, phys_addr_t ptep,
 				  pmdval_t prot)
 {
-	set_pmd(pmdp, __pmd(__phys_to_pmd_val(ptep) | prot));
+	set_pmd(pmdp, __pmd(__phys_to_pmd_val(ptep) | prot | (kpti_ng?PTE_NG:0)));
 }
 
 /*
