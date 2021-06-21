@@ -59,6 +59,7 @@ enum cnss_dev_bus_type {
 	CNSS_BUS_NONE = -1,
 	CNSS_BUS_PCI,
 	CNSS_BUS_USB,
+	CNSS_BUS_MAX,
 };
 
 struct cnss_vreg_cfg {
@@ -512,6 +513,7 @@ struct cnss_plat_data {
 	int qrtr_node_id;
 	unsigned int wlfw_service_instance_id;
 	u64 feature_list;
+	bool adsp_pc_enabled;
 };
 
 #ifdef CONFIG_ARCH_QCOM
