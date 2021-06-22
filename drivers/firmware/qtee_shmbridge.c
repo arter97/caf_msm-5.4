@@ -105,6 +105,16 @@ static int32_t qtee_shmbridge_enable(bool enable)
 	int32_t ret = 0;
 
 	qtee_shmbridge_enabled = false;
+
+	/*
+	 * Temporarily disable shmbridge in kernel until QCPE access
+	 * control is ready.
+	 */
+	if (of_property_read_bool(default_bridge.dev->of_node,
+		"qcom,disable-shmbridge-support")) {
+		return ret;
+	}
+
 	if (!enable) {
 		pr_warn("shmbridge isn't enabled\n");
 		return ret;
