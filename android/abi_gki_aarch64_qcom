@@ -45,10 +45,12 @@
   backlight_device_unregister
   bin2hex
   __bitmap_clear
+  bitmap_find_free_region
   bitmap_find_next_zero_area_off
   bitmap_free
   bitmap_parselist
   bitmap_print_to_pagebuf
+  bitmap_release_region
   __bitmap_set
   __bitmap_subset
   bitmap_zalloc
@@ -2024,6 +2026,7 @@
   rpmsg_set_signals
   rpmsg_trysend
   rpmsg_unregister_device
+  rtc_add_group
   rtc_class_close
   rtc_class_open
   rtc_read_time
