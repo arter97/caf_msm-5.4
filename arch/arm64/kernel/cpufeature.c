@@ -960,6 +960,31 @@ has_useable_cnp(const struct arm64_cpu_capabilities *entry, int scope)
 	return has_cpuid_feature(entry, scope);
 }
 
+#ifdef CONFIG_UNMAP_KERNEL_AT_EL0
+bool kpti_ng = true;
+#else
+bool kpti_ng = false;
+#endif
+void check_cpuid_kpti(void)
+{
+	struct arm64_cpu_capabilities entry;
+	static bool checked;
+
+	if (checked)
+		return;
+
+	entry.sys_reg = SYS_ID_AA64PFR0_EL1;
+	entry.field_pos = ID_AA64PFR0_CSV3_SHIFT;
+	entry.min_field_value = 1;
+
+	if (has_cpuid_feature(&entry, SCOPE_LOCAL_CPU))
+		kpti_ng = false;
+	else
+		kpti_ng = true;
+
+	checked = true;
+}
+
 static bool __meltdown_safe = true;
 static int __kpti_forced; /* 0: not forced, >0: forced on, <0: forced off */
 
@@ -1404,7 +1429,7 @@ static const struct arm64_cpu_capabilities arm64_features[] = {
 		.field_pos = ID_AA64PFR0_CSV3_SHIFT,
 		.min_field_value = 1,
 		.matches = unmap_kernel_at_el0,
-		.cpu_enable = kpti_install_ng_mappings,
+		//.cpu_enable = kpti_install_ng_mappings,
 	},
 	{
 		/* FP/SIMD is not implemented */
