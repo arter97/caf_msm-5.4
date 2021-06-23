@@ -249,6 +249,8 @@ struct cpu_info {
 	uint32_t limited_max_freq;
 	uint32_t limited_min_freq;
 	bool freq_thresh_clear;
+	int32_t freq_cur_state;
+	int32_t hotplug_cur_state;
 	struct cluster_info *parent_ptr;
 };
 
@@ -3598,7 +3600,10 @@ static int hotplug_notify(enum thermal_trip_type type, int temp, void *data)
 		break;
 	}
 	if (hotplug_task) {
-		cpu_node->hotplug_thresh_clear = true;
+		if (cpu_node->hotplug_cur_state != type) {
+			cpu_node->hotplug_thresh_clear = true;
+			cpu_node->hotplug_cur_state = type;
+		}
 		complete(&hotplug_notify_complete);
 	} else
 		pr_err("Hotplug task is not initialized\n");
@@ -3670,6 +3675,7 @@ static void hotplug_init(void)
 		low_thresh->trip = THERMAL_TRIP_CONFIGURABLE_LOW;
 		hi_thresh->notify = low_thresh->notify = hotplug_notify;
 		hi_thresh->data = low_thresh->data = (void *)&cpus[cpu];
+		cpus[cpu].hotplug_cur_state = -1;
 
 		sensor_mgr_set_threshold(cpus[cpu].sensor_id, hi_thresh);
 	}
@@ -3810,7 +3816,10 @@ static int freq_mitigation_notify(enum thermal_trip_type type,
 	}
 
 	if (freq_mitigation_task) {
-		cpu_node->freq_thresh_clear = true;
+		if (cpu_node->freq_cur_state != type) {
+			cpu_node->freq_thresh_clear = true;
+			cpu_node->freq_cur_state = type;
+		}
 		complete(&freq_mitigation_complete);
 	} else {
 		pr_err("Frequency mitigation task is not initialized\n");
@@ -3852,6 +3861,7 @@ static void freq_mitigation_init(void)
 		hi_thresh->notify = low_thresh->notify =
 			freq_mitigation_notify;
 		hi_thresh->data = low_thresh->data = (void *)&cpus[cpu];
+		cpus[cpu].freq_cur_state = -1;
 
 		sensor_mgr_set_threshold(cpus[cpu].sensor_id, hi_thresh);
 	}
