@@ -293,8 +293,8 @@ static int ion_assign_heap_id(struct ion_heap *heap, struct ion_device *dev)
 	if (id_bit < 0) {
 		if (heap->id) {
 			id_bit = __ffs(heap->id);
-			if (id_bit < start_bit || id_bit > end_bit)
-				return -EINVAL;
+			/*if (id_bit < start_bit || id_bit > end_bit)
+				return -EINVAL;*/
 		} else {
 			id_bit = find_next_zero_bit(dev->heap_ids, end_bit + 1,
 						    start_bit);
