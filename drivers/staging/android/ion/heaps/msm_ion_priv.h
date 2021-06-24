@@ -42,6 +42,7 @@
 #define ION_DISPLAY_HEAP_NAME "display"
 #define ION_AUDIO_ML_HEAP_NAME "audio_ml"
 #define ION_AUDIO_CARVEOUT_HEAP_NAME "audio_carveout"
+#define ION_GRAPHICS_PMEM_HEAP_NAME "graphics_pmem"
 
 /**
  * Debug feature. Make ION allocations DMA
