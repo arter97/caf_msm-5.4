@@ -249,6 +249,8 @@ struct cpu_info {
 	uint32_t limited_max_freq;
 	uint32_t limited_min_freq;
 	bool freq_thresh_clear;
+	int32_t freq_cur_state;
+	int32_t hotplug_cur_state;
 	struct cluster_info *parent_ptr;
 };
 
@@ -3598,7 +3600,10 @@ static int hotplug_notify(enum thermal_trip_type type, int temp, void *data)
 		break;
 	}
 	if (hotplug_task) {
-		cpu_node->hotplug_thresh_clear = true;
+		if (cpu_node->hotplug_cur_state != type) {
+			cpu_node->hotplug_thresh_clear = true;
+			cpu_node->hotplug_cur_state = type;
+		}
 		complete(&hotplug_notify_complete);
 	} else
 		pr_err("Hotplug task is not initialized\n");
@@ -3670,6 +3675,7 @@ static void hotplug_init(void)
 		low_thresh->trip = THERMAL_TRIP_CONFIGURABLE_LOW;
 		hi_thresh->notify = low_thresh->notify = hotplug_notify;
 		hi_thresh->data = low_thresh->data = (void *)&cpus[cpu];
+		cpus[cpu].hotplug_cur_state = -1;
 
 		sensor_mgr_set_threshold(cpus[cpu].sensor_id, hi_thresh);
 	}
@@ -3810,7 +3816,10 @@ static int freq_mitigation_notify(enum thermal_trip_type type,
 	}
 
 	if (freq_mitigation_task) {
-		cpu_node->freq_thresh_clear = true;
+		if (cpu_node->freq_cur_state != type) {
+			cpu_node->freq_thresh_clear = true;
+			cpu_node->freq_cur_state = type;
+		}
 		complete(&freq_mitigation_complete);
 	} else {
 		pr_err("Frequency mitigation task is not initialized\n");
@@ -3852,6 +3861,7 @@ static void freq_mitigation_init(void)
 		hi_thresh->notify = low_thresh->notify =
 			freq_mitigation_notify;
 		hi_thresh->data = low_thresh->data = (void *)&cpus[cpu];
+		cpus[cpu].freq_cur_state = -1;
 
 		sensor_mgr_set_threshold(cpus[cpu].sensor_id, hi_thresh);
 	}
@@ -5980,6 +5990,13 @@ static int probe_vdd_rstr(struct device_node *node,
 	if (ret)
 		goto read_node_fail;
 
+	/*
+	 * Monitor only this sensor if defined, otherwise monitor all tsens
+	 */
+	key = "qcom,vdd-restriction-sensor-id";
+	if (of_property_read_u32(node, key, &data->vdd_rstr_sensor_id))
+		data->vdd_rstr_sensor_id = MONITOR_ALL_TSENS;
+
 	for_each_child_of_node(node, child_node) {
 		rails_cnt++;
 	}
@@ -6052,7 +6069,7 @@ static int probe_vdd_rstr(struct device_node *node,
 			goto read_node_fail;
 		}
 		ret = sensor_mgr_init_threshold(&thresh[MSM_VDD_RESTRICTION],
-			MONITOR_ALL_TSENS,
+			data->vdd_rstr_sensor_id,
 			data->vdd_rstr_temp_hyst_degC, data->vdd_rstr_temp_degC,
 			vdd_restriction_notify);
 		if (ret) {
@@ -7008,6 +7025,10 @@ static void thermal_vdd_config_read(struct seq_file *m, void *data)
 				msm_thermal_info.vdd_rstr_temp_degC);
 		seq_printf(m, "threshold clear:%d degC\n",
 				msm_thermal_info.vdd_rstr_temp_hyst_degC);
+		if (msm_thermal_info.vdd_rstr_sensor_id != MONITOR_ALL_TSENS)
+			seq_printf(m, "tsens sensor:tsens_tz_sensor%d\n",
+				msm_thermal_info.vdd_rstr_sensor_id);
+
 		for (i = 0; i < rails_cnt; i++) {
 			if (!strcmp(rails[i].name, "vdd-dig")
 				&& rails[i].num_levels)
