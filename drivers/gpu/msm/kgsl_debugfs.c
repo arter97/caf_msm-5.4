@@ -125,7 +125,11 @@ static int print_mem_entry(void *data, void *ptr)
 	flags[3] = get_alignflag(m);
 	flags[4] = get_cacheflag(m);
 	flags[5] = kgsl_memdesc_use_cpu_map(m) ? 'p' : '-';
-	flags[6] = (m->useraddr) ? 'Y' : 'N';
+	/*
+	 * Show Y if at least one vma has this entry
+	 * mapped (could be multiple)
+	 */
+	flags[6] = atomic_read(&entry->map_count) ? 'Y' : 'N';
 	flags[7] = '\0';
 
 	kgsl_get_memory_usage(usage, sizeof(usage), m->flags);
@@ -134,12 +138,12 @@ static int print_mem_entry(void *data, void *ptr)
 		kgsl_get_egl_counts(entry, &egl_surface_count,
 						&egl_image_count);
 
-	seq_printf(s, "%pK %pK %16llu %5d %8s %10s %16s %5d %16llu %6d %6d",
+	seq_printf(s, "%pK %d %16llu %5d %8s %10s %16s %5d %16d %6d %6d",
 			(uint64_t *)(uintptr_t) m->gpuaddr,
-			(unsigned long *) m->useraddr,
-			m->size, entry->id, flags,
+			0, m->size, entry->id, flags,
 			memtype_str(usermem_type),
-			usage, m->sgt->nents, m->mapsize,
+			usage, m->sgt->nents,
+			atomic_read(&entry->map_count),
 			egl_surface_count, egl_image_count);
 
 	seq_putc(s, '\n');
@@ -206,7 +210,7 @@ static int process_mem_seq_show(struct seq_file *s, void *ptr)
 	if (ptr == SEQ_START_TOKEN) {
 		seq_printf(s, "%16s %16s %16s %5s %8s %10s %16s %5s %16s %6s %6s\n",
 			"gpuaddr", "useraddr", "size", "id", "flags", "type",
-			"usage", "sglen", "mapsize", "eglsrf", "eglimg");
+			"usage", "sglen", "mapcount", "eglsrf", "eglimg");
 		return 0;
 	} else
 		return print_mem_entry(s, ptr);
