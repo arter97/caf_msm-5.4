@@ -1761,8 +1761,7 @@ void a6xx_gmu_suspend(struct adreno_device *adreno_dev)
 
 	clk_bulk_disable_unprepare(gmu->num_clks, gmu->clks);
 
-	if (!a6xx_cx_regulator_disable_wait(gmu->cx_gdsc, device, 5000))
-		dev_err(&gmu->pdev->dev, "GMU CX gdsc off timeout\n");
+	a6xx_cx_regulator_disable_wait(gmu->cx_gdsc, device, 5000);
 
 	a6xx_rdpm_cx_freq_update(gmu, 0);
 
@@ -2243,9 +2242,8 @@ clks_gdsc_off:
 	clk_bulk_disable_unprepare(gmu->num_clks, gmu->clks);
 
 gdsc_off:
-	/* Pool to make sure that the CX is off */
-	if (!a6xx_cx_regulator_disable_wait(gmu->cx_gdsc, device, 5000))
-		dev_err(&gmu->pdev->dev, "GMU CX gdsc off timeout\n");
+	/* Poll to make sure that the CX is off */
+	a6xx_cx_regulator_disable_wait(gmu->cx_gdsc, device, 5000);
 
 	a6xx_rdpm_cx_freq_update(gmu, 0);
 
@@ -2324,9 +2322,8 @@ clks_gdsc_off:
 	clk_bulk_disable_unprepare(gmu->num_clks, gmu->clks);
 
 gdsc_off:
-	/* Pool to make sure that the CX is off */
-	if (!a6xx_cx_regulator_disable_wait(gmu->cx_gdsc, device, 5000))
-		dev_err(&gmu->pdev->dev, "GMU CX gdsc off timeout\n");
+	/* Poll to make sure that the CX is off */
+	a6xx_cx_regulator_disable_wait(gmu->cx_gdsc, device, 5000);
 
 	a6xx_rdpm_cx_freq_update(gmu, 0);
 
@@ -2809,9 +2806,8 @@ static int a6xx_gmu_power_off(struct adreno_device *adreno_dev)
 
 	clk_bulk_disable_unprepare(gmu->num_clks, gmu->clks);
 
-	/* Pool to make sure that the CX is off */
-	if (!a6xx_cx_regulator_disable_wait(gmu->cx_gdsc, device, 5000))
-		dev_err(&gmu->pdev->dev, "GMU CX gdsc off timeout\n");
+	/* Poll to make sure that the CX is off */
+	a6xx_cx_regulator_disable_wait(gmu->cx_gdsc, device, 5000);
 
 	a6xx_rdpm_cx_freq_update(gmu, 0);
 
@@ -2948,6 +2944,8 @@ static int a6xx_boot(struct adreno_device *adreno_dev)
 	kgsl_pwrscale_wake(device);
 
 	set_bit(GMU_PRIV_GPU_STARTED, &gmu->flags);
+
+	device->pwrctrl.last_stat_updated = ktime_get();
 	device->state = KGSL_STATE_ACTIVE;
 
 	trace_kgsl_pwr_set_state(device, KGSL_STATE_ACTIVE);
@@ -3016,6 +3014,7 @@ static int a6xx_first_boot(struct adreno_device *adreno_dev)
 	set_bit(GMU_PRIV_FIRST_BOOT_DONE, &gmu->flags);
 	set_bit(GMU_PRIV_GPU_STARTED, &gmu->flags);
 
+	device->pwrctrl.last_stat_updated = ktime_get();
 	device->state = KGSL_STATE_ACTIVE;
 
 	trace_kgsl_pwr_set_state(device, KGSL_STATE_ACTIVE);
@@ -3277,6 +3276,8 @@ static void a6xx_gmu_touch_wakeup(struct adreno_device *adreno_dev)
 	kgsl_pwrscale_wake(device);
 
 	set_bit(GMU_PRIV_GPU_STARTED, &gmu->flags);
+
+	device->pwrctrl.last_stat_updated = ktime_get();
 	device->state = KGSL_STATE_ACTIVE;
 
 	trace_kgsl_pwr_set_state(device, KGSL_STATE_ACTIVE);

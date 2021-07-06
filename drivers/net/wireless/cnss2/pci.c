@@ -61,7 +61,6 @@
 
 #define RAMDUMP_SIZE_DEFAULT		0x420000
 #define DEVICE_RDDM_COOKIE		0xCAFECACE
-
 static bool cnss_driver_registered;
 
 static DEFINE_SPINLOCK(pci_link_down_lock);
@@ -77,14 +76,6 @@ static DEFINE_SPINLOCK(time_sync_lock);
 #define FORCE_WAKE_DELAY_MIN_US			4000
 #define FORCE_WAKE_DELAY_MAX_US			6000
 #define FORCE_WAKE_DELAY_TIMEOUT_US		60000
-
-#define QCA6390_WLAON_QFPROM_PWR_CTRL_REG	0x1F8031C
-#define QCA6390_PCIE_SCRATCH_2_SOC_PCIE_REG	0x01E0405C
-#define PCIE_REG_FOR_QRTR_NODE_INSTANCE_ID	\
-	QCA6390_PCIE_SCRATCH_2_SOC_PCIE_REG
-
-#define POWER_ON_RETRY_MAX_TIMES		3
-#define POWER_ON_RETRY_DELAY_MS			200
 
 #define LINK_TRAINING_RETRY_MAX_TIMES		3
 #define LINK_TRAINING_RETRY_DELAY_MS		500
@@ -699,8 +690,11 @@ static void cnss_pci_select_window(struct cnss_pci_data *pci_priv, u32 offset)
 	u32 window_enable = WINDOW_ENABLE_BIT | window;
 	u32 val;
 
+	if (pci_priv->device_id == QCN7605_DEVICE_ID)
+		window_enable = QCN7605_WINDOW_ENABLE_BIT | window;
+
 	writel_relaxed(window_enable, pci_priv->bar +
-		       QCA6390_PCIE_REMAP_BAR_CTRL_OFFSET);
+		       PCIE_REMAP_BAR_CTRL_OFFSET);
 
 	if (window != pci_priv->remap_window) {
 		pci_priv->remap_window = window;
@@ -709,7 +703,7 @@ static void cnss_pci_select_window(struct cnss_pci_data *pci_priv, u32 offset)
 	}
 
 	/* Read it back to make sure the write has taken effect */
-	val = readl_relaxed(pci_priv->bar + QCA6390_PCIE_REMAP_BAR_CTRL_OFFSET);
+	val = readl_relaxed(pci_priv->bar + PCIE_REMAP_BAR_CTRL_OFFSET);
 	if (val != window_enable) {
 		cnss_pr_err("Failed to config window register to 0x%x, current value: 0x%x\n",
 			    window_enable, val);
@@ -1814,6 +1808,9 @@ static int cnss_wlan_adsp_pc_enable(struct cnss_pci_data *pci_priv,
 	u32 pm_options = PM_OPTIONS_DEFAULT;
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 
+	if (!pci_priv->drv_supported)
+		return 0;
+
 	if (plat_priv->adsp_pc_enabled == control) {
 		cnss_pr_dbg("ADSP power collapse already %s\n",
 			    control ? "Enabled" : "Disabled");
@@ -1837,6 +1834,123 @@ static int cnss_wlan_adsp_pc_enable(struct cnss_pci_data *pci_priv,
 #else
 static int cnss_wlan_adsp_pc_enable(struct cnss_pci_data *pci_priv,
 				    bool control)
+{
+	return 0;
+}
+#endif
+
+#ifdef CONFIG_CNSS_SUPPORT_DUAL_DEV
+static struct cnss_plat_data *
+cnss_get_plat_priv_by_driver_ops(struct cnss_wlan_driver *driver_ops)
+{
+	int plat_env_count = cnss_get_plat_env_count();
+	struct cnss_plat_data *plat_env;
+	struct cnss_pci_data *pci_priv;
+	int i = 0;
+
+	if (!driver_ops) {
+		cnss_pr_err("No cnss driver\n");
+		return NULL;
+	}
+
+	for (i = 0; i < plat_env_count; i++) {
+		plat_env = cnss_get_plat_env(i);
+
+		if (!plat_env)
+			continue;
+
+		pci_priv = plat_env->bus_priv;
+		if (!pci_priv) {
+			cnss_pr_err("pci_priv is NULL\n");
+			continue;
+		}
+
+		if (driver_ops == pci_priv->driver_ops)
+			return plat_env;
+	}
+	/* Doesn't find the existing instance,
+	 * so return the fist empty instance
+	 */
+	for (i = 0; i < plat_env_count; i++) {
+		plat_env = cnss_get_plat_env(i);
+
+		if (!plat_env)
+			continue;
+		pci_priv = plat_env->bus_priv;
+		if (!pci_priv) {
+			cnss_pr_err("pci_priv is NULL\n");
+			continue;
+		}
+
+		if (!pci_priv->driver_ops)
+			return plat_env;
+	}
+
+	return NULL;
+}
+
+static int cnss_pci_store_qrtr_node_id(struct cnss_pci_data *pci_priv)
+{
+	int ret = 0;
+	u32 scratch = QCA6390_PCIE_SOC_PCIE_REG_PCIE_SCRATCH_2_SOC_PCIE_REG;
+	struct cnss_plat_data *plat_priv;
+
+	if (!pci_priv) {
+		cnss_pr_err("pci_priv is NULL\n");
+		return -ENODEV;
+	}
+
+	plat_priv = pci_priv->plat_priv;
+	/**
+	 * in the single wlan chipset case, plat_priv->qrtr_node_id always is 0,
+	 * wlan fw will use the hardcode 7 as the qrtr node id.
+	 * in the dual Hastings case, we will read qrtr node id
+	 * from device tree and pass to get plat_priv->qrtr_node_id,
+	 * which always is not zero. And then store this new value
+	 * to pcie register, wlan fw will read out this qrtr node id
+	 * from this register and overwrite to the hardcode one
+	 * while do initialization for ipc router.
+	 * without this change, two Hastings will use the same
+	 * qrtr node instance id, which will mess up qmi message
+	 * exchange. According to qrtr spec, every node should
+	 * have unique qrtr node id
+	 */
+	if (plat_priv->device_id == QCA6390_DEVICE_ID &&
+	    plat_priv->qrtr_node_id) {
+		u32 val;
+
+		cnss_pr_dbg("write 0x%x to SCRATCH REG\n",
+			    plat_priv->qrtr_node_id);
+		ret = cnss_pci_reg_write(pci_priv, scratch,
+					 plat_priv->qrtr_node_id);
+		if (ret) {
+			cnss_pr_err("Failed to write register offset 0x%x, err = %d\n",
+				    scratch, ret);
+			goto out;
+		}
+
+		ret = cnss_pci_reg_read(pci_priv, scratch, &val);
+		if (ret) {
+			cnss_pr_err("Failed to read SCRATCH REG");
+			goto out;
+		}
+
+		if (val != plat_priv->qrtr_node_id) {
+			cnss_pr_err("qrtr node id write to register doesn't match with readout value");
+			return -ERANGE;
+		}
+	}
+out:
+	return ret;
+}
+#else
+static struct cnss_plat_data *
+cnss_get_plat_priv_by_driver_ops(struct cnss_wlan_driver *driver_ops)
+{
+	return cnss_bus_dev_to_plat_priv(NULL);
+}
+
+static int cnss_pci_store_qrtr_node_id(struct cnss_pci_data *pci_priv)
 {
 	return 0;
 }
@@ -1872,44 +1986,10 @@ int cnss_pci_start_mhi(struct cnss_pci_data *pci_priv)
 	else /* For perf builds the timeout is 10 (default) * 3 seconds */
 		pci_priv->mhi_ctrl->timeout_ms *= 3;
 
-	/**
-	 * in the single wlan chipset case, plat_priv->qrtr_node_id always is 0,
-	 * wlan fw will use the hardcode 7 as the qrtr node id.
-	 * in the dual Hastings case, we will read qrtr node id
-	 * from device tree and pass to get plat_priv->qrtr_node_id,
-	 * which always is not zero. And then store this new value
-	 * to pcie register, wlan fw will read out this qrtr node id
-	 * from this register and overwrite to the hardcode one
-	 * while do initialization for ipc router.
-	 * without this change, two Hastings will use the same
-	 * qrtr node instance id, which will mess up qmi message
-	 * exchange. According to qrtr spec, every node should
-	 * have unique qrtr node id
-	 */
-	if (plat_priv->device_id == QCA6390_DEVICE_ID &&
-	    plat_priv->qrtr_node_id) {
-		u32 val;
+	ret = cnss_pci_store_qrtr_node_id(pci_priv);
+	if (ret)
+		return ret;
 
-		cnss_pr_dbg("write 0x%x to PCIE_REG_FOR_QRTR_NODE_INSTANCE_ID\n",
-			    plat_priv->qrtr_node_id);
-		ret = cnss_pci_reg_write(pci_priv,
-					 PCIE_REG_FOR_QRTR_NODE_INSTANCE_ID,
-					 plat_priv->qrtr_node_id);
-		if (ret) {
-			cnss_pr_err("Failed to write register offset 0x%x, err = %d\n",
-				    PCIE_REG_FOR_QRTR_NODE_INSTANCE_ID, ret);
-			goto out;
-		}
-		if (cnss_pci_reg_read(pci_priv,
-				      PCIE_REG_FOR_QRTR_NODE_INSTANCE_ID,
-				      &val))
-			cnss_pr_err("Failed to read PCIE_REG_FOR_QRTR_NODE_INSTANCE_ID");
-
-		if (val != plat_priv->qrtr_node_id) {
-			cnss_pr_err("qrtr node id write to register doesn't match with readout value");
-			goto out;
-		}
-	}
 	/* Start the timer to dump MHI/PBL/SBL debug data periodically */
 	mod_timer(&pci_priv->boot_debug_timer,
 		  jiffies + msecs_to_jiffies(BOOT_DEBUG_TIMEOUT_MS));
@@ -1932,7 +2012,6 @@ int cnss_pci_start_mhi(struct cnss_pci_data *pci_priv)
 		ret = cnss_pci_handle_mhi_poweron_timeout(pci_priv);
 	}
 
-out:
 	return ret;
 }
 
@@ -2867,64 +2946,6 @@ int cnss_pci_is_drv_connected(struct device *dev)
 	return pci_priv->drv_connected_last;
 }
 EXPORT_SYMBOL(cnss_pci_is_drv_connected);
-
-#ifdef CONFIG_CNSS_SUPPORT_DUAL_DEV
-static struct cnss_plat_data *
-cnss_get_plat_priv_by_driver_ops(struct cnss_wlan_driver *driver_ops)
-{
-	int plat_env_count = cnss_get_plat_env_count();
-	struct cnss_plat_data *plat_env;
-	struct cnss_pci_data *pci_priv;
-	int i = 0;
-
-	if (!driver_ops) {
-		cnss_pr_err("No cnss driver\n");
-		return NULL;
-	}
-
-	for (i = 0; i < plat_env_count; i++) {
-		plat_env = cnss_get_plat_env(i);
-
-		if (!plat_env)
-			continue;
-
-		pci_priv = plat_env->bus_priv;
-		if (!pci_priv) {
-			cnss_pr_err("pci_priv is NULL\n");
-			continue;
-		}
-
-		if (driver_ops == pci_priv->driver_ops)
-			return plat_env;
-	}
-	/* Doesn't find the existing instance,
-	 * so return the fist empty instance
-	 */
-	for (i = 0; i < plat_env_count; i++) {
-		plat_env = cnss_get_plat_env(i);
-
-		if (!plat_env)
-			continue;
-		pci_priv = plat_env->bus_priv;
-		if (!pci_priv) {
-			cnss_pr_err("pci_priv is NULL\n");
-			continue;
-		}
-
-		if (!pci_priv->driver_ops)
-			return plat_env;
-	}
-
-	return NULL;
-}
-
-#else
-static struct cnss_plat_data *
-cnss_get_plat_priv_by_driver_ops(struct cnss_wlan_driver *driver_ops)
-{
-	return cnss_bus_dev_to_plat_priv(NULL);
-}
-#endif
 
 int cnss_wlan_register_driver(struct cnss_wlan_driver *driver_ops)
 {
@@ -5826,6 +5847,62 @@ static int cnss_pci_of_reserved_mem_device_init(struct cnss_pci_data *pci_priv)
 }
 #endif
 
+#ifdef CONFIG_CNSS_SUPPORT_DUAL_DEV
+static int cnss_try_suspend(struct cnss_plat_data *plat_priv)
+{
+	int ret = 0;
+
+	/* in the dual wlan card case, if call pci_register_driver after
+	 * finishing the first pcie device enumeration, it will cause
+	 * the cnss_pci_probe called in advance with the second wlan card,
+	 * and the sequence like this:
+	 * enter msm_pcie_enumerate -> pci_bus_add_devices -> cnss_pci_probe
+	 * -> exit msm_pcie_enumerate.
+	 * But the correct sequence we expected is like this:
+	 * enter msm_pcie_enumerate -> pci_bus_add_devices  ->
+	 * exit msm_pcie_enumerate -> cnss_pci_probe.
+	 * And this unexpected sequence will make the second wlan card do
+	 * pcie link suspend while the pcie enumeration not finished.
+	 * So need to add below logical to avoid doing pcie link suspend
+	 * if the enumeration has not finish.
+	 */
+
+	plat_priv->enumerate_done = true;
+
+	/* Now enumeration is finished, try to suspend PCIe link */
+	if (plat_priv->bus_priv) {
+		struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+		struct pci_dev *pci_dev = pci_priv->pci_dev;
+
+		switch (pci_dev->device) {
+		case QCA6390_DEVICE_ID:
+			cnss_pci_set_wlaon_pwr_ctrl(pci_priv,
+						    false,
+						    true,
+						    false);
+
+			ret = cnss_suspend_pci_link(pci_priv);
+			if (ret)
+				cnss_pr_err("Failed to suspend PCI link, err = %d\n",
+					    ret);
+			cnss_power_off_device(plat_priv);
+			break;
+		default:
+			cnss_pr_err("Unknown PCI device found: 0x%x\n",
+				    pci_dev->device);
+			ret = -ENODEV;
+		}
+	}
+
+	return ret;
+}
+#else
+static int cnss_try_suspend(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+#endif
+
 /* Setting to use this cnss_pm_domain ops will let PM framework override the
  * ops from dev->bus->pm which is pci_dev_pm_ops from pci-driver.c. This ops
  * has to take care everything device driver needed which is currently done
@@ -5965,7 +6042,7 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 
 	switch (pci_dev->device) {
 	case QCA6174_DEVICE_ID:
-		if (cnss_get_dual_wlan() && !plat_priv->enumerate_done)
+		if (cnss_is_dual_wlan_enabled() && !plat_priv->enumerate_done)
 			break;
 		pci_read_config_word(pci_dev, QCA6174_REV_ID_OFFSET,
 				     &pci_priv->revision_id);
@@ -5975,11 +6052,10 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	case QCN7605_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 	case WCN7850_DEVICE_ID:
-		if ((cnss_get_dual_wlan() && plat_priv->enumerate_done) ||
-		    (!cnss_get_dual_wlan() &&
-		     pci_dev->device != QCN7605_DEVICE_ID))
-			cnss_pci_set_wlaon_pwr_ctrl(pci_priv, false,
-						    false, false);
+		if ((cnss_is_dual_wlan_enabled() &&
+		     plat_priv->enumerate_done) || !cnss_is_dual_wlan_enabled())
+			cnss_pci_set_wlaon_pwr_ctrl(pci_priv, false, false,
+						    false);
 		timer_setup(&pci_priv->dev_rddm_timer,
 			    cnss_dev_rddm_timeout_hdlr, 0);
 		timer_setup(&pci_priv->boot_debug_timer,
@@ -5987,9 +6063,7 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 		INIT_DELAYED_WORK(&pci_priv->time_sync_work,
 				  cnss_pci_time_sync_work_hdlr);
 		cnss_pci_get_link_status(pci_priv);
-
-		if (pci_dev->device != QCN7605_DEVICE_ID)
-			cnss_pci_set_wlaon_pwr_ctrl(pci_priv, false, true, false);
+		cnss_pci_set_wlaon_pwr_ctrl(pci_priv, false, true, false);
 		cnss_pci_wake_gpio_init(pci_priv);
 		break;
 	default:
@@ -6003,7 +6077,7 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	if (EMULATION_HW)
 		goto out;
 
-	if (cnss_get_dual_wlan() && !plat_priv->enumerate_done)
+	if (cnss_is_dual_wlan_enabled() && !plat_priv->enumerate_done)
 		return 0;
 
 	ret = cnss_suspend_pci_link(pci_priv);
@@ -6165,66 +6239,12 @@ int cnss_pci_init(struct cnss_plat_data *plat_priv)
 			goto out;
 	}
 
-	/* in the dual wlan card case, if call pci_register_driver after
-	 * finishing the first pcie device enumeration, it will cause
-	 * the cnss_pci_probe called in advance with the second wlan card,
-	 * and the sequence like this:
-	 * enter msm_pcie_enumerate -> pci_bus_add_devices -> cnss_pci_probe
-	 * -> exit msm_pcie_enumerate.
-	 * But the correct sequence we expected is like this:
-	 * enter msm_pcie_enumerate -> pci_bus_add_devices  ->
-	 * exit msm_pcie_enumerate -> cnss_pci_probe.
-	 * And this unexpected sequence will make the second wlan card do
-	 * pcie link suspend while the pcie enumeration not finished.
-	 * So need to add below logical to avoid doing pcie link suspend
-	 * if the enumeration has not finish.
-	 */
-	if (cnss_get_dual_wlan()) {
-		plat_priv->enumerate_done = true;
-		/* Now enumeration is finished, try to suspend PCIe link */
-		if (plat_priv->bus_priv) {
-			struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
-			struct pci_dev *pci_dev = pci_priv->pci_dev;
-
-			switch (pci_dev->device) {
-			case QCA6174_DEVICE_ID:
-				pci_read_config_word(pci_dev,
-						     QCA6174_REV_ID_OFFSET,
-						     &pci_priv->revision_id);
-				ret = cnss_suspend_pci_link(pci_priv);
-				if (ret)
-					cnss_pr_err("Failed to suspend PCI link, err = %d\n",
-						    ret);
-				cnss_power_off_device(plat_priv);
-				break;
-			case QCA6290_DEVICE_ID:
-			case QCA6390_DEVICE_ID:
-			case QCA6490_DEVICE_ID:
-			case QCN7605_DEVICE_ID:
-				if (pci_dev->device != QCN7605_DEVICE_ID) {
-					cnss_pci_set_wlaon_pwr_ctrl(pci_priv,
-								    false,
-								    false,
-								    false);
-					cnss_pci_set_wlaon_pwr_ctrl(pci_priv,
-								    false,
-								    true,
-								    false);
-				}
-				ret = cnss_suspend_pci_link(pci_priv);
-				if (ret)
-					cnss_pr_err("Failed to suspend PCI link, err = %d\n",
-						    ret);
-				cnss_power_off_device(plat_priv);
-
-				break;
-			default:
-				cnss_pr_err("Unknown PCI device found: 0x%x\n",
-					    pci_dev->device);
-				ret = -ENODEV;
-			}
-		}
+	ret = cnss_try_suspend(plat_priv);
+	if (ret) {
+		cnss_pr_err("Failed to suspend, ret: %d\n", ret);
+		goto out;
 	}
+
 	if (!cnss_driver_registered) {
 		ret = pci_register_driver(&cnss_pci_driver);
 		if (ret) {

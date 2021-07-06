@@ -36,6 +36,7 @@
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <soc/qcom/subsystem_notif.h>
+#include <linux/pinctrl/qcom-pinctrl.h>
 
 #include "../pci.h"
 
@@ -768,6 +769,7 @@ struct msm_pcie_dev_t {
 	uint32_t gpio_n;
 	uint32_t parf_deemph;
 	uint32_t parf_swing;
+	uint32_t clkreq_gpio;
 
 	struct msm_pcie_vreg_info_t *cx_vreg;
 	struct msm_pcie_clk_info_t *rate_change_clk;
@@ -834,6 +836,7 @@ struct msm_pcie_dev_t {
 	uint32_t aux_clk_freq;
 	bool linkdown_panic;
 	uint32_t boot_option;
+	bool lpi_enable;
 
 	uint32_t rc_idx;
 	uint32_t phy_ver;
@@ -1396,7 +1399,7 @@ static void msm_pcie_write_reg(void __iomem *base, u32 offset, u32 value)
 static void msm_pcie_write_reg_field(void __iomem *base, u32 offset,
 	const u32 mask, u32 val)
 {
-	u32 shift = find_first_bit((void *)&mask, 32);
+	u32 shift = __ffs(mask);
 	u32 tmp = readl_relaxed(base + offset);
 
 	tmp &= ~mask; /* clear written bits */
@@ -4831,8 +4834,10 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev)
 		goto link_fail;
 	}
 
-	if (dev->enumerated)
-		msm_msi_config(dev_get_msi_domain(&dev->dev->dev));
+	if (dev->enumerated) {
+		if (!dev->lpi_enable)
+			msm_msi_config(dev_get_msi_domain(&dev->dev->dev));
+	}
 
 	/* bring eps out of reset */
 	if (dev->i2c_ctrl.client && dev->i2c_ctrl.client_i2c_reset)
@@ -4878,7 +4883,9 @@ static void msm_pcie_disable(struct msm_pcie_dev_t *dev)
 	}
 
 	/* suspend access to MSI register. resume access in msm_msi_config */
-	msm_msi_config_access(dev_get_msi_domain(&dev->dev->dev), false);
+	if (!dev->lpi_enable)
+		msm_msi_config_access(dev_get_msi_domain(&dev->dev->dev),
+				      false);
 
 	dev->link_status = MSM_PCIE_LINK_DISABLED;
 	dev->power_on = false;
@@ -5096,9 +5103,11 @@ int msm_pcie_enumerate(u32 rc_idx)
 		goto out;
 	}
 
-	ret = msm_msi_init(&dev->pdev->dev);
-	if (ret)
-		goto out;
+	if (!dev->lpi_enable) {
+		ret = msm_msi_init(&dev->pdev->dev);
+		if (ret)
+			goto out;
+	}
 
 	list_splice_init(&res, &bridge->windows);
 	bridge->dev.parent = &dev->pdev->dev;
@@ -6304,8 +6313,23 @@ static int msm_pcie_probe(struct platform_device *pdev)
 		PCIE_DBG(pcie_dev, "RC%d: aux clock frequency: %d.\n",
 			pcie_dev->rc_idx, pcie_dev->aux_clk_freq);
 
+	of_property_read_u32(of_node, "qcom,clkreq-gpio",
+			&pcie_dev->clkreq_gpio);
+
+	PCIE_DBG(pcie_dev, "RC%d: clkreq gpio no:%u\n",
+			pcie_dev->rc_idx, pcie_dev->clkreq_gpio);
+
 	pcie_dev->shadow_en = true;
 	pcie_dev->aer_enable = true;
+
+	if (!of_find_property(of_node, "msi-map", NULL)) {
+		PCIE_DBG(pcie_dev, "RC%d: LPI not supported.\n",
+			 pcie_dev->rc_idx);
+	} else {
+		PCIE_DBG(pcie_dev, "RC%d: LPI supported.\n",
+			 pcie_dev->rc_idx);
+		pcie_dev->lpi_enable = true;
+	}
 
 	memcpy(pcie_dev->vreg, msm_pcie_vreg_info, sizeof(msm_pcie_vreg_info));
 	memcpy(pcie_dev->gpio, msm_pcie_gpio_info, sizeof(msm_pcie_gpio_info));
@@ -6872,6 +6896,7 @@ static struct pci_device_id msm_pci_device_id[] = {
 	{PCI_DEVICE(0x17cb, 0x0108)},
 	{PCI_DEVICE(0x17cb, 0x010b)},
 	{PCI_DEVICE(0x17cb, 0x010c)},
+	{PCI_DEVICE(0x17cb, 0x1000)},
 	{0},
 };
 
@@ -7153,7 +7178,7 @@ static int pcie_i2c_ctrl_probe(struct i2c_client *client,
 		client_id = data->client_id;
 	}
 
-	if (rc_index >= MAX_RC_NUM) {
+	if (rc_index >= MAX_RC_NUM || rc_index == -EINVAL) {
 		dev_err(&client->dev, "invalid RC index %d\n", rc_index);
 		return -EINVAL;
 	}
@@ -7758,7 +7783,9 @@ static int msm_pcie_drv_resume(struct msm_pcie_dev_t *pcie_dev)
 	pcie_dev->link_status = MSM_PCIE_LINK_ENABLED;
 
 	/* resume access to MSI register as link is resumed */
-	msm_msi_config_access(dev_get_msi_domain(&pcie_dev->dev->dev), true);
+	if (!pcie_dev->lpi_enable)
+		msm_msi_config_access(dev_get_msi_domain(&pcie_dev->dev->dev),
+				      true);
 
 	enable_irq(pcie_dev->irq[MSM_PCIE_INT_GLOBAL_INT].num);
 
@@ -7766,6 +7793,10 @@ static int msm_pcie_drv_resume(struct msm_pcie_dev_t *pcie_dev)
 	PCIE_DBG(pcie_dev, "PCIe RC%d: LTSSM_STATE: %s\n",
 		pcie_dev->rc_idx, TO_LTSSM_STR(val & 0x3f));
 
+	msm_gpio_mpm_wake_set(pcie_dev->clkreq_gpio, false);
+
+	PCIE_DBG(pcie_dev, "PCIe: RC%d: disable wake up cap for CLKREQ GPIO\n",
+		pcie_dev->rc_idx);
 	mutex_unlock(&pcie_dev->setup_lock);
 	mutex_unlock(&pcie_dev->recovery_lock);
 
@@ -7788,6 +7819,10 @@ static int msm_pcie_drv_suspend(struct msm_pcie_dev_t *pcie_dev,
 	}
 
 	mutex_lock(&pcie_dev->recovery_lock);
+	msm_gpio_mpm_wake_set(pcie_dev->clkreq_gpio, true);
+
+	PCIE_DBG(pcie_dev, "PCIe: RC%d:Enable wake up cap for CLKREQ GPIO\n",
+		pcie_dev->rc_idx);
 
 	/* disable global irq - no more linkdown/aer detection */
 	disable_irq(pcie_dev->irq[MSM_PCIE_INT_GLOBAL_INT].num);
@@ -7803,7 +7838,9 @@ static int msm_pcie_drv_suspend(struct msm_pcie_dev_t *pcie_dev,
 	}
 
 	/* suspend access to MSI register. resume access in drv_resume */
-	msm_msi_config_access(dev_get_msi_domain(&pcie_dev->dev->dev), false);
+	if (!pcie_dev->lpi_enable)
+		msm_msi_config_access(dev_get_msi_domain(&pcie_dev->dev->dev),
+				      false);
 
 	pcie_dev->user_suspend = true;
 	set_bit(pcie_dev->rc_idx, &pcie_drv.rc_drv_enabled);
@@ -7923,6 +7960,7 @@ int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr, void *user,
 			break;
 		}
 
+		mutex_lock(&pcie_dev->recovery_lock);
 		mutex_lock(&pcie_dev->enumerate_lock);
 
 		/*
@@ -7953,12 +7991,12 @@ int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr, void *user,
 				 "PCIe: RC%d: request to suspend the link is rejected\n",
 				 pcie_dev->rc_idx);
 			mutex_unlock(&pcie_dev->enumerate_lock);
+			mutex_unlock(&pcie_dev->recovery_lock);
 			break;
 		}
 
 		pcie_dev->user_suspend = true;
 
-		mutex_lock(&pcie_dev->recovery_lock);
 
 		ret = msm_pcie_pm_suspend(dev, user, data, options);
 		if (ret) {
@@ -7974,9 +8012,9 @@ int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr, void *user,
 			}
 		}
 
-		mutex_unlock(&pcie_dev->recovery_lock);
-
 		mutex_unlock(&pcie_dev->enumerate_lock);
+
+		mutex_unlock(&pcie_dev->recovery_lock);
 		break;
 	case MSM_PCIE_RESUME:
 		PCIE_DBG(pcie_dev,
@@ -7988,6 +8026,8 @@ int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr, void *user,
 			ret = msm_pcie_drv_resume(pcie_dev);
 			break;
 		}
+
+		mutex_lock(&pcie_dev->recovery_lock);
 
 		/* when link was suspended and link resume is requested */
 		mutex_lock(&pcie_dev->enumerate_lock);
@@ -8015,10 +8055,10 @@ int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr, void *user,
 			PCIE_ERR(pcie_dev,
 				 "PCIe: RC%d: requested to resume when link is already powered on.\n",
 				 pcie_dev->rc_idx);
+			mutex_unlock(&pcie_dev->recovery_lock);
 			break;
 		}
 
-		mutex_lock(&pcie_dev->recovery_lock);
 		ret = msm_pcie_pm_resume(dev, user, data, options);
 		if (ret) {
 			PCIE_ERR(pcie_dev,

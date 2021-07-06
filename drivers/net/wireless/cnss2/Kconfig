@@ -106,7 +106,9 @@ config CNSS_REQ_FW_DIRECT
 	  space failure.
 
 config CNSS_SUPPORT_DUAL_DEV
-       bool "Enable cnss2 support dual wlan card"
-       help
-         This enables the changes from cnss2 platform driver to support dual
-         wlan card attach.
+	bool "Enable cnss2 support dual wlan card"
+	depends on CNSS2 && !CNSS_ASYNC
+	help
+	  This enables the changes from cnss2 platform driver to support dual
+	  wlan card attach. Now just supports QCA6390 chip and does not support
+	  asynchronous probe.
