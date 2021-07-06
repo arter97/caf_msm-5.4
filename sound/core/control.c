@@ -411,11 +411,8 @@ static int __snd_ctl_add_replace(struct snd_card *card,
 				return err;
 		}
 	}
-
-#if 0
 	if (snd_ctl_find_hole(card, kcontrol->count) < 0)
 		return -ENOMEM;
-#endif
 
 	list_add_tail(&kcontrol->list, &card->controls);
 	card->controls_count += kcontrol->count;
