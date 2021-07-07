@@ -1890,7 +1890,7 @@ static void __exit qcom_ethqos_exit_module(void)
  * to do something with the code that the module provides.
  */
 
-module_init(qcom_ethqos_init_module)
+early_module_init(qcom_ethqos_init_module, EARLY_SUBSYS_6, EARLY_INIT_LEVEL4);
 
 /*!
  * \brief Macro to register the driver un-registration function.
