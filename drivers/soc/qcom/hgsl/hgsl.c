@@ -157,7 +157,7 @@ static uint32_t hgsl_dbq_get_state_info(uint32_t *va_base, uint32_t command,
 		break;
 	}
 
-	return *dest;
+	return ((dest != NULL) ? (*dest) : (0));
 }
 
 static void hgsl_dbq_set_state_info(uint32_t *va_base, uint32_t command,
@@ -1571,11 +1571,13 @@ static int hgsl_ioctl_isync_fence_create(struct file *filep,
 	struct hgsl_isync_create_fence param;
 	int ret = 0;
 	int fence = 0;
+	bool ts_is_valid;
 
 	copy_from_user(&param, USRPTR(arg), sizeof(param));
+	ts_is_valid = (param.padding == HGSL_ISYNC_FENCE_CREATE_USE_TS);
 
-	ret = hgsl_isync_fence_create(priv, param.timeline_id,
-						param.ts, &fence);
+	ret = hgsl_isync_fence_create(priv, param.timeline_id, param.ts,
+						ts_is_valid, &fence);
 
 	if (ret == 0) {
 		param.fence_id = fence;
