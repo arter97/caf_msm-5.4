@@ -187,6 +187,14 @@ static void cnss_get_rc_qrtr(struct cnss_plat_data *plat_priv)
 			    plat_priv->wlfw_service_instance_id);
 	}
 }
+
+static inline int
+cnss_get_pld_bus_ops_name(struct cnss_plat_data *plat_priv)
+{
+	return of_property_read_string(plat_priv->plat_dev->dev.of_node,
+				       "qcom,pld_bus_ops_name",
+				       &plat_priv->pld_bus_ops_name);
+}
 #else
 static void cnss_set_plat_priv(struct platform_device *plat_dev,
 			       struct cnss_plat_data *plat_priv)
@@ -223,6 +231,12 @@ struct cnss_plat_data *cnss_get_plat_priv_by_rc_num(int rc_num)
 
 static void cnss_get_rc_qrtr(struct cnss_plat_data *plat_priv)
 {
+}
+
+static int
+cnss_get_pld_bus_ops_name(struct cnss_plat_data *plat_priv)
+{
+	return 0;
 }
 #endif
 
@@ -2485,6 +2499,11 @@ static int cnss_register_ramdump_v2(struct cnss_plat_data *plat_priv)
 
 	cnss_pr_dbg("Ramdump size 0x%lx\n", info_v2->ramdump_size);
 
+	if (info_v2->ramdump_size == 0) {
+		cnss_pr_info("Ramdump will not be collected");
+		return 0;
+	}
+
 	info_v2->dump_data_vaddr = kzalloc(CNSS_DUMP_DESC_SIZE, GFP_KERNEL);
 	if (!info_v2->dump_data_vaddr)
 		return -ENOMEM;
@@ -3356,6 +3375,11 @@ static int cnss_probe(struct platform_device *plat_dev)
 
 	plat_priv->plat_dev = plat_dev;
 	plat_priv->device_id = device_id->driver_data;
+
+	ret = cnss_get_pld_bus_ops_name(plat_priv);
+	if (ret)
+		cnss_pr_err("Failed to find bus ops name, err = %d\n",
+			    ret);
 
 	cnss_get_rc_qrtr(plat_priv);
 

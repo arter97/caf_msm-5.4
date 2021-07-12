@@ -887,10 +887,15 @@ int cnss_request_bus_bandwidth(struct device *dev, int bandwidth)
 EXPORT_SYMBOL(cnss_request_bus_bandwidth);
 
 int cnss_pci_debug_reg_read(struct cnss_pci_data *pci_priv, u32 offset,
-			    u32 *val)
+			    u32 *val, bool raw_access)
 {
 	int ret = 0;
 	bool do_force_wake_put = true;
+
+	if (raw_access) {
+		ret = cnss_pci_reg_read(pci_priv, offset, val);
+		goto out;
+	}
 
 	ret = cnss_pci_is_device_down(&pci_priv->pci_dev->dev);
 	if (ret)
@@ -922,10 +927,15 @@ out:
 }
 
 int cnss_pci_debug_reg_write(struct cnss_pci_data *pci_priv, u32 offset,
-			     u32 val)
+			     u32 val, bool raw_access)
 {
 	int ret = 0;
 	bool do_force_wake_put = true;
+
+	if (raw_access) {
+		ret = cnss_pci_reg_write(pci_priv, offset, val);
+		goto out;
+	}
 
 	ret = cnss_pci_is_device_down(&pci_priv->pci_dev->dev);
 	if (ret)
@@ -1840,6 +1850,8 @@ static int cnss_wlan_adsp_pc_enable(struct cnss_pci_data *pci_priv,
 #endif
 
 #ifdef CONFIG_CNSS_SUPPORT_DUAL_DEV
+#define PLC_PCIE_NAME_LEN		14
+
 static struct cnss_plat_data *
 cnss_get_plat_priv_by_driver_ops(struct cnss_wlan_driver *driver_ops)
 {
@@ -1852,6 +1864,33 @@ cnss_get_plat_priv_by_driver_ops(struct cnss_wlan_driver *driver_ops)
 		cnss_pr_err("No cnss driver\n");
 		return NULL;
 	}
+
+	for (i = 0; i < plat_env_count; i++) {
+		plat_env = cnss_get_plat_env(i);
+		if (!plat_env)
+			continue;
+		if (driver_ops->name && plat_env->pld_bus_ops_name) {
+			/* driver_ops->name = PLD_PCIE_OPS_NAME
+			 * #ifdef MULTI_IF_NAME
+			 * #define PLD_PCIE_OPS_NAME "pld_pcie_" MULTI_IF_NAME
+			 * #else
+			 * #define PLD_PCIE_OPS_NAME "pld_pcie"
+			 * #endif
+			 */
+			if (memcmp(driver_ops->name,
+				   plat_env->pld_bus_ops_name,
+				   PLC_PCIE_NAME_LEN) == 0)
+				return plat_env;
+		}
+	}
+
+	cnss_pr_err("Invalid cnss driver name from ko %s\n", driver_ops->name);
+	/* in the dual wlan card case, the pld_bus_ops_name from dts
+	 * and driver_ops-> name from ko should match, otherwise
+	 * wlanhost driver don't know which plat_env it can use;
+	 * if doesn't find the match one, then get first available
+	 * instance insteadly.
+	 */
 
 	for (i = 0; i < plat_env_count; i++) {
 		plat_env = cnss_get_plat_env(i);
@@ -3129,7 +3168,7 @@ static bool cnss_pci_is_drv_supported(struct cnss_pci_data *pci_priv)
 
 	root_of_node = root_port->dev.of_node;
 
-	if (root_of_node->parent)
+	if (root_of_node && root_of_node->parent)
 		drv_supported = of_property_read_bool(root_of_node->parent,
 						      "qcom,drv-supported");
 
