@@ -75,6 +75,8 @@
 
 #define KGSL_CONTEXT_INVALIDATE_ON_FAULT 0x10000000
 
+#define KGSL_CONTEXT_SEPARATE_SHADOW_MEM 0x20000000
+
 #define KGSL_CONTEXT_INVALID 0xffffffff
 
 /*
@@ -384,6 +386,7 @@ struct kgsl_shadowprop {
 	unsigned long gpuaddr;
 	__kernel_size_t size;
 	unsigned int flags; /* contains KGSL_FLAGS_ values */
+	int fd; /* dmabuf fd if shadow memory is a dmabuf */
 };
 
 struct kgsl_qdss_stm_prop {
@@ -437,6 +440,7 @@ struct kgsl_gpu_model {
 
 /* Context property sub types */
 #define KGSL_CONTEXT_PROP_FAULTS 1
+#define KGSL_CONTEXT_PROP_SHADOW 2
 
 /* Performance counter groups */
 
@@ -627,11 +631,15 @@ struct kgsl_cmdstream_freememontimestamp {
 	_IOR(KGSL_IOC_TYPE, 0x12, struct kgsl_cmdstream_freememontimestamp)
 
 /* create a draw context, which is used to preserve GPU state.
- * The flags field may contain a mask KGSL_CONTEXT_*  values
+ * The flags field may contain a mask KGSL_CONTEXT_*  values.
+ * The shadow_mem_flags field contains KGSL_MEMFLAGS_* to allocate
+ * separate shadow timestamp memory. It is only valid when
+ * KGSL_CONTEXT_SEPARATE_SHADOW_MEM is set in flags field.
  */
 struct kgsl_drawctxt_create {
 	unsigned int flags;
 	unsigned int drawctxt_id; /*output param */
+	__u64 shadow_mem_flags;
 };
 
 #define IOCTL_KGSL_DRAWCTXT_CREATE \

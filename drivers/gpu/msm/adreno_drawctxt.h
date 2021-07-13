@@ -104,7 +104,8 @@ enum adreno_context_priv {
 
 struct kgsl_context *adreno_drawctxt_create(
 			struct kgsl_device_private *dev_priv,
-			uint32_t *flags);
+			uint32_t *flags,
+			uint64_t shadow_mem_flags);
 
 void adreno_drawctxt_detach(struct kgsl_context *context);
 

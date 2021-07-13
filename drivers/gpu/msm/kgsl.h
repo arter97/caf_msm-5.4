@@ -55,6 +55,13 @@
 	((dev)->memstore->gpuaddr + \
 	 KGSL_MEMSTORE_OFFSET(((rb)->id + KGSL_MEMSTORE_MAX), field))
 
+#define CONTEXT_SHADOW_OFFSET(field)	\
+	 offsetof(struct kgsl_devmemstore, field)
+
+#define CONTEXT_SHADOW_GPU_ADDR(context, field)	\
+	((context)->shadow_timestamp_mem->memdesc.gpuaddr + \
+	 CONTEXT_SHADOW_OFFSET(field))
+
 /*
  * SCRATCH MEMORY: The scratch memory is one page worth of data that
  * is mapped into the GPU. This allows for some 'shared' data between

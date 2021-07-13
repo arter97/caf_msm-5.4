@@ -74,6 +74,7 @@ static inline struct kgsl_pagetable *_get_memdesc_pagetable(
 }
 
 static void kgsl_mem_entry_detach_process(struct kgsl_mem_entry *entry);
+static uint64_t get_mmapsize(struct kgsl_memdesc *memdesc);
 
 static const struct file_operations kgsl_fops;
 
@@ -1361,6 +1362,42 @@ static int kgsl_get_ctxt_fault_stats(struct kgsl_context *context,
 	return 0;
 }
 
+static inline int kgsl_get_ctxt_shadow(struct kgsl_context *context,
+		struct kgsl_context_property *ctxt_property)
+{
+	struct kgsl_shadowprop shadow_prop;
+	struct kgsl_mem_entry *entry = context->shadow_timestamp_mem;
+	size_t copy;
+
+	if (entry == NULL)
+		return -ENODEV;
+
+	/* Return the size of the subtype struct */
+	if (ctxt_property->size == 0) {
+		ctxt_property->size = sizeof(shadow_prop);
+		return 0;
+	}
+
+	memset(&shadow_prop, 0, sizeof(shadow_prop));
+
+	copy = min_t(size_t, ctxt_property->size, sizeof(shadow_prop));
+
+	shadow_prop.gpuaddr = (unsigned long)entry->id << PAGE_SHIFT;
+	shadow_prop.size = get_mmapsize(&entry->memdesc);
+	shadow_prop.flags = KGSL_FLAGS_INITIALIZED;
+	shadow_prop.fd = kgsl_get_mem_entry_dma_buf_fd(entry);
+
+	/*
+	 * Copy the shadow property to data which also serves as
+	 * the out parameter.
+	 */
+	if (copy_to_user(u64_to_user_ptr(ctxt_property->data),
+				&shadow_prop, copy))
+		return -EFAULT;
+
+	return 0;
+}
+
 static long kgsl_get_ctxt_properties(struct kgsl_device_private *dev_priv,
 		struct kgsl_device_getproperty *param)
 {
@@ -1398,6 +1435,8 @@ static long kgsl_get_ctxt_properties(struct kgsl_device_private *dev_priv,
 
 	if (ctxt_property.type == KGSL_CONTEXT_PROP_FAULTS)
 		ret = kgsl_get_ctxt_fault_stats(context, &ctxt_property);
+	else if (ctxt_property.type == KGSL_CONTEXT_PROP_SHADOW)
+		ret = kgsl_get_ctxt_shadow(context, &ctxt_property);
 	else
 		ret = -EOPNOTSUPP;
 
@@ -2124,7 +2163,8 @@ long kgsl_ioctl_drawctxt_create(struct kgsl_device_private *dev_priv,
 	struct kgsl_context *context = NULL;
 	struct kgsl_device *device = dev_priv->device;
 
-	context = device->ftbl->drawctxt_create(dev_priv, &param->flags);
+	context = device->ftbl->drawctxt_create(dev_priv, &param->flags,
+						param->shadow_mem_flags);
 	if (IS_ERR(context)) {
 		result = PTR_ERR(context);
 		goto done;

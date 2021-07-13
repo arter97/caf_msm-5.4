@@ -289,6 +289,16 @@ static void _retire_timestamp(struct kgsl_drawobj *drawobj)
 		KGSL_MEMSTORE_OFFSET(context->id, eoptimestamp),
 		drawobj->timestamp);
 
+	if (context->shadow_timestamp_mem) {
+		kgsl_sharedmem_writel(&context->shadow_timestamp_mem->memdesc,
+			CONTEXT_SHADOW_OFFSET(soptimestamp),
+			drawobj->timestamp);
+
+		kgsl_sharedmem_writel(&context->shadow_timestamp_mem->memdesc,
+			CONTEXT_SHADOW_OFFSET(eoptimestamp),
+			drawobj->timestamp);
+	}
+
 	drawctxt->submitted_timestamp = drawobj->timestamp;
 
 	/* Retire pending GPU events for the object */

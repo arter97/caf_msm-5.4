@@ -130,7 +130,8 @@ struct kgsl_functable {
 	 */
 	struct kgsl_context *(*drawctxt_create)
 				(struct kgsl_device_private *dev_priv,
-						uint32_t *flags);
+						uint32_t *flags,
+						uint64_t shadow_mem_flags);
 	void (*drawctxt_detach)(struct kgsl_context *context);
 	void (*drawctxt_destroy)(struct kgsl_context *context);
 	void (*drawctxt_dump)(struct kgsl_device *device,
@@ -376,6 +377,8 @@ struct kgsl_process_private;
  * @total_fault_count: number of times gpu faulted in this context
  * @last_faulted_cmd_ts: last faulted command batch timestamp
  * @gmu_registered: whether context is registered with gmu or not
+ * @shadow_timestamp_mem: per-context shadow timestamp memory entry when
+ * requested by user
  */
 struct kgsl_context {
 	struct kref refcount;
@@ -403,6 +406,7 @@ struct kgsl_context {
 	 * submitted
 	 */
 	u32 gmu_dispatch_queue;
+	struct kgsl_mem_entry *shadow_timestamp_mem;
 };
 
 #define _context_comm(_c) \
