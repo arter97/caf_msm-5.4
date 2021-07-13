@@ -132,6 +132,12 @@
 #define KGSL_MEMFLAGS_GPUWRITEONLY (1ULL << 25)
 #define KGSL_MEMFLAGS_FORCE_32BIT  (1ULL << 32)
 
+/* Guest OS information */
+#define KGSL_MEMFLAGS_GVM          (1ULL << 36)
+
+#define KGSL_MEMFLAGS_GVM_ID_SHIFT 37
+#define KGSL_MEMFLAGS_GVM_ID_MASK  (1ULL << KGSL_MEMFLAGS_GVM_ID_SHIFT)
+
 /* Flag for binding all the virt range to single phys data */
 #define KGSL_SPARSE_BIND_MULTIPLE_TO_PHYS 0x400000000ULL
 #define KGSL_SPARSE_BIND 0x1ULL
@@ -1313,6 +1319,7 @@ struct kgsl_cff_sync_gpuobj {
  * @id: Returns the GPU object ID of the new object
  * @metadata_len: Length of the metdata to copy from the user
  * @metadata: Pointer to the user specified metadata to store for the object
+ * @fd: dmabuf fd if memory is dmabuf based
  */
 struct kgsl_gpuobj_alloc {
 	__u64 size;
@@ -1322,6 +1329,7 @@ struct kgsl_gpuobj_alloc {
 	unsigned int id;
 	unsigned int metadata_len;
 	__u64 metadata;
+	int fd;
 };
 
 /* Let the user know that this header supports the gpuobj metadata */

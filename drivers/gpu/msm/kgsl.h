@@ -136,6 +136,8 @@ struct kgsl_driver {
 		atomic_long_t coherent_max;
 		atomic_long_t secure;
 		atomic_long_t secure_max;
+		atomic_long_t ion_alloc;
+		atomic_long_t ion_alloc_max;
 		atomic_long_t mapped;
 		atomic_long_t mapped_max;
 	} stats;
@@ -378,6 +380,20 @@ struct retire_info {
 	u64 retired_on_gmu;
 };
 
+/**
+ * struct kgsl_dma_buf_meta - Dmabuf meta info in memory entry
+ * @entry: Pointer to the memory entry owning this dmabuf
+ * @dmabuf: Pointer to the dmabuf
+ * @attach: Pointer to the dmabuf attachment
+ * @table: Pointer to sg table of this dmabuf
+ */
+struct kgsl_dma_buf_meta {
+	struct kgsl_mem_entry *entry;
+	struct dma_buf *dmabuf;
+	struct dma_buf_attachment *attach;
+	struct sg_table *table;
+};
+
 long kgsl_ioctl_device_getproperty(struct kgsl_device_private *dev_priv,
 					  unsigned int cmd, void *data);
 long kgsl_ioctl_device_setproperty(struct kgsl_device_private *dev_priv,
@@ -475,6 +491,12 @@ int kgsl_request_irq(struct platform_device *pdev, const  char *name,
 
 int __init kgsl_core_init(void);
 void kgsl_core_exit(void);
+
+int kgsl_create_dma_buf_meta(struct kgsl_device *device,
+				struct kgsl_mem_entry *entry,
+				struct dma_buf *dmabuf,
+				bool imported);
+void kgsl_destroy_dma_buf_meta(struct kgsl_mem_entry *entry);
 
 static inline bool kgsl_gpuaddr_in_memdesc(const struct kgsl_memdesc *memdesc,
 				uint64_t gpuaddr, uint64_t size)
