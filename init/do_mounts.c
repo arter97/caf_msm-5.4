@@ -390,12 +390,13 @@ static void __init get_fs_names(char *page)
 static int __init do_mount_root(char *name, char *fs, int flags, void *data)
 {
 	struct super_block *s;
+	int err;
 
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
 	place_marker("M - DRIVER F/S Init");
 #endif
 
-	int err = ksys_mount(name, "/root", fs, flags, data);
+	err = ksys_mount(name, "/root", fs, flags, data);
 	if (err)
 		return err;
 
@@ -616,7 +617,6 @@ static int prefetch_thread(void *unused)
 	char *buf;
 	int index;
 	char *name;
-	char **p_name;
 
 	cpumask_clear(&cpumask);
 	cpumask_set_cpu((thread_num%4)+1, &cpumask);
@@ -722,7 +722,7 @@ out:
 
 	for (index = 0; index < PREFETCH_NUM; index++) {
 		snprintf(name, 16, "prefetch%d", index);
-		kthread_run(prefetch_thread, (void *)index, name);
+		kthread_run(prefetch_thread, (void *)(uintptr_t)index, name);
 	}
 	}
 	first_time = 0;
@@ -730,7 +730,6 @@ out:
 
 void __init early_prepare_namespace(char *name)
 {
-	int err;
 
 	if (strstr(saved_root_name, name))
 		prepare_namespace();

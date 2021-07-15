@@ -921,18 +921,6 @@ static bool has_cache_idc(const struct arm64_cpu_capabilities *entry,
 	return ctr & BIT(CTR_IDC_SHIFT);
 }
 
-static void cpu_emulate_effective_ctr(const struct arm64_cpu_capabilities *__unused)
-{
-	/*
-	 * If the CPU exposes raw CTR_EL0.IDC = 0, while effectively
-	 * CTR_EL0.IDC = 1 (from CLIDR values), we need to trap accesses
-	 * to the CTR_EL0 on this CPU and emulate it with the real/safe
-	 * value.
-	 */
-	if (!(read_cpuid_cachetype() & BIT(CTR_IDC_SHIFT)))
-		sysreg_clear_set(sctlr_el1, SCTLR_EL1_UCT, 0);
-}
-
 static bool has_cache_dic(const struct arm64_cpu_capabilities *entry,
 			  int scope)
 {
@@ -1055,35 +1043,7 @@ static bool unmap_kernel_at_el0(const struct arm64_cpu_capabilities *entry,
 }
 
 #ifdef CONFIG_UNMAP_KERNEL_AT_EL0
-static void __nocfi
-kpti_install_ng_mappings(const struct arm64_cpu_capabilities *__unused)
-{
-	typedef void (kpti_remap_fn)(int, int, phys_addr_t);
-	extern kpti_remap_fn idmap_kpti_install_ng_mappings;
-	kpti_remap_fn *remap_fn;
 
-	static bool kpti_applied = false;
-	int cpu = smp_processor_id();
-
-	/*
-	 * We don't need to rewrite the page-tables if either we've done
-	 * it already or we have KASLR enabled and therefore have not
-	 * created any global mappings at all.
-	 */
-	if (kpti_applied || kaslr_offset() > 0)
-		return;
-
-	remap_fn = (void *)__pa_function(idmap_kpti_install_ng_mappings);
-
-	cpu_install_idmap();
-	remap_fn(cpu, num_online_cpus(), __pa_symbol(swapper_pg_dir));
-	cpu_uninstall_idmap();
-
-	if (!cpu)
-		kpti_applied = true;
-
-	return;
-}
 #else
 static void
 kpti_install_ng_mappings(const struct arm64_cpu_capabilities *__unused)
@@ -1130,12 +1090,6 @@ static bool cpu_can_use_dbm(const struct arm64_cpu_capabilities *cap)
 {
 	return has_cpuid_feature(cap, SCOPE_LOCAL_CPU) &&
 	       !cpu_has_broken_dbm();
-}
-
-static void cpu_enable_hw_dbm(struct arm64_cpu_capabilities const *cap)
-{
-	if (cpu_can_use_dbm(cap))
-		__cpu_enable_hw_dbm();
 }
 
 static bool has_hw_dbm(const struct arm64_cpu_capabilities *cap,
@@ -1286,28 +1240,6 @@ static void cpu_enable_ssbs(const struct arm64_cpu_capabilities *__unused)
 	}
 }
 #endif /* CONFIG_ARM64_SSBD */
-
-#ifdef CONFIG_ARM64_PAN
-static void cpu_enable_pan(const struct arm64_cpu_capabilities *__unused)
-{
-	/*
-	 * We modify PSTATE. This won't work from irq context as the PSTATE
-	 * is discarded once we return from the exception.
-	 */
-	WARN_ON_ONCE(in_interrupt());
-
-	sysreg_clear_set(sctlr_el1, SCTLR_EL1_SPAN, 0);
-	asm(SET_PSTATE_PAN(1));
-}
-#endif /* CONFIG_ARM64_PAN */
-
-#ifdef CONFIG_ARM64_RAS_EXTN
-static void cpu_clear_disr(const struct arm64_cpu_capabilities *__unused)
-{
-	/* Firmware may have left a deferred SError in this register. */
-	write_sysreg_s(0, SYS_DISR_EL1);
-}
-#endif /* CONFIG_ARM64_RAS_EXTN */
 
 #ifdef CONFIG_ARM64_PTR_AUTH
 static void cpu_enable_address_auth(struct arm64_cpu_capabilities const *cap)

@@ -21,7 +21,6 @@
 #define ALT_ORIG_PTR(a)		__ALT_PTR(a, orig_offset)
 #define ALT_REPL_PTR(a)		__ALT_PTR(a, alt_offset)
 
-static int all_alternatives_applied;
 
 static DECLARE_BITMAP(applied_alternatives, ARM64_NCAPS);
 
@@ -192,42 +191,6 @@ static void __nocfi __apply_alternatives(void *alt_region,  bool is_module,
 	}
 }
 
-/*
- * We might be patching the stop_machine state machine, so implement a
- * really simple polling protocol here.
- */
-static int __apply_alternatives_multi_stop(void *unused)
-{
-	struct alt_region region = {
-		.begin	= (struct alt_instr *)__alt_instructions,
-		.end	= (struct alt_instr *)__alt_instructions_end,
-	};
-
-#ifdef CONFIG_FIX_BOOT_CPU_LOGICAL_MAPPING
-	/* We always have a logical boot CPU at this point (__init) */
-	if (smp_processor_id() != logical_bootcpu_id) {
-#else
-	/* We always have a CPU 0 at this point (__init) */
-	if (smp_processor_id()) {
-#endif
-		while (!READ_ONCE(all_alternatives_applied))
-			cpu_relax();
-		isb();
-	} else {
-		DECLARE_BITMAP(remaining_capabilities, ARM64_NPATCHABLE);
-
-		bitmap_complement(remaining_capabilities, boot_capabilities,
-				  ARM64_NPATCHABLE);
-
-		BUG_ON(all_alternatives_applied);
-		__apply_alternatives(&region, false, remaining_capabilities);
-		/* Barriers provided by the cache flushing */
-		WRITE_ONCE(all_alternatives_applied, 1);
-	}
-
-	return 0;
-}
-
 void __init apply_alternatives_all(void)
 {
 	/* better not try code patching on a live SMP system */
@@ -247,6 +210,7 @@ void __init apply_boot_alternatives(void)
 		.end	= (struct alt_instr *)__alt_instructions_end,
 	};
 
+	DECLARE_BITMAP(capabilities, ARM64_NPATCHABLE);
 	/* If called on non-boot cpu things could go wrong */
 #ifdef CONFIG_FIX_BOOT_CPU_LOGICAL_MAPPING
 	WARN_ON(smp_processor_id() != logical_bootcpu_id);
@@ -255,7 +219,6 @@ void __init apply_boot_alternatives(void)
 #endif
 
 	//__apply_alternatives(&region, false, &boot_capabilities[0]);
-	DECLARE_BITMAP(capabilities, ARM64_NPATCHABLE);
 	bitmap_zero(capabilities, ARM64_NPATCHABLE);
 	set_bit(ARM64_HAS_PAN, capabilities);
 	set_bit(ARM64_HAS_UAO, capabilities);
