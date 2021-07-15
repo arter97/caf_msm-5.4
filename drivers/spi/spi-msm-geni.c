@@ -1045,25 +1045,6 @@ static int spi_geni_prepare_message(struct spi_master *spi,
 		}
 	}
 
-	if (pm_runtime_status_suspended(mas->dev) && !mas->is_le_vm) {
-		if (!pm_runtime_enabled(mas->dev)) {
-			GENI_SE_ERR(mas->ipc, false, NULL,
-				"%s: System suspended\n", __func__);
-			return -EACCES;
-		}
-
-		ret = pm_runtime_get_sync(mas->dev);
-		if (ret < 0) {
-			dev_err(mas->dev,
-			"%s:pm_runtime_get_sync failed %d\n", __func__, ret);
-			WARN_ON_ONCE(1);
-			pm_runtime_put_noidle(mas->dev);
-			/* Set device in suspended since resume failed */
-			pm_runtime_set_suspended(mas->dev);
-			return ret;
-		}
-	}
-
 	mas->cur_xfer_mode = select_xfer_mode(spi, spi_msg);
 
 	if (mas->cur_xfer_mode < 0) {
@@ -1997,6 +1978,7 @@ static int spi_geni_probe(struct platform_device *pdev)
 		dev_info(&pdev->dev, "LA-VM usecase\n");
 	}
 
+	geni_mas->spi_rsc.wrapper_dev = &wrapper_pdev->dev;
 	/*
 	 * For LE, clocks, gpio and icb voting will be provided by
 	 * by LA. The SPI operates in GSI mode only for LE usecase,
@@ -2004,7 +1986,6 @@ static int spi_geni_probe(struct platform_device *pdev)
 	 * in SPI LE dt.
 	 */
 	if (!geni_mas->is_le_vm) {
-		geni_mas->spi_rsc.wrapper_dev = &wrapper_pdev->dev;
 		ret = geni_se_resources_init(rsc, SPI_CORE2X_VOTE,
 					(DEFAULT_SE_CLK * DEFAULT_BUS_WIDTH));
 		if (ret) {
@@ -2302,17 +2283,27 @@ static int spi_geni_resume(struct device *dev)
 static int spi_geni_suspend(struct device *dev)
 {
 	int ret = 0;
-	struct spi_master *spi = get_spi_master(dev);
-	struct spi_geni_master *geni_mas = spi_master_get_devdata(spi);
 
 	if (!pm_runtime_status_suspended(dev)) {
-		GENI_SE_ERR(geni_mas->ipc, true, dev,
-			":%s: runtime PM is active\n", __func__);
-		ret = -EBUSY;
-		return ret;
-	}
+		struct spi_master *spi = get_spi_master(dev);
+		struct spi_geni_master *geni_mas = spi_master_get_devdata(spi);
 
-	GENI_SE_ERR(geni_mas->ipc, true, dev, ":%s: End\n", __func__);
+		if (list_empty(&spi->queue) && !spi->cur_msg) {
+			GENI_SE_ERR(geni_mas->ipc, true, dev,
+					"%s: Force suspend", __func__);
+			ret = spi_geni_runtime_suspend(dev);
+			if (ret) {
+				GENI_SE_ERR(geni_mas->ipc, true, dev,
+					"Force suspend Failed:%d", ret);
+			} else {
+				pm_runtime_disable(dev);
+				pm_runtime_set_suspended(dev);
+				pm_runtime_enable(dev);
+			}
+		} else {
+			ret = -EBUSY;
+		}
+	}
 	return ret;
 }
 #else

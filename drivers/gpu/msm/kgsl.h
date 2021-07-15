@@ -453,6 +453,8 @@ void kgsl_mem_entry_destroy(struct kref *kref);
 void kgsl_get_egl_counts(struct kgsl_mem_entry *entry,
 			int *egl_surface_count, int *egl_image_count);
 
+unsigned long kgsl_get_dmabuf_inode_number(struct kgsl_mem_entry *entry);
+
 struct kgsl_mem_entry * __must_check
 kgsl_sharedmem_find(struct kgsl_process_private *private, uint64_t gpuaddr);
 
@@ -617,9 +619,4 @@ static inline void kgsl_gpu_sysfs_add_link(struct kobject *dst,
 {
 }
 #endif
-
-static inline bool kgsl_is_compat_task(void)
-{
-	return (BITS_PER_LONG == 32) || is_compat_task();
-}
 #endif /* __KGSL_H */
