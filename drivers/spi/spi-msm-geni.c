@@ -2357,7 +2357,7 @@ static void __exit spi_dev_exit(void)
 	platform_driver_unregister(&spi_geni_driver);
 }
 
-module_init(spi_dev_init);
+early_module_init(spi_dev_init, EARLY_SUBSYS_4, EARLY_INIT_LEVEL2);
 module_exit(spi_dev_exit);
 
 MODULE_LICENSE("GPL v2");
