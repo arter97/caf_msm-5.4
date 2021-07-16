@@ -133,8 +133,7 @@ static int __init iommu_subsys_init(void)
 
 	return 0;
 }
-early_subsys_initcall(iommu_subsys_init, EARLY_SUBSYS_PLATFORM,
-		EARLY_INIT_LEVEL1);
+subsys_initcall(iommu_subsys_init);
 
 int iommu_device_register(struct iommu_device *iommu)
 {

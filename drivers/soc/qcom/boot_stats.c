@@ -526,7 +526,7 @@ static int __init boot_stats_init(void)
 
 	return 0;
 }
-early_subsys_initcall(boot_stats_init, EARLY_SUBSYS_PLATFORM, EARLY_INIT_LEVEL0);
+subsys_initcall(boot_stats_init);
 
 static void __exit boot_stats_exit(void)
 {
