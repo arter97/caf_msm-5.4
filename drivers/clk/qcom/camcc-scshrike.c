@@ -3341,8 +3341,7 @@ static int __init cam_cc_scshrike_init(void)
 {
 	return platform_driver_register(&cam_cc_scshrike_driver);
 }
-early_subsys_initcall(cam_cc_scshrike_init, EARLY_SUBSYS_PLATFORM,
-EARLY_INIT_LEVEL0);
+subsys_initcall(cam_cc_scshrike_init);
 
 static void __exit cam_cc_scshrike_exit(void)
 {

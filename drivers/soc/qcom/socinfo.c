@@ -1288,7 +1288,7 @@ static struct platform_driver qcom_socinfo_driver = {
 	},
 };
 
-early_module_platform_driver(qcom_socinfo_driver, EARLY_SUBSYS_PLATFORM, EARLY_INIT_LEVEL0);
+module_platform_driver(qcom_socinfo_driver);
 
 MODULE_DESCRIPTION("Qualcomm SoCinfo driver");
 MODULE_LICENSE("GPL v2");

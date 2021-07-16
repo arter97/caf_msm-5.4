@@ -15,7 +15,6 @@
 #include <linux/pm_runtime.h>
 #include <linux/qcom-geni-se.h>
 #include <linux/spinlock.h>
-#include <linux/early_async.h>
 
 #define SE_I2C_TX_TRANS_LEN		0x26c
 #define SE_I2C_RX_TRANS_LEN		0x270
@@ -683,10 +682,7 @@ static struct platform_driver geni_i2c_driver = {
 	},
 };
 
-early_module_platform_driver_async(geni_i2c_driver, EARLY_SUBSYS_PLATFORM,
-EARLY_INIT_LEVEL4);
-
-early_init(_geni_i2c_driver_init_sync, EARLY_SUBSYS_2, EARLY_INIT_LEVEL0);
+module_platform_driver(geni_i2c_driver);
 
 MODULE_DESCRIPTION("I2C Controller Driver for GENI based QUP cores");
 MODULE_LICENSE("GPL v2");

@@ -1470,6 +1470,5 @@ static void __exit firmware_class_exit(void)
 	unregister_sysfs_loader();
 }
 
-early_fs_initcall(firmware_class_init, EARLY_SUBSYS_PLATFORM,
-EARLY_INIT_LEVEL8);
+fs_initcall(firmware_class_init);
 module_exit(firmware_class_exit);

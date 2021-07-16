@@ -384,9 +384,7 @@ static int __init aop_qmp_clk_init(void)
 {
 	return platform_driver_register(&aop_qmp_clk_driver);
 }
-
-early_subsys_initcall(aop_qmp_clk_init, EARLY_SUBSYS_PLATFORM,
-EARLY_INIT_LEVEL5);
+subsys_initcall(aop_qmp_clk_init);
 
 static void __exit aop_qmp_clk_exit(void)
 {
