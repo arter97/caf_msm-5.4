@@ -1474,7 +1474,7 @@ static int __init init(void)
 {
 	return platform_driver_register(&usb_bam_driver);
 }
-module_init(init);
+early_module_init(init, EARLY_SUBSYS_5, EARLY_INIT_LEVEL5);
 
 static void __exit cleanup(void)
 {
