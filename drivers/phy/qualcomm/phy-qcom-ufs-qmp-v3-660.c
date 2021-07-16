@@ -258,7 +258,8 @@ static struct platform_driver ufs_qcom_phy_qmp_v3_660_driver = {
 	},
 };
 
-module_platform_driver(ufs_qcom_phy_qmp_v3_660_driver);
+early_module_platform_driver(ufs_qcom_phy_qmp_v3_660_driver, EARLY_SUBSYS_1,
+EARLY_INIT_LEVEL2);
 
 MODULE_DESCRIPTION("Universal Flash Storage (UFS) QCOM PHY QMP v3 660");
 MODULE_LICENSE("GPL v2");
