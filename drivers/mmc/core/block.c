@@ -3164,7 +3164,7 @@ static void __exit mmc_blk_exit(void)
 	bus_unregister(&mmc_rpmb_bus_type);
 }
 
-early_module_init(mmc_blk_init, EARLY_SUBSYS_1, EARLY_INIT_LEVEL2);
+module_init(mmc_blk_init);
 module_exit(mmc_blk_exit);
 
 MODULE_LICENSE("GPL");
