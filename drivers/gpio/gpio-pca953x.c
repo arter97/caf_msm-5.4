@@ -982,9 +982,15 @@ static int pca953x_probe(struct i2c_client *client,
 	struct pca953x_chip *chip;
 	int irq_base = 0;
 	int ret;
+	int reg_loop_count;
+	int regval_loop_count;
+	int i;
 	u32 invert = 0;
+	u32 tc_reg_map[12];
+	u32 tc_regval_map[12];
 	struct regulator *reg;
 	const struct regmap_config *regmap_config;
+	struct device_node *node;
 
 	chip = devm_kzalloc(&client->dev,
 			sizeof(struct pca953x_chip), GFP_KERNEL);
@@ -1113,6 +1119,34 @@ static int pca953x_probe(struct i2c_client *client,
 				chip->gpio_chip.ngpio, pdata->context);
 		if (ret < 0)
 			dev_warn(&client->dev, "setup failed, %d\n", ret);
+	}
+
+	if (client->addr == 0x23)
+		node = of_find_node_by_name(NULL, "tca6424a_1");
+
+	if (client->addr == 0x22)
+		node = of_find_node_by_name(NULL, "tca6424a_2");
+
+	reg_loop_count = of_property_count_elems_of_size(node, "tc,regmap", sizeof(u32));
+	regval_loop_count = of_property_count_elems_of_size(node, "tc,regvalmap", sizeof(u32));
+
+	if ((reg_loop_count == regval_loop_count) && (reg_loop_count != 0) &&
+			((regval_loop_count != 0))) {
+		ret = of_property_read_u32_array(node, "tc,regmap", tc_reg_map, reg_loop_count);
+		if (ret < 0)
+			dev_warn(&client->dev, "read regmap to array failed, %d\n", ret);
+
+		ret = of_property_read_u32_array(node, "tc,regvalmap", tc_regval_map,
+								regval_loop_count);
+		if (ret < 0)
+			dev_warn(&client->dev, "read regvalmap to array failed, %d\n", ret);
+
+		for (i = 0; i < reg_loop_count; i++) {
+			ret = regmap_write(chip->regmap, tc_reg_map[i], tc_regval_map[i]);
+			if (ret < 0)
+				dev_warn(&client->dev,
+					"write value to tca6424 reg failed, %d\n", ret);
+		}
 	}
 
 	return 0;

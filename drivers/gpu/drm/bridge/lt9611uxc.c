@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
  */
 
 #define pr_fmt(fmt) "%s: " fmt, __func__
@@ -94,6 +94,9 @@ struct lt9611 {
 	struct device_node *host_node;
 	struct mipi_dsi_device *dsi;
 	struct drm_connector connector;
+
+	struct pinctrl *pctrl;
+	struct pinctrl_state *pin_active;
 
 	u8 i2c_addr;
 	int irq;
@@ -1776,6 +1779,10 @@ static int lt9611_probe(struct i2c_client *client,
 	}
 
 	lt9611_assert_5v(pdata);
+
+	pdata->pctrl = devm_pinctrl_get(pdata->dev);
+	pdata->pin_active = pinctrl_lookup_state(pdata->pctrl, "default");
+	pinctrl_select_state(pdata->pctrl, pdata->pin_active);
 
 	ret = lt9611_enable_vreg(pdata, true);
 	if (ret) {
