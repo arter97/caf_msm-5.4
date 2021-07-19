@@ -1467,6 +1467,7 @@ static int veth_ipa_emac_evt_mgmt(void *arg)
 	int ret = 0;
 	int timeout_ms = 100;
 	struct emac_hab_mm_message pdata_recv;
+	pdata_recv.event_id = -1;
 	//veth_emac_import_iova msg;
 	int pdata_size = sizeof(pdata_recv);
 	struct veth_ipa_dev *pdata = (struct veth_ipa_dev *)arg;
