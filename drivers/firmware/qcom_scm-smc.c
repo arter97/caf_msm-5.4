@@ -2240,7 +2240,7 @@ int __qcom_scm_tsens_reinit(struct device *dev, int *tsens_ret)
 	return ret;
 }
 
-int __qcom_scm_reboot(struct device *dev)
+int __qcom_scm_reboot(struct device *dev, enum qcom_scm_reset_type reboot_type)
 {
 	struct qcom_scm_desc desc = {
 		.svc = QCOM_SCM_SVC_OEM_POWER,
@@ -2248,7 +2248,8 @@ int __qcom_scm_reboot(struct device *dev)
 		.owner = ARM_SMCCC_OWNER_OEM,
 	};
 
-	desc.arginfo = QCOM_SCM_ARGS(0);
+	desc.args[0] = reboot_type;
+	desc.arginfo = QCOM_SCM_ARGS(1);
 
 	return qcom_scm_call_atomic(dev, &desc);
 }
