@@ -1328,10 +1328,6 @@ static void qusb_phy_port_state_work(struct work_struct *w)
 
 		qusb_phy_disable_phy(qphy);
 		qphy->port_state = PORT_CHG_DET_DONE;
-		/*
-		 * Fall through to check if causingble got disconnected
-		 * during detection
-		 */
 	case PORT_CHG_DET_DONE:
 		if (!qphy->vbus_active) {
 			qphy->port_state = PORT_UNKNOWN;

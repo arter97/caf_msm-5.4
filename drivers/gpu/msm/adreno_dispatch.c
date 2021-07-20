@@ -304,6 +304,9 @@ static void _retire_timestamp(struct kgsl_drawobj *drawobj)
 				context->id, drawobj->timestamp,
 				!!(drawobj->flags & KGSL_DRAWOBJ_END_OF_FRAME));
 
+	if (drawobj->flags & KGSL_DRAWOBJ_END_OF_FRAME)
+		atomic64_inc(&context->proc_priv->frame_count);
+
 	/*
 	 * For A3xx we still get the rptr from the CP_RB_RPTR instead of
 	 * rptr scratch out address. At this point GPU clocks turned off.
@@ -2355,6 +2358,9 @@ static void retire_cmdobj(struct adreno_device *adreno_dev,
 			       context->id, drawobj->timestamp,
 			       !!(drawobj->flags & KGSL_DRAWOBJ_END_OF_FRAME));
 
+	if (drawobj->flags & KGSL_DRAWOBJ_END_OF_FRAME)
+		atomic64_inc(&context->proc_priv->frame_count);
+
 	/*
 	 * For A3xx we still get the rptr from the CP_RB_RPTR instead of
 	 * rptr scratch out address. At this point GPU clocks turned off.
@@ -2466,6 +2472,10 @@ static int adreno_dispatch_process_drawqueue(struct adreno_device *adreno_dev,
 			msecs_to_jiffies(adreno_drawobj_timeout);
 		return count;
 	}
+
+	/* Don't check timeout if we are still in middle of preemption */
+	if (!adreno_in_preempt_state(adreno_dev, ADRENO_PREEMPT_NONE))
+		return 0;
 
 	/*
 	 * If we get here then 1) the ringbuffer is current and 2) we haven't

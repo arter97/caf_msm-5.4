@@ -3,12 +3,11 @@
  * Copyright (c) 2021 The Linux Foundation. All rights reserved.
  */
 
-#include <linux/power_supply.h>
+#include <linux/kernel.h>
 #include <linux/iio/consumer.h>
 #include "smb5-iio.h"
 
-
-#ifdef CONFIG_SUPPORT_BOTH_SMB5_SMBLITE
+#if defined(CONFIG_QPNP_SMBLITE) && defined(CONFIG_QPNP_SMB5)
 struct iio_channel **get_ext_channels(struct device *dev,
 		 const char *const *channel_map, int size)
 {

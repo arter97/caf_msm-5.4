@@ -911,6 +911,14 @@ config QM_DEBUGCC_SCUBA
 	  Say Y if you want to support the clock debug mux measurement
 	  and it's functionalities.
 
+config SA_DISPCC_DIREWOLF
+	tristate "DIREWOLF Display Clock Controllers"
+	select SA_GCC_DIREWOLF
+	help
+	  Support for the display clock controller 0 and 1 on Qualcomm Technologies, Inc.
+	  DIREWOLF devices.
+	  Say Y if you want to support display devices and functionality such as
+	  splash screen.
 endif
 
 config VIRTIO_CLK

@@ -221,7 +221,7 @@ int smblite_iio_set_prop(struct smb_charger *chg, int channel, int val)
 	return 0;
 }
 
-#ifndef CONFIG_SUPPORT_BOTH_SMB5_SMBLITE
+#ifndef CONFIG_QPNP_SMB5
 struct iio_channel **get_ext_channels(struct device *dev,
 		 const char *const *channel_map, int size)
 {
