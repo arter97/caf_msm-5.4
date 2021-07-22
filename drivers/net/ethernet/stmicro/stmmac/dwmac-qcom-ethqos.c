@@ -412,6 +412,7 @@ place_marker("M - Etherent Assigned IPv4 address");
 	return res;
 }
 
+#ifdef CONFIG_IPV6
 static int qcom_ethqos_add_ipv6addr(struct ip_params *ip_info,
 				    struct net_device *dev)
 {
@@ -459,6 +460,7 @@ static int qcom_ethqos_add_ipv6addr(struct ip_params *ip_info,
 		}
 	return ret;
 }
+#endif
 
 static int rgmii_readl(struct qcom_ethqos *ethqos, unsigned int offset)
 {
@@ -1050,16 +1052,22 @@ static int emac_emb_smmu_cb_probe(struct platform_device *pdev)
 	int result = 0;
 	u32 iova_ap_mapping[2];
 	struct device *dev = &pdev->dev;
+	const char *str = NULL;
 
 	ETHQOSDBG("EMAC EMB SMMU CB probe: smmu pdev=%p\n", pdev);
+	result = of_property_read_string(dev->of_node, "qcom,iommu-dma", &str);
 
-	result = of_property_read_u32_array(dev->of_node,
-					    "qcom,iommu-dma-addr-pool",
-					    iova_ap_mapping,
-					    ARRAY_SIZE(iova_ap_mapping));
-	if (result) {
-		ETHQOSERR("Failed to read EMB start/size iova addresses\n");
-		return result;
+	if (result == 0 && !strcmp(str, "bypass")) {
+		ETHQOSINFO("iommu-dma-addr-pool not required in bypass mode\n");
+	} else {
+		result = of_property_read_u32_array(dev->of_node,
+						    "qcom,iommu-dma-addr-pool",
+						    iova_ap_mapping,
+						    ARRAY_SIZE(iova_ap_mapping));
+		if (result) {
+			ETHQOSERR("Failed to read EMB start/size iova addresses\n");
+			return result;
+		}
 	}
 
 	emac_emb_smmu_ctx.smmu_pdev = pdev;
@@ -1145,7 +1153,12 @@ inline bool qcom_ethqos_is_phy_link_up(struct qcom_ethqos *ethqos)
 	 */
 	struct stmmac_priv *priv = qcom_ethqos_get_priv(ethqos);
 
-	return (priv->dev->phydev && priv->dev->phydev->link);
+	if (priv->plat->mac2mac_en) {
+		return priv->plat->mac2mac_link;
+	} else {
+		return (priv->dev->phydev &&
+			priv->dev->phydev->link);
+	}
 }
 
 static void qcom_ethqos_phy_resume_clks(struct qcom_ethqos *ethqos)
@@ -1260,6 +1273,49 @@ static void qcom_ethqos_bringup_iface(struct work_struct *work)
 	ETHQOSINFO("exit\n");
 }
 
+static void read_mac_addr_from_fuse_reg(struct device_node *np)
+{
+	int ret, i, count, x;
+	u32 mac_efuse_prop, efuse_size = 8;
+	u64 mac_addr;
+
+	/* If the property doesn't exist or empty return */
+	count = of_property_count_u32_elems(np, "mac-efuse-addr");
+	if (!count || count < 0)
+		return;
+
+	/* Loop over all addresses given until we get valid address */
+	for (x = 0; x < count; x++) {
+		void __iomem *mac_efuse_addr;
+
+		ret = of_property_read_u32_index(np, "mac-efuse-addr",
+						 x, &mac_efuse_prop);
+		if (!ret) {
+			mac_efuse_addr = ioremap(mac_efuse_prop, efuse_size);
+			if (!mac_efuse_addr)
+				continue;
+
+			mac_addr = readq(mac_efuse_addr);
+			ETHQOSINFO("Mac address read: %llx\n", mac_addr);
+
+			/* create byte array out of value read from efuse */
+			for (i = 0; i < ETH_ALEN ; i++) {
+				pparams.mac_addr[ETH_ALEN - 1 - i] =
+					mac_addr & 0xff;
+				mac_addr = mac_addr >> 8;
+			}
+
+			iounmap(mac_efuse_addr);
+
+			/* if valid address is found set cookie & return */
+			pparams.is_valid_mac_addr =
+				is_valid_ether_addr(pparams.mac_addr);
+			if (pparams.is_valid_mac_addr)
+				return;
+		}
+	}
+}
+
 static void ethqos_is_ipv4_NW_stack_ready(struct work_struct *work)
 {
 	struct delayed_work *dwork;
@@ -1290,6 +1346,7 @@ static void ethqos_is_ipv4_NW_stack_ready(struct work_struct *work)
 	flush_delayed_work(&ethqos->ipv4_addr_assign_wq);
 }
 
+#ifdef CONFIG_IPV6
 static void ethqos_is_ipv6_NW_stack_ready(struct work_struct *work)
 {
 	struct delayed_work *dwork;
@@ -1319,6 +1376,7 @@ static void ethqos_is_ipv6_NW_stack_ready(struct work_struct *work)
 	cancel_delayed_work_sync(&ethqos->ipv6_addr_assign_wq);
 	flush_delayed_work(&ethqos->ipv6_addr_assign_wq);
 }
+#endif
 
 static int ethqos_set_early_eth_param(struct stmmac_priv *priv,
 				      struct qcom_ethqos *ethqos)
@@ -1336,6 +1394,7 @@ static int ethqos_set_early_eth_param(struct stmmac_priv *priv,
 		schedule_delayed_work(&ethqos->ipv4_addr_assign_wq, 0);
 	}
 
+#ifdef CONFIG_IPV6
 	if (pparams.is_valid_ipv6_addr) {
 		INIT_DELAYED_WORK(&ethqos->ipv6_addr_assign_wq,
 				  ethqos_is_ipv6_NW_stack_ready);
@@ -1344,6 +1403,7 @@ static int ethqos_set_early_eth_param(struct stmmac_priv *priv,
 			schedule_delayed_work(&ethqos->ipv6_addr_assign_wq,
 					      msecs_to_jiffies(1000));
 	}
+#endif
 
 	if (pparams.is_valid_mac_addr) {
 		ether_addr_copy(dev_addr, pparams.mac_addr);
@@ -1613,6 +1673,9 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_mem;
 
+	/* Read mac address from fuse register */
+	read_mac_addr_from_fuse_reg(np);
+
 	/*Initialize Early ethernet to false*/
 	ethqos->early_eth_enabled = false;
 
@@ -1644,6 +1707,14 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	plat_dat->handle_prv_ioctl = ethqos_handle_prv_ioctl;
 	plat_dat->request_phy_wol = qcom_ethqos_request_phy_wol;
 	plat_dat->init_pps = ethqos_init_pps;
+
+	/* Get rgmii interface speed for mac2c from device tree */
+	if (of_property_read_u32(np, "mac2mac-rgmii-speed",
+				 &plat_dat->mac2mac_rgmii_speed))
+		plat_dat->mac2mac_rgmii_speed = -1;
+	else
+		ETHQOSINFO("mac2mac rgmii speed = %d\n",
+			   plat_dat->mac2mac_rgmii_speed);
 
 	if (of_property_read_bool(pdev->dev.of_node,
 				  "emac-core-version")) {
@@ -1687,7 +1758,7 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		ETHQOSERR("Phy interrupt configuration failed");
 	rgmii_dump(ethqos);
 
-	if (ethqos->emac_ver == EMAC_HW_v2_3_2_RG) {
+	if (ethqos->emac_ver == EMAC_HW_v2_3_2_RG || ethqos->emac_ver == EMAC_HW_v2_3_1) {
 		ethqos_pps_irq_config(ethqos);
 		create_pps_interrupt_device_node(&ethqos->avb_class_a_dev_t,
 						 &ethqos->avb_class_a_cdev,
@@ -1715,7 +1786,12 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		/*Set early eth parameters*/
 		ethqos_set_early_eth_param(priv, ethqos);
 	}
+
+	if (priv->plat->mac2mac_en)
+		priv->plat->mac2mac_link = -1;
+
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
+
 	place_marker("M - Ethernet probe end");
 #endif
 

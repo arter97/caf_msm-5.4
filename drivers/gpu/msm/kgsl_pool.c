@@ -23,7 +23,7 @@
  */
 struct kgsl_page_pool {
 	unsigned int pool_order;
-	int page_count;
+	unsigned int page_count;
 	unsigned int reserved_pages;
 	spinlock_t list_lock;
 	struct list_head page_list;
@@ -156,6 +156,35 @@ static int kgsl_pool_size_total(void)
 }
 
 /*
+ * Returns a page from specified pool only if pool
+ * currently holds more number of pages than reserved
+ * pages.
+ */
+static struct page *
+_kgsl_pool_get_nonreserved_page(struct kgsl_page_pool *pool)
+{
+	struct page *p = NULL;
+
+	spin_lock(&pool->list_lock);
+	if (pool->page_count <= pool->reserved_pages) {
+		spin_unlock(&pool->list_lock);
+		return NULL;
+	}
+
+	p = list_first_entry_or_null(&pool->page_list, struct page, lru);
+	if (p == NULL) {
+		spin_unlock(&pool->list_lock);
+		return NULL;
+	}
+	pool->page_count--;
+	list_del(&p->lru);
+	spin_unlock(&pool->list_lock);
+	mod_node_page_state(page_pgdat(p), NR_KERNEL_MISC_RECLAIMABLE,
+			-(1 << pool->pool_order));
+	return p;
+}
+
+/*
  * This will shrink the specified pool by num_pages or by
  * (page_count - reserved_pages), whichever is smaller.
  */
@@ -165,19 +194,21 @@ _kgsl_pool_shrink(struct kgsl_page_pool *pool,
 {
 	int j;
 	unsigned int pcount = 0;
+	struct page *(*get_page)(struct kgsl_page_pool *) =
+		_kgsl_pool_get_nonreserved_page;
 
 	if (pool == NULL || num_pages == 0)
 		return pcount;
 
-	num_pages = num_pages >> pool->pool_order;
+	num_pages = (num_pages + (1 << pool->pool_order) - 1) >>
+				pool->pool_order;
 
-	/* This is to ensure that we don't free reserved pages */
-	if (!exit)
-		num_pages =  min(num_pages, (pool->page_count -
-				pool->reserved_pages));
+	/* This is to ensure that we free reserved pages */
+	if (exit)
+		get_page = _kgsl_pool_get_page;
 
 	for (j = 0; j < num_pages; j++) {
-		struct page *page = _kgsl_pool_get_page(pool);
+		struct page *page = get_page(pool);
 
 		if (!page)
 			break;
@@ -419,6 +450,11 @@ done:
 		pcount++;
 	}
 
+#ifdef CONFIG_MM_STAT_UNRECLAIMABLE_PAGES
+	mod_node_page_state(page_pgdat(page), NR_UNRECLAIMABLE_PAGES,
+			(1 << order));
+#endif
+
 	return pcount;
 
 eagain:
@@ -489,6 +525,11 @@ static void kgsl_pool_free_page(struct page *page)
 		return;
 
 	page_order = compound_order(page);
+
+#ifdef CONFIG_MM_STAT_UNRECLAIMABLE_PAGES
+	mod_node_page_state(page_pgdat(page), NR_UNRECLAIMABLE_PAGES,
+			-(1 << page_order));
+#endif
 
 	if (!kgsl_pool_max_pages ||
 			(kgsl_pool_size_total() < kgsl_pool_max_pages)) {
