@@ -79,6 +79,7 @@ enum QBG_ACCUM_INTERVAL_TYPE {
  * @qbg_cdev:		Member for QBG char device
  * @dev_no:		Device number for QBG char device
  * @batt_node:		Pointer to battery device node
+ * @dfs_root:		Pointer to QBG debug fs root directory
  * @indio_dev:		Pointer to QBG IIO device
  * @iio_chan:		Pointer to QBG IIO channels
  * @sdam:		Pointer to multiple QBG SDAMs
@@ -90,6 +91,7 @@ enum QBG_ACCUM_INTERVAL_TYPE {
  * @kdata:		QBG Kernel space data structure
  * @udata:		QBG user space data structure
  * @battery:		Pointer to QBG battery data structure
+ * @step_chg_jeita_params:	Jeita step charge parameters structure
  * @fifo_lock:		Lock for reading FIFO data
  * @data_lock:		Lock for reading kdata from QBG char device
  * @context_lock:	Lock for reading/writing QBG context
@@ -152,6 +154,7 @@ struct qti_qbg {
 	struct cdev		qbg_cdev;
 	dev_t			dev_no;
 	struct device_node      *batt_node;
+	struct dentry		*dfs_root;
 	struct iio_dev		*indio_dev;
 	struct iio_chan_spec	*iio_chan;
 	struct nvmem_device	**sdam;
@@ -163,6 +166,7 @@ struct qti_qbg {
 	struct qbg_kernel_data	kdata;
 	struct qbg_user_data	udata;
 	struct qbg_battery_data	*battery;
+	struct qbg_step_chg_jeita_params	*step_chg_jeita_params;
 	struct mutex		fifo_lock;
 	struct mutex		data_lock;
 	struct mutex		context_lock;

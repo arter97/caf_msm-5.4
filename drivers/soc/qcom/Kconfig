@@ -598,12 +598,30 @@ config QCOM_DCC_V2
 
 config QCOM_MINIDUMP
 	tristate "QCOM Minidump Support"
-	depends on QCOM_SMEM && POWER_RESET_MSM
 	help
-	  This enables minidump feature. It allows various clients to
+	  This enables minidump framework. It allows various clients to
 	  register to dump their state at system bad state (panic/WDT,etc.,).
 	  Minidump would dump all registered entries, only when DLOAD mode
 	  is enabled.
+
+config QCOM_MINIDUMP_SMEM
+	tristate "QCOM Minidump SMEM Support"
+	depends on QCOM_MINIDUMP && QCOM_SMEM
+	default y
+	help
+	  This enables minidump smem transport layer.
+	  If minidump and smem are enabled,
+	  this config option shall be enabled by
+	  default.
+
+config QCOM_MINIDUMP_MMIO
+	tristate "QTI Minidump MMIO Support"
+	depends on QCOM_MINIDUMP
+	help
+	  This enables MMIO minidump transport layer.
+	  If the target emulates minidump smem as shadow registers, say yes to
+	  enable minidump feature.
+	  If unsure, say no.
 
 config QCOM_DYN_MINIDUMP_STACK
 	bool "QTI Dynamic Minidump Stack Registration Support"
@@ -1216,7 +1234,7 @@ config QCOM_HYP_CORE_CTL
 
 config QTI_CRYPTO_COMMON
 	tristate "Enable common crypto functionality used for FBE"
-	depends on SCSI_UFS_CRYPTO_QTI
+	depends on SCSI_UFS_CRYPTO_QTI || MMC_CQHCI_CRYPTO_QTI
 	help
 	 Say 'Y' to enable the common crypto implementation to be used by
 	 different storage layers such as UFS and EMMC for file based hardware
@@ -1239,7 +1257,7 @@ config QTI_CRYPTO_FDE
 	 Say 'Y' to enable hardware Full Disk Encryption implementation to be used by
 	 different storage layers such as UFS or eMMC. Enabling the FDE will reserve
 	 one slot of KSM(Key Slot Manager) for the FDE. Making one less slot available
-	 for FBE (File based encryption) in case both encryption mechanism are enabled
+	 for FBE(File based encryption) in case both encryption mechanism are enabled
 	 on device.
 
 config QTI_CRYPTO_VIRTUALIZATION
@@ -1337,6 +1355,24 @@ config MSM_SEB_RPMSG
 	  opened by remote processor. It doesn't maintain state machine
 	  and is probed when Slate opens channel and removed when the
 	  channel is closed by remote processor.
+
+config DEEPSLEEP
+	bool "Deep Sleep or Suspend-to-RAM sleep state"
+	help
+		Set this option to enable Deep Sleep. Deep Sleep is Suspend-to-RAM
+		sleep state, in which entire system is put in a low-power state,
+		except for memory, so that exit from this state can happen in shorter
+		duration.
+
+config POWER_STATE
+	depends on DEEPSLEEP || HIBERNATION
+	bool "Power State driver support for Deep Sleep and Hibernate"
+	help
+		This option enables Power State Driver which is the kernel component
+		for supporting deep sleep and hibernate. Create a power_state device
+		node for user space communication. User space client can open device
+		node for communication required for handling deep sleep and hibernate
+		modes.
 
 source "drivers/soc/qcom/icnss2/Kconfig"
 

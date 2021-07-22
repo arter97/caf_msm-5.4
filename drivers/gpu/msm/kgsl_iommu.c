@@ -945,7 +945,7 @@ static void setup_64bit_pagetable(struct kgsl_mmu *mmu,
 
 	if (pagetable->name != KGSL_MMU_GLOBAL_PT &&
 		pagetable->name != KGSL_MMU_SECURE_PT) {
-		if (kgsl_is_compat_task()) {
+		if (is_compat_task()) {
 			pt->svm_start = KGSL_IOMMU_SVM_BASE32(mmu);
 			pt->svm_end = mmu->secure_base;
 		} else {
@@ -2519,8 +2519,8 @@ int kgsl_iommu_probe(struct kgsl_device *device)
 	 */
 	kgsl_iommu_map_globals(mmu, mmu->defaultpagetable);
 	kgsl_iommu_map_globals(mmu, mmu->lpac_pagetable);
-	/* QDSS is supported only when CORESIGHT is enabled */
-	if (IS_ENABLED(CONFIG_CORESIGHT))
+	/* QDSS is supported only when QCOM_KGSL_QDSS_STM is enabled */
+	if (IS_ENABLED(CONFIG_QCOM_KGSL_QDSS_STM))
 		device->qdss_desc = kgsl_allocate_global_fixed(device,
 					"qcom,gpu-qdss-stm", "gpu-qdss");
 

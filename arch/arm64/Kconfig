@@ -1807,9 +1807,13 @@ config FIX_BOOT_CPU_LOGICAL_MAPPING
 	help
 	  This option fixes the logical cpu map of
 	  of boot cpu which is otherwise considered
-	  to be logical cpu 0. High performance core
-	  for logical cpu 0 will increase idle power
-	  consumption for the system.
+	  to be logical cpu 0.
+
+          Booting on high performance core makes the
+          core as logical cpu 0. It impacts the idle
+          power consumption of the system. This can
+	  be avoided by fixing the logical cpu map
+          hardcoding of the boot cpu.
 
 menu "Power management options"
 
