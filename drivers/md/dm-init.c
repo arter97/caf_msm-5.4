@@ -284,7 +284,8 @@ static int __init dm_init_init(void)
 		goto out;
 
 	DMINFO("waiting for all devices to be available before creating mapped devices");
-	wait_for_device_probe();
+	if(!is_early_userspace)
+		wait_for_device_probe();
 
 	list_for_each_entry(dev, &devices, list) {
 		if (dm_early_create(&dev->dmi, dev->table,
@@ -297,7 +298,7 @@ out:
 	return r;
 }
 
-late_initcall(dm_init_init);
+early_late_initcall(dm_init_init, EARLY_SUBSYS_1, EARLY_INIT_LEVEL5);
 
 module_param(create, charp, 0);
 MODULE_PARM_DESC(create, "Create a mapped device in early boot");
