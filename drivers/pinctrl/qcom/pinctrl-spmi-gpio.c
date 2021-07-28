@@ -1179,7 +1179,8 @@ static struct platform_driver pmic_gpio_driver = {
 	.remove = pmic_gpio_remove,
 };
 
-module_platform_driver(pmic_gpio_driver);
+early_module_platform_driver(pmic_gpio_driver, EARLY_SUBSYS_PLATFORM,
+		EARLY_INIT_LEVEL8);
 
 MODULE_AUTHOR("Ivan T. Ivanov <iivanov@mm-sol.com>");
 MODULE_DESCRIPTION("Qualcomm SPMI PMIC GPIO pin control driver");
