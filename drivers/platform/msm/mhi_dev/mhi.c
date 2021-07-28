@@ -1501,7 +1501,7 @@ int mhi_dev_send_event(struct mhi_dev *mhi, int evnt_ring,
 		}
 	}
 
-	mutex_lock(&mhi->mhi_event_lock);
+	mutex_lock(&ring->event_lock);
 	/* add the ring element */
 	mhi_dev_add_element(ring, el, NULL, 0);
 
@@ -1534,7 +1534,6 @@ int mhi_dev_send_event(struct mhi_dev *mhi, int evnt_ring,
 	 */
 	wmb();
 
-	mutex_unlock(&mhi->mhi_event_lock);
 	mhi_log(MHI_MSG_VERBOSE, "event sent:\n");
 	mhi_log(MHI_MSG_VERBOSE, "evnt ptr : 0x%llx\n", el->evt_tr_comp.ptr);
 	mhi_log(MHI_MSG_VERBOSE, "evnt len : 0x%x\n", el->evt_tr_comp.len);
@@ -1547,6 +1546,7 @@ int mhi_dev_send_event(struct mhi_dev *mhi, int evnt_ring,
 	else
 		rc = ep_pcie_trigger_msi(mhi_ctx->phandle, ctx->ev.msivec);
 
+	mutex_unlock(&ring->event_lock);
 	return rc;
 }
 
@@ -1803,8 +1803,10 @@ static void mhi_dev_process_cmd_ring(struct mhi_dev *mhi,
 					return;
 				}
 			}
+			mutex_lock(&mhi->ch[ch_id].ch_lock);
 			mhi_dev_alloc_evt_buf_evt_req(mhi, &mhi->ch[ch_id],
 					evt_ring);
+			mutex_unlock(&mhi->ch[ch_id].ch_lock);
 		}
 
 		if (MHI_USE_DMA(mhi))
@@ -3156,6 +3158,8 @@ int mhi_dev_write_channel(struct mhi_req *wreq)
 	}
 
 	usr_buf_remaining =  wreq->len;
+	handle_client = wreq->client;
+	ch = handle_client->channel;
 	mutex_lock(&mhi_ctx->mhi_write_test);
 
 	if (atomic_read(&mhi_ctx->is_suspended)) {
@@ -3163,6 +3167,7 @@ int mhi_dev_write_channel(struct mhi_req *wreq)
 		 * Expected usage is when there is a write
 		 * to the MHI core -> notify SM.
 		 */
+		mhi_log(MHI_MSG_INFO, "Wakeup by chan:%d\n", ch->ch_id);
 		rc = mhi_dev_notify_sm_event(MHI_DEV_EVENT_CORE_WAKEUP);
 		if (rc) {
 			pr_err("error sending core wakeup event\n");
@@ -3185,8 +3190,6 @@ int mhi_dev_write_channel(struct mhi_req *wreq)
 		return -ENODEV;
 	}
 
-	handle_client = wreq->client;
-	ch = handle_client->channel;
 
 	ring = ch->ring;
 
@@ -3429,14 +3432,25 @@ static void mhi_dev_enable(struct work_struct *work)
 		pr_err("%s: get mhi state failed\n", __func__);
 		return;
 	}
+	if (mhi_reset) {
+		mhi_dev_mmio_clear_reset(mhi);
+		mhi_log(MHI_MSG_VERBOSE,
+			"Cleared reset before waiting for M0\n");
+	}
 
-	while (state != MHI_DEV_M0_STATE && max_cnt < MHI_SUSPEND_TIMEOUT) {
+	while (state != MHI_DEV_M0_STATE &&
+		((max_cnt < MHI_SUSPEND_TIMEOUT) || mhi->no_m0_timeout)) {
 		/* Wait for Host to set the M0 state */
 		msleep(MHI_SUSPEND_MIN);
 		rc = mhi_dev_mmio_get_mhi_state(mhi, &state, &mhi_reset);
 		if (rc) {
 			pr_err("%s: get mhi state failed\n", __func__);
 			return;
+		}
+		if (mhi_reset) {
+			mhi_dev_mmio_clear_reset(mhi);
+			mhi_log(MHI_MSG_VERBOSE,
+				"Cleared reset while waiting for M0\n");
 		}
 		max_cnt++;
 	}
@@ -3693,6 +3707,9 @@ static int get_device_tree_data(struct platform_device *pdev)
 
 	mhi->enable_m2 = of_property_read_bool((&pdev->dev)->of_node,
 				"qcom,enable-m2");
+
+	mhi->no_m0_timeout = of_property_read_bool((&pdev->dev)->of_node,
+		"qcom,no-m0-timeout");
 
 	mhi_log(MHI_MSG_VERBOSE, "acquiring wakelock\n");
 

@@ -543,6 +543,15 @@
 #define A6XX_RBBM_CLOCK_MODE_HLSQ	 0x0011b
 #define A6XX_RBBM_CLOCK_DELAY_HLSQ       0x0011c
 #define A6XX_RBBM_CLOCK_HYST_HLSQ        0x0011d
+#define A6XX_RBBM_CLOCK_CNTL_FCHE        0x00123
+#define A6XX_RBBM_CLOCK_DELAY_FCHE       0x00124
+#define A6XX_RBBM_CLOCK_HYST_FCHE        0x00125
+#define A6XX_RBBM_CLOCK_CNTL_GLC         0x0012B
+#define A6XX_RBBM_CLOCK_DELAY_GLC        0x00129
+#define A6XX_RBBM_CLOCK_HYST_GLC         0x0012A
+#define A6XX_RBBM_CLOCK_CNTL_MHUB        0x00126
+#define A6XX_RBBM_CLOCK_DELAY_MHUB       0x00127
+#define A6XX_RBBM_CLOCK_HYST_MHUB        0x00128
 
 #define A6XX_GMUAO_GMU_CGC_MODE_CNTL     0x23b09
 #define A6XX_GMUAO_GMU_CGC_DELAY_CNTL    0x23b0a
@@ -746,6 +755,7 @@
 #define A6XX_UCHE_CMDQ_CONFIG               0xE3C
 
 /* SP registers */
+#define A6XX_SP_DBG_ECO_CNTL                0xAE00
 #define A6XX_SP_ADDR_MODE_CNTL              0xAE01
 #define A6XX_SP_NC_MODE_CNTL                0xAE02
 #define A6XX_SP_PERFCTR_SP_SEL_0            0xAE10

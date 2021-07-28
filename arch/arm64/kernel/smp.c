@@ -225,6 +225,7 @@ asmlinkage notrace void secondary_start_kernel(void)
 	if (system_uses_irq_prio_masking())
 		init_gic_priority_masking();
 
+	rcu_cpu_starting(cpu);
 	preempt_disable();
 	trace_hardirqs_off();
 
@@ -400,6 +401,7 @@ void cpu_die_early(void)
 
 	/* Mark this CPU absent */
 	set_cpu_present(cpu, 0);
+	rcu_report_dead(cpu);
 
 #ifdef CONFIG_HOTPLUG_CPU
 	update_cpu_boot_status(CPU_KILL_ME);
@@ -482,6 +484,20 @@ static u64 __init of_get_cpu_mpidr(struct device_node *dn)
  * cpu. cpu_logical_map was initialized to INVALID_HWID to avoid
  * matching valid MPIDR values.
  */
+#ifdef CONFIG_FIX_BOOT_CPU_LOGICAL_MAPPING
+static bool __init is_mpidr_duplicate(unsigned int cpu, u64 hwid)
+{
+	unsigned int i;
+
+	for (i = 0; (i <= cpu) && (i < NR_CPUS); i++) {
+		if (i == logical_bootcpu_id)
+			continue;
+		if (cpu_logical_map(i) == hwid)
+			return true;
+	}
+	return false;
+}
+#else
 static bool __init is_mpidr_duplicate(unsigned int cpu, u64 hwid)
 {
 	unsigned int i;
@@ -491,6 +507,7 @@ static bool __init is_mpidr_duplicate(unsigned int cpu, u64 hwid)
 			return true;
 	return false;
 }
+#endif
 
 /*
  * Initialize cpu operations for a logical cpu and
@@ -510,7 +527,11 @@ static int __init smp_cpu_setup(int cpu)
 }
 
 static bool bootcpu_valid __initdata;
+#ifdef CONFIG_FIX_BOOT_CPU_LOGICAL_MAPPING
+static unsigned int cpu_count;
+#else
 static unsigned int cpu_count = 1;
+#endif
 
 #ifdef CONFIG_ACPI
 static struct acpi_madt_generic_interrupt cpu_madt_gicc[NR_CPUS];
@@ -547,14 +568,22 @@ acpi_map_gic_cpu_interface(struct acpi_madt_generic_interrupt *processor)
 	}
 
 	/* Check if GICC structure of boot CPU is available in the MADT */
+#ifdef CONFIG_FIX_BOOT_CPU_LOGICAL_MAPPING
+	if (cpu_logical_map(logical_bootcpu_id) == hwid) {
+#else
 	if (cpu_logical_map(0) == hwid) {
+#endif
 		if (bootcpu_valid) {
 			pr_err("duplicate boot CPU MPIDR: 0x%llx in MADT\n",
 			       hwid);
 			return;
 		}
 		bootcpu_valid = true;
+#ifdef CONFIG_FIX_BOOT_CPU_LOGICAL_MAPPING
+		cpu_madt_gicc[logical_bootcpu_id] = *processor;
+#else
 		cpu_madt_gicc[0] = *processor;
+#endif
 		return;
 	}
 
@@ -562,7 +591,7 @@ acpi_map_gic_cpu_interface(struct acpi_madt_generic_interrupt *processor)
 		return;
 
 	/* map the logical cpu id to cpu MPIDR */
-	cpu_logical_map(cpu_count) = hwid;
+	set_cpu_logical_map(cpu_count, hwid);
 
 	cpu_madt_gicc[cpu_count] = *processor;
 
@@ -629,7 +658,8 @@ static void __init acpi_parse_and_init_cpus(void)
 /*
  * Enumerate the possible CPU set from the device tree and build the
  * cpu logical map array containing MPIDR values related to logical
- * cpus. Assumes that cpu_logical_map(0) has already been initialized.
+ * cpus. Assumes that cpu_logical_map(0) or cpu_logical_map(logical_bootcpu_id)
+ * for CONFIG_FIX_BOOT_CPU_LOGICAL_MAPPING has already been initialized.
  */
 static void __init of_parse_and_init_cpus(void)
 {
@@ -647,6 +677,33 @@ static void __init of_parse_and_init_cpus(void)
 			goto next;
 		}
 
+#ifdef CONFIG_FIX_BOOT_CPU_LOGICAL_MAPPING
+		/*
+		 * The numbering scheme requires that the boot CPU
+		 * must be assigned logical boot cpu id. Record it so that
+		 * the logical map built from DT is validated and can
+		 * be used.
+		 */
+		if (hwid == cpu_logical_map(logical_bootcpu_id)) {
+			if (bootcpu_valid) {
+				pr_err("%pOF: duplicate boot cpu reg property in DT\n",
+					dn);
+				goto next;
+			}
+
+			bootcpu_valid = true;
+			early_map_cpu_to_node(logical_bootcpu_id,
+						of_node_to_nid(dn));
+			/*
+			 * boot cpu's cpu_logical_map is already
+			 * initialized and the boot cpu doesn't need the
+			 * enable-method like secondary cpu's. Now, as we
+			 * can't assume logical boot cpu to be 0, we need
+			 * to loop through entire logical cpu map.
+			 */
+			goto next;
+		}
+#else
 		/*
 		 * The numbering scheme requires that the boot CPU
 		 * must be assigned logical id 0. Record it so that
@@ -671,12 +728,13 @@ static void __init of_parse_and_init_cpus(void)
 			 */
 			continue;
 		}
+#endif
 
 		if (cpu_count >= NR_CPUS)
 			goto next;
 
 		pr_debug("cpu logical map 0x%llx\n", hwid);
-		cpu_logical_map(cpu_count) = hwid;
+		set_cpu_logical_map(cpu_count, hwid);
 
 		early_map_cpu_to_node(cpu_count, of_node_to_nid(dn));
 next:
@@ -714,12 +772,25 @@ void __init smp_init_cpus(void)
 	 * with entries in cpu_logical_map while initializing the cpus.
 	 * If the cpu set-up fails, invalidate the cpu_logical_map entry.
 	 */
+#ifdef CONFIG_FIX_BOOT_CPU_LOGICAL_MAPPING
+	for (i = 0; i < nr_cpu_ids; i++) {
+		if (cpu_logical_map(i) != INVALID_HWID) {
+			if (cpu_logical_map(i) ==
+					cpu_logical_map(logical_bootcpu_id))
+				continue;
+
+			if (smp_cpu_setup(i))
+				set_cpu_logical_map(i, INVALID_HWID);
+		}
+	}
+#else
 	for (i = 1; i < nr_cpu_ids; i++) {
 		if (cpu_logical_map(i) != INVALID_HWID) {
 			if (smp_cpu_setup(i))
-				cpu_logical_map(i) = INVALID_HWID;
+				set_cpu_logical_map(i, INVALID_HWID);
 		}
 	}
+#endif
 }
 
 void __init smp_prepare_cpus(unsigned int max_cpus)

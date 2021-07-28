@@ -126,6 +126,10 @@ extern int qcom_scm_iommu_secure_map(phys_addr_t sg_list_addr, size_t num_sg,
 				unsigned long iova, size_t total_len);
 extern int qcom_scm_iommu_secure_unmap(u64 sec_id, int cbndx,
 				unsigned long iova, size_t total_len);
+extern int qcom_scm_paravirt_smmu_attach(u64 sid, u64 asid, u64 ste_pa,
+				u64 ste_size, u64 cd_pa, u64 cd_size);
+extern int qcom_scm_paravirt_tlb_inv(u64 asid);
+extern int qcom_scm_paravirt_smmu_detach(u64 sid);
 extern int
 qcom_scm_assign_mem_regions(struct qcom_scm_mem_map_info *mem_regions,
 			    size_t mem_regions_sz, u32 *srcvms, size_t src_sz,
@@ -158,6 +162,8 @@ extern int qcom_scm_config_set_ice_key(uint32_t index, phys_addr_t paddr,
 				       unsigned int data_unit,
 				       unsigned int food);
 extern int qcom_scm_clear_ice_key(uint32_t index, unsigned int food);
+extern int qcom_scm_derive_raw_secret(phys_addr_t paddr_key, size_t key_size,
+				      phys_addr_t paddr_secret, size_t secret_size);
 extern bool qcom_scm_hdcp_available(void);
 extern int qcom_scm_hdcp_req(struct qcom_scm_hdcp_req *req, u32 req_cnt,
 			     u32 *resp);
@@ -205,6 +211,8 @@ extern int qcom_scm_invoke_callback_response(phys_addr_t out_buf,
 		unsigned int *data);
 extern bool qcom_scm_is_available(void);
 extern int qcom_scm_mem_protect_audio(phys_addr_t paddr, size_t size);
+extern int qcom_scm_ddrbw_profiler(phys_addr_t in_buf, size_t in_buf_size,
+		phys_addr_t out_buf, size_t out_buf_size);
 #else
 
 #include <linux/errno.h>
@@ -281,6 +289,13 @@ static inline int qcom_scm_iommu_secure_map(phys_addr_t sg_list_addr,
 		unsigned long iova, size_t total_len) { return -ENODEV; }
 static inline int qcom_scm_iommu_secure_unmap(u64 sec_id, int cbndx,
 		unsigned long iova, size_t total_len) { return -ENODEV; }
+static inline int qcom_scm_paravirt_smmu_attach(u64 sid, u64 asid, u64 ste_pa,
+					u64 ste_size, u64 cd_pa, u64 cd_size)
+		  { return -ENODEV; }
+static inline int qcom_scm_paravirt_tlb_inv(u64 asid)
+		  { return -ENODEV; }
+static inline int qcom_scm_paravirt_smmu_detach(u64 sid)
+		  { return -ENODEV; }
 static inline int
 qcom_scm_assign_mem_regions(struct qcom_scm_mem_map_info *mem_regions,
 			    size_t mem_regions_sz, u32 *srcvms, size_t src_sz,
@@ -320,6 +335,9 @@ static inline int qcom_scm_config_set_ice_key(uint32_t index, phys_addr_t paddr,
 		size_t size, uint32_t cipher, unsigned int data_unit,
 		unsigned int food) { return -ENODEV; }
 static inline int qcom_scm_clear_ice_key(uint32_t index, unsigned int food)
+		{ return -ENODEV; }
+static inline int qcom_scm_derive_raw_secret(phys_addr_t paddr_key,
+		size_t key_size, phys_addr_t paddr_secret, size_t secret_size)
 		{ return -ENODEV; }
 static inline bool qcom_scm_hdcp_available(void) { return false; }
 static inline int qcom_scm_hdcp_req(struct qcom_scm_hdcp_req *req, u32 req_cnt,
@@ -390,5 +408,8 @@ static inline int qcom_scm_invoke_callback_response(phys_addr_t out_buf,
 static inline bool qcom_scm_is_available(void) { return false; }
 static inline int qcom_scm_mem_protect_audio(phys_addr_t paddr, size_t size)
 				{ return -ENODEV; }
+static inline int qcom_scm_ddrbw_profiler(phys_addr_t in_buf, size_t in_buf_size,
+		phys_addr_t out_buf, size_t out_buf_size)
+		{ return -ENODEV; }
 #endif
 #endif
