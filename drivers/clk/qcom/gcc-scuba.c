@@ -1060,10 +1060,10 @@ static struct clk_rcg2 gcc_camss_ope_ahb_clk_src = {
 
 static const struct freq_tbl ftbl_gcc_camss_ope_clk_src[] = {
 	F(19200000, P_BI_TCXO, 1, 0, 0),
-	F_SLEW(200000000, P_GPLL8_OUT_MAIN, 2, 0, 0, 800000000),
-	F_SLEW(266600000, P_GPLL8_OUT_MAIN, 1, 0, 0, 533200000),
-	F_SLEW(465000000, P_GPLL8_OUT_MAIN, 1, 0, 0, 930000000),
-	F_SLEW(580000000, P_GPLL8_OUT_EARLY, 1, 0, 0, 580000000),
+	F(200000000, P_GPLL8_OUT_EARLY, 2, 0, 0),
+	F(266600000, P_GPLL8_OUT_EARLY, 1, 0, 0),
+	F(465000000, P_GPLL8_OUT_EARLY, 1, 0, 0),
+	F(580000000, P_GPLL8_OUT_EARLY, 1, 0, 0),
 	{ }
 };
 
