@@ -8,6 +8,9 @@
 #include <linux/highmem.h>
 #include <linux/slab.h>
 #include <linux/random.h>
+#include <linux/dma-buf.h>
+#include <linux/ion.h>
+#include <linux/msm_ion.h>
 
 #include "kgsl_device.h"
 #include "kgsl_pool.h"
@@ -397,6 +400,10 @@ static ssize_t memstat_show(struct device *dev,
 		val = atomic_long_read(&kgsl_driver.stats.secure);
 	else if (!strcmp(attr->attr.name, "secure_max"))
 		val = atomic_long_read(&kgsl_driver.stats.secure_max);
+	else if (!strcmp(attr->attr.name, "ion_alloc"))
+		val = atomic_long_read(&kgsl_driver.stats.ion_alloc);
+	else if (!strcmp(attr->attr.name, "ion_alloc_max"))
+		val = atomic_long_read(&kgsl_driver.stats.ion_alloc_max);
 	else if (!strcmp(attr->attr.name, "mapped"))
 		val = atomic_long_read(&kgsl_driver.stats.mapped);
 	else if (!strcmp(attr->attr.name, "mapped_max"))
@@ -436,6 +443,8 @@ static DEVICE_ATTR(coherent, 0444, memstat_show, NULL);
 static DEVICE_ATTR(coherent_max, 0444, memstat_show, NULL);
 static DEVICE_ATTR(secure, 0444, memstat_show, NULL);
 static DEVICE_ATTR(secure_max, 0444, memstat_show, NULL);
+static DEVICE_ATTR(ion_alloc, 0444, memstat_show, NULL);
+static DEVICE_ATTR(ion_alloc_max, 0444, memstat_show, NULL);
 static DEVICE_ATTR(mapped, 0444, memstat_show, NULL);
 static DEVICE_ATTR(mapped_max, 0444, memstat_show, NULL);
 static DEVICE_ATTR_RW(full_cache_threshold);
@@ -449,6 +458,8 @@ static const struct attribute *drv_attr_list[] = {
 	&dev_attr_coherent_max.attr,
 	&dev_attr_secure.attr,
 	&dev_attr_secure_max.attr,
+	&dev_attr_ion_alloc.attr,
+	&dev_attr_ion_alloc_max.attr,
 	&dev_attr_mapped.attr,
 	&dev_attr_mapped_max.attr,
 	&dev_attr_full_cache_threshold.attr,
@@ -685,6 +696,10 @@ void kgsl_memdesc_init(struct kgsl_device *device,
 
 	/* Secure memory disables advanced addressing modes */
 	if (flags & KGSL_MEMFLAGS_SECURE)
+		flags &= ~((uint64_t) KGSL_MEMFLAGS_USE_CPU_MAP);
+
+	/* GVM shared memory is allocated from ION which doesn't support SVM */
+	if (flags & KGSL_MEMFLAGS_GVM)
 		flags &= ~((uint64_t) KGSL_MEMFLAGS_USE_CPU_MAP);
 
 	/* Disable IO coherence if it is not supported on the chip */
@@ -1245,6 +1260,10 @@ static int kgsl_alloc_contiguous(struct kgsl_device *device,
 {
 	int ret;
 
+	/* GVM memory allocation is only supported from ION heap */
+	if (memdesc->flags & KGSL_MEMFLAGS_GVM)
+		return -ENOTSUPP;
+
 	size = PAGE_ALIGN(size);
 
 	if (!size || size > UINT_MAX)
@@ -1277,6 +1296,153 @@ static int kgsl_allocate_secure(struct kgsl_device *device,
 }
 #endif
 
+static void kgsl_ion_alloc_free(struct kgsl_memdesc *memdesc)
+{
+	struct kgsl_mem_entry *entry = container_of(memdesc,
+					struct kgsl_mem_entry, memdesc);
+	struct kgsl_dma_buf_meta *meta = entry->priv_data;
+	struct dma_buf *dmabuf = meta->dmabuf;
+
+	if (memdesc != NULL) {
+		kgsl_destroy_dma_buf_meta(entry);
+		dma_buf_put(dmabuf);
+		atomic_long_sub(memdesc->size, &kgsl_driver.stats.ion_alloc);
+	}
+}
+
+static int kgsl_ion_alloc_map_kernel(struct kgsl_memdesc *memdesc)
+{
+	struct kgsl_mem_entry *entry = container_of(memdesc,
+					struct kgsl_mem_entry, memdesc);
+	struct kgsl_dma_buf_meta *meta = entry->priv_data;
+	struct dma_buf *dmabuf = meta->dmabuf;
+	int ret;
+
+	if ((meta == NULL) || (dmabuf == NULL))
+		return -EINVAL;
+
+	if (memdesc->size > ULONG_MAX)
+		return -ENOMEM;
+
+	ret = dma_buf_begin_cpu_access(dmabuf, DMA_BIDIRECTIONAL);
+	if (ret) {
+		pr_err("kgsl: dma begin cpu access failed %d\n", ret);
+		return ret;
+	}
+
+	mutex_lock(&kernel_map_global_lock);
+	if (!memdesc->hostptr) {
+		memdesc->hostptr = dma_buf_vmap(dmabuf);
+		if (memdesc->hostptr == NULL) {
+			pr_err("kgsl: dma vmap failed\n");
+			dma_buf_end_cpu_access(dmabuf, DMA_BIDIRECTIONAL);
+			ret = -ENOMEM;
+		} else
+			KGSL_STATS_ADD(memdesc->size,
+				&kgsl_driver.stats.vmalloc,
+				&kgsl_driver.stats.vmalloc_max);
+	}
+
+	if (memdesc->hostptr)
+		memdesc->hostptr_count++;
+
+	mutex_unlock(&kernel_map_global_lock);
+
+	return ret;
+}
+
+static void kgsl_ion_alloc_unmap_kernel(struct kgsl_memdesc *memdesc)
+{
+	struct kgsl_mem_entry *entry = container_of(memdesc,
+					struct kgsl_mem_entry, memdesc);
+	struct kgsl_dma_buf_meta *meta = entry->priv_data;
+	struct dma_buf *dmabuf = meta->dmabuf;
+
+	if ((meta == NULL) || (dmabuf == NULL))
+		return;
+
+	mutex_lock(&kernel_map_global_lock);
+	if (!memdesc->hostptr) {
+		WARN_ON(memdesc->hostptr_count);
+		goto done;
+	}
+
+	memdesc->hostptr_count--;
+	if (!memdesc->hostptr_count) {
+		dma_buf_vunmap(dmabuf, memdesc->hostptr);
+		memdesc->hostptr = NULL;
+		atomic_long_sub(memdesc->size, &kgsl_driver.stats.vmalloc);
+	}
+
+done:
+	mutex_unlock(&kernel_map_global_lock);
+	dma_buf_end_cpu_access(dmabuf, DMA_BIDIRECTIONAL);
+}
+
+static struct kgsl_memdesc_ops kgsl_ion_alloc_ops = {
+	.free = kgsl_ion_alloc_free,
+	.map_kernel = kgsl_ion_alloc_map_kernel,
+	.unmap_kernel = kgsl_ion_alloc_unmap_kernel,
+};
+
+static uint64_t kgsl_get_ion_aligned_size(uint64_t size, uint64_t flags)
+{
+	unsigned int align = (flags & KGSL_MEMALIGN_MASK) >>
+						KGSL_MEMALIGN_SHIFT;
+	uint64_t align_value = (1 << align) - 1;
+
+	size = PAGE_ALIGN(size);
+
+	return (size + align_value) & (~align_value);
+}
+
+static int kgsl_sharedmem_alloc_ion(struct kgsl_device *device,
+				struct kgsl_memdesc *memdesc,
+				uint64_t size, u64 flags)
+{
+	struct kgsl_mem_entry *entry = container_of(memdesc,
+					struct kgsl_mem_entry, memdesc);
+	unsigned long ion_flags = 0;
+	unsigned int cache = kgsl_memdesc_get_cachemode(memdesc);
+	struct dma_buf *dmabuf;
+	int ret;
+
+	/* todo: how to apply the alignment with ION?? */
+	size = kgsl_get_ion_aligned_size(size, memdesc->flags);
+	if (size == 0 || size > UINT_MAX)
+		return -EINVAL;
+
+	kgsl_memdesc_init(device, memdesc, flags);
+
+	/* 1. ion setup cache flags */
+	if ((cache == KGSL_CACHEMODE_WRITEBACK) ||
+		(cache == KGSL_CACHEMODE_WRITETHROUGH))
+		ion_flags |= ION_FLAG_CACHED;
+
+	/* 2. ion_alloc() TODO: use correct heap id based on GVM ID */
+	dmabuf = ion_alloc(size, ION_HEAP(ION_GRAPHICS_PMEM_HEAP_ID), ion_flags);
+	if (IS_ERR_OR_NULL(dmabuf))
+		return -ENOMEM;
+
+	/* 3. setup dmabuf, use kgsl_setup_dma_buf ?? */
+	ret = kgsl_create_dma_buf_meta(device, entry, dmabuf, false);
+	if (ret) {
+		dma_buf_put(dmabuf);
+		memset(memdesc, 0, sizeof(*memdesc));
+		return ret;
+	}
+
+	/* 4. setup memdesc->ops, implement special free and mmap functions */
+	entry->memdesc.ops = &kgsl_ion_alloc_ops;
+	entry->memdesc.size = size;
+	entry->memdesc.dev = device->dev->parent;
+
+	KGSL_STATS_ADD(memdesc->size, &kgsl_driver.stats.ion_alloc,
+		&kgsl_driver.stats.ion_alloc_max);
+
+	return 0;
+}
+
 int kgsl_allocate_user(struct kgsl_device *device, struct kgsl_memdesc *memdesc,
 		u64 size, u64 flags, u32 priv)
 {
@@ -1285,6 +1451,8 @@ int kgsl_allocate_user(struct kgsl_device *device, struct kgsl_memdesc *memdesc,
 			priv);
 	else if (flags & KGSL_MEMFLAGS_SECURE)
 		return kgsl_allocate_secure(device, memdesc, size, flags, priv);
+	else if (flags & KGSL_MEMFLAGS_GVM)
+		return kgsl_sharedmem_alloc_ion(device, memdesc, size, flags);
 
 	return kgsl_alloc_pages(device, memdesc, size, flags, priv);
 }

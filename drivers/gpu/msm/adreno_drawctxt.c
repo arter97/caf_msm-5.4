@@ -276,6 +276,16 @@ void adreno_drawctxt_invalidate(struct kgsl_device *device,
 			KGSL_MEMSTORE_OFFSET(context->id, eoptimestamp),
 			drawctxt->timestamp);
 
+	if (context->shadow_timestamp_mem) {
+		kgsl_sharedmem_writel(&context->shadow_timestamp_mem->memdesc,
+			CONTEXT_SHADOW_OFFSET(soptimestamp),
+			drawctxt->timestamp);
+
+		kgsl_sharedmem_writel(&context->shadow_timestamp_mem->memdesc,
+			CONTEXT_SHADOW_OFFSET(eoptimestamp),
+			drawctxt->timestamp);
+	}
+
 	/* Get rid of commands still waiting in the queue */
 	count = drawctxt_detach_drawobjs(drawctxt, list);
 	spin_unlock(&drawctxt->lock);
@@ -301,12 +311,13 @@ void adreno_drawctxt_invalidate(struct kgsl_device *device,
  * adreno_drawctxt_create - create a new adreno draw context
  * @dev_priv: the owner of the context
  * @flags: flags for the context (passed from user space)
+ * @shadow_mem_flags: flags to create separate shadow timestamp memory
  *
  * Create and return a new draw context for the 3D core.
  */
 struct kgsl_context *
 adreno_drawctxt_create(struct kgsl_device_private *dev_priv,
-			uint32_t *flags)
+			uint32_t *flags, uint64_t shadow_mem_flags)
 {
 	struct adreno_context *drawctxt;
 	struct kgsl_device *device = dev_priv->device;
@@ -328,7 +339,10 @@ adreno_drawctxt_create(struct kgsl_device_private *dev_priv,
 		KGSL_CONTEXT_IFH_NOP |
 		KGSL_CONTEXT_SECURE |
 		KGSL_CONTEXT_PREEMPT_STYLE_MASK |
-		KGSL_CONTEXT_NO_SNAPSHOT);
+		KGSL_CONTEXT_NO_SNAPSHOT |
+		KGSL_CONTEXT_SEPARATE_SHADOW_MEM);
+
+	shadow_mem_flags &= KGSL_MEMFLAGS_GVM | KGSL_MEMFLAGS_GVM_ID_MASK;
 
 	/* Check for errors before trying to initialize */
 
@@ -408,18 +422,40 @@ adreno_drawctxt_create(struct kgsl_device_private *dev_priv,
 		INIT_LIST_HEAD(&drawctxt->active_node);
 	}
 
+	if (local & KGSL_CONTEXT_SEPARATE_SHADOW_MEM) {
+		struct kgsl_mem_entry *entry;
+
+		entry = gpumem_alloc_entry(drawctxt->base.dev_priv,
+					   sizeof(struct kgsl_devmemstore),
+					   shadow_mem_flags);
+		if (IS_ERR(entry)) {
+			ret = PTR_ERR(entry);
+			goto detach_out;
+		}
+
+		if (kgsl_memdesc_map(&entry->memdesc) == NULL) {
+			ret = -ENOMEM;
+			goto detach_out;
+		}
+
+		drawctxt->base.shadow_timestamp_mem = entry;
+		memset(entry->memdesc.hostptr, 0, entry->memdesc.size);
+	}
+
 	if (gpudev->preemption_context_init) {
 		ret = gpudev->preemption_context_init(&drawctxt->base);
-		if (ret != 0) {
-			kgsl_context_detach(&drawctxt->base);
-			return ERR_PTR(ret);
-		}
+		if (ret != 0)
+			goto detach_out;
 	}
 
 	/* copy back whatever flags we dediced were valid */
 	*flags = drawctxt->base.flags;
 
 	return &drawctxt->base;
+
+detach_out:
+	kgsl_context_detach(&drawctxt->base);
+	return ERR_PTR(ret);
 }
 
 static void wait_for_timestamp_rb(struct kgsl_device *device,
@@ -481,6 +517,16 @@ static void wait_for_timestamp_rb(struct kgsl_device *device,
 	kgsl_sharedmem_writel(device->memstore,
 			KGSL_MEMSTORE_OFFSET(context->id, eoptimestamp),
 			drawctxt->timestamp);
+
+	if (context->shadow_timestamp_mem) {
+		kgsl_sharedmem_writel(&context->shadow_timestamp_mem->memdesc,
+			CONTEXT_SHADOW_OFFSET(soptimestamp),
+			drawctxt->timestamp);
+
+		kgsl_sharedmem_writel(&context->shadow_timestamp_mem->memdesc,
+			CONTEXT_SHADOW_OFFSET(eoptimestamp),
+			drawctxt->timestamp);
+	}
 
 	adreno_profile_process_results(adreno_dev);
 
@@ -550,11 +596,24 @@ void adreno_drawctxt_detach(struct kgsl_context *context)
 void adreno_drawctxt_destroy(struct kgsl_context *context)
 {
 	struct adreno_context *drawctxt;
+	struct kgsl_mem_entry *entry;
 
 	if (context == NULL)
 		return;
 
 	drawctxt = ADRENO_CONTEXT(context);
+	entry = context->shadow_timestamp_mem;
+
+	if (entry) {
+		if (entry->memdesc.hostptr)
+			kgsl_memdesc_unmap(&entry->memdesc);
+
+		gpumem_free_entry(entry);
+		/* Put the extra ref from gpumem_alloc_entry() */
+		kgsl_mem_entry_put(entry);
+		context->shadow_timestamp_mem = NULL;
+	}
+
 	kfree(drawctxt);
 }
 

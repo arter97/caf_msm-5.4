@@ -75,6 +75,8 @@
 
 #define KGSL_CONTEXT_INVALIDATE_ON_FAULT 0x10000000
 
+#define KGSL_CONTEXT_SEPARATE_SHADOW_MEM 0x20000000
+
 #define KGSL_CONTEXT_INVALID 0xffffffff
 
 /*
@@ -131,6 +133,12 @@
 #define KGSL_MEMFLAGS_GPUREADONLY  (1ULL << 24)
 #define KGSL_MEMFLAGS_GPUWRITEONLY (1ULL << 25)
 #define KGSL_MEMFLAGS_FORCE_32BIT  (1ULL << 32)
+
+/* Guest OS information */
+#define KGSL_MEMFLAGS_GVM          (1ULL << 36)
+
+#define KGSL_MEMFLAGS_GVM_ID_SHIFT 37
+#define KGSL_MEMFLAGS_GVM_ID_MASK  (1ULL << KGSL_MEMFLAGS_GVM_ID_SHIFT)
 
 /* Flag for binding all the virt range to single phys data */
 #define KGSL_SPARSE_BIND_MULTIPLE_TO_PHYS 0x400000000ULL
@@ -378,6 +386,7 @@ struct kgsl_shadowprop {
 	unsigned long gpuaddr;
 	__kernel_size_t size;
 	unsigned int flags; /* contains KGSL_FLAGS_ values */
+	int fd; /* dmabuf fd if shadow memory is a dmabuf */
 };
 
 struct kgsl_qdss_stm_prop {
@@ -431,6 +440,7 @@ struct kgsl_gpu_model {
 
 /* Context property sub types */
 #define KGSL_CONTEXT_PROP_FAULTS 1
+#define KGSL_CONTEXT_PROP_SHADOW 2
 
 /* Performance counter groups */
 
@@ -621,11 +631,15 @@ struct kgsl_cmdstream_freememontimestamp {
 	_IOR(KGSL_IOC_TYPE, 0x12, struct kgsl_cmdstream_freememontimestamp)
 
 /* create a draw context, which is used to preserve GPU state.
- * The flags field may contain a mask KGSL_CONTEXT_*  values
+ * The flags field may contain a mask KGSL_CONTEXT_*  values.
+ * The shadow_mem_flags field contains KGSL_MEMFLAGS_* to allocate
+ * separate shadow timestamp memory. It is only valid when
+ * KGSL_CONTEXT_SEPARATE_SHADOW_MEM is set in flags field.
  */
 struct kgsl_drawctxt_create {
 	unsigned int flags;
 	unsigned int drawctxt_id; /*output param */
+	__u64 shadow_mem_flags;
 };
 
 #define IOCTL_KGSL_DRAWCTXT_CREATE \
@@ -1313,6 +1327,7 @@ struct kgsl_cff_sync_gpuobj {
  * @id: Returns the GPU object ID of the new object
  * @metadata_len: Length of the metdata to copy from the user
  * @metadata: Pointer to the user specified metadata to store for the object
+ * @fd: dmabuf fd if memory is dmabuf based
  */
 struct kgsl_gpuobj_alloc {
 	__u64 size;
@@ -1322,6 +1337,7 @@ struct kgsl_gpuobj_alloc {
 	unsigned int id;
 	unsigned int metadata_len;
 	__u64 metadata;
+	int fd;
 };
 
 /* Let the user know that this header supports the gpuobj metadata */

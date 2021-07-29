@@ -64,6 +64,7 @@ enum hab_payload_type {
 
 #define HABCFG_FILE_SIZE_MAX   256
 #define HABCFG_MMID_AREA_MAX   (MM_ID_MAX/100)
+#define HABCFG_MMID_NUM        26
 
 #define HABCFG_VMID_MAX        16
 #define HABCFG_VMID_INVALID    (-1)
