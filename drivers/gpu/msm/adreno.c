@@ -58,9 +58,41 @@ static unsigned int adreno_ft_regs_default[] = {
 	ADRENO_REG_CP_IB2_BUFSZ,
 };
 
-/* used to identify A640R_V0 device */
-#define ADRENO_FEATURE_ID_A640R_V0 6
-#define ADRENO_SPEED_BIN_A640R_V0  105
+/*
+ * For Auto chipsets, efuse register is not blown with the speedbin
+ * information so read feature id from efuse register to differentiate
+ * between different SKUs to limit the GPU FMAX.
+ */
+/* To identify Talos SKU */
+#define ADRENO_FEATURE_ID_6155 3
+#define ADRENO_SPEED_BIN_6155  177
+
+#define ADRENO_FEATURE_ID_6150 5
+#define ADRENO_SPEED_BIN_6150  136
+
+#define ADRENO_FEATURE_ID_6145 6
+#define ADRENO_SPEED_BIN_6145  105
+
+#define ADRENO_FEATURE_ID_4150 7
+#define ADRENO_SPEED_BIN_4150  91
+
+/* To identify Poipu SKU */
+#define ADRENO_FEATURE_ID_POIPU_AA 0
+#define ADRENO_SPEED_BIN_POIPU_AA  1
+
+#define ADRENO_FEATURE_ID_POIPU_AB_V1 1
+#define ADRENO_FEATURE_ID_POIPU_AB_V2 2
+#define ADRENO_SPEED_BIN_POIPU_AB     0
+
+#define ADRENO_FEATURE_ID_POIPU_AC 3
+#define ADRENO_SPEED_BIN_POIPU_AC  0
+
+/* To identify Hana SKU */
+#define ADRENO_FEATURE_ID_8155 0
+#define ADRENO_SPEED_BIN_8155  0
+
+#define ADRENO_FEATURE_ID_8150 1
+#define ADRENO_SPEED_BIN_8150  1
 
 /* Nice level for the higher priority GPU start thread */
 int adreno_wake_nice = -7;
@@ -1210,16 +1242,21 @@ static int adreno_read_feature_id(struct platform_device *pdev)
 
 	if (of_property_read_u32_array(pdev->dev.of_node,
 		"qcom,feature-id", bin, 3))
-		return 0;
+		/*
+		 * Return -ENOENT incase the feature-id property is not present in
+		 * the DT node. In this case, read the PTE_DATA field of QFPROM
+		 * register to get the speed-bin information.
+		 */
+		return -ENODEV;
 
 	if (adreno_efuse_map(pdev))
-		return 0;
+		return -ENODEV;
 
 	ret = adreno_efuse_read_u32(bin[0], &val);
 	adreno_efuse_unmap();
 
 	if (ret)
-		return 0;
+		return -ENODEV;
 
 	return (val >> bin[1]) & bin[2];
 }
@@ -1253,14 +1290,72 @@ static int adreno_read_speed_bin(struct platform_device *pdev)
 	return val;
 }
 
-static int adreno_get_speed_bin(struct platform_device *pdev)
+static int adreno_get_speed_bin(struct platform_device *pdev, struct adreno_device *adreno_dev)
 {
-	/* Because the speed bin value of A640R_V0 device in efuse is
-	 * same as that of A640R_V1, so read feature id from efuse to
-	 * identify A640R_V0 device, and set different power level
-	 * for A640R_V0. */
-	return (ADRENO_FEATURE_ID_A640R_V0 == adreno_read_feature_id(pdev)) ?
-			ADRENO_SPEED_BIN_A640R_V0 : adreno_read_speed_bin(pdev);
+	int feature_id = 0;
+	unsigned int speed_bin = 0;
+	unsigned int rev = ADRENO_GPUREV(adreno_dev);
+
+	/*
+	 * Check feature id for the targets where speedbin information
+	 * is derived from the feature_id field of QFPROM register.
+	 */
+	feature_id = adreno_read_feature_id(pdev);
+	if (-ENODEV == feature_id)
+		/* Fallback to read the speedbin information from PTE_DATA field of QFPROM register */
+		return adreno_read_speed_bin(pdev);
+
+	if (ADRENO_REV_A612 == rev) {
+		switch(feature_id) {
+			case ADRENO_FEATURE_ID_6155:
+				speed_bin = ADRENO_SPEED_BIN_6155;
+				break;
+			case ADRENO_FEATURE_ID_6150:
+				speed_bin = ADRENO_SPEED_BIN_6150;
+				break;
+			case ADRENO_FEATURE_ID_6145:
+				speed_bin = ADRENO_SPEED_BIN_6145;
+				break;
+			case ADRENO_FEATURE_ID_4150:
+				speed_bin = ADRENO_SPEED_BIN_4150;
+				break;
+			default:
+				break;
+		}
+	} else if (ADRENO_REV_A640 == rev) {
+		switch(feature_id) {
+			case ADRENO_FEATURE_ID_8155:
+				speed_bin = ADRENO_SPEED_BIN_8155;
+				break;
+			case ADRENO_FEATURE_ID_8150:
+				speed_bin = ADRENO_SPEED_BIN_8150;
+				break;
+			default:
+				break;
+		}
+	} else if (ADRENO_REV_A680 == rev) {
+		switch(feature_id) {
+			case ADRENO_FEATURE_ID_POIPU_AA:
+				speed_bin = ADRENO_SPEED_BIN_POIPU_AA;
+				break;
+			case ADRENO_FEATURE_ID_POIPU_AB_V1:
+			case ADRENO_FEATURE_ID_POIPU_AB_V2:
+				/* For Poipu AB part, the feature id could be 1 or 2 */
+				speed_bin = ADRENO_SPEED_BIN_POIPU_AB;
+				break;
+			case ADRENO_FEATURE_ID_POIPU_AC:
+				/*
+				 * For Poipu AB and AC part, the speedbin number is 0 for both
+				 * so differenciate on the basis of feature id.
+				*/
+				speed_bin = ADRENO_SPEED_BIN_POIPU_AC;
+				break;
+			default:
+				break;
+		};
+	}
+
+	return speed_bin;
 }
 
 static int adreno_read_gpu_model_fuse(struct platform_device *pdev)
@@ -1485,7 +1580,7 @@ int adreno_device_probe(struct platform_device *pdev,
 
 	adreno_update_soc_hw_revision_quirks(adreno_dev, pdev);
 
-	status = adreno_get_speed_bin(pdev);
+	status = adreno_get_speed_bin(pdev, adreno_dev);
 	if (status < 0)
 		return status;
 
