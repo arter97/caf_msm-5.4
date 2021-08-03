@@ -78,6 +78,10 @@ static DEFINE_SPINLOCK(time_sync_lock);
 #define FORCE_WAKE_DELAY_MAX_US			6000
 #define FORCE_WAKE_DELAY_TIMEOUT_US		60000
 
+#define WRITE_REG_RETRY_MAX_TIMES		3
+#define READ_REG_RETRY_MAX_TIMES		3
+#define CHECK_REG_RETRY_MAX_TIMES		3
+
 #define LINK_TRAINING_RETRY_MAX_TIMES		3
 #define LINK_TRAINING_RETRY_DELAY_MS		500
 
@@ -1871,6 +1875,9 @@ static int cnss_pci_store_qrtr_node_id(struct cnss_pci_data *pci_priv)
 	int ret = 0;
 	u32 scratch = QCA6390_PCIE_SOC_PCIE_REG_PCIE_SCRATCH_2_SOC_PCIE_REG;
 	struct cnss_plat_data *plat_priv;
+	int retry_time_w = 0;
+	int retry_time_r = 0;
+	int retry_time_c = 0;
 
 	if (!pci_priv) {
 		cnss_pr_err("pci_priv is NULL\n");
@@ -1896,6 +1903,7 @@ static int cnss_pci_store_qrtr_node_id(struct cnss_pci_data *pci_priv)
 	    plat_priv->qrtr_node_id) {
 		u32 val;
 
+retry_w:
 		cnss_pr_dbg("write 0x%x to SCRATCH REG\n",
 			    plat_priv->qrtr_node_id);
 		ret = cnss_pci_reg_write(pci_priv, scratch,
@@ -1903,18 +1911,33 @@ static int cnss_pci_store_qrtr_node_id(struct cnss_pci_data *pci_priv)
 		if (ret) {
 			cnss_pr_err("Failed to write register offset 0x%x, err = %d\n",
 				    scratch, ret);
-			goto out;
+			if (retry_time_w++ < WRITE_REG_RETRY_MAX_TIMES) {
+				goto retry_w;
+			} else {
+				ret = -EIO;
+				goto out;
+			}
 		}
-
+retry_r:
 		ret = cnss_pci_reg_read(pci_priv, scratch, &val);
 		if (ret) {
 			cnss_pr_err("Failed to read SCRATCH REG");
-			goto out;
+			if (retry_time_r++ < READ_REG_RETRY_MAX_TIMES) {
+				goto retry_r;
+			} else {
+				ret = -EIO;
+				goto out;
+			}
 		}
 
 		if (val != plat_priv->qrtr_node_id) {
 			cnss_pr_err("qrtr node id write to register doesn't match with readout value");
-			return -ERANGE;
+			if (retry_time_c++ < CHECK_REG_RETRY_MAX_TIMES) {
+				goto retry_w;
+			} else {
+				ret = -ERANGE;
+				goto out;
+			}
 		}
 	}
 out:
