@@ -16,6 +16,7 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/slab.h>
+#include <linux/suspend.h>
 #include <linux/uaccess.h>
 #include <soc/qcom/boot_stats.h>
 #include <linux/suspend.h>
@@ -65,7 +66,8 @@ static struct kobject *bootkpi_obj;
 static int num_markers;
 static DECLARE_HASHTABLE(marker_htable, 5);
 
-static inline u64 get_time_in_msec(u64 counter)
+#ifdef CONFIG_QCOM_SOC_SLEEP_STATS
+static u64 get_time_in_msec(u64 counter)
 {
 	counter *= MSEC_PER_SEC;
 	do_div(counter, MSM_ARCH_TIMER_FREQ);
@@ -93,6 +95,9 @@ static void measure_wake_up_time(void)
 	} else
 		destroy_marker("M - STR Wakeup");
 }
+#else
+static void measure_wake_up_time(void) {}
+#endif
 
 /**
  * boot_kpi_pm_notifier() - PM notifier callback function.

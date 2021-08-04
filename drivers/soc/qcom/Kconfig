@@ -596,6 +596,25 @@ config QCOM_DCC_V2
          driver provides interface to configure DCC block and read back
          captured data from DCC's internal SRAM.
 
+config SDX_EXT_IPC
+	tristate "QCOM external ipc driver"
+	help
+	  This enables the module to help modem communicate with external
+	  Application processor connected to Qualcomm Technologies, Inc
+	  modem chipset. The modem and APQ can understand each other's
+	  state by reading ipc gpios.
+
+	  If unsure, say N.
+
+config QTI_NOTIFY_SIDEBAND
+	tristate "QCOM sideband signalling helper"
+	help
+	  This provides helper APIs and a header file through which
+	  transport layer driver can talk to the sideband driver to
+	  assert appropriate sideband signal.
+
+	  If unsure, say N.
+
 config QCOM_MINIDUMP
 	tristate "QCOM Minidump Support"
 	help
@@ -888,6 +907,14 @@ config MSM_PM_LEGACY
 	  cores and l2 low power modes. It interface with
 	  various system driver and put the cores into
 	  low power modes.
+
+config SILENT_MODE
+	bool "Driver support for  Silent mode feature on QCOM Chipsets"
+	help
+	  Enables the support for Silent mode for QCOM chipsets. This feature
+	  monitors a chosen external interface, ex: GPIO, when signalled a
+	  state change, will update /sys/power/pm_kernelsilentmode attribute to
+	  indicate the state transition from silent to non-silent.
 
 config QTI_PLH_SCMI_CLIENT
 	tristate "Qualcomm Technologies Inc. SCMI client driver for PLH"
@@ -1373,6 +1400,25 @@ config POWER_STATE
 		node for user space communication. User space client can open device
 		node for communication required for handling deep sleep and hibernate
 		modes.
+
+config MSM_PIL_SSR_SLATE
+	tristate "MSM Subsystem SLATE Support"
+	depends on MSM_PIL && MSM_SUBSYSTEM_RESTART
+	help
+	  Support for booting and shutting down SLATE SOC which is
+	  an external SOC. This driver communicates with SLATE SOC
+	  via pair of IPC GPIOs for inward and outward signals between MSM
+	  and SLATE SOC.
+
+config AUTO_EARLY_LAUNCH
+	tristate "Auto Early Service Launch Driver"
+	depends on DEVTMPFS_MOUNT
+	help
+	 This driver is used to launch early services from kernel using
+	 call_usermodehelper(). Executing early services binary placed in
+	 ramdisk.
+	 early_init user space executable file will be copied into
+	 ramdisk/early_services directory during build.
 
 source "drivers/soc/qcom/icnss2/Kconfig"
 

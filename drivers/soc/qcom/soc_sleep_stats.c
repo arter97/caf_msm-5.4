@@ -15,6 +15,7 @@
 #include <linux/platform_device.h>
 
 #include <clocksource/arm_arch_timer.h>
+#include <soc/qcom/boot_stats.h>
 
 #ifdef CONFIG_ARM
 #ifndef readq_relaxed
@@ -98,13 +99,13 @@ uint64_t get_sleep_exit_time(void)
 {
 	int i;
 	uint32_t offset;
-	__le64 last_exited_at;
-	__le32 count;
+	u64 last_exited_at;
+	u32 count;
 	static u32 saved_deep_sleep_count;
 	u32 s_type = 0;
 	char stat_type[5] = {0};
-	void __iomem *reg;
 	struct soc_sleep_stats_data *drv = gdata;
+	void __iomem *reg;
 
 	if (!drv) {
 		pr_err("ERROR could not get rpm data memory\n");
@@ -116,21 +117,20 @@ uint64_t get_sleep_exit_time(void)
 	for (i = 0; i < drv->config->num_records; i++) {
 
 		offset = offsetof(struct entry, stat_type);
-		s_type = le32_to_cpu(readl_relaxed(reg + offset));
+		s_type = readl_relaxed(reg + offset);
 		memcpy(stat_type, &s_type, sizeof(u32));
 
 		if (!memcmp((const void *)stat_type, (const void *)"aosd", 4)) {
 
 			offset = offsetof(struct entry, count);
-			count = le32_to_cpu(readl_relaxed(reg + offset));
+			count = readl_relaxed(reg + offset);
 
 			if (saved_deep_sleep_count == count)
 				deep_sleep_last_exited_time = 0;
 			else {
 				saved_deep_sleep_count = count;
 				offset = offsetof(struct entry, last_exited_at);
-				last_exited_at = le64_to_cpu(readq_relaxed(reg
-							+ offset));
+				last_exited_at = readq_relaxed(reg + offset);
 				deep_sleep_last_exited_time = last_exited_at;
 			}
 			break;
