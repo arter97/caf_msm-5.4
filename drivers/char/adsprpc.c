@@ -6928,7 +6928,7 @@ static void __exit fastrpc_device_exit(void)
 	debugfs_remove_recursive(debugfs_root);
 }
 
-module_init(fastrpc_device_init);
+early_module_init(fastrpc_device_init, EARLY_SUBSYS_6, EARLY_INIT_LEVEL2);
 module_exit(fastrpc_device_exit);
 
 MODULE_LICENSE("GPL v2");
