@@ -150,6 +150,10 @@ void setup_arch(char **);
 void prepare_namespace(void);
 void __init init_rootfs(void);
 extern struct file_system_type rootfs_fs_type;
+void launch_early_services(void);
+#ifdef CONFIG_EARLY_SERVICES
+int get_early_services_status(void);
+#endif
 
 #if defined(CONFIG_STRICT_KERNEL_RWX) || defined(CONFIG_STRICT_MODULE_RWX)
 extern bool rodata_enabled;
