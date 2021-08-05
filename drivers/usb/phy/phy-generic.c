@@ -370,7 +370,7 @@ static int __init usb_phy_generic_init(void)
 {
 	return platform_driver_register(&usb_phy_generic_driver);
 }
-subsys_initcall(usb_phy_generic_init);
+early_subsys_initcall(usb_phy_generic_init, EARLY_SUBSYS_7, EARLY_INIT_LEVEL1);
 
 static void __exit usb_phy_generic_exit(void)
 {

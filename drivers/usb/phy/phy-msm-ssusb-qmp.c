@@ -1130,7 +1130,7 @@ static struct platform_driver msm_ssphy_qmp_driver = {
 	},
 };
 
-module_platform_driver(msm_ssphy_qmp_driver);
+early_module_platform_driver(msm_ssphy_qmp_driver, EARLY_SUBSYS_7, EARLY_INIT_LEVEL2);
 
 MODULE_DESCRIPTION("MSM USB SS QMP PHY driver");
 MODULE_LICENSE("GPL v2");

@@ -1053,6 +1053,6 @@ static void __exit usb_exit(void)
 	idr_destroy(&usb_bus_idr);
 }
 
-subsys_initcall(usb_init);
+early_subsys_initcall(usb_init, EARLY_SUBSYS_7, EARLY_INIT_LEVEL1);
 module_exit(usb_exit);
 MODULE_LICENSE("GPL");

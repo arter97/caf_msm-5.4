@@ -1625,7 +1625,7 @@ static int __init usb_udc_init(void)
 	udc_class->dev_uevent = usb_udc_uevent;
 	return 0;
 }
-subsys_initcall(usb_udc_init);
+early_subsys_initcall(usb_udc_init, EARLY_SUBSYS_7, EARLY_INIT_LEVEL1);
 
 static void __exit usb_udc_exit(void)
 {

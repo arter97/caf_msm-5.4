@@ -6020,7 +6020,7 @@ static int dwc3_msm_init(void)
 {
 	return platform_driver_register(&dwc3_msm_driver);
 }
-module_init(dwc3_msm_init);
+early_module_init(dwc3_msm_init, EARLY_SUBSYS_7, EARLY_INIT_LEVEL3);
 
 static void __exit dwc3_msm_exit(void)
 {

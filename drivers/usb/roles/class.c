@@ -340,7 +340,7 @@ static int __init usb_roles_init(void)
 	role_class = class_create(THIS_MODULE, "usb_role");
 	return PTR_ERR_OR_ZERO(role_class);
 }
-subsys_initcall(usb_roles_init);
+early_subsys_initcall(usb_roles_init, EARLY_SUBSYS_7, EARLY_INIT_LEVEL1);
 
 static void __exit usb_roles_exit(void)
 {
