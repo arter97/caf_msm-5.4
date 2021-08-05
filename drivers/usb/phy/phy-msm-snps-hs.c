@@ -950,7 +950,7 @@ static struct platform_driver msm_hsphy_driver = {
 	},
 };
 
-module_platform_driver(msm_hsphy_driver);
+early_module_platform_driver(msm_hsphy_driver, EARLY_SUBSYS_7, EARLY_INIT_LEVEL2);
 
 MODULE_DESCRIPTION("MSM USB HS PHY driver");
 MODULE_LICENSE("GPL v2");

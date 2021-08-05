@@ -1677,7 +1677,7 @@ err_unregister_bus:
 
 	return ret;
 }
-subsys_initcall(typec_init);
+early_subsys_initcall(typec_init, EARLY_SUBSYS_7, EARLY_INIT_LEVEL1);
 
 static void __exit typec_exit(void)
 {

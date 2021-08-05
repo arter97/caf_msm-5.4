@@ -198,7 +198,7 @@ static struct platform_driver dwc3_of_simple_driver = {
 	},
 };
 
-module_platform_driver(dwc3_of_simple_driver);
+early_module_platform_driver(dwc3_of_simple_driver, EARLY_SUBSYS_7, EARLY_INIT_LEVEL3);
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("DesignWare USB3 OF Simple Glue Layer");
 MODULE_AUTHOR("Felipe Balbi <balbi@ti.com>");

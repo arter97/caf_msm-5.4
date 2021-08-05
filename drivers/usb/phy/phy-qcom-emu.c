@@ -140,7 +140,7 @@ static struct platform_driver qcusb_emu_phy_driver = {
 	},
 };
 
-module_platform_driver(qcusb_emu_phy_driver);
+early_module_platform_driver(qcusb_emu_phy_driver, EARLY_SUBSYS_7, EARLY_INIT_LEVEL2);
 
 MODULE_DESCRIPTION("Qualcomm Technologies, Inc. USB Emulation PHY driver");
 MODULE_LICENSE("GPL v2");

@@ -309,7 +309,7 @@ static void __exit usb_common_exit(void)
 	debugfs_remove_recursive(usb_debug_root);
 }
 
-subsys_initcall(usb_common_init);
+early_subsys_initcall(usb_common_init, EARLY_SUBSYS_7, EARLY_INIT_LEVEL1);
 module_exit(usb_common_exit);
 
 MODULE_LICENSE("GPL");

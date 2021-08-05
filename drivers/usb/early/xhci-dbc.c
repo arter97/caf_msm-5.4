@@ -1000,4 +1000,4 @@ free_and_quit:
 
 	return ret;
 }
-subsys_initcall(xdbc_init);
+early_subsys_initcall(xdbc_init, EARLY_SUBSYS_7, EARLY_INIT_LEVEL1);
