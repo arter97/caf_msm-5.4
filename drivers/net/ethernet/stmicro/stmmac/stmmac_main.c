@@ -301,6 +301,29 @@ static inline u32 stmmac_rx_dirty(struct stmmac_priv *priv, u32 queue)
 }
 
 /**
+ * stmmac_hw_fix_mac_speed - callback for speed selection
+ * @priv: driver private structure
+ * Description: on some platforms (e.g. ST), some HW system configuration
+ * registers have to be set according to the link speed negotiated.
+ */
+static inline void stmmac_hw_fix_mac_speed(struct stmmac_priv *priv)
+{
+	if (likely(priv->plat->fix_mac_speed)) {
+		if (priv->plat->mac2mac_en) {
+			priv->plat->fix_mac_speed(priv->plat->bsp_priv,
+					priv->speed);
+			return;
+		}
+		if (priv->phydev->link)
+			priv->plat->fix_mac_speed(priv->plat->bsp_priv,
+						  priv->speed);
+		else
+			priv->plat->fix_mac_speed(priv->plat->bsp_priv,
+						  SPEED_10);
+	}
+}
+
+/**
  * stmmac_enable_eee_mode - check and enter in LPI mode
  * @priv: driver private structure
  * Description: this function is to verify and enter in LPI mode in case of
@@ -1070,7 +1093,7 @@ static int stmmac_init_phy(struct net_device *dev)
 			return -ENODEV;
 		}
 		ret = phylink_connect_phy(priv->phylink, priv->phydev);
-		if (phy_intr_en) {
+		if (priv->plat->phy_intr_en_extn_stm) {
 			priv->phydev->irq = PHY_IGNORE_INTERRUPT;
 			priv->phydev->interrupts =  PHY_INTERRUPT_ENABLED;
 			if (priv->phydev->drv->ack_interrupt &&
@@ -1087,7 +1110,7 @@ static int stmmac_init_phy(struct net_device *dev)
 			    !priv->phydev->drv->config_intr(priv->phydev)) {
 				pr_err(" qcom-ethqos: %s config_phy_intr successful aftre connect\n",
 				       __func__);
-				qcom_ethqos_request_phy_wol(priv->plat);
+				priv->plat->request_phy_wol(priv->plat);
 			}
 		} else {
 			pr_info("stmmac phy polling mode\n");
@@ -2679,7 +2702,7 @@ static int stmmac_hw_setup(struct net_device *dev, bool init_ptp)
 			clk_set_rate(priv->plat->clk_ptp_ref,
 				     priv->plat->clk_ptp_rate);
 
-		ret = ethqos_init_pps(priv);
+		ret = priv->plat->init_pps(priv);
 	}
 
 	priv->tx_lpi_timer = STMMAC_DEFAULT_TWT_LS;
@@ -2725,6 +2748,27 @@ static void stmmac_hw_teardown(struct net_device *dev)
 	clk_disable_unprepare(priv->plat->clk_ptp_ref);
 }
 
+void stmmac_mac2mac_adjust_link(int speed, struct stmmac_priv *priv)
+{
+	u32 ctrl = readl_relaxed(priv->ioaddr + MAC_CTRL_REG);
+
+	ctrl &= ~priv->hw->link.speed_mask;
+
+	if (speed == SPEED_1000) {
+		ctrl |= priv->hw->link.speed1000;
+		priv->speed = SPEED_1000;
+	} else if (speed == SPEED_100) {
+		ctrl |= priv->hw->link.speed100;
+		priv->speed = SPEED_100;
+	} else {
+		ctrl |= priv->hw->link.speed10;
+		priv->speed = SPEED_10;
+	}
+
+	stmmac_hw_fix_mac_speed(priv);
+	writel_relaxed(ctrl, priv->ioaddr + MAC_CTRL_REG);
+}
+
 /**
  *  stmmac_open - open entry point of the driver
  *  @dev : pointer to the device structure.
@@ -2741,9 +2785,10 @@ static int stmmac_open(struct net_device *dev)
 	u32 chan;
 	int ret;
 
-	if (priv->hw->pcs != STMMAC_PCS_RGMII &&
-	    priv->hw->pcs != STMMAC_PCS_TBI &&
-	    priv->hw->pcs != STMMAC_PCS_RTBI) {
+	if (!priv->plat->mac2mac_en &&
+	    (priv->hw->pcs != STMMAC_PCS_RGMII &&
+	     priv->hw->pcs != STMMAC_PCS_TBI &&
+	     priv->hw->pcs != STMMAC_PCS_RTBI)) {
 		ret = stmmac_init_phy(dev);
 		if (ret) {
 			netdev_err(priv->dev,
@@ -2837,6 +2882,13 @@ static int stmmac_open(struct net_device *dev)
 
 	stmmac_enable_all_queues(priv);
 	netif_tx_start_all_queues(priv->dev);
+
+	if (priv->plat->mac2mac_en) {
+		stmmac_mac2mac_adjust_link(priv->plat->mac2mac_rgmii_speed,
+					   priv);
+		priv->plat->mac2mac_link = true;
+		netif_carrier_on(dev);
+	}
 
 	return 0;
 
@@ -4060,11 +4112,13 @@ static void stmmac_poll_controller(struct net_device *dev)
  */
 static int stmmac_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 {
-	struct stmmac_priv *priv = netdev_priv (dev);
 	int ret = -EOPNOTSUPP;
+	struct stmmac_priv *priv;
 
 	if (!netif_running(dev))
 		return -EINVAL;
+
+	priv = netdev_priv(dev);
 
 	switch (cmd) {
 	case SIOCGMIIPHY:
@@ -4078,7 +4132,7 @@ static int stmmac_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	case SIOCGHWTSTAMP:
 		ret = stmmac_hwtstamp_get(dev, rq);
 	case SIOCDEVPRIVATE:
-		ret = ethqos_handle_prv_ioctl(dev, rq, cmd);
+		ret = priv->plat->handle_prv_ioctl(dev, rq, cmd);
 		break;
 	default:
 		break;

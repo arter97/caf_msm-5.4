@@ -1933,6 +1933,26 @@ int __qcom_scm_clear_ice_key(struct device *dev, uint32_t index,
 	return qcom_scm_call_noretry(dev, &desc);
 }
 
+int __qcom_scm_derive_raw_secret(struct device *dev,
+				 phys_addr_t paddr_key, size_t key_size,
+				 phys_addr_t paddr_secret, size_t secret_size)
+{
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_ES,
+		.cmd = QCOM_SCM_ES_DERIVE_RAW_SECRET,
+		.owner = ARM_SMCCC_OWNER_SIP
+	};
+
+	desc.args[0] = paddr_key;
+	desc.args[1] = key_size;
+	desc.args[2] = paddr_secret;
+	desc.args[3] = secret_size;
+	desc.arginfo = QCOM_SCM_ARGS(4, QCOM_SCM_RW, QCOM_SCM_VAL,
+				     QCOM_SCM_RW, QCOM_SCM_VAL);
+
+	return qcom_scm_call_noretry(dev, &desc);
+}
+
 int __qcom_scm_hdcp_req(struct device *dev, struct qcom_scm_hdcp_req *req,
 			u32 req_cnt, u32 *resp)
 {
@@ -2210,6 +2230,7 @@ int __qcom_scm_tsens_reinit(struct device *dev, int *tsens_ret)
 	struct qcom_scm_desc desc = {
 		.svc = QCOM_SCM_SVC_TSENS,
 		.cmd = QCOM_SCM_TSENS_INIT_ID,
+		.owner = ARM_SMCCC_OWNER_SIP
 	};
 
 	ret = qcom_scm_call(dev, &desc);
@@ -2321,7 +2342,7 @@ int __qcom_scm_invoke_smc_legacy(struct device *dev, phys_addr_t in_buf,
 	desc.arginfo = QCOM_SCM_ARGS(4, QCOM_SCM_RW, QCOM_SCM_VAL, QCOM_SCM_RW,
 					QCOM_SCM_VAL);
 
-	ret = qcom_scm_call(dev, &desc);
+	ret = qcom_scm_call_noretry(dev, &desc);
 
 	if (result)
 		*result = desc.res[1];
@@ -2353,7 +2374,7 @@ int __qcom_scm_invoke_smc(struct device *dev, phys_addr_t in_buf,
 	desc.arginfo = QCOM_SCM_ARGS(4, QCOM_SCM_RW, QCOM_SCM_VAL, QCOM_SCM_RW,
 					QCOM_SCM_VAL);
 
-	ret = qcom_scm_call(dev, &desc);
+	ret = qcom_scm_call_noretry(dev, &desc);
 
 	if (result)
 		*result = desc.res[1];
@@ -2382,7 +2403,7 @@ int __qcom_scm_invoke_callback_response(struct device *dev, phys_addr_t out_buf,
 	desc.args[1] = out_buf_size;
 	desc.arginfo = QCOM_SCM_ARGS(2, QCOM_SCM_RW, QCOM_SCM_VAL);
 
-	ret = qcom_scm_call(dev, &desc);
+	ret = qcom_scm_call_noretry(dev, &desc);
 
 	if (result)
 		*result = desc.res[1];
@@ -2444,6 +2465,74 @@ int __qcom_scm_qseecom_do(struct device *dev, u32 cmd_id, struct scm_desc *desc,
 	memcpy(desc->ret, &_desc.res, sizeof(_desc.res));
 
 	return _ret;
+}
+
+int __qcom_scm_paravirt_smmu_attach(struct device *dev, u64 sid,
+				    u64 asid, u64 ste_pa, u64 ste_size,
+				    u64 cd_pa, u64 cd_size)
+{
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_SMMU_PROGRAM,
+		.cmd = ARM_SMMU_PARAVIRT_CMD,
+		.owner = ARM_SMCCC_OWNER_SIP,
+	};
+	int ret;
+
+	desc.args[0] = SMMU_PARAVIRT_OP_ATTACH;
+	desc.args[1] = sid;
+	desc.args[2] = asid;
+	desc.args[3] = 0;
+	desc.args[4] = ste_pa;
+	desc.args[5] = ste_size;
+	desc.args[6] = cd_pa;
+	desc.args[7] = cd_size;
+	desc.arginfo = ARM_SMMU_PARAVIRT_DESCARG;
+	ret = qcom_scm_call(dev, &desc);
+	return ret ? : desc.res[0];
+}
+
+int __qcom_scm_paravirt_tlb_inv(struct device *dev, u64 asid)
+{
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_SMMU_PROGRAM,
+		.cmd = ARM_SMMU_PARAVIRT_CMD,
+		.owner = ARM_SMCCC_OWNER_SIP,
+	};
+	int ret;
+
+	desc.args[0] = SMMU_PARAVIRT_OP_INVAL_ASID;
+	desc.args[1] = 0;
+	desc.args[2] = asid;
+	desc.args[3] = 0;
+	desc.args[4] = 0;
+	desc.args[5] = 0;
+	desc.args[6] = 0;
+	desc.args[7] = 0;
+	desc.arginfo = ARM_SMMU_PARAVIRT_DESCARG;
+	ret = qcom_scm_call_atomic(dev, &desc);
+	return ret ? : desc.res[0];
+}
+
+int __qcom_scm_paravirt_smmu_detach(struct device *dev, u64 sid)
+{
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_SMMU_PROGRAM,
+		.cmd = ARM_SMMU_PARAVIRT_CMD,
+		.owner = ARM_SMCCC_OWNER_SIP,
+	};
+	int ret;
+
+	desc.args[0] = SMMU_PARAVIRT_OP_DETACH;
+	desc.args[1] = sid;
+	desc.args[2] = 0;
+	desc.args[3] = 0;
+	desc.args[4] = 0;
+	desc.args[5] = 0;
+	desc.args[6] = 0;
+	desc.args[7] = 0;
+	desc.arginfo = ARM_SMMU_PARAVIRT_DESCARG;
+	ret = qcom_scm_call(dev, &desc);
+	return ret ? : desc.res[0];
 }
 
 #ifdef CONFIG_QCOM_RTIC

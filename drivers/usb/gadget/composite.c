@@ -13,6 +13,9 @@
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/utsname.h>
+#ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
+#include <soc/qcom/boot_stats.h>
+#endif
 
 #include <linux/usb/composite.h>
 #include <linux/usb/otg.h>
@@ -889,6 +892,9 @@ static int set_config(struct usb_composite_dev *cdev,
 	if (!c)
 		goto done;
 
+#ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
+	place_marker("M - USB Device is enumerated");
+#endif
 	usb_gadget_set_state(gadget, USB_STATE_CONFIGURED);
 	cdev->config = c;
 
@@ -1720,11 +1726,12 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 				count_configs(cdev, USB_DT_DEVICE);
 			cdev->desc.bMaxPacketSize0 =
 				cdev->gadget->ep0->maxpacket;
+				cdev->desc.bcdUSB = cpu_to_le16(0x0200);
 			if (gadget_is_superspeed(gadget)) {
 				if (gadget->speed >= USB_SPEED_SUPER) {
 					cdev->desc.bcdUSB = cpu_to_le16(0x0320);
 					cdev->desc.bMaxPacketSize0 = 9;
-				} else {
+				} else if (gadget->lpm_capable) {
 					cdev->desc.bcdUSB = cpu_to_le16(0x0210);
 				}
 			} else {
@@ -2413,7 +2420,10 @@ void composite_resume(struct usb_gadget *gadget)
 	/* REVISIT:  should we have config level
 	 * suspend/resume callbacks?
 	 */
-	DBG(cdev, "resume\n");
+	INFO(cdev, "USB Resume end\n");
+#ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
+	place_marker("M - USB Device is resumed");
+#endif
 	if (cdev->driver->resume)
 		cdev->driver->resume(cdev);
 	if (cdev->config) {

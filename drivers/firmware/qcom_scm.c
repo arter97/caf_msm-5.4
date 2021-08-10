@@ -475,6 +475,27 @@ void qcom_scm_deassert_ps_hold(void)
 }
 EXPORT_SYMBOL(qcom_scm_deassert_ps_hold);
 
+int qcom_scm_paravirt_smmu_attach(u64 sid, u64 asid,
+			u64 ste_pa, u64 ste_size, u64 cd_pa,
+			u64 cd_size)
+{
+	return __qcom_scm_paravirt_smmu_attach(__scm ? __scm->dev : NULL, sid, asid,
+					ste_pa, ste_size, cd_pa, cd_size);
+}
+EXPORT_SYMBOL(qcom_scm_paravirt_smmu_attach);
+
+int qcom_scm_paravirt_tlb_inv(u64 asid)
+{
+	return __qcom_scm_paravirt_tlb_inv(__scm ? __scm->dev : NULL, asid);
+}
+EXPORT_SYMBOL(qcom_scm_paravirt_tlb_inv);
+
+int qcom_scm_paravirt_smmu_detach(u64 sid)
+{
+	return __qcom_scm_paravirt_smmu_detach(__scm ? __scm->dev : NULL, sid);
+}
+EXPORT_SYMBOL(qcom_scm_paravirt_smmu_detach);
+
 void qcom_scm_mmu_sync(bool sync)
 {
 	__qcom_scm_mmu_sync(__scm ? __scm->dev : NULL, sync);
@@ -813,6 +834,14 @@ int qcom_scm_clear_ice_key(uint32_t index,  unsigned int food)
 	return __qcom_scm_clear_ice_key(__scm->dev, index, food);
 }
 EXPORT_SYMBOL(qcom_scm_clear_ice_key);
+
+int qcom_scm_derive_raw_secret(phys_addr_t paddr_key, size_t key_size,
+			       phys_addr_t paddr_secret, size_t secret_size)
+{
+	return __qcom_scm_derive_raw_secret(__scm->dev, paddr_key, key_size,
+					    paddr_secret, secret_size);
+}
+EXPORT_SYMBOL(qcom_scm_derive_raw_secret);
 
 /**
  * qcom_scm_hdcp_available() - Check if secure environment supports HDCP.
