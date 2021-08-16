@@ -381,7 +381,7 @@ static int __init qcom_secure_buffer_init(void)
 {
 	return platform_driver_register(&qcom_secure_buffer_driver);
 }
-subsys_initcall(qcom_secure_buffer_init);
+early_subsys_initcall(qcom_secure_buffer_init, EARLY_SUBSYS_PLATFORM, EARLY_INIT_LEVEL4);
 
 static void __exit qcom_secure_buffer_exit(void)
 {
