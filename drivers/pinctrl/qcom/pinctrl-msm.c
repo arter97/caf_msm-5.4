@@ -1163,17 +1163,7 @@ static int msm_gpio_irq_set_type(struct irq_data *d, unsigned int type)
 	u32 offset = 0;
 	u32 val;
 
-	if (is_gpio_tlmm_dc(d, &offset, &irq)) {
-		configure_tlmm_dc_polarity(d, type, offset);
-		enable_tlmm_dc(irq);
-		if (type & (IRQ_TYPE_LEVEL_LOW | IRQ_TYPE_LEVEL_HIGH))
-			irq_set_handler_locked(d, handle_level_irq);
-		else if (type & (IRQ_TYPE_EDGE_FALLING | IRQ_TYPE_EDGE_RISING))
-			irq_set_handler_locked(d, handle_edge_irq);
-		return 0;
-	}
-
-	if (d->parent_data) {
+	if (d->parent_data && test_bit(d->hwirq, pctrl->skip_wake_irqs)) {
 		if (pctrl->n_dir_conns > 0) {
 			if (type == IRQ_TYPE_EDGE_BOTH)
 				add_dirconn_tlmm(d, pctrl);
@@ -1185,6 +1175,16 @@ static int msm_gpio_irq_set_type(struct irq_data *d, unsigned int type)
 
 	if (test_bit(d->hwirq, pctrl->skip_wake_irqs))
 		return 0;
+
+	if (is_gpio_tlmm_dc(d, &offset, &irq) && type != IRQ_TYPE_EDGE_BOTH) {
+		configure_tlmm_dc_polarity(d, type, offset);
+		enable_tlmm_dc(irq);
+		if (type & (IRQ_TYPE_LEVEL_LOW | IRQ_TYPE_LEVEL_HIGH))
+			irq_set_handler_locked(d, handle_level_irq);
+		else if (type & (IRQ_TYPE_EDGE_FALLING | IRQ_TYPE_EDGE_RISING))
+			irq_set_handler_locked(d, handle_edge_irq);
+		return 0;
+	}
 
 	g = &pctrl->soc->groups[d->hwirq];
 

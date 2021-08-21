@@ -54,6 +54,7 @@
 
 static char btss_state[BUF_SIZE] = "offline";
 static char dspss_state[BUF_SIZE] = "offline";
+static void ssr_register(void);
 
 /* tzapp command list.*/
 enum slate_tz_commands {
@@ -413,6 +414,7 @@ static int slate_daemon_probe(struct platform_device *pdev)
 	dev->platform_dev = &pdev->dev;
 	pr_info("%s success\n", __func__);
 
+	ssr_register();
 	return 0;
 }
 
@@ -466,9 +468,10 @@ static int ssr_slate_cb(struct notifier_block *this,
 		slatee.e_type = SLATE_BEFORE_POWER_UP;
 		slatecom_slatedown_handler();
 		send_uevent(&slatee);
-	break;
+		break;
 	case SUBSYS_AFTER_POWERUP:
 		pr_debug("Slate after powerup\n");
+		slatee.e_type = SLATE_AFTER_POWER_UP;
 		slatecom_set_spi_state(SLATECOM_SPI_FREE);
 		send_uevent(&slatee);
 		break;
@@ -691,8 +694,6 @@ static int __init init_slate_com_dev(void)
 
 	if (platform_driver_register(&slate_daemon_driver))
 		pr_err("%s: failed to register slate-daemon register\n", __func__);
-
-	ssr_register();
 
 	return 0;
 }
