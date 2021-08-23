@@ -24,16 +24,25 @@
 #include <linux/nfs_fs_sb.h>
 #include <linux/nfs_mount.h>
 #include <uapi/linux/mount.h>
+#include <soc/qcom/boot_stats.h>
 
 #include "do_mounts.h"
 
 int __initdata rd_doload;	/* 1 = load RAM disk, 0 = don't load */
 
-int root_mountflags = MS_RDONLY | MS_SILENT;
+int root_mountflags =  MS_RDONLY | MS_SILENT;
 static char * __initdata root_device_name;
 static char __initdata saved_root_name[64];
 static int root_wait;
-
+#ifdef CONFIG_EARLY_SERVICES
+static char saved_modem_name[64];
+static char saved_early_userspace[64];
+static char init_prog[128] = "/early_services/init_early";
+static char *init_prog_argv[2] = { init_prog, NULL };
+static int es_status; /*1= es mount is success 0= es failed to run*/
+#define EARLY_SERVICES_MOUNT_POINT "/early_services"
+#define FIRMWARE_MOUNT_PATH "/early_services/vendor/firmware_mnt"
+#endif
 dev_t ROOT_DEV;
 
 static int __init load_ramdisk(char *str)
@@ -321,6 +330,22 @@ static int __init root_dev_setup(char *line)
 
 __setup("root=", root_dev_setup);
 
+#ifdef CONFIG_EARLY_SERVICES
+static int __init modem_dev_setup(char *line)
+{
+	strlcpy(saved_modem_name, line, sizeof(saved_modem_name));
+	return 1;
+}
+
+__setup("modem=", modem_dev_setup);
+static int __init early_userspace_setup(char *line)
+{
+	strlcpy(saved_early_userspace, line, sizeof(saved_early_userspace));
+	return 1;
+}
+
+__setup("early_userspace=", early_userspace_setup);
+#endif
 static int __init rootwait_setup(char *str)
 {
 	if (*str)
@@ -383,6 +408,26 @@ static void __init get_fs_names(char *page)
 	*s = '\0';
 }
 
+#ifdef CONFIG_EARLY_SERVICES
+static void get_fs_names_runtime(char *page)
+{
+	char *s = page;
+	int len = get_filesystem_list_runtime(page);
+	char *p, *next;
+
+	page[len] = '\0';
+
+	for (p = page-1; p; p = next) {
+		next = strnchr(++p, len, '\n');
+		if (*p++ != '\t')
+			continue;
+		while ((*s++ = *p++) != '\n')
+			;
+		s[-1] = '\0';
+	}
+	*s = '\0';
+}
+#endif
 static int __init do_mount_root(char *name, char *fs, int flags, void *data)
 {
 	struct super_block *s;
@@ -400,7 +445,22 @@ static int __init do_mount_root(char *name, char *fs, int flags, void *data)
 	       MAJOR(ROOT_DEV), MINOR(ROOT_DEV));
 	return 0;
 }
+#ifdef CONFIG_EARLY_SERVICES
+static int do_mount_part(char *name, char *fs, int flags,
+				void *data, char *mnt_point)
+{
+	int err;
 
+	err = ksys_mount((char __user *)name, (char __user *)mnt_point,
+			(char __user *)fs, (unsigned long)flags,
+						(void __user *)data);
+	if (err) {
+		pr_err("Mount Partition [%s] failed[%d]\n", name, err);
+		return err;
+	}
+	return 0;
+}
+#endif
 void __init mount_block_root(char *name, int flags)
 {
 	struct page *page = alloc_page(GFP_KERNEL);
@@ -565,6 +625,77 @@ void __init mount_root(void)
 #endif
 }
 
+#ifdef CONFIG_EARLY_SERVICES
+int get_early_services_status(void)
+{
+	return es_status;
+}
+
+static int mount_partition(char *part_name, char *mnt_point, void *data, char *fs_name)
+{
+	struct page *page;
+	char *fs_names;
+	char *p;
+	int err = -EPERM;
+	int retryCount = 0;
+
+	if (!part_name[0]) {
+		pr_err("Unknown partition\n");
+		return -ENOENT;
+	}
+	if (fs_name != NULL) {
+		fs_names = fs_name;
+	} else {
+		page = alloc_page(GFP_KERNEL);
+		fs_names = page_address(page);
+		get_fs_names_runtime(fs_names);
+	}
+
+	for (retryCount = 0 ; retryCount < 31; retryCount++) {
+		for (p = fs_names; *p; p += strlen(p)+1) {
+			err = do_mount_part(part_name, p, root_mountflags,
+					data, mnt_point);
+			pr_info("mounting firmwaremnt %d) %s %d %s\n",
+					retryCount, part_name, err, p);
+			switch (err) {
+			case 0:
+				return err;
+			case -EACCES:
+			case -EINVAL:
+			case -ENOENT:
+				msleep_interruptible(1);
+			}
+		}
+	}
+	return err;
+}
+void launch_early_services(void)
+{
+	int rc = 0;
+	char option[] = "context=u:object_r:firmware_file:s0";
+	char fw_fs_name[8] =  {'v', 'f', 'a', 't', 0, 0};
+	char es_fs_name[8] =  {'e', 'x', 't', '4', 0, 0};
+
+	devtmpfs_mount("dev");
+	rc = mount_partition(saved_early_userspace, EARLY_SERVICES_MOUNT_POINT, NULL, es_fs_name);
+	if (!rc) {
+		place_marker("Early Services Partition ready");
+		rc = call_usermodehelper(init_prog, init_prog_argv, NULL, 0);
+		if (!rc) {
+			es_status = 1;
+			pr_info("early_init launched\n");
+		} else
+			pr_err("early_init failed\n");
+
+		rc = mount_partition(saved_modem_name, FIRMWARE_MOUNT_PATH, option, fw_fs_name);
+		if (!rc)
+			place_marker("firmwares Partition ready");
+
+	}
+}
+#else
+void launch_early_services(void) { }
+#endif
 /*
  * Prepare the namespace - decide what/where to mount, load ramdisks, etc.
  */
