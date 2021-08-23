@@ -728,11 +728,17 @@ out:
 	first_time = 0;
 }
 
+extern int __init dm_init_init(void);
+
 void __init early_prepare_namespace(char *name)
 {
 
 	if (strstr(saved_root_name, name))
 		prepare_namespace();
+	else if (strstr(saved_root_name, "dm-0") && strstr("vda", name)) {
+		dm_init_init();
+		prepare_namespace();
+	}
 }
 
 static bool is_tmpfs;

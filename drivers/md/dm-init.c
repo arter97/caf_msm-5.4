@@ -13,6 +13,8 @@
 #include <linux/init.h>
 #include <linux/list.h>
 #include <linux/moduleparam.h>
+#include <linux/delay.h>
+#include "dm.h"
 
 #define DM_MSG_PREFIX "init"
 #define DM_MAX_DEVICES 256
@@ -261,7 +263,7 @@ static int __init dm_parse_devices(struct list_head *devices, char *str)
 /**
  * dm_init_init - parse "dm-mod.create=" argument and configure drivers
  */
-static int __init dm_init_init(void)
+int __init dm_init_init(void)
 {
 	struct dm_device *dev;
 	LIST_HEAD(devices);
@@ -283,8 +285,10 @@ static int __init dm_init_init(void)
 	if (r)
 		goto out;
 
-	DMINFO("waiting for all devices to be available before creating mapped devices");
-	wait_for_device_probe();
+	//DMINFO("waiting for all devices to be available before creating mapped devices");
+	//wait_for_device_probe();
+	while (!dm_get_target_type("verity"))
+		msleep(20);
 
 	list_for_each_entry(dev, &devices, list) {
 		if (dm_early_create(&dev->dmi, dev->table,
@@ -297,7 +301,7 @@ out:
 	return r;
 }
 
-late_initcall(dm_init_init);
+//late_initcall(dm_init_init);
 
 module_param(create, charp, 0);
 MODULE_PARM_DESC(create, "Create a mapped device in early boot");
