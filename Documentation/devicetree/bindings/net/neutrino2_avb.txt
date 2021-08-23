@@ -8,6 +8,9 @@ Required properties:
 
 Optional properties:
   - ntn-supply-enable-gpio: GPIO used to control power supply to Neutrino
+  - qcom,ntn-disable-phy: Use for devices that don't have a PHY chip
+  - qcom,ntn-mac-port-speed: MAC port speed 10Mbps/100Mbps/1000Mbps applicable
+                            when qcom,ntn-disable-phy is enabled
 
 Example:
 	qcom,ntn2_avb {
