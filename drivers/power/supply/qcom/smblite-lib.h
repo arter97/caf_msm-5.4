@@ -97,6 +97,7 @@ enum {
 	BOOST_BACK_WA			= BIT(0),
 	WEAK_ADAPTER_WA			= BIT(1),
 	FLASH_DIE_TEMP_DERATE_WA	= BIT(2),
+	HDC_ICL_REDUCTION_WA		= BIT(3),
 };
 
 enum jeita_cfg_stat {
@@ -510,5 +511,6 @@ int smblite_lib_get_fcc(struct smb_chg_param *param, u8 val_raw);
 int smblite_lib_set_fcc(struct smb_chg_param *param, int val_u, u8 *val_raw);
 int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable);
 bool is_concurrent_mode_supported(struct smb_charger *chg);
+void smblite_lib_hvdcp_detect_enable(struct smb_charger *chg, bool enable);
 
 #endif /* __SMBLITE_LIB_H */

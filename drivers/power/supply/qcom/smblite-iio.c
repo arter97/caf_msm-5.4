@@ -108,7 +108,7 @@ int smblite_iio_get_prop(struct smb_charger *chg, int channel, int *val)
 		rc = smblite_lib_get_die_health(chg, val);
 		break;
 	default:
-		pr_err("get prop %x is not supported\n", channel);
+		pr_debug("get prop %x is not supported\n", channel);
 		rc = -EINVAL;
 		break;
 	}
@@ -208,7 +208,7 @@ int smblite_iio_set_prop(struct smb_charger *chg, int channel, int val)
 		power_supply_changed(chg->batt_psy);
 		break;
 	default:
-		pr_err("get prop %d is not supported\n", channel);
+		pr_debug("get prop %d is not supported\n", channel);
 		rc = -EINVAL;
 		break;
 	}
@@ -221,6 +221,7 @@ int smblite_iio_set_prop(struct smb_charger *chg, int channel, int val)
 	return 0;
 }
 
+#ifndef CONFIG_QPNP_SMB5
 struct iio_channel **get_ext_channels(struct device *dev,
 		 const char *const *channel_map, int size)
 {
@@ -245,3 +246,4 @@ struct iio_channel **get_ext_channels(struct device *dev,
 
 	return iio_ch_ext;
 }
+#endif

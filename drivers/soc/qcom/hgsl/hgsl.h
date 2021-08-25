@@ -16,18 +16,19 @@
 
 struct qcom_hgsl;
 struct hgsl_hsync_timeline;
+struct hgsl_priv;
 
 /**
  * HGSL context define
  **/
 struct hgsl_context {
+	struct hgsl_priv *priv;
 	uint32_t context_id;
 	struct dma_buf *shadow_dma;
 	void *shadow_vbase;
 	uint32_t shadow_sop_off;
 	uint32_t shadow_eop_off;
 	wait_queue_head_t wait_q;
-	pid_t pid;
 	bool dbq_assigned;
 
 	bool in_destroy;
@@ -42,7 +43,6 @@ struct hgsl_context {
 struct hgsl_priv {
 	struct qcom_hgsl *dev;
 	uint32_t dbq_idx;
-	pid_t pid;
 
 	struct idr isync_timeline_idr;
 	spinlock_t isync_timeline_lock;
@@ -108,6 +108,7 @@ struct hgsl_isync_timeline {
 };
 
 struct hgsl_isync_fence {
+	struct list_head free_list;  /* For free in batch */
 	struct dma_fence fence;
 	struct hgsl_isync_timeline *timeline;
 	struct list_head child_list;
@@ -124,6 +125,7 @@ int hgsl_hsync_timeline_create(struct hgsl_context *context);
 void hgsl_hsync_timeline_signal(struct hgsl_hsync_timeline *timeline,
 						unsigned int ts);
 void hgsl_hsync_timeline_put(struct hgsl_hsync_timeline *timeline);
+void hgsl_hsync_timeline_fini(struct hgsl_context *context);
 
 /* Fence for process sync. */
 int hgsl_isync_timeline_create(struct hgsl_priv *priv,
@@ -131,7 +133,7 @@ int hgsl_isync_timeline_create(struct hgsl_priv *priv,
 int hgsl_isync_timeline_destroy(struct hgsl_priv *priv, uint32_t id);
 void hgsl_isync_fini(struct hgsl_priv *priv);
 int hgsl_isync_fence_create(struct hgsl_priv *priv, uint32_t timeline_id,
-						    uint32_t ts, int *fence);
+				uint32_t ts, bool ts_is_valid, int *fence_fd);
 int hgsl_isync_fence_signal(struct hgsl_priv *priv, uint32_t timeline_id,
 							       int fence_fd);
 int hgsl_isync_forward(struct hgsl_priv *priv, uint32_t timeline_id,

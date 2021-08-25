@@ -871,6 +871,11 @@ static void msm_gpio_irq_enable(struct irq_data *d)
 	struct irq_data *dir_conn_data;
 	irq_hw_number_t dir_conn_irq = 0;
 
+	if (test_bit(d->hwirq, pctrl->skip_wake_irqs)) {
+		if (pctrl->mpm_wake_ctl)
+			msm_gpio_mpm_wake_set(d->hwirq, true);
+	}
+
 	/*
 	 * Clear the interrupt that may be pending before we enable
 	 * the line.
@@ -894,11 +899,8 @@ static void msm_gpio_irq_enable(struct irq_data *d)
 		irq_chip_enable_parent(d);
 	}
 
-	if (test_bit(d->hwirq, pctrl->skip_wake_irqs)) {
-		if (pctrl->mpm_wake_ctl)
-			msm_gpio_mpm_wake_set(d->hwirq, true);
+	if (test_bit(d->hwirq, pctrl->skip_wake_irqs))
 		return;
-	}
 
 	msm_gpio_irq_clear_unmask(d, true);
 }
@@ -1048,6 +1050,62 @@ static void msm_gpio_dirconn_handler(struct irq_desc *desc)
 			      IRQCHIP_STATE_ACTIVE, 0);
 }
 
+static bool is_gpio_tlmm_dc(struct irq_data *d, u32 *offset,
+		irq_hw_number_t *irq)
+{
+	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
+	struct msm_pinctrl *pctrl = gpiochip_get_data(gc);
+	struct msm_dir_conn *dc;
+	int i;
+
+	for (i = pctrl->n_dir_conns; i > 0; i--) {
+		dc = &pctrl->soc->dir_conn[i];
+		*offset = pctrl->n_dir_conns - i;
+		*irq = dc->irq;
+
+		if (dc->gpio == d->hwirq)
+			return true;
+	}
+
+	return false;
+}
+
+static void configure_tlmm_dc_polarity(struct irq_data *d,
+		unsigned int type, u32 offset)
+{
+	const struct msm_pingroup *g;
+	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
+	struct msm_pinctrl *pctrl = gpiochip_get_data(gc);
+	unsigned int polarity = 1, val;
+	unsigned long flags;
+
+	if (type & (IRQ_TYPE_EDGE_RISING | IRQ_TYPE_LEVEL_HIGH)) {
+		/*
+		 * Since the default polarity is set to 0, change it to 1 for
+		 * Rising edge and active high interrupt type such that the line
+		 * is not inverted.
+		 */
+		raw_spin_lock_irqsave(&pctrl->lock, flags);
+		g = &pctrl->soc->groups[d->hwirq];
+		val = readl_relaxed(msm_pinctrl_data->regs[g->tile] +
+						g->dir_conn_reg + (offset * 4));
+		val |= polarity << 8;
+		writel_relaxed(val, msm_pinctrl_data->regs[g->tile] +
+						g->dir_conn_reg + (offset * 4));
+		raw_spin_unlock_irqrestore(&pctrl->lock, flags);
+	}
+}
+
+static void enable_tlmm_dc(irq_hw_number_t irq)
+{
+	struct irq_data *dir_conn_data = irq_get_irq_data(irq);
+
+	if (!dir_conn_data || !(dir_conn_data->chip))
+		return;
+
+	dir_conn_data->chip->irq_unmask(dir_conn_data);
+}
+
 static void add_dirconn_tlmm(struct irq_data *d, struct msm_pinctrl *pctrl)
 {
 	struct irq_data *dir_conn_data = NULL;
@@ -1094,9 +1152,10 @@ static int msm_gpio_irq_set_type(struct irq_data *d, unsigned int type)
 	const struct msm_pingroup *g;
 	irq_hw_number_t irq = 0;
 	unsigned long flags;
+	u32 offset = 0;
 	u32 val;
 
-	if (d->parent_data) {
+	if (d->parent_data && test_bit(d->hwirq, pctrl->skip_wake_irqs)) {
 		if (pctrl->n_dir_conns > 0) {
 			if (type == IRQ_TYPE_EDGE_BOTH)
 				add_dirconn_tlmm(d, pctrl);
@@ -1108,6 +1167,16 @@ static int msm_gpio_irq_set_type(struct irq_data *d, unsigned int type)
 
 	if (test_bit(d->hwirq, pctrl->skip_wake_irqs))
 		return 0;
+
+	if (is_gpio_tlmm_dc(d, &offset, &irq) && type != IRQ_TYPE_EDGE_BOTH) {
+		configure_tlmm_dc_polarity(d, type, offset);
+		enable_tlmm_dc(irq);
+		if (type & (IRQ_TYPE_LEVEL_LOW | IRQ_TYPE_LEVEL_HIGH))
+			irq_set_handler_locked(d, handle_level_irq);
+		else if (type & (IRQ_TYPE_EDGE_FALLING | IRQ_TYPE_EDGE_RISING))
+			irq_set_handler_locked(d, handle_edge_irq);
+		return 0;
+	}
 
 	g = &pctrl->soc->groups[d->hwirq];
 
@@ -1340,6 +1409,8 @@ static int msm_gpio_init(struct msm_pinctrl *pctrl)
 	pctrl->irq_chip.irq_set_wake = msm_gpio_irq_set_wake;
 	pctrl->irq_chip.irq_set_affinity = msm_gpio_irq_set_affinity;
 	pctrl->irq_chip.irq_set_vcpu_affinity = msm_gpio_irq_set_vcpu_affinity;
+	pctrl->irq_chip.flags = IRQCHIP_MASK_ON_SUSPEND
+				| IRQCHIP_SET_TYPE_MASKED;
 
 	dn = of_parse_phandle(pctrl->dev->of_node, "wakeup-parent", 0);
 	if (dn) {
@@ -1412,6 +1483,36 @@ static int msm_gpio_init(struct msm_pinctrl *pctrl)
 	}
 
 	return 0;
+}
+
+static void msm_gpio_setup_dir_connects(struct msm_pinctrl *pctrl)
+{
+	struct msm_dir_conn *dc = NULL;
+	unsigned int i, n_dir_conns = pctrl->n_dir_conns, offset = 0;
+	irq_hw_number_t dirconn_irq = 0, gpio_irq = 0;
+	struct irq_data *gpio_irq_data;
+	struct irq_domain *child_domain = pctrl->chip.irq.domain;
+
+	for (i = n_dir_conns; i > 0; i--) {
+		dc = &pctrl->soc->dir_conn[i];
+		dirconn_irq = dc->irq;
+		offset = n_dir_conns - i;
+
+		if (dc->gpio == -1)
+			continue;
+
+		gpio_irq = irq_create_mapping(child_domain, dc->gpio);
+		irq_set_parent(gpio_irq, dirconn_irq);
+		irq_set_chip_and_handler_name(gpio_irq, &(pctrl->irq_chip), NULL, NULL);
+		irq_set_chip_data(gpio_irq, &(pctrl->chip));
+
+		gpio_irq_data = irq_get_irq_data(gpio_irq);
+		if (!gpio_irq_data)
+			continue;
+
+		irq_set_handler_data(dirconn_irq, gpio_irq_data);
+		msm_dirconn_cfg_reg(gpio_irq_data, offset);
+	}
 }
 
 static int msm_ps_hold_restart(struct notifier_block *nb, unsigned long action,
@@ -1606,6 +1707,8 @@ int msm_pinctrl_probe(struct platform_device *pdev,
 		irq_set_irq_type(irq, IRQ_TYPE_EDGE_RISING);
 		pctrl->n_dir_conns++;
 	}
+
+	msm_gpio_setup_dir_connects(pctrl);
 
 	platform_set_drvdata(pdev, pctrl);
 

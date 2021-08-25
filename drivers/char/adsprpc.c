@@ -645,6 +645,8 @@ struct fastrpc_file {
 	struct completion work;
 	/* Flag to indicate ram dump collection status*/
 	bool is_ramdump_pend;
+	/* Flag to indicate dynamic process creation status*/
+	bool in_process_create;
 };
 
 static struct fastrpc_apps gfa;
@@ -1289,7 +1291,7 @@ static void fastrpc_mmap_free(struct fastrpc_mmap *map, uint32_t flags)
 			dma_free_attrs(me->dev, map->size, (void *)map->va,
 			(dma_addr_t)map->phys, (unsigned long)map->attr);
 		}
-	} else if (map->flags == FASTRPC_DMAHANDLE_NOMAP) {
+	} else if (fl && map->flags == FASTRPC_DMAHANDLE_NOMAP) {
 		trace_fastrpc_dma_unmap(fl->cid, map->phys, map->size);
 		if (!IS_ERR_OR_NULL(map->table))
 			dma_buf_unmap_attachment(map->attach, map->table,
@@ -1298,7 +1300,7 @@ static void fastrpc_mmap_free(struct fastrpc_mmap *map, uint32_t flags)
 			dma_buf_detach(map->buf, map->attach);
 		if (!IS_ERR_OR_NULL(map->buf))
 			dma_buf_put(map->buf);
-	} else {
+	} else if (fl) {
 		int destVM[1] = {VMID_HLOS};
 		int destVMperm[1] = {PERM_READ | PERM_WRITE | PERM_EXEC};
 
@@ -2280,7 +2282,13 @@ static void fastrpc_ramdump_collection(int cid)
 
 	spin_lock(&me->hlock);
 	hlist_for_each_entry_safe(fl, n, &me->drivers, hn) {
-		if (fl->cid == cid && fl->init_mem) {
+	/*
+	 * On SSR call back, dumps collected only when process is initialized,
+	 * And, process is not cleaned on DSP to avoid UAF for init_mem.
+	 */
+		if (fl->cid == cid && fl->init_mem &&
+			fl->file_close < FASTRPC_PROCESS_DSP_EXIT_COMPLETE &&
+			fl->dsp_proc_init) {
 			hlist_add_head(&fl->init_mem->hn_init, &chan->initmems);
 			fl->is_ramdump_pend = true;
 		}
@@ -3308,7 +3316,7 @@ static int fastrpc_wait_on_async_queue(
 read_async_job:
 	interrupted = wait_event_interruptible(fl->async_wait_queue,
 				atomic_read(&fl->async_queue_job_count));
-	if (!fl || fl->file_close == FASTRPC_PROCESS_EXIT_START) {
+	if (!fl || fl->file_close >= FASTRPC_PROCESS_EXIT_START) {
 		err = -EBADF;
 		goto bail;
 	}
@@ -3652,6 +3660,15 @@ static int fastrpc_init_create_dynamic_process(struct fastrpc_file *fl,
 		int siglen;
 	} inbuf;
 
+	spin_lock(&fl->hlock);
+	if (fl->in_process_create) {
+		err = -EALREADY;
+		ADSPRPC_ERR("Already in create dynamic process\n");
+		spin_unlock(&fl->hlock);
+		return err;
+	}
+	fl->in_process_create = true;
+	spin_unlock(&fl->hlock);
 	inbuf.pgid = fl->tgid;
 	inbuf.namelen = strlen(current->comm) + 1;
 	inbuf.filelen = init->filelen;
@@ -3818,6 +3835,9 @@ bail:
 			locked = 0;
 		}
 	}
+	spin_lock(&fl->hlock);
+	fl->in_process_create = false;
+	spin_unlock(&fl->hlock);
 	return err;
 }
 
@@ -3885,7 +3905,7 @@ static int fastrpc_init_create_static_process(struct fastrpc_file *fl,
 			err = fastrpc_mmap_create(fl, -1, 0, init->mem,
 				 init->memlen, ADSP_MMAP_REMOTE_HEAP_ADDR, &mem);
 			mutex_unlock(&fl->map_mutex);
-			if (err)
+			if (err || !mem)
 				goto bail;
 			spin_lock(&me->hlock);
 			mem->in_use = true;
@@ -3897,7 +3917,7 @@ static int fastrpc_init_create_static_process(struct fastrpc_file *fl,
 		 * If remote-heap VMIDs are defined in DTSI, then do
 		 * hyp_assign from HLOS to those VMs (LPASS, ADSP).
 		 */
-		if (rhvm->vmid && mem && !mem->is_persistent) {
+		if (rhvm->vmid && !mem->is_persistent) {
 			err = hyp_assign_phys(phys, (uint64_t)size,
 				hlosvm, 1,
 				rhvm->vmid, rhvm->vmperm, rhvm->vmcount);
@@ -4213,9 +4233,9 @@ static int fastrpc_release_current_dsp_process(struct fastrpc_file *fl)
 	ioctl.perf_kernel = NULL;
 	ioctl.perf_dsp = NULL;
 	ioctl.job = NULL;
-	spin_lock(&fl->hlock);
+	spin_lock(&fl->apps->hlock);
 	fl->file_close = FASTRPC_PROCESS_DSP_EXIT_INIT;
-	spin_unlock(&fl->hlock);
+	spin_unlock(&fl->apps->hlock);
 	/*
 	 * Pass 2 for "kernel" arg to send kernel msg to DSP
 	 * with non-zero msg PID for the DSP to directly use
@@ -4223,9 +4243,9 @@ static int fastrpc_release_current_dsp_process(struct fastrpc_file *fl)
 	 */
 	VERIFY(err, 0 == (err = fastrpc_internal_invoke(fl,
 		FASTRPC_MODE_PARALLEL, KERNEL_MSG_WITH_NONZERO_PID, &ioctl)));
-	spin_lock(&fl->hlock);
+	spin_lock(&fl->apps->hlock);
 	fl->file_close = FASTRPC_PROCESS_DSP_EXIT_COMPLETE;
-	spin_unlock(&fl->hlock);
+	spin_unlock(&fl->apps->hlock);
 	if (err && fl->dsp_proc_init)
 		ADSPRPC_ERR(
 			"releasing DSP process failed with %d (0x%x) for %s\n",
@@ -5164,12 +5184,11 @@ static int fastrpc_file_free(struct fastrpc_file *fl)
 	if (!fl)
 		return 0;
 	cid = fl->cid;
-	spin_lock(&fl->hlock);
+	spin_lock(&fl->apps->hlock);
 	fl->file_close = FASTRPC_PROCESS_EXIT_START;
-	spin_unlock(&fl->hlock);
+	spin_unlock(&fl->apps->hlock);
 
 	(void)fastrpc_release_current_dsp_process(fl);
-
 	spin_lock(&fl->apps->hlock);
 	if (!fl->is_ramdump_pend) {
 		spin_unlock(&fl->apps->hlock);
@@ -5182,10 +5201,10 @@ skip_dump_wait:
 	spin_lock(&fl->apps->hlock);
 	hlist_del_init(&fl->hn);
 	fl->is_ramdump_pend = false;
+	fl->in_process_create = false;
 	spin_unlock(&fl->apps->hlock);
 	kfree(fl->debug_buf);
 	kfree(fl->gidlist.gids);
-
 	if (!fl->sctx) {
 		kfree(fl->dev_pm_qos_req);
 		kfree(fl);
@@ -5590,6 +5609,7 @@ static int fastrpc_device_open(struct inode *inode, struct file *filp)
 	fl->qos_request = 0;
 	fl->dsp_proc_init = 0;
 	fl->is_ramdump_pend = false;
+	fl->in_process_create = false;
 	init_completion(&fl->work);
 	fl->file_close = FASTRPC_PROCESS_DEFAULT_STATE;
 	filp->private_data = fl;
@@ -5742,7 +5762,7 @@ bail:
 static int fastrpc_internal_control(struct fastrpc_file *fl,
 					struct fastrpc_ioctl_control *cp)
 {
-	int err = 0;
+	int err = 0, ret_val = 0;
 	unsigned int latency;
 	struct fastrpc_apps *me = &gfa;
 	u32 silver_core_count = me->silvercores.corecount, ii = 0, cpu;
@@ -5761,7 +5781,7 @@ static int fastrpc_internal_control(struct fastrpc_file *fl,
 	switch (cp->req) {
 	case FASTRPC_CONTROL_LATENCY:
 		latency = cp->lp.enable == FASTRPC_LATENCY_CTRL_ENB ?
-			fl->apps->latency : PM_QOS_DEFAULT_VALUE;
+			fl->apps->latency : PM_QOS_RESUME_LATENCY_DEFAULT_VALUE;
 		VERIFY(err, latency != 0);
 		if (err) {
 			err = -EINVAL;
@@ -5775,24 +5795,25 @@ static int fastrpc_internal_control(struct fastrpc_file *fl,
 		for (ii = 0; ii < silver_core_count; ii++) {
 			cpu = me->silvercores.coreno[ii];
 			if (!fl->qos_request) {
-				err = dev_pm_qos_add_request(
+				ret_val = dev_pm_qos_add_request(
 						get_cpu_device(cpu),
 						&fl->dev_pm_qos_req[ii],
 						DEV_PM_QOS_RESUME_LATENCY,
 						latency);
 			} else {
-				err = dev_pm_qos_update_request(
+				ret_val = dev_pm_qos_update_request(
 						&fl->dev_pm_qos_req[ii],
 						latency);
 			}
-			if (err < 0) {
-				pr_warn("adsprpc: %s: %s: PM voting for cpu:%d failed, err %d, QoS update %d\n",
+			if (ret_val < 0) {
+				pr_warn("adsprpc: %s: %s: PM voting for cpu:%d failed, ret_val %d, QoS update %d\n",
 					current->comm, __func__, cpu,
-					err, fl->qos_request);
+					ret_val, fl->qos_request);
+				err = ret_val;
 				break;
 			}
 		}
-		if (err >= 0)
+		if (ret_val >= 0)
 			fl->qos_request = 1;
 
 		/* Ensure CPU feature map updated to DSP for early WakeUp */

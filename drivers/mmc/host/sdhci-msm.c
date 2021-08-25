@@ -20,6 +20,7 @@
 #include <linux/interrupt.h>
 #include <linux/of.h>
 #include <linux/reset.h>
+#include <linux/pinctrl/consumer.h>
 
 #include "sdhci-pltfm.h"
 #include "cqhci.h"
@@ -1494,9 +1495,6 @@ static int sdhci_msm_execute_tuning(struct mmc_host *mmc, u32 opcode)
 	const struct sdhci_msm_offset *msm_offset =
 					sdhci_priv_msm_offset(host);
 
-	core_vendor_spec = readl_relaxed(host->ioaddr +
-			msm_offset->core_vendor_spec);
-
 	if (!sdhci_msm_is_tuning_needed(host)) {
 		msm_host->use_cdr = false;
 		sdhci_msm_set_cdr(host, false);
@@ -1522,6 +1520,9 @@ static int sdhci_msm_execute_tuning(struct mmc_host *mmc, u32 opcode)
 		msm_set_clock_rate_for_bus_mode(host, ios.clock);
 		host->flags &= ~SDHCI_HS400_TUNING;
 	}
+
+	core_vendor_spec = readl_relaxed(host->ioaddr +
+			msm_offset->core_vendor_spec);
 
 	/* Make sure that PWRSAVE bit is set to '0' during tuning */
 	writel_relaxed((core_vendor_spec & ~CORE_CLK_PWRSAVE),
@@ -2686,8 +2687,8 @@ static void sdhci_msm_registers_restore(struct sdhci_host *host)
 			host->ioaddr + msm_offset->core_pwrctl_mask);
 
 	if (cq_host)
-		cqhci_writel(cq_host, msm_host->cqe_regs.cqe_vendor_cfg1,
-				CQHCI_VENDOR_CFG1);
+		cqhci_writel(cq_host, msm_host->cqe_regs.cqe_vendor_cfg1 &
+				~CMDQ_SEND_STATUS_TRIGGER, CQHCI_VENDOR_CFG1);
 
 	if (((ios.timing == MMC_TIMING_MMC_HS400) ||
 			(ios.timing == MMC_TIMING_MMC_HS200) ||
@@ -3489,6 +3490,7 @@ static void sdhci_msm_hw_reset(struct sdhci_host *host)
 	if (ret)
 		dev_err(&pdev->dev, "%s: core_reset deassert failed, err = %d\n",
 				__func__, ret);
+	usleep_range(200, 210);
 
 	sdhci_msm_registers_restore(host);
 	msm_host->reg_store = false;
@@ -4377,6 +4379,13 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 			ret = PTR_ERR(msm_host->core_mem);
 			goto vreg_deinit;
 		}
+	}
+
+	/* Toggle wlan_en pin to reset SDIO card to correct state */
+	if (host->mmc->pm_caps & MMC_PM_KEEP_POWER) {
+		pinctrl_pm_select_sleep_state(&pdev->dev);
+		mdelay(1);
+		pinctrl_pm_select_default_state(&pdev->dev);
 	}
 
 	/* Reset the vendor spec register to power on reset state */
