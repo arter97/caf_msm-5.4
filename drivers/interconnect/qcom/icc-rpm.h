@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  *
  */
 
@@ -57,6 +57,8 @@ enum qcom_icc_rpm_context {
 struct qcom_icc_provider {
 	struct icc_provider provider;
 	struct device *dev;
+	struct qcom_icc_node **nodes;
+	size_t num_nodes;
 	struct regmap *regmap;
 	struct list_head probe_list;
 	struct clk_bulk_data *qos_clks;
