@@ -1042,15 +1042,6 @@ static bool unmap_kernel_at_el0(const struct arm64_cpu_capabilities *entry,
 	return !meltdown_safe;
 }
 
-#ifdef CONFIG_UNMAP_KERNEL_AT_EL0
-
-#else
-static void
-kpti_install_ng_mappings(const struct arm64_cpu_capabilities *__unused)
-{
-}
-#endif	/* CONFIG_UNMAP_KERNEL_AT_EL0 */
-
 static int __init parse_kpti(char *str)
 {
 	bool enabled;
