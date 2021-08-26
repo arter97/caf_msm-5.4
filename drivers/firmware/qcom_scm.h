@@ -270,8 +270,7 @@ extern int __qcom_scm_paravirt_smmu_detach(struct device *dev,
 // OEM Services and Function IDs
 #define QCOM_SCM_SVC_OEM_POWER		0x09
 #define QCOM_SCM_OEM_POWER_REBOOT	0x22
-extern int __qcom_scm_reboot(struct device *dev,
-				enum qcom_scm_reset_type reboot_type);
+extern int __qcom_scm_reboot(struct device *dev);
 
 // TOS Services and Function IDs
 #define QCOM_SCM_SVC_QSEELOG		0x01

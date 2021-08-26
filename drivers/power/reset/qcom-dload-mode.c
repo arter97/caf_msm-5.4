@@ -268,10 +268,8 @@ static int qcom_dload_reboot(struct notifier_block *this, unsigned long event,
 			msm_enable_dump_mode(true);
 	}
 
-	if (current_download_mode != QCOM_DOWNLOAD_NODUMP) {
+	if (current_download_mode != QCOM_DOWNLOAD_NODUMP)
 		reboot_mode = REBOOT_WARM;
-		qcom_scm_reset_type = QCOM_SCM_RST_WARM_RESET;
-	}
 
 	return NOTIFY_OK;
 }
