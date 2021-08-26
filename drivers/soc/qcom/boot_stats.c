@@ -48,7 +48,6 @@ struct boot_stats {
 
 static void __iomem *mpm_counter_base;
 static uint32_t mpm_counter_freq;
-static struct boot_stats __iomem *boot_stats;
 
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
 
@@ -273,6 +272,7 @@ EXPORT_SYMBOL(destroy_marker);
 
 static void set_bootloader_stats(void)
 {
+#if 0
 	if (IS_ERR_OR_NULL(boot_stats)) {
 		pr_err("boot_marker: imem not initialized!\n");
 		return;
@@ -288,7 +288,9 @@ static void set_bootloader_stats(void)
 		readl_relaxed(&boot_stats->bootloader_load_kernel));
 	_create_boot_marker("M - APPSBL End - ",
 		readl_relaxed(&boot_stats->bootloader_end));
+#endif
 }
+
 
 static ssize_t bootkpi_reader(struct file *fp, struct kobject *obj,
 		struct bin_attribute *bin_attr, char *user_buffer, loff_t off,
@@ -456,12 +458,13 @@ static int mpm_parse_dt(void)
 		pr_err("can't find qcom,msm-imem node\n");
 		return -ENODEV;
 	}
+#if 0
 	boot_stats = of_iomap(np_imem, 0);
 	if (!boot_stats) {
 		pr_err("boot_stats: Can't map imem\n");
 		goto err1;
 	}
-
+#endif
 	np_mpm2 = of_find_compatible_node(NULL, NULL,
 				"qcom,mpm2-sleep-counter");
 	if (!np_mpm2) {
@@ -492,6 +495,7 @@ err1:
 
 static void print_boot_stats(void)
 {
+#if 0
 	pr_info("KPI: Bootloader start count = %u\n",
 		readl_relaxed(&boot_stats->bootloader_start));
 	pr_info("KPI: Bootloader end count = %u\n",
@@ -500,6 +504,7 @@ static void print_boot_stats(void)
 		readl_relaxed(&boot_stats->bootloader_display));
 	pr_info("KPI: Bootloader load kernel count = %u\n",
 		readl_relaxed(&boot_stats->bootloader_load_kernel));
+#endif
 	pr_info("KPI: Kernel MPM timestamp = %u\n",
 		readl_relaxed(mpm_counter_base));
 	pr_info("KPI: Kernel MPM Clock frequency = %u\n",
@@ -525,7 +530,6 @@ static int __init boot_stats_init(void)
 		set_bootloader_stats();
 #endif
 	} else {
-		iounmap(boot_stats);
 		iounmap(mpm_counter_base);
 	}
 
@@ -537,7 +541,6 @@ static void __exit boot_stats_exit(void)
 {
 	if (boot_marker_enabled()) {
 		exit_bootkpi();
-		iounmap(boot_stats);
 		iounmap(mpm_counter_base);
 	}
 }
