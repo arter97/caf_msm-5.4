@@ -1374,6 +1374,17 @@ config POWER_STATE
 		node for communication required for handling deep sleep and hibernate
 		modes.
 
+config PLATFORM_AUTO
+	bool "Support automotive platform features"
+	default n
+	help
+	  Automotive market has aggressive requirement on booting
+	  KPI. So we need to remove anything that blocks us from
+	  booting linux in parallel. With this config, the big
+	  lock for platform driver probe will be removed.
+
+	  If you are unsure about this, Say N here.
+
 source "drivers/soc/qcom/icnss2/Kconfig"
 
 source "drivers/soc/qcom/gnsssirf/Kconfig"
