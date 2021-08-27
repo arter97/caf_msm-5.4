@@ -1120,6 +1120,23 @@ config QTI_QUIN_GVM
 	  build a kernel that runs on this platform or if you are
 	  unsure, say 'N' here.
 
+config QTI_GHS_GVM
+	bool "Enable QTI GHS virtual machine support"
+	help
+	  This enables support for Qualcomm Technologies, Inc.'s
+          virtual machine on GHS platform. If you do not wish to
+          build a kernel that runs on this platform or if you are
+          unsure, say 'N' here.
+
+config GHS_VMM
+       bool "GHS VMM guest support on ARM64"
+       depends on ARM64 && OF
+       help
+         This kernel feature is required for running Linux in a Virtual Machine
+         on a GHS VMM on ARM64.  This option includes various GHS components
+         and optimizes several operations for a GHS VMM, including IPC and VMM
+         hypercalls.
+
 config FORCE_MAX_ZONEORDER
 	int
 	default "14" if (ARM64_64K_PAGES && TRANSPARENT_HUGEPAGE)
