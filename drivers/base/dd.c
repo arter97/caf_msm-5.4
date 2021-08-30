@@ -27,6 +27,7 @@
 #include <linux/async.h>
 #include <linux/pm_runtime.h>
 #include <linux/pinctrl/devinfo.h>
+#include <linux/platform_device.h>
 
 #include "base.h"
 #include "power/power.h"
@@ -343,6 +344,7 @@ static int deferred_probe_initcall(void)
 	return 0;
 }
 late_initcall(deferred_probe_initcall);
+early_init(deferred_probe_initcall, EARLY_SUBSYS_PLATFORM, EARLY_INIT_LEVEL6);
 
 static void __exit deferred_probe_exit(void)
 {
@@ -979,7 +981,8 @@ void device_initial_probe(struct device *dev)
  */
 static void __device_driver_lock(struct device *dev, struct device *parent)
 {
-	if (parent && dev->bus->need_parent_lock)
+	if (!(is_early_userspace && (dev->bus == &platform_bus_type))
+				&& parent && dev->bus->need_parent_lock)
 		device_lock(parent);
 	device_lock(dev);
 }
@@ -996,7 +999,8 @@ static void __device_driver_lock(struct device *dev, struct device *parent)
 static void __device_driver_unlock(struct device *dev, struct device *parent)
 {
 	device_unlock(dev);
-	if (parent && dev->bus->need_parent_lock)
+	if (!(is_early_userspace && (dev->bus == &platform_bus_type))
+				&& parent && dev->bus->need_parent_lock)
 		device_unlock(parent);
 }
 
