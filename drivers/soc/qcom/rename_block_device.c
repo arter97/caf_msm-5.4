@@ -72,10 +72,10 @@ static void get_slot_updated_name(char *name)
 	}
 }
 
-static int rename_blk_dev_init(void)
+void rename_blk_dev_init(int index)
 {
 	dev_t dev;
-	int index = 0, partno;
+	int partno;
 	struct gendisk *disk;
 	struct device_node *node;
 	char dev_path[PATH_SIZE];
@@ -84,40 +84,23 @@ static int rename_blk_dev_init(void)
 
 	node = of_find_compatible_node(NULL, NULL, "qcom,blkdev-rename");
 	if (!node) {
-		pr_err("qcom,blkdev-rename is missing\n");
-		goto out;
+		return;
 	}
-	while (!of_property_read_string_index(node, "actual-dev", index,
+	if (!of_property_read_string_index(node, "actual-dev", index,
 						&actual_name)) {
 		memset(dev_path, '\0', PATH_SIZE);
 		snprintf(dev_path, PATH_SIZE, "/dev/%s", actual_name);
 		dev = name_to_dev_t(dev_path);
-		if (!dev) {
-			pr_err("No device path : %s\n", dev_path);
-			goto out;
-		}
 		disk = get_gendisk(dev, &partno);
-		if (!disk) {
-			pr_err("No device with dev path : %s\n", dev_path);
-			goto out;
-		}
 		if (!of_property_read_string_index(node, dp_enabled ?
 					"rename-dev-ab" : "rename-dev",
 				 index,	(const char **)&modified_name)) {
 			get_slot_updated_name(modified_name);
 			device_rename(disk_to_dev(disk), final_name);
-		} else {
-			pr_err("rename-dev for actual-dev = %s is missing\n",
-								 actual_name);
-			goto out;
 		}
-		index++;
 	}
-out:
 	of_node_put(node);
-	return  0;
 }
 
-late_initcall(rename_blk_dev_init);
 MODULE_DESCRIPTION("Rename block devices");
 MODULE_LICENSE("GPL v2");

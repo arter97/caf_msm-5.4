@@ -735,7 +735,8 @@ void __init early_prepare_namespace(char *name)
 
 	if (strstr(saved_root_name, name))
 		prepare_namespace();
-	else if (strstr(saved_root_name, "dm-0") && strstr("vda", name)) {
+	else if (strstr(saved_root_name, "dm-0") &&
+		(strstr("vda", name) || strstr("system", name))) {
 		dm_init_init();
 		prepare_namespace();
 	}
