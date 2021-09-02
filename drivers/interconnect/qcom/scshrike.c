@@ -2975,7 +2975,8 @@ static int __init qnoc_driver_init(void)
 {
 	return platform_driver_register(&qnoc_driver);
 }
-core_initcall(qnoc_driver_init);
+early_arch_initcall(qnoc_driver_init, EARLY_SUBSYS_PLATFORM,
+		EARLY_INIT_LEVEL0);
 
 static void __exit qnoc_driver_exit(void)
 {

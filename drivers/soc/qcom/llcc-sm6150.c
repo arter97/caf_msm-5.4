@@ -80,7 +80,8 @@ static int __init sm6150_init_qcom_llcc_init(void)
 {
 	return platform_driver_register(&sm6150_qcom_llcc_driver);
 }
-module_init(sm6150_init_qcom_llcc_init);
+early_module_init(sm6150_init_qcom_llcc_init, EARLY_SUBSYS_PLATFORM,
+EARLY_INIT_LEVEL2);
 
 static void __exit sm6150_exit_qcom_llcc_exit(void)
 {
