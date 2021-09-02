@@ -836,7 +836,7 @@ static struct platform_driver qcom_smp2p_driver = {
 		.pm = &qcom_smp2p_pm_ops,
 	},
 };
-module_platform_driver(qcom_smp2p_driver);
+early_module_platform_driver(qcom_smp2p_driver, EARLY_SUBSYS_PLATFORM, EARLY_INIT_LEVEL4);
 
 MODULE_DESCRIPTION("Qualcomm Shared Memory Point to Point driver");
 MODULE_LICENSE("GPL v2");
