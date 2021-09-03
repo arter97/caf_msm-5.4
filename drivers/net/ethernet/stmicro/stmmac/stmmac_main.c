@@ -4965,12 +4965,11 @@ int stmmac_suspend(struct device *dev)
 	if (!priv->plat->mac2mac_en)
 		phylink_mac_change(priv->phylink, false);
 
-#ifdef CONFIG_DWMAC_QCOM_ETHQOS
 	rtnl_lock();
 	if (!priv->plat->mac2mac_en)
 		phylink_stop(priv->phylink);
 	rtnl_unlock();
-#endif
+
 	mutex_lock(&priv->lock);
 
 	netif_device_detach(ndev);
@@ -4994,12 +4993,6 @@ int stmmac_suspend(struct device *dev)
 		priv->irq_wake = 1;
 	} else {
 		mutex_unlock(&priv->lock);
-#ifndef CONFIG_DWMAC_QCOM_ETHQOS
-		rtnl_lock();
-		if (!priv->plat->mac2mac_en)
-			phylink_stop(priv->phylink);
-		rtnl_unlock();
-#endif
 		mutex_lock(&priv->lock);
 
 		stmmac_mac_set(priv, priv->ioaddr, false);
@@ -5101,20 +5094,11 @@ int stmmac_resume(struct device *dev)
 	stmmac_enable_all_queues(priv);
 
 	mutex_unlock(&priv->lock);
-#ifndef CONFIG_DWMAC_QCOM_ETHQOS
-	if (!device_may_wakeup(priv->device)) {
-		rtnl_lock();
-		if (!priv->plat->mac2mac_en)
-			phylink_start(priv->phylink);
-		rtnl_unlock();
-	}
-#endif
-#ifdef CONFIG_DWMAC_QCOM_ETHQOS
-		rtnl_lock();
-		if (!priv->plat->mac2mac_en)
-			phylink_start(priv->phylink);
-		rtnl_unlock();
-#endif
+
+	rtnl_lock();
+	if (!priv->plat->mac2mac_en)
+		phylink_start(priv->phylink);
+	rtnl_unlock();
 	if (!priv->plat->mac2mac_en)
 		phylink_mac_change(priv->phylink, true);
 
