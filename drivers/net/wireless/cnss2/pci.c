@@ -15,6 +15,7 @@
 #include <linux/suspend.h>
 #include <linux/memblock.h>
 #include <linux/completion.h>
+#include <linux/iommu.h>
 
 #include "main.h"
 #include "bus.h"
@@ -4256,14 +4257,26 @@ static int cnss_pci_smmu_fault_handler(struct iommu_domain *domain,
 				       int flags, void *handler_token)
 {
 	struct cnss_pci_data *pci_priv = handler_token;
-
-	cnss_fatal_err("SMMU fault happened with IOVA 0x%lx\n", iova);
+	u64 ts = __arch_counter_get_cntvct();
+	int f_mask = IOMMU_FAULT_TRANSLATION | IOMMU_FAULT_READ;
 
 	if (!pci_priv) {
 		cnss_pr_err("pci_priv is NULL\n");
 		return -ENODEV;
 	}
 
+	switch (pci_priv->device_id) {
+	case QCN7605_DEVICE_ID:
+		/* return 0 if and only if [TF R ] is set */
+		if ((flags & f_mask) && !(flags & ~f_mask))
+			return 0;
+		break;
+	default:
+		break;
+	}
+
+	cnss_fatal_err("0x%lX SMMU fault happened with IOVA 0x%lx, flags: 0x%x\n",
+		       ts, iova, flags);
 	cnss_pci_update_status(pci_priv, CNSS_FW_DOWN);
 	cnss_force_fw_assert(&pci_priv->pci_dev->dev);
 
