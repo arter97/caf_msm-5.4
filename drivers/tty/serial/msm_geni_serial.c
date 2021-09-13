@@ -27,6 +27,7 @@
 #include <linux/dma-mapping.h>
 #include <uapi/linux/msm_geni_serial.h>
 #include <soc/qcom/boot_stats.h>
+#include <linux/suspend.h>
 
 /* UART specific GENI registers */
 #define SE_UART_LOOPBACK_CFG		(0x22C)
@@ -106,7 +107,7 @@
 #define STALE_TIMEOUT		(16)
 #define STALE_COUNT		(DEFAULT_BITS_PER_CHAR * STALE_TIMEOUT)
 #define SEC_TO_USEC		(1000000)
-#define SYSTEM_DELAY		(500)
+#define STALE_DELAY		(10) //10msec
 #define DEFAULT_BITS_PER_CHAR	(10)
 #define GENI_UART_NR_PORTS	(6)
 #define GENI_UART_CONS_PORTS	(1)
@@ -1584,7 +1585,6 @@ static int stop_rx_sequencer(struct uart_port *uport)
 	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
 	unsigned long flags = 0;
 	bool is_rx_active;
-	unsigned int stale_delay;
 	u32 dma_rx_status, s_irq_status;
 	int usage_count;
 
@@ -1601,15 +1601,12 @@ static int stop_rx_sequencer(struct uart_port *uport)
 
 	if (!uart_console(uport)) {
 		/*
-		 * Wait for the stale timeout to happen if there
-		 * is any data pending in the rx fifo.
-		 * Have a safety factor of 2 to include the interrupt
-		 * and system latencies, add 500usec delay for interrupt
-		 * latency or system delay.
+		 * Wait for the stale timeout around 10msec to happen
+		 * if there is any data pending in the rx fifo.
+		 * This will help to handle incoming rx data in stop_rx_sequencer
+		 * for interrupt latency or system delay cases.
 		 */
-		stale_delay = (STALE_COUNT * SEC_TO_USEC) / port->cur_baud;
-		stale_delay = (2 * stale_delay) + SYSTEM_DELAY;
-		udelay(stale_delay);
+		mdelay(STALE_DELAY);
 
 		dma_rx_status = geni_read_reg_nolog(uport->membase,
 						SE_DMA_RX_IRQ_STAT);
@@ -2434,6 +2431,9 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 		/* Disable IRQ for hsuart with auto-suspend-disable flag. */
 		if (msm_port->pm_auto_suspend_disable)
 			disable_irq(uport->irq);
+
+		/* Reset UART error to default during port_close() */
+		msm_port->uart_error = UART_ERROR_DEFAULT;
 	}
 	UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev, "%s: End\n", __func__);
 }
@@ -2754,8 +2754,13 @@ static void msm_geni_serial_set_termios(struct uart_port *uport,
 	/* baud rate */
 	baud = uart_get_baud_rate(uport, termios, old, 300, 4000000);
 	port->cur_baud = baud;
-	uart_sampling = IS_ENABLED(CONFIG_SERIAL_MSM_GENI_HALF_SAMPLING) ?
-				UART_OVERSAMPLING / 2 : UART_OVERSAMPLING;
+
+	/* sampling is halved for QUP versions >= 2.5 */
+	uart_sampling = UART_OVERSAMPLING;
+	if ((port->ver_info.hw_major_ver >= 2) &&
+		(port->ver_info.hw_minor_ver >= 5))
+		uart_sampling /= 2;
+
 	desired_rate = baud * uart_sampling;
 
 	/*
@@ -3715,41 +3720,53 @@ static int msm_geni_serial_sys_suspend(struct device *dev)
 	return 0;
 }
 
+static int msm_geni_serial_sys_hib_resume(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct msm_geni_serial_port *port = platform_get_drvdata(pdev);
+	struct uart_port *uport = &port->uport;
+
+	if (uart_console(uport)) {
+		uart_resume_port((struct uart_driver *)uport->private_data,
+									uport);
+		/*
+		 * For hibernation usecase clients for
+		 * console UART won't call port setup during restore.
+		 * Hence call port setup for console uart.
+		 */
+		msm_geni_serial_port_setup(uport);
+	} else {
+		/*
+		 * Peripheral register settings are lost during hibernation.
+		 * Update setup flag such that port setup happens again
+		 * during next session. Clients of HS-UART will close and
+		 * open the port during hibernation.
+		 */
+		port->port_setup = false;
+	}
+	return 0;
+}
+
 static int msm_geni_serial_sys_resume(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct msm_geni_serial_port *port = platform_get_drvdata(pdev);
 	struct uart_port *uport = &port->uport;
 
+#ifdef CONFIG_DEEPSLEEP
+	if (mem_sleep_current == PM_SUSPEND_MEM) {
+		IPC_LOG_MSG(port->ipc_log_pwr, "deepsleep: %s\n",
+			    __func__);
+		return msm_geni_serial_sys_hib_resume(dev);
+	}
+#endif
 	if ((uart_console(uport) &&
 	    console_suspend_enabled && uport->suspended) ||
 		port->pm_auto_suspend_disable) {
 		IPC_LOG_MSG(port->console_log, "%s start\n", __func__);
 		uart_resume_port((struct uart_driver *)uport->private_data,
 									uport);
-		IPC_LOG_MSG(port->console_log, "%s\n", __func__);
-	}
-	return 0;
-}
-
-static int msm_geni_serial_sys_hib_resume(struct device *dev)
-{
-	struct platform_device *pdev = to_platform_device(dev);
-	struct msm_geni_serial_port *port = platform_get_drvdata(pdev);
-	struct uart_port *uport = &port->uport;
-	unsigned long cfg0, cfg1;
-
-	if (uart_console(uport) &&
-	    console_suspend_enabled && uport->suspended) {
-		uart_resume_port((struct uart_driver *)uport->private_data,
-									uport);
-		dev_dbg(dev, "%s\n", __func__);
-		se_get_packing_config(8, 1, false, &cfg0, &cfg1);
-		geni_write_reg_nolog(cfg0, uport->membase,
-					SE_GENI_TX_PACKING_CFG0);
-		geni_write_reg_nolog(cfg1, uport->membase,
-					SE_GENI_TX_PACKING_CFG1);
-		disable_irq(uport->irq);
+		IPC_LOG_MSG(port->console_log, "%s End\n", __func__);
 	}
 	return 0;
 }
@@ -3787,6 +3804,7 @@ static const struct dev_pm_ops msm_geni_serial_pm_ops = {
 	.resume = msm_geni_serial_sys_resume,
 	.freeze = msm_geni_serial_sys_suspend,
 	.restore = msm_geni_serial_sys_hib_resume,
+	.thaw = msm_geni_serial_sys_hib_resume,
 };
 
 static struct platform_driver msm_geni_serial_platform_driver = {

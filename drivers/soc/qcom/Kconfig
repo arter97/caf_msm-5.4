@@ -861,6 +861,26 @@ config QTI_PMIC_PON_LOG
 	  some Qualcomm Technologies, Inc. PMIC devices.  This driver is useful
 	  when debugging unexpected power-off scenarios.
 
+config QTI_PMIC_LPM
+	tristate "QTI PMIC LPM support"
+	depends on MFD_SPMI_PMIC
+	help
+	  Say Y here to enable the Qualcomm Technologies, Inc. low power mode
+	  driver which reports the entry and exit of PMIC's low power modes
+	  DeepSleep/Hibernate/TWM to a companion chip through the SDAM
+	  interface.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called qti-pmic-lpm.
+
+config MSM_ADSP_LOADER
+	tristate "ADSP loader support"
+	help
+	  Enable ADSP image loader.
+	  The ADSP loader brings ADSP out of reset
+	  for platforms that have ADSP.
+	  Say M if you want to enable this module.
+
 config MSM_CDSP_LOADER
 	tristate "CDSP loader support"
 	help
@@ -1117,6 +1137,15 @@ config QCOM_WDT_CORE
 	   watchdog module must be loaded along with this for watchdog
 	   functionality.
 
+config QCOM_CX_IPEAK
+	tristate "Common driver to handle Cx iPeak limitation"
+	help
+	  Cx ipeak HW module is used to limit the current drawn by various
+	  subsystem blocks on Cx power rail. Each client needs to set their
+	  bit in tcsr register if it is going to cross its own threshold.
+	  If all clients are going to cross their thresholds then Cx ipeak
+	  hw module will raise an interrupt to cDSP block to throttle cDSP fmax.
+
 config QCOM_SOC_WATCHDOG
 	tristate "Qualcomm Technologies, Inc. Soc Watchdog"
 	depends on QCOM_WDT_CORE
@@ -1348,6 +1377,32 @@ config MSM_SLATECOM_INTERFACE
 		Single user space client can open device node for communication
 		from hardware. Hardware will provide access to read
 		registers and read/write AHB memory in the device.
+
+config MSM_SLATECOM_RPMSG
+       tristate "Provide support for slate control GLINK channel"
+       depends on MSM_SLATECOM_INTERFACE
+       help
+         MSM_SLATECOM_RPMSG informs SLATECOM_INTERFACE driver if GLINK channel
+         has been opened by remote processor. It doesn't maintain state machine
+         and is probed when Slate opens channel and removed when the channel is
+         closed by remote processor.
+
+config MSM_SLATERSB
+        bool "Provide support for rsb events on Slate"
+        help
+          SLATERSB communicates to SLATE over rpmsg driver for RSB configuration
+          and enable/disable on device power state change.Add slate rsb driver
+          which is use to configure rsb on slate.Slate rsb driver uses glink
+          to communicate with slate
+
+config MSM_SLATERSB_RPMSG
+        bool "Provide support for slate events to RSB"
+        depends on MSM_SLATERSB
+        help
+          SLATERSB-RPMSG informs SLATERSB driver if GLINK channel has been
+          opened by remote processor. It doesn't maintain state machine
+          and is probed when SLATE opens channel and removed when the
+          channel is closed by remote processor.
 
 config QCOM_AOP_SET_DDR
 	tristate "Sysfs to communicate with AOP using QMP protocol"
