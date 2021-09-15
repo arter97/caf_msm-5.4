@@ -85,6 +85,8 @@
 #define EMAC_I0_EMAC_CORE_HW_VERSION_RGOFFADDR 0x00000070
 #define EMAC_HW_v2_3_2_RG 0x20030002
 
+#define EMAC_HW_v3_0_0_RG 0x30000000
+
 #define MII_BUSY 0x00000001
 #define MII_WRITE 0x00000002
 
@@ -120,7 +122,7 @@ static struct qcom_ethqos *pethqos;
 
 static unsigned char dev_addr[ETH_ALEN] = {
 	0, 0x55, 0x7b, 0xb5, 0x7d, 0xf7};
-static struct ip_params pparams = {"", "", "", ""};
+static struct ip_params pparams;
 
 struct qcom_ethqos *get_pethqos(void)
 {
@@ -143,6 +145,34 @@ static inline unsigned int dwmac_qcom_get_vlan_ucp(unsigned char  *buf)
 	return
 		(((u16)buf[QTAG_UCP_FIELD_OFFSET] << 8)
 		 | buf[QTAG_UCP_FIELD_OFFSET + 1]);
+}
+
+static struct ethqos_emac_por emac_por[] = {
+	{ .offset = RGMII_IO_MACRO_CONFIG,	.value = 0x0 },
+	{ .offset = SDCC_HC_REG_DLL_CONFIG,	.value = 0x0 },
+	{ .offset = SDCC_HC_REG_DDR_CONFIG,	.value = 0x0 },
+	{ .offset = SDCC_HC_REG_DLL_CONFIG2,	.value = 0x0 },
+	{ .offset = SDCC_USR_CTL,		.value = 0x0 },
+	{ .offset = RGMII_IO_MACRO_CONFIG2,	.value = 0x0},
+};
+
+static struct ethqos_emac_driver_data emac_por_data = {
+	.por = emac_por,
+	.num_por = ARRAY_SIZE(emac_por),
+};
+
+static void qcom_ethqos_read_iomacro_por_values(struct qcom_ethqos *ethqos)
+{
+	int i;
+
+	ethqos->por = emac_por_data.por;
+	ethqos->num_por = emac_por_data.num_por;
+
+	/* Read to POR values and enable clk */
+	for (i = 0; i < ethqos->num_por; i++)
+		ethqos->por[i].value =
+			readl_relaxed
+			(ethqos->rgmii_base + ethqos->por[i].offset);
 }
 
 u16 dwmac_qcom_select_queue(struct net_device *dev,
@@ -584,8 +614,9 @@ static int ethqos_dll_configure(struct qcom_ethqos *ethqos)
 	rgmii_updatel(ethqos, SDCC_DLL_CONFIG_DLL_EN,
 		      SDCC_DLL_CONFIG_DLL_EN, SDCC_HC_REG_DLL_CONFIG);
 
-	if (ethqos->emac_ver != EMAC_HW_v2_3_2_RG &&
-	    ethqos->emac_ver != EMAC_HW_v2_1_2) {
+	if ((ethqos->emac_ver != EMAC_HW_v2_3_2_RG &&
+	     ethqos->emac_ver != EMAC_HW_v2_1_2) &&
+	    ethqos->emac_ver != EMAC_HW_v3_0_0_RG) {
 		rgmii_updatel(ethqos, SDCC_DLL_MCLK_GATING_EN,
 			      0, SDCC_HC_REG_DLL_CONFIG);
 
@@ -625,8 +656,9 @@ static int ethqos_dll_configure(struct qcom_ethqos *ethqos)
 	rgmii_updatel(ethqos, SDCC_DLL_CONFIG2_DDR_CAL_EN,
 		      SDCC_DLL_CONFIG2_DDR_CAL_EN, SDCC_HC_REG_DLL_CONFIG2);
 
-	if (ethqos->emac_ver != EMAC_HW_v2_3_2_RG &&
-	    ethqos->emac_ver != EMAC_HW_v2_1_2) {
+	if ((ethqos->emac_ver != EMAC_HW_v2_3_2_RG &&
+	     ethqos->emac_ver != EMAC_HW_v2_1_2) &&
+	    ethqos->emac_ver != EMAC_HW_v3_0_0_RG) {
 		rgmii_updatel(ethqos, SDCC_DLL_CONFIG2_DLL_CLOCK_DIS,
 			      0, SDCC_HC_REG_DLL_CONFIG2);
 
@@ -681,6 +713,9 @@ static int ethqos_rgmii_macro_init(struct qcom_ethqos *ethqos)
 		if (ethqos->emac_ver == EMAC_HW_v2_3_2_RG)
 			rgmii_updatel(ethqos, SDCC_DDR_CONFIG_PRG_RCLK_DLY,
 				      69, SDCC_HC_REG_DDR_CONFIG);
+		else if (ethqos->emac_ver == EMAC_HW_v3_0_0_RG)
+			rgmii_updatel(ethqos, SDCC_DDR_CONFIG_PRG_RCLK_DLY,
+				      115, SDCC_HC_REG_DDR_CONFIG);
 		else if (ethqos->emac_ver == EMAC_HW_v2_1_2)
 			rgmii_updatel(ethqos, SDCC_DDR_CONFIG_PRG_RCLK_DLY,
 				      52, SDCC_HC_REG_DDR_CONFIG);
@@ -697,7 +732,8 @@ static int ethqos_rgmii_macro_init(struct qcom_ethqos *ethqos)
 			      SDCC_DDR_CONFIG_PRG_DLY_EN,
 			      SDCC_HC_REG_DDR_CONFIG);
 		if (ethqos->emac_ver == EMAC_HW_v2_3_2_RG ||
-		    ethqos->emac_ver == EMAC_HW_v2_1_2)
+		    ethqos->emac_ver == EMAC_HW_v2_1_2 ||
+		    ethqos->emac_ver == EMAC_HW_v3_0_0_RG)
 			rgmii_updatel(ethqos, RGMII_CONFIG_LOOPBACK_EN,
 				      0, RGMII_IO_MACRO_CONFIG);
 		else
@@ -729,7 +765,8 @@ static int ethqos_rgmii_macro_init(struct qcom_ethqos *ethqos)
 		if (ethqos->emac_ver == EMAC_HW_v2_3_2_RG ||
 		    ethqos->emac_ver == EMAC_HW_v2_1_2 ||
 			ethqos->emac_ver == EMAC_HW_v2_1_1 ||
-			ethqos->emac_ver == EMAC_HW_v2_3_1)
+			ethqos->emac_ver == EMAC_HW_v2_3_1 ||
+			ethqos->emac_ver == EMAC_HW_v3_0_0_RG)
 			rgmii_updatel(ethqos, RGMII_CONFIG2_RX_PROG_SWAP,
 				      RGMII_CONFIG2_RX_PROG_SWAP,
 				      RGMII_IO_MACRO_CONFIG2);
@@ -746,7 +783,8 @@ static int ethqos_rgmii_macro_init(struct qcom_ethqos *ethqos)
 			      SDCC_DDR_CONFIG_EXT_PRG_RCLK_DLY_EN,
 			      SDCC_HC_REG_DDR_CONFIG);
 		if (ethqos->emac_ver == EMAC_HW_v2_3_2_RG ||
-		    ethqos->emac_ver == EMAC_HW_v2_1_2)
+		    ethqos->emac_ver == EMAC_HW_v2_1_2  ||
+		    ethqos->emac_ver == EMAC_HW_v3_0_0_RG)
 			rgmii_updatel(ethqos, RGMII_CONFIG_LOOPBACK_EN,
 				      0, RGMII_IO_MACRO_CONFIG);
 		else
@@ -771,7 +809,8 @@ static int ethqos_rgmii_macro_init(struct qcom_ethqos *ethqos)
 		if (ethqos->emac_ver == EMAC_HW_v2_3_2_RG ||
 		    ethqos->emac_ver == EMAC_HW_v2_1_2 ||
 			ethqos->emac_ver == EMAC_HW_v2_1_1 ||
-			ethqos->emac_ver == EMAC_HW_v2_3_1)
+			ethqos->emac_ver == EMAC_HW_v2_3_1 ||
+			ethqos->emac_ver == EMAC_HW_v3_0_0_RG)
 			rgmii_updatel(ethqos,
 				      RGMII_CONFIG2_TX_CLK_PHASE_SHIFT_EN,
 				      RGMII_CONFIG2_TX_CLK_PHASE_SHIFT_EN,
@@ -788,7 +827,8 @@ static int ethqos_rgmii_macro_init(struct qcom_ethqos *ethqos)
 		if (ethqos->emac_ver == EMAC_HW_v2_3_2_RG ||
 		    ethqos->emac_ver == EMAC_HW_v2_1_2 ||
 			ethqos->emac_ver == EMAC_HW_v2_1_1 ||
-			ethqos->emac_ver == EMAC_HW_v2_3_1)
+			ethqos->emac_ver == EMAC_HW_v2_3_1 ||
+			ethqos->emac_ver == EMAC_HW_v3_0_0_RG)
 			rgmii_updatel(ethqos, RGMII_CONFIG2_RX_PROG_SWAP,
 				      RGMII_CONFIG2_RX_PROG_SWAP,
 				      RGMII_IO_MACRO_CONFIG2);
@@ -805,7 +845,8 @@ static int ethqos_rgmii_macro_init(struct qcom_ethqos *ethqos)
 			      SDCC_DDR_CONFIG_EXT_PRG_RCLK_DLY_EN,
 			      SDCC_HC_REG_DDR_CONFIG);
 		if (ethqos->emac_ver == EMAC_HW_v2_3_2_RG ||
-		    ethqos->emac_ver == EMAC_HW_v2_1_2)
+		    ethqos->emac_ver == EMAC_HW_v2_1_2 ||
+		    ethqos->emac_ver == EMAC_HW_v3_0_0_RG)
 			rgmii_updatel(ethqos, RGMII_CONFIG_LOOPBACK_EN,
 				      0, RGMII_IO_MACRO_CONFIG);
 		else
@@ -843,6 +884,17 @@ static int ethqos_configure(struct qcom_ethqos *ethqos)
 	rgmii_updatel(ethqos, SDCC_DLL_CONFIG_PDN,
 		      SDCC_DLL_CONFIG_PDN, SDCC_HC_REG_DLL_CONFIG);
 
+	if (ethqos->emac_ver == EMAC_HW_v3_0_0_RG) {
+		if (ethqos->speed == SPEED_1000) {
+			rgmii_writel(ethqos, 0x1800000, SDCC_TEST_CTL);
+			rgmii_writel(ethqos, 0x2C010800, SDCC_USR_CTL);
+			rgmii_writel(ethqos, 0xA001, SDCC_HC_REG_DLL_CONFIG2);
+		} else {
+			rgmii_writel(ethqos, 0x40010800, SDCC_USR_CTL);
+			rgmii_writel(ethqos, 0xA001, SDCC_HC_REG_DLL_CONFIG2);
+		}
+	}
+
 	/* Clear DLL_RST */
 	rgmii_updatel(ethqos, SDCC_DLL_CONFIG_DLL_RST, 0,
 		      SDCC_HC_REG_DLL_CONFIG);
@@ -862,6 +914,7 @@ static int ethqos_configure(struct qcom_ethqos *ethqos)
 			      SDCC_HC_REG_DLL_CONFIG);
 
 		/* Set USR_CTL bit 26 with mask of 3 bits */
+	if (ethqos->emac_ver != EMAC_HW_v3_0_0_RG)
 		rgmii_updatel(ethqos, GENMASK(26, 24), BIT(26), SDCC_USR_CTL);
 
 		/* wait for DLL LOCK */
@@ -952,9 +1005,12 @@ static void ethqos_handle_phy_interrupt(struct qcom_ethqos *ethqos)
 	struct stmmac_priv *priv = netdev_priv(dev);
 	int micrel_intr_status = 0;
 
-	if (priv->phydev && (priv->phydev->phy_id &
-	    priv->phydev->drv->phy_id_mask)
-	    == MICREL_PHY_ID) {
+	if ((priv->phydev && (priv->phydev->phy_id &
+	     priv->phydev->drv->phy_id_mask)
+	     == MICREL_PHY_ID) ||
+	    (priv->phydev && (priv->phydev->phy_id &
+	     priv->phydev->drv->phy_id_mask)
+	     == PHY_ID_KSZ9131)) {
 		phy_intr_status = ethqos_mdio_read(priv,
 						   priv->plat->phy_addr,
 						   DWC_ETH_QOS_BASIC_STATUS);
@@ -1045,8 +1101,8 @@ static int ethqos_phy_intr_enable(void *priv_n)
 }
 
 static const struct of_device_id qcom_ethqos_match[] = {
-	{ .compatible = "qcom,qcs404-ethqos", .data = &emac_v2_3_0_por},
-	{ .compatible = "qcom,sdxprairie-ethqos", .data = &emac_v2_3_2_por},
+	{ .compatible = "qcom,qcs404-ethqos",},
+	{ .compatible = "qcom,sdxprairie-ethqos",},
 	{ .compatible = "qcom,stmmac-ethqos", },
 	{ .compatible = "qcom,emac-smmu-embedded", },
 	{ }
@@ -1391,8 +1447,8 @@ static void ethqos_is_ipv6_NW_stack_ready(struct work_struct *work)
 }
 #endif
 
-static int ethqos_set_early_eth_param(struct stmmac_priv *priv,
-				      struct qcom_ethqos *ethqos)
+static void ethqos_set_early_eth_param(struct stmmac_priv *priv,
+				       struct qcom_ethqos *ethqos)
 {
 	int ret = 0;
 
@@ -1417,12 +1473,7 @@ static int ethqos_set_early_eth_param(struct stmmac_priv *priv,
 					      msecs_to_jiffies(1000));
 	}
 #endif
-
-	if (pparams.is_valid_mac_addr) {
-		ether_addr_copy(dev_addr, pparams.mac_addr);
-		memcpy(priv->dev->dev_addr, dev_addr, ETH_ALEN);
-	}
-	return ret;
+	return;
 }
 
 static ssize_t read_phy_reg_dump(struct file *file, char __user *user_buf,
@@ -1621,6 +1672,13 @@ static int ethqos_cleanup_debugfs(struct qcom_ethqos *ethqos)
 	return 0;
 }
 
+static u32 l3mdev_fib_table1(const struct net_device *dev)
+{
+	return RT_TABLE_LOCAL;
+}
+
+static const struct l3mdev_ops l3mdev_op1 = {.l3mdev_fib_table = l3mdev_fib_table1};
+
 static int qcom_ethqos_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
@@ -1679,8 +1737,6 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		ret = PTR_ERR(ethqos->rgmii_clk);
 		goto err_mem;
 	}
-
-	ethqos->por = of_device_get_match_data(&pdev->dev);
 
 	ret = clk_prepare_enable(ethqos->rgmii_clk);
 	if (ret)
@@ -1788,6 +1844,14 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 						 AVB_CLASS_B_POLL_DEV_NODE);
 	}
 
+	qcom_ethqos_read_iomacro_por_values(ethqos);
+
+	if (pparams.is_valid_mac_addr) {
+		ether_addr_copy(dev_addr, pparams.mac_addr);
+		memcpy(priv->dev->dev_addr, dev_addr, ETH_ALEN);
+		ETHQOSINFO("using partition device MAC address %pM\n", priv->dev->dev_addr);
+	}
+
 	if (ethqos->early_eth_enabled) {
 		/* Initialize work*/
 		INIT_WORK(&ethqos->early_eth,
@@ -1804,6 +1868,16 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
 
 	place_marker("M - Ethernet probe end");
+#endif
+
+#ifdef CONFIG_NET_L3_MASTER_DEV
+	if (ethqos->early_eth_enabled &&
+	    (ethqos->emac_ver == EMAC_HW_v2_1_2 || ethqos->emac_ver == EMAC_HW_v2_1_1 ||
+	    ethqos->emac_ver == EMAC_HW_v2_3_1)) {
+		ETHQOSINFO("l3mdev_op1 set\n");
+		ndev->priv_flags = IFF_L3MDEV_MASTER;
+		ndev->l3mdev_ops = &l3mdev_op1;
+	}
 #endif
 
 	return ret;
