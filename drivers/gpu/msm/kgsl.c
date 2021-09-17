@@ -3,6 +3,7 @@
  * Copyright (c) 2008-2021, The Linux Foundation. All rights reserved.
  */
 
+#include <uapi/linux/msm_ion.h>
 #include <uapi/linux/sched/types.h>
 #include <linux/ctype.h>
 #include <linux/debugfs.h>
@@ -245,6 +246,13 @@ static void _deferred_put(struct work_struct *work)
 		container_of(work, struct kgsl_mem_entry, work);
 
 	kgsl_mem_entry_put(entry);
+}
+
+/* Use a worker to put the refcount on mem entry */
+void kgsl_mem_entry_put_deferred(struct kgsl_mem_entry *entry)
+{
+	INIT_WORK(&entry->work, _deferred_put);
+	queue_work(kgsl_driver.mem_workqueue, &entry->work);
 }
 
 static struct kgsl_mem_entry *kgsl_mem_entry_create(void)
@@ -2335,8 +2343,7 @@ static bool gpuobj_free_fence_func(void *priv)
 			entry->memdesc.gpuaddr, entry->memdesc.size,
 			entry->memdesc.flags);
 
-	INIT_WORK(&entry->work, _deferred_put);
-	queue_work(kgsl_driver.mem_workqueue, &entry->work);
+	kgsl_mem_entry_put_deferred(entry);
 	return true;
 }
 
@@ -3008,6 +3015,29 @@ static int kgsl_setup_dma_buf(struct kgsl_device *device,
 	entry->priv_data = meta;
 	entry->memdesc.sgt = sg_table;
 
+	if (entry->memdesc.priv & KGSL_MEMDESC_SECURE) {
+		unsigned long dma_buf_flags;
+
+		ret = dma_buf_get_flags(dmabuf, &dma_buf_flags);
+		if (ret) {
+			dev_info(device->dev,
+				"Unable to get dma buf flags, err = %d. Skipped access check\n",
+				ret);
+			ret = 0;
+			goto skip_access_check;
+		}
+
+		/*
+		 * Secure buffer is not accessible to CP_PIXEL, there is no point
+		 * in importing this buffer.
+		 */
+		if (!(dma_buf_flags & ION_FLAG_CP_PIXEL)) {
+			ret = -EPERM;
+			goto out;
+		}
+	}
+
+skip_access_check:
 	/* Calculate the size of the memdesc from the sglist */
 	for (s = entry->memdesc.sgt->sgl; s != NULL; s = sg_next(s)) {
 		int priv = (entry->memdesc.priv & KGSL_MEMDESC_SECURE) ? 1 : 0;

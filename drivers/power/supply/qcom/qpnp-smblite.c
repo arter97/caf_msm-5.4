@@ -137,6 +137,7 @@ struct smb_dt_props {
 	int			term_current_thresh_hi_ma;
 	int			term_current_thresh_lo_ma;
 	int			disable_suspend_on_collapse;
+	bool			remote_fg;
 };
 
 struct smblite {
@@ -181,13 +182,20 @@ static struct attribute *smblite_attrs[] = {
 };
 ATTRIBUTE_GROUPS(smblite);
 
+#define REVISION_V2	0x2
 static int smblite_chg_config_init(struct smblite *chip)
 {
 	struct smb_charger *chg = &chip->chg;
-	u8 val;
+	u8 val, rev4;
 	int rc = 0;
 
 	chg->subtype = (u8)of_device_get_match_data(chg->dev);
+
+	rc = smblite_lib_read(chg, REVID_REVISION4, &rev4);
+	if (rc < 0) {
+		pr_err("Couldn't read REVID_REVISION4 reg rc=%d\n", rc);
+		return rc;
+	}
 
 	switch (chg->subtype) {
 	case PM2250:
@@ -211,6 +219,11 @@ static int smblite_chg_config_init(struct smblite *chip)
 		chg->name = "PM5100_charger";
 		chg->connector_type = QTI_POWER_SUPPLY_CONNECTOR_MICRO_USB;
 		chg->use_extcon = true;
+
+		/* Enable HW WA for all PM5100 v1 targets. */
+		if (rev4 < REVISION_V2)
+			chg->wa_flags |= HDC_ICL_REDUCTION_WA;
+
 		break;
 	default:
 		pr_err("Unsupported PMIC subtype=%d\n", chg->subtype);
@@ -250,6 +263,7 @@ static int smblite_parse_dt_misc(struct smblite *chip, struct device_node *node)
 	if (rc < 0 || chip->dt.wd_bark_time < MIN_WD_BARK_TIME)
 		chip->dt.wd_bark_time = DEFAULT_WD_BARK_TIME;
 
+	chip->dt.remote_fg = of_property_read_bool(node, "qcom,remote-fg");
 
 	chip->dt.no_battery = of_property_read_bool(node,
 						"qcom,batteryless-platform");
@@ -1104,6 +1118,10 @@ static int smblite_init_hw(struct smblite *chip)
 		return rc;
 	}
 
+	/* Enable HVDCP detection only for PM5100 targets */
+	if (chg->subtype == PM5100)
+		smblite_lib_hvdcp_detect_enable(chg, true);
+
 	rc = schgm_flashlite_init(chg);
 	if (rc < 0) {
 		pr_err("Couldn't configure flash rc=%d\n", rc);
@@ -1956,6 +1974,7 @@ static int smblite_probe(struct platform_device *pdev)
 
 	chg->chg_param.iio_read = smblite_direct_iio_read;
 	chg->chg_param.iio_write = smblite_direct_iio_write;
+	chg->is_fg_remote = chip->dt.remote_fg;
 
 	rc = smblite_lib_init(chg);
 	if (rc < 0) {
@@ -2190,22 +2209,47 @@ static int smblite_freeze(struct device *dev)
 
 static int smblite_suspend(struct device *dev)
 {
+	int rc = 0;
+	struct smblite *chip = dev_get_drvdata(dev);
+
+	if (chip->dt.remote_fg) {
+		rc = remote_bms_suspend();
+		if (rc < 0) {
+			pr_err("Couldn't suspend remote-fg, rc=%d\n", rc);
+			return rc;
+		}
+	}
+
 #ifdef CONFIG_DEEPSLEEP
 	if (mem_sleep_current == PM_SUSPEND_MEM)
 		return smblite_freeze(dev);
 #endif
 
-	return 0;
+	return rc;
 }
 
 static int smblite_resume(struct device *dev)
 {
+	int rc = 0;
+	struct smblite *chip = dev_get_drvdata(dev);
+
 #ifdef CONFIG_DEEPSLEEP
-	if (mem_sleep_current == PM_SUSPEND_MEM)
-		return smblite_restore(dev);
+	if (mem_sleep_current == PM_SUSPEND_MEM) {
+		rc = smblite_restore(dev);
+		if (rc < 0)
+			return rc;
+	}
 #endif
 
-	return 0;
+	if (chip->dt.remote_fg) {
+		rc = remote_bms_resume();
+		if (rc < 0) {
+			pr_err("Couldn't resume remote-fg, rc=%d\n", rc);
+			return rc;
+		}
+	}
+
+	return rc;
 }
 
 static const struct dev_pm_ops smblite_pm_ops = {
