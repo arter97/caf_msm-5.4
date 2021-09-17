@@ -1020,10 +1020,10 @@ static struct clk_hw *scuba_clks[] = {
 	[RPM_SMD_BIMC_A_CLK] = &holi_bimc_a_clk.hw,
 	[RPM_SMD_QDSS_CLK] = &holi_qdss_clk.hw,
 	[RPM_SMD_QDSS_A_CLK] = &holi_qdss_a_clk.hw,
-	[RPM_SMD_LN_BB_CLK2] = &scuba_ln_bb_clk2.hw,
-	[RPM_SMD_LN_BB_CLK2_A] = &scuba_ln_bb_clk2_a.hw,
-	[RPM_SMD_RF_CLK3] = &scuba_rf_clk3.hw,
-	[RPM_SMD_RF_CLK3_A] = &scuba_rf_clk3_a.hw,
+	[RPM_SMD_LN_BB_CLK2] = &monaco_ln_bb_clk2.hw,
+	[RPM_SMD_LN_BB_CLK2_A] = &monaco_ln_bb_clk2_a.hw,
+	[RPM_SMD_RF_CLK3] = &monaco_rf_clk3.hw,
+	[RPM_SMD_RF_CLK3_A] = &monaco_rf_clk3_a.hw,
 	[RPM_SMD_CNOC_CLK] = &holi_cnoc_clk.hw,
 	[RPM_SMD_CNOC_A_CLK] = &holi_cnoc_a_clk.hw,
 	[RPM_SMD_IPA_CLK] = &holi_ipa_clk.hw,
@@ -1040,16 +1040,16 @@ static struct clk_hw *scuba_clks[] = {
 	[RPM_SMD_SNOC_LPASS_A_CLK] = &holi_snoc_lpass_a_clk.hw,
 	[RPM_SMD_CE1_CLK] = &holi_ce1_clk.hw,
 	[RPM_SMD_CE1_A_CLK] = &holi_ce1_a_clk.hw,
-	[RPM_SMD_QPIC_CLK] = &scuba_qpic_clk.hw,
-	[RPM_SMD_QPIC_A_CLK] = &scuba_qpic_a_clk.hw,
+	[RPM_SMD_QPIC_CLK] = &qcs404_qpic_clk.hw,
+	[RPM_SMD_QPIC_A_CLK] = &qcs404_qpic_a_clk.hw,
 	[RPM_SMD_HWKM_CLK] = &holi_hwkm_clk.hw,
 	[RPM_SMD_HWKM_A_CLK] = &holi_hwkm_a_clk.hw,
 	[RPM_SMD_PKA_CLK] = &holi_pka_clk.hw,
 	[RPM_SMD_PKA_A_CLK] = &holi_pka_a_clk.hw,
-	[RPM_SMD_BIMC_GPU_CLK] = &scuba_bimc_gpu_clk.hw,
-	[RPM_SMD_BIMC_GPU_A_CLK] = &scuba_bimc_gpu_a_clk.hw,
-	[RPM_SMD_CPUSS_GNOC_CLK] = &scuba_cpuss_gnoc_clk.hw,
-	[RPM_SMD_CPUSS_GNOC_A_CLK] = &scuba_cpuss_gnoc_a_clk.hw,
+	[RPM_SMD_BIMC_GPU_CLK] = &monaco_bimc_gpu_clk.hw,
+	[RPM_SMD_BIMC_GPU_A_CLK] = &monaco_bimc_gpu_a_clk.hw,
+	[RPM_SMD_CPUSS_GNOC_CLK] = &monaco_cpuss_gnoc_clk.hw,
+	[RPM_SMD_CPUSS_GNOC_A_CLK] = &monaco_cpuss_gnoc_a_clk.hw,
 };
 
 static const struct rpm_smd_clk_desc rpm_clk_scuba = {
@@ -1126,8 +1126,8 @@ static const struct of_device_id rpm_smd_clk_match_table[] = {
 	{ .compatible = "qcom,rpmcc-holi", .data = &rpm_clk_holi},
 	{ .compatible = "qcom,rpmcc-sdxnightjar", .data = &rpm_clk_sdxnightjar},
 	{ .compatible = "qcom,rpmcc-monaco", .data = &rpm_clk_monaco },
-	{ .compatible = "qcom,rpmcc-scuba", .data = &rpm_clk_scuba},
 	{ .compatible = "qcom,rpmcc-bengal", .data = &rpm_clk_bengal},
+	{ .compatible = "qcom,rpmcc-scuba", .data = &rpm_clk_scuba },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, rpm_smd_clk_match_table);
@@ -1186,8 +1186,10 @@ static int rpm_smd_clk_probe(struct platform_device *pdev)
 {
 	struct clk_hw **hw_clks;
 	const struct rpm_smd_clk_desc *desc;
-	int ret, i, is_holi, hw_clk_handoff = false, is_sdxnightjar, is_monaco, is_scuba;
-	int is_bengal, is_qcs404;
+	int ret, i, is_holi, hw_clk_handoff = false, is_sdxnightjar, is_monaco;
+	int is_qcs404;
+	int is_bengal;
+	int is_scuba;
 
 	desc = of_device_get_match_data(&pdev->dev);
 	if (!desc)
@@ -1203,22 +1205,23 @@ static int rpm_smd_clk_probe(struct platform_device *pdev)
 						"qcom,rpmcc-scuba");
 	is_qcs404 = of_device_is_compatible(pdev->dev.of_node,
 						"qcom,rpmcc-qcs404");
+	is_scuba = of_device_is_compatible(pdev->dev.of_node,
+						"qcom,rpmcc-scuba");
 
 	if (is_holi || is_sdxnightjar || is_monaco || is_qcs404 || is_scuba) {
-
 		ret = clk_vote_bimc(&holi_bimc_clk.hw, INT_MAX);
 		if (ret < 0)
 			return ret;
 	}
 
 	is_bengal = of_device_is_compatible(pdev->dev.of_node,
-                                                "qcom,rpmcc-bengal");
+						"qcom,rpmcc-bengal");
 
-        if (is_bengal) {
-                ret = clk_vote_bimc(&bengal_bimc_clk.hw, INT_MAX);
-                if (ret < 0)
-                        return ret;
-        }
+	if (is_bengal) {
+		ret = clk_vote_bimc(&bengal_bimc_clk.hw, INT_MAX);
+		if (ret < 0)
+			return ret;
+	}
 
 	hw_clks = desc->clks;
 
@@ -1258,7 +1261,7 @@ static int rpm_smd_clk_probe(struct platform_device *pdev)
 	if (ret)
 		goto err;
 
-	if (is_holi || is_monaco) {
+	if (is_holi || is_monaco || is_scuba) {
 		/*
 		 * Keep an active vote on CXO in case no other driver
 		 * votes for it.
@@ -1311,19 +1314,19 @@ static int rpm_smd_clk_probe(struct platform_device *pdev)
 		clk_prepare_enable(sdxnightjar_snoc_a_clk.hw.clk);
 		clk_set_rate(sdxnightjar_snoc_a_clk.hw.clk, 19200000);
 	} else if (is_bengal) {
-                /*
-                 * Keep an active vote on CXO in case no other driver
-                 * votes for it.
-                 */
-                clk_prepare_enable(bengal_bi_tcxo_ao.hw.clk);
+		/*
+		 * Keep an active vote on CXO in case no other driver
+		 * votes for it.
+		 */
+		clk_prepare_enable(bengal_bi_tcxo_ao.hw.clk);
 
-                /* Hold an active set vote for the cnoc_keepalive_a_clk */
-                clk_set_rate(bengal_cnoc_a_clk.hw.clk, 19200000);
-                clk_prepare_enable(bengal_cnoc_a_clk.hw.clk);
+		/* Hold an active set vote for the cnoc_keepalive_a_clk */
+		clk_set_rate(bengal_cnoc_a_clk.hw.clk, 19200000);
+		clk_prepare_enable(bengal_cnoc_a_clk.hw.clk);
 
-                /* Hold an active set vote for the snoc_keepalive_a_clk */
-                clk_set_rate(bengal_snoc_a_clk.hw.clk, 19200000);
-                clk_prepare_enable(bengal_snoc_a_clk.hw.clk);
+		/* Hold an active set vote for the snoc_keepalive_a_clk */
+		clk_set_rate(bengal_snoc_a_clk.hw.clk, 19200000);
+		clk_prepare_enable(bengal_snoc_a_clk.hw.clk);
 
 		/*  Hold an active set vote for the ipa_keepalive_a_clk */
 		clk_prepare_enable(bengal_ipa_a_clk.hw.clk);

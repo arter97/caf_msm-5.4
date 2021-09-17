@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021, The Linux Foundation. All rights reserved.
  */
 
 #define pr_fmt(fmt) "clk: %s: " fmt, __func__
@@ -477,6 +477,7 @@ static int gpucc_bengal_probe(struct platform_device *pdev)
 	struct regmap *regmap;
 	unsigned int value, mask;
 	int ret;
+
 	vdd_cx.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_cx");
 	if (IS_ERR(vdd_cx.regulator[0])) {
 		if (!(PTR_ERR(vdd_cx.regulator[0]) == -EPROBE_DEFER))

@@ -548,6 +548,15 @@ config SM_GPUCC_BENGAL
           Say Y if you want to support graphics controller devices and
           functionality such as 3D graphics.
 
+config SM_GPUCC_BENGAL
+        tristate "BENGAL Graphics Clock Controller"
+        select SM_GCC_BENGAL
+        help
+          Support for the graphics clock controller on Qualcomm Technologies,
+          Inc. BENGAL devices.
+          Say Y if you want to support graphics controller devices and
+          functionality such as 3D graphics.
+
 config SM_DISPCC_SHIMA
 	tristate "SHIMA Display Clock Controller"
 	depends on SM_GCC_SHIMA
@@ -583,6 +592,15 @@ config SM_DEBUGCC_HOLI
 	  HOLI devices.
 	  Say Y if you want to support the debug clocks such as
 	  clock measurement functionality.
+
+config SM_DEBUGCC_BENGAL
+        tristate "BENGAL Debug Clock Controller"
+        depends on SM_GCC_BENGAL
+        help
+          Support for the debug clock controller on Qualcomm Technologies, Inc.
+          BENGAL devices.
+          Say Y if you want to support the debug clocks such as
+          clock measurement functionality.
 
 config SDX_GCC_LEMUR
 	tristate "SDXLEMUR Global Clock Controller"
@@ -911,6 +929,15 @@ config QM_DEBUGCC_SCUBA
 	  Say Y if you want to support the clock debug mux measurement
 	  and it's functionalities.
 
+config SA_CAMCC_DIREWOLF
+	tristate "DIREWOLF Camera Clock Controller"
+	select SA_GCC_DIREWOLF
+	help
+	  Support for the camera clock controller on Qualcomm Technologies, Inc.
+	  DIREWOLF devices.
+	  Say Y if you want to support camera devices and functionality such as
+	  capturing pictures.
+
 config SA_DISPCC_DIREWOLF
 	tristate "DIREWOLF Display Clock Controllers"
 	select SA_GCC_DIREWOLF
@@ -919,6 +946,25 @@ config SA_DISPCC_DIREWOLF
 	  DIREWOLF devices.
 	  Say Y if you want to support display devices and functionality such as
 	  splash screen.
+
+config SA_GPUCC_DIREWOLF
+	tristate "DIREWOLF Graphics Clock Controllers"
+	select SA_GCC_DIREWOLF
+	help
+	  Support for the graphics clock controller on Qualcomm Technologies, Inc
+	  DIREWOLF devices.
+	  Say Y if you want to support graphics controller devices and
+	  functionality such as 3D graphics.
+
+config SA_VIDEOCC_DIREWOLF
+	tristate "DIREWOLF Video Clock Controller"
+	select SA_GCC_DIREWOLF
+	help
+	  Support for the video clock controller on Qualcomm Technologies, Inc.
+	  DIREWOLF devices.
+	  Say Y if you want to support video devices and functionality such as
+	  video encode/decode.
+
 endif
 
 config VIRTIO_CLK
