@@ -127,6 +127,20 @@ struct qcom_ethqos *get_pethqos(void)
 	return pethqos;
 }
 
+#ifdef MODULE
+static char *eipv4;
+module_param(eipv4, charp, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+MODULE_PARM_DESC(eipv4, "ipv4 value from ethernet partition");
+
+static char *eipv6;
+module_param(eipv6, charp, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+MODULE_PARM_DESC(eipv6, "ipv6 value from ethernet partition");
+
+static char *ermac;
+module_param(ermac, charp, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+MODULE_PARM_DESC(ermac, "mac address from ethernet partition");
+#endif
+
 static inline unsigned int dwmac_qcom_get_eth_type(unsigned char *buf)
 {
 	return
@@ -293,8 +307,7 @@ static int ethqos_handle_prv_ioctl(struct net_device *dev, struct ifreq *ifr, in
 	return ret;
 }
 
-#ifndef MODULE
-static int __init set_early_ethernet_ipv4(char *ipv4_addr_in)
+static int set_early_ethernet_ipv4(char *ipv4_addr_in)
 {
 	int ret = 1;
 
@@ -319,9 +332,7 @@ static int __init set_early_ethernet_ipv4(char *ipv4_addr_in)
 	return ret;
 }
 
-__setup("eipv4=", set_early_ethernet_ipv4);
-
-static int __init set_early_ethernet_ipv6(char *ipv6_addr_in)
+static int set_early_ethernet_ipv6(char *ipv6_addr_in)
 {
 	int ret = 1;
 
@@ -346,13 +357,12 @@ static int __init set_early_ethernet_ipv6(char *ipv6_addr_in)
 	return ret;
 }
 
-__setup("eipv6=", set_early_ethernet_ipv6);
-
-static int __init set_early_ethernet_mac(char *mac_addr)
+static int set_early_ethernet_mac(char *mac_addr)
 {
 	bool valid_mac = false;
 
 	pparams.is_valid_mac_addr = false;
+
 	if (!mac_addr)
 		return 1;
 
@@ -372,7 +382,33 @@ fail:
 	return 1;
 }
 
-__setup("ermac=", set_early_ethernet_mac);
+#ifndef MODULE
+static int __init set_early_ethernet_ipv4_static(char *ipv4_addr_in)
+{
+	int ret =1;
+	ret = set_early_ethernet_ipv4(ipv4_addr_in);
+	return ret;
+}
+
+__setup("eipv4=", set_early_ethernet_ipv4_static);
+
+static int __init set_early_ethernet_ipv6_static(char *ipv6_addr_in)
+{
+	int ret = 1;
+	ret = set_early_ethernet_ipv6(ipv6_addr_in);
+	return ret;
+}
+
+__setup("eipv6=", set_early_ethernet_ipv6_static);
+
+static int __init set_early_ethernet_mac_static(char *mac_addr)
+{
+	int ret = 1;
+	ret = set_early_ethernet_mac(mac_addr);
+	return ret;
+}
+
+__setup("ermac=", set_early_ethernet_mac_static);
 #endif
 
 static int qcom_ethqos_add_ipaddr(struct ip_params *ip_info,
@@ -1621,6 +1657,16 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
 	place_marker("M - Ethernet probe start");
+#endif
+#ifdef MODULE
+	if (eipv4 != NULL)
+		ret = set_early_ethernet_ipv4(eipv4);
+
+	if (eipv6 != NULL)
+		ret = set_early_ethernet_ipv6(eipv6);
+
+	if (ermac != NULL)
+		ret = set_early_ethernet_mac(ermac);
 #endif
 
 	ipc_emac_log_ctxt = ipc_log_context_create(IPCLOG_STATE_PAGES,
