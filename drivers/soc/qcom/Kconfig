@@ -1420,6 +1420,18 @@ config AUTO_EARLY_LAUNCH
 	 early_init user space executable file will be copied into
 	 ramdisk/early_services directory during build.
 
+config QCOM_ADSP_VOTE_SMP2P
+	bool "Send command to ADSP for unvote/vote during suspend/resume"
+	depends on QCOM_SMP2P
+	help
+	  When this option is enabled, vote/unvote commands are sent to remote ADSP
+	  from the local processor through the smp2p framework.
+	  Some Auto target use adsp to be functional during full power mode.
+	  ADSP not allowe to auto sleep and to ensure that driver send vote request
+	  to adsp while system is up and unvote for low power transition.
+	  This driver can be used to manually release and acquire the ADSP vote from
+	  APPS processor during system suspend and resume.
+
 source "drivers/soc/qcom/icnss2/Kconfig"
 
 source "drivers/soc/qcom/gnsssirf/Kconfig"
