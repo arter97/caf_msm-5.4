@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -156,7 +156,8 @@ struct smq_invoke_ctx {
 	int tgid;
 	remote_arg_t *lpra;
 	remote_arg64_t *rpra;
-	remote_arg64_t *lrpra;		/* Local copy of rpra for put_args */
+	/* Local copy of rpra for put_args */
+	remote_arg64_t *lrpra;
 	int *fds;
 	struct fastrpc_mmap **maps;
 	struct fastrpc_buf *buf;
@@ -253,6 +254,8 @@ struct fastrpc_mmap {
 	int refs;
 	uintptr_t raddr;
 	int uncached;
+	/* Mapping for fastrpc shell */
+	bool is_filemap;
 };
 
 struct fastrpc_file {
@@ -461,7 +464,9 @@ static int fastrpc_mmap_remove(struct fastrpc_file *fl, uintptr_t va,
 	hlist_for_each_entry_safe(map, n, &me->maps, hn) {
 		if (map->raddr == va &&
 			map->raddr + map->len == va + len &&
-			map->refs == 1) {
+			map->refs == 1 &&
+			/* Skip unmap if it is fastrpc shell memory */
+			!map->is_filemap) {
 			match = map;
 			hlist_del_init(&map->hn);
 			break;
@@ -476,7 +481,9 @@ static int fastrpc_mmap_remove(struct fastrpc_file *fl, uintptr_t va,
 	hlist_for_each_entry_safe(map, n, &fl->maps, hn) {
 		if (map->raddr == va &&
 			map->raddr + map->len == va + len &&
-			map->refs == 1) {
+			map->refs == 1 &&
+			/* Skip unmap if it is fastrpc memory */
+			!map->is_filemap) {
 			match = map;
 			hlist_del_init(&map->hn);
 			break;
@@ -582,6 +589,7 @@ static int fastrpc_mmap_create(struct fastrpc_file *fl, int fd, uintptr_t va,
 	INIT_HLIST_NODE(&map->hn);
 	map->fl = fl;
 	map->fd = fd;
+	map->is_filemap = false;
 	if (mflags == ADSP_MMAP_HEAP_ADDR) {
 		DEFINE_DMA_ATTRS(rh_attrs);
 
@@ -1612,6 +1620,8 @@ static int fastrpc_init_process(struct fastrpc_file *fl,
 		if (init->filelen) {
 			VERIFY(err, !fastrpc_mmap_create(fl, init->filefd,
 				init->file, init->filelen, mflags, &file));
+			if (file)
+				file->is_filemap = true;
 			if (err)
 				goto bail;
 		}
