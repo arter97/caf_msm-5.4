@@ -608,7 +608,8 @@ static inline void prefetch_read_dir(void *name, char *buf, int len)
 	}
 }
 
-static atomic_t prefetch_index;
+static int prefetch_index;
+static struct mutex lock;
 
 static int prefetch_thread(void *unused)
 {
@@ -619,16 +620,20 @@ static int prefetch_thread(void *unused)
 	char *name;
 
 	cpumask_clear(&cpumask);
-	cpumask_set_cpu((thread_num%4)+1, &cpumask);
+	cpumask_set_cpu((thread_num%4)+4, &cpumask);
 	if (sched_setaffinity(0, &cpumask))
 		printk("sched_setaffinity fails\n");
+	if (set_task_ioprio(current, IOPRIO_PRIO_VALUE(IOPRIO_CLASS_IDLE, 0)))
+		printk("set_task_ioprio fails\n");
 
 	buf = kzalloc(PREFETCH_BUF_LEN, GFP_KERNEL);
 	printk("prefetchs%d %d\n", thread_num, smp_processor_id());
 
-	index = atomic_inc_return(&prefetch_index);
-	while (index <= (sizeof(prefetch_files)>>3)) {
-		name = prefetch_files[index-1];
+	mutex_lock(&lock);
+	index = prefetch_index++;
+	mutex_unlock(&lock);
+	while (index < (sizeof(prefetch_files)>>3)) {
+		name = prefetch_files[index];
 
 		if (name) {
 			if (*name == 'f')
@@ -640,7 +645,9 @@ static int prefetch_thread(void *unused)
 			else
 				pr_err("invalid name %s\n", name);
 		}
-		index = atomic_inc_return(&prefetch_index);
+		mutex_lock(&lock);
+		index = prefetch_index++;
+		mutex_unlock(&lock);
 	}
 	printk("prefetche%d %d\n", thread_num, smp_processor_id());
 
@@ -720,6 +727,7 @@ out:
 	ksys_mount(".", "/", NULL, MS_MOVE, NULL);
 	ksys_chroot(".");
 
+	mutex_init(&lock);
 	for (index = 0; index < PREFETCH_NUM; index++) {
 		snprintf(name, 16, "prefetch%d", index);
 		kthread_run(prefetch_thread, (void *)(uintptr_t)index, name);

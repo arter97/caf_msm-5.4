@@ -6851,7 +6851,7 @@ static void __exit bfq_exit(void)
 	bfq_slab_kill();
 }
 
-module_init(bfq_init);
+subsys_initcall(bfq_init);
 module_exit(bfq_exit);
 
 MODULE_AUTHOR("Paolo Valente");
