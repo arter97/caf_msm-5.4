@@ -950,6 +950,7 @@ void clk_huayra_pll_configure(struct clk_alpha_pll *pll, struct regmap *regmap,
 	regmap_update_bits(regmap, PLL_MODE(pll),
 			 PLL_OUTCTRL, PLL_OUTCTRL);
 }
+EXPORT_SYMBOL(clk_huayra_pll_configure);
 
 static unsigned long
 alpha_huayra_pll_calc_rate(u64 prate, u32 l, u32 a)
@@ -1093,6 +1094,14 @@ static int alpha_pll_huayra_set_rate(struct clk_hw *hw, unsigned long rate,
 				   PLL_ALPHA_EN | PLL_ALPHA_MODE, PLL_ALPHA_EN);
 
 	return 0;
+}
+
+static long alpha_pll_huayra_round_rate(struct clk_hw *hw, unsigned long rate,
+					unsigned long *prate)
+{
+	u32 l, a;
+
+	return alpha_huayra_pll_round_rate(rate, *prate, &l, &a);
 }
 
 static int alpha_pll_huayra_determine_rate(struct clk_hw *hw,
@@ -1960,6 +1969,7 @@ const struct clk_ops clk_alpha_pll_huayra_ops = {
 	.disable = clk_alpha_pll_disable,
 	.is_enabled = clk_alpha_pll_is_enabled,
 	.recalc_rate = alpha_pll_huayra_recalc_rate,
+	.round_rate = alpha_pll_huayra_round_rate,
 	.determine_rate = alpha_pll_huayra_determine_rate,
 	.set_rate = alpha_pll_huayra_set_rate,
 	.debug_init = clk_common_debug_init,

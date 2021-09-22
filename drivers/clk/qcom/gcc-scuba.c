@@ -1074,7 +1074,6 @@ static struct clk_rcg2 gcc_camss_ope_clk_src = {
 	.parent_map = gcc_parent_map_6,
 	.freq_tbl = ftbl_gcc_camss_ope_clk_src,
 	.enable_safe_config = true,
-	.flags = RCG_UPDATE_BEFORE_PLL,
 	.clkr.hw.init = &(struct clk_init_data){
 		.name = "gcc_camss_ope_clk_src",
 		.parent_names = gcc_parent_names_6,
