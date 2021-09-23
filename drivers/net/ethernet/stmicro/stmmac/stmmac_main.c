@@ -4954,11 +4954,9 @@ int stmmac_suspend(struct device *dev)
 
 	phylink_mac_change(priv->phylink, false);
 
-#ifdef CONFIG_DWMAC_QCOM_ETHQOS
 	rtnl_lock();
 	phylink_stop(priv->phylink);
 	rtnl_unlock();
-#endif
 	mutex_lock(&priv->lock);
 
 	netif_device_detach(ndev);
@@ -4982,11 +4980,6 @@ int stmmac_suspend(struct device *dev)
 		priv->irq_wake = 1;
 	} else {
 		mutex_unlock(&priv->lock);
-#ifndef CONFIG_DWMAC_QCOM_ETHQOS
-		rtnl_lock();
-		phylink_stop(priv->phylink);
-		rtnl_unlock();
-#endif
 		mutex_lock(&priv->lock);
 
 		stmmac_mac_set(priv, priv->ioaddr, false);
