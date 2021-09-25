@@ -22,7 +22,8 @@
 #include <linux/ip.h>
 #include <linux/ipv6.h>
 #include <linux/rtnetlink.h>
-
+#include <asm-generic/io.h>
+#include <linux/kthread.h>
 #include "stmmac.h"
 #include "stmmac_platform.h"
 #include "dwmac-qcom-ethqos.h"
@@ -1615,8 +1616,9 @@ static u32 l3mdev_fib_table1(const struct net_device *dev)
 
 static const struct l3mdev_ops l3mdev_op1 = {.l3mdev_fib_table = l3mdev_fib_table1};
 
-static int qcom_ethqos_probe(struct platform_device *pdev)
+static int _qcom_ethqos_probe(void *arg)
 {
+	struct platform_device *pdev = (struct platform_device *)arg;
 	struct device_node *np = pdev->dev.of_node;
 	struct plat_stmmacenet_data *plat_dat = NULL;
 	struct stmmac_resources stmmac_res;
@@ -1821,6 +1823,20 @@ err_mem:
 	stmmac_remove_config_dt(pdev, plat_dat);
 
 	return ret;
+}
+
+static int qcom_ethqos_probe(struct platform_device *pdev)
+{
+#ifdef CONFIG_PLATFORM_AUTO
+	struct task_struct *ethqos_task = kthread_run(_qcom_ethqos_probe, pdev,
+			"ethqos_probe");
+	if (IS_ERR(ethqos_task))
+		return PTR_ERR(ethqos_task);
+	else
+		return 0;
+#else
+	return _qcom_ethqos_probe(pdev);
+#endif
 }
 
 static int qcom_ethqos_remove(struct platform_device *pdev)
