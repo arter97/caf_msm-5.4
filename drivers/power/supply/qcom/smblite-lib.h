@@ -19,6 +19,7 @@
 #include <linux/qti_power_supply.h>
 #include "storm-watch.h"
 #include "battery.h"
+#include "smblite-remote-bms.h"
 
 enum print_reason {
 	PR_INTERRUPT	= BIT(0),
@@ -60,6 +61,10 @@ enum print_reason {
 
 #define ITERM_LIMITS_MA			10000
 #define ADC_CHG_ITERM_MASK		32767
+#define PM5100_MAX_LIMITS_MA		2000
+#define PM5100_ADC_CHG_ITERM_MULT	16384
+#define PM5100_RAW_ITERM(iterm)					\
+		div_s64(((int64_t)iterm * PM5100_ADC_CHG_ITERM_MULT), 1000)
 
 #define USBIN_25UA	25000
 #define USBIN_100UA     100000
@@ -267,6 +272,7 @@ struct smb_charger {
 	struct iio_channel	**iio_chan_list_qg;
 	struct iio_channel	**iio_chan_list_smb_parallel;
 	struct class            qcom_class;
+	struct smblite_remote_bms	remote_bms;
 	int			*debug_mask;
 	enum smb_mode		mode;
 	u8			subtype;
@@ -384,6 +390,7 @@ struct smb_charger {
 	bool			flash_init_done;
 	bool			flash_active;
 	u32			irq_status;
+	bool			is_fg_remote;
 };
 
 int smblite_lib_read(struct smb_charger *chg, u16 addr, u8 *val);
@@ -438,6 +445,7 @@ int smblite_lib_get_prop_system_temp_level_max(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblite_lib_get_prop_batt_iterm(struct smb_charger *chg,
 				union power_supply_propval *val);
+int smblite_lib_set_prop_batt_iterm(struct smb_charger *chg, int iterm_ma);
 int smblite_lib_get_prop_input_suspend(struct smb_charger *chg,
 					int *val);
 int smblite_lib_set_prop_input_suspend(struct smb_charger *chg,

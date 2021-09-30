@@ -380,11 +380,18 @@ int smblite_lib_get_prop_from_bms(struct smb_charger *chg, int channel, int *val
 {
 	int rc;
 
-	if (IS_ERR_OR_NULL(chg->iio_chan_list_qg))
-		return -ENODEV;
+	if (chg->is_fg_remote) {
+		rc = remote_bms_get_prop(channel, val, BMS_GLINK);
+		if (rc < 0)
+			smblite_lib_err(chg, "Couldn't get prop from remote bms, rc = %d",
+					rc);
+	} else {
+		if (IS_ERR_OR_NULL(chg->iio_chan_list_qg))
+			return -ENODEV;
 
-	rc = iio_read_channel_processed(chg->iio_chan_list_qg[channel],
-					val);
+		rc = iio_read_channel_processed(chg->iio_chan_list_qg[channel],
+						val);
+	}
 
 	return rc < 0 ? rc : 0;
 }
@@ -607,7 +614,7 @@ void smblite_lib_suspend_on_debug_battery(struct smb_charger *chg)
 {
 	int rc, val;
 
-	if (!chg->iio_chan_list_qg)
+	if (!chg->iio_chan_list_qg && !chg->is_fg_remote)
 		return;
 
 	rc = smblite_lib_get_prop_from_bms(chg, SMB5_QG_DEBUG_BATTERY,
@@ -1209,10 +1216,55 @@ int smblite_lib_get_prop_batt_iterm(struct smb_charger *chg,
 	temp = buf[1] | (buf[0] << 8);
 	temp = sign_extend32(temp, 15);
 
-	temp = DIV_ROUND_CLOSEST(temp * ITERM_LIMITS_MA,
-					ADC_CHG_ITERM_MASK);
+	if (chg->subtype == PM5100)
+		temp = DIV_ROUND_CLOSEST((temp * 1000), PM5100_ADC_CHG_ITERM_MULT);
+	else
+		temp = DIV_ROUND_CLOSEST(temp * ITERM_LIMITS_MA, ADC_CHG_ITERM_MASK);
 
 	val->intval = temp;
+
+	return rc;
+}
+
+int smblite_lib_set_prop_batt_iterm(struct smb_charger *chg, int iterm_ma)
+{
+	int rc;
+	s16 raw_hi_thresh;
+	u8 stat, *buf;
+
+	if (chg->subtype != PM5100)
+		return -EINVAL;
+
+	if (iterm_ma < (-1 * PM5100_MAX_LIMITS_MA)
+		|| iterm_ma > PM5100_MAX_LIMITS_MA)
+		return -EINVAL;
+
+	/* Currently, only ADC comparator-based termination is supported
+	 * and validate, hence read only the threshold corresponding to ADC
+	 * source. Proceed only if CHGR_ITERM_USE_ANALOG_BIT is 0.
+	 */
+	rc = smblite_lib_read(chg, CHGR_TERM_CFG_REG(chg->base), &stat);
+	if (rc < 0) {
+		smblite_lib_err(chg, "Couldn't read CHGR_TERM_CFG_REG rc=%d\n",
+				rc);
+		return rc;
+	}
+
+	if (stat & CHGR_ITERM_USE_ANALOG_BIT)
+		return -EINVAL;
+
+	raw_hi_thresh = PM5100_RAW_ITERM(iterm_ma);
+	raw_hi_thresh = sign_extend32(raw_hi_thresh, 15);
+	buf = (u8 *)&raw_hi_thresh;
+	raw_hi_thresh = buf[1] | (buf[0] << 8);
+
+	rc = smblite_lib_batch_write(chg, CHGR_ADC_ITERM_UP_THD_MSB_REG(chg->base),
+			(u8 *)&raw_hi_thresh, 2);
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't configure ITERM threshold HIGH rc=%d\n",
+				rc);
+		return rc;
+	}
 
 	return rc;
 }
@@ -2733,10 +2785,9 @@ static void smblite_lib_usb_plugin_locked(struct smb_charger *chg)
 			}
 		}
 
-		/* Force 1500mA FCC on removal if fcc stepper is enabled */
 		if (chg->fcc_stepper_enable)
 			vote(chg->fcc_votable, FCC_STEPPER_VOTER,
-							true, 1500000);
+					true, chg->chg_param.fcc_step_start_ua);
 
 		if (chg->wa_flags & WEAK_ADAPTER_WA) {
 			chg->aicl_5v_threshold_mv =
@@ -4028,6 +4079,7 @@ int smblite_lib_init(struct smb_charger *chg)
 {
 	int rc = 0;
 	struct iio_channel **iio_list;
+	struct smblite_remote_bms *remote_bms;
 
 	INIT_WORK(&chg->bms_update_work, bms_update_work);
 	INIT_WORK(&chg->jeita_update_work, jeita_update_work);
@@ -4072,10 +4124,24 @@ int smblite_lib_init(struct smb_charger *chg)
 			return rc;
 		}
 
-		iio_list = get_ext_channels(chg->dev, smblite_lib_qg_ext_iio_chan,
-			ARRAY_SIZE(smblite_lib_qg_ext_iio_chan));
-		if (!IS_ERR(iio_list))
-			chg->iio_chan_list_qg = iio_list;
+		if (chg->is_fg_remote) {
+			remote_bms = &chg->remote_bms;
+			remote_bms->dev = chg->dev;
+			remote_bms->iio_read = chg->chg_param.iio_read;
+			remote_bms->iio_write = chg->chg_param.iio_write;
+
+			rc = remote_bms_init(remote_bms);
+			if (rc < 0) {
+				smblite_lib_err(chg, "Couldn't initialize remote bms rc=%d\n",
+						rc);
+				return rc;
+			}
+		} else {
+			iio_list = get_ext_channels(chg->dev, smblite_lib_qg_ext_iio_chan,
+				ARRAY_SIZE(smblite_lib_qg_ext_iio_chan));
+			if (!IS_ERR(iio_list))
+				chg->iio_chan_list_qg = iio_list;
+		}
 
 		rc = smblite_lib_register_notifier(chg);
 		if (rc < 0) {
@@ -4107,6 +4173,7 @@ int smblite_lib_deinit(struct smb_charger *chg)
 		cancel_delayed_work_sync(&chg->role_reversal_check);
 		cancel_delayed_work_sync(&chg->pr_swap_detach_work);
 		power_supply_unreg_notifier(&chg->nb);
+		remote_bms_deinit();
 		smblite_lib_destroy_votables(chg);
 		qcom_step_chg_deinit();
 		qcom_batt_deinit();
