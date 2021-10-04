@@ -79,7 +79,7 @@ static void md_smem_set_ss_region_count(u32 count)
 	md_smem_ss_toc->ss_region_count = count;
 }
 
-u32 md_smem_get_ss_region_count(void)
+static u32 md_smem_get_ss_region_count(void)
 {
 	return md_smem_ss_toc->ss_region_count;
 }
@@ -103,47 +103,22 @@ static struct md_init_data md_smem_init_data = {
 	.ops = &md_smem_ops,
 };
 
-static int minidump_smem_probe(struct platform_device *pdev)
+static int __init minidump_smem_init(void)
 {
 	size_t size;
 
 	/* Get Minidump table from SMEM */
 	md_smem_global_toc = qcom_smem_get(QCOM_SMEM_HOST_ANY, SBL_MINIDUMP_SMEM_ID,
 				      &size);
-	if (IS_ERR_OR_NULL(md_smem_global_toc)) {
-		pr_err("SMEM is not initialized.\n");
+	if (!md_smem_global_toc)
 		return -ENODEV;
-	}
+
+	if (IS_ERR(md_smem_global_toc))
+		return PTR_ERR(md_smem_global_toc);
 
 	md_smem_ss_toc = &md_smem_global_toc->md_ss_toc[MD_SS_HLOS_ID];
 
-	return msm_minidump_probe(pdev, &md_smem_init_data);
+	return msm_minidump_probe(&md_smem_init_data);
 }
 
-static const struct of_device_id minidump_smem_device_tbl[] = {
-	{ .compatible = "qcom,minidump-smem", },
-	{},
-};
-
-static struct platform_driver minidump_smem_driver = {
-	.probe = minidump_smem_probe,
-	.driver = {
-		.name = "minidump_smem",
-		.of_match_table = minidump_smem_device_tbl,
-	},
-};
-
-static int __init minidump_smem_init(void)
-{
-	return platform_driver_register(&minidump_smem_driver);
-}
 subsys_initcall(minidump_smem_init);
-
-static void __exit minidump_smem_exit(void)
-{
-	platform_driver_unregister(&minidump_smem_driver);
-}
-module_exit(minidump_smem_exit);
-
-MODULE_DESCRIPTION("QTI minidump MMIO driver");
-MODULE_LICENSE("GPL v2");

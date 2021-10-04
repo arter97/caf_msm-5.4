@@ -135,7 +135,7 @@ static int minidump_mmio_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	return msm_minidump_probe(pdev, &md_mmio_init_data);
+	return msm_minidump_probe(&md_mmio_init_data);
 }
 
 static const struct of_device_id minidump_mmio_device_tbl[] = {

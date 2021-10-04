@@ -79,11 +79,19 @@ struct md_global_toc {
 };
 
 /**
- * md_ops: Global Table of Content
- * @md_toc_init : Global Minidump init status
- * @md_revision : Minidump revision
- * @md_enable_status : Minidump enable status
- * @md_ss_toc : Array of subsystems toc
+ * md_ops: Minidump operations
+ * @get_toc_init : Get toc initialization status
+ * @get_revision : Get Minidump revision
+ * @get_enable_status : Get Minidump enable status
+ * @set_ss_toc_init : Set subsystem toc initialization status
+ * @get_ss_toc_init : Get subsystem toc initialization status
+ * @set_ss_enable_status: Set subsystem enable status
+ * @get_ss_enable_status: Get subsystem enable status
+ * @set_ss_encryption: Set subsystem encryption
+ * @set_ss_region_base: Set subsystem region base address
+ * @get_ss_region_base: Get subsystem region base address
+ * @set_ss_region_count: Set subsystem region count
+ * @get_ss_region_count: Get subsystem region count
  */
 struct md_ops {
 	bool		(*get_toc_init)(void);
@@ -91,7 +99,6 @@ struct md_ops {
 	u32		(*get_enable_status)(void);
 	void		(*set_ss_toc_init)(u32 init);
 	u32		(*get_ss_toc_init)(void);
-	void		(*init_ss_toc)(bool init);
 	void		(*set_ss_enable_status)(bool enable);
 	u32		(*get_ss_enable_status)(void);
 	void		(*set_ss_encryption)(bool required, u32 status);
@@ -105,7 +112,6 @@ struct md_init_data {
 	const struct md_ops	*ops;
 };
 
-extern int msm_minidump_probe(struct platform_device *pdev,
-		const struct md_init_data *data);
+extern int msm_minidump_probe(const struct md_init_data *data);
 
 #endif

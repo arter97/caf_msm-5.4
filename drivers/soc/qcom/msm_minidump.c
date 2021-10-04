@@ -541,16 +541,15 @@ static int msm_minidump_add_header(void)
 	return 0;
 }
 
-int msm_minidump_probe(struct platform_device *pdev,
-		      const struct md_init_data *data)
+int msm_minidump_probe(const struct md_init_data *data)
 {
 	unsigned int i;
 	struct md_region *mdr;
 	struct md_global_toc *md_global_toc;
 	unsigned long flags;
+	int ret = 0;
 
-	md_global_toc = devm_kzalloc(&pdev->dev, sizeof(struct md_global_toc),
-			GFP_KERNEL);
+	md_global_toc = kzalloc(sizeof(struct md_global_toc), GFP_KERNEL);
 	if (!md_global_toc)
 		return -ENOMEM;
 
@@ -559,8 +558,9 @@ int msm_minidump_probe(struct platform_device *pdev,
 	/*Check global minidump support initialization */
 	md_global_toc->md_toc_init = minidump_table.ops->get_toc_init();
 	if (!md_global_toc->md_toc_init) {
-		dev_err(&pdev->dev, "System Minidump TOC not initialized\n");
-		return -ENODEV;
+		pr_err("System Minidump TOC not initialized\n");
+		ret = -ENODEV;
+		goto err_get_toc_init;
 	}
 
 	md_global_toc->md_revision = minidump_table.ops->get_revision();
@@ -573,8 +573,10 @@ int msm_minidump_probe(struct platform_device *pdev,
 
 	minidump_table.md_regions = kzalloc((MAX_NUM_ENTRIES *
 				sizeof(struct md_ss_region)), GFP_KERNEL);
-	if (!minidump_table.md_regions)
-		return -ENOMEM;
+	if (!minidump_table.md_regions) {
+		ret = -ENOMEM;
+		goto err_kzalloc_md_regions;
+	}
 
 	minidump_table.ops->set_ss_region_base(virt_to_phys(minidump_table.md_regions));
 
@@ -594,11 +596,16 @@ int msm_minidump_probe(struct platform_device *pdev,
 	pendings = 0;
 	spin_unlock_irqrestore(&mdt_lock, flags);
 
-	dev_info(&pdev->dev, "Enabled with max number of regions %d\n",
+	pr_info("Enabled with max number of regions %d\n",
 		CONFIG_MINIDUMP_MAX_ENTRIES);
 
 	/* All updates above should be visible, before init completes */
 	smp_store_release(&md_init_done, true);
 	return 0;
+
+err_kzalloc_md_regions:
+err_get_toc_init:
+	kfree(md_global_toc);
+	return ret;
 }
 EXPORT_SYMBOL(msm_minidump_probe);
