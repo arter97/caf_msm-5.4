@@ -2738,8 +2738,10 @@ static int qnoc_probe(struct platform_device *pdev)
 	}
 
 	qp->num_clks = devm_clk_bulk_get_all(qp->dev, &qp->clks);
-	if (qp->num_clks < 0)
-		return qp->num_clks;
+	if (qp->num_clks < 0) {
+		ret = qp->num_clks;
+		goto err2;
+	}
 
 	for (i = 0; i < num_nodes; i++) {
 		size_t j;
@@ -2790,6 +2792,7 @@ err:
 
 	clk_bulk_put_all(qp->num_clks, qp->clks);
 
+err2:
 	icc_provider_del(provider);
 	return ret;
 }
