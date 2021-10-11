@@ -315,9 +315,7 @@ static struct clk_alpha_pll apcs_cpu_pll = {
 				[VDD_MIN] = 615000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1500000000,
-				[VDD_NOMINAL] = 1750000000,
-				[VDD_HIGH] = 1804800000},
-
+				[VDD_NOMINAL] = 1750000000},
 		},
 	},
 };
