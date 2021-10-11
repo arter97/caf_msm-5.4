@@ -1095,6 +1095,134 @@ exit_control_error:
 }
 EXPORT_SYMBOL(mhi_control_error);
 
+#ifdef CONFIG_MHI_SW_RESET
+void mhi_reset_pcie_txvecdb(struct mhi_controller *mhi_cntrl)
+{
+
+	MHI_CNTRL_LOG("Reset PCIe TXVECDB\n");
+
+	mhi_cntrl->write_reg(mhi_cntrl, mhi_cntrl->regs,
+			     PCIE_TXVECDB, 0);
+}
+
+void mhi_reset_pcie_txvecstatus(struct mhi_controller *mhi_cntrl)
+{
+	MHI_CNTRL_LOG("Reset PCIe TXVECSTATUS\n");
+
+	mhi_cntrl->write_reg(mhi_cntrl, mhi_cntrl->regs,
+			     PCIE_TXVECSTATUS, 0);
+}
+
+void mhi_reset_pcie_rxvecdb(struct mhi_controller *mhi_cntrl)
+{
+	MHI_CNTRL_LOG("Reset PCIe RXVECDB\n");
+
+        mhi_cntrl->write_reg(mhi_cntrl, mhi_cntrl->regs,
+                             PCIE_RXVECDB, 0);
+
+}
+
+void mhi_reset_pcie_rxvecstatus(struct mhi_controller *mhi_cntrl)
+{
+	MHI_CNTRL_LOG("Reset PCIe RXVECSTATUS\n");
+
+	mhi_cntrl->write_reg(mhi_cntrl, mhi_cntrl->regs,
+			     PCIE_RXVECSTATUS, 0);
+}
+
+void mhi_set_wlaon_sw_entry(struct mhi_controller *mhi_cntrl)
+{
+	u32 val;
+
+	mhi_read_reg_remap(mhi_cntrl, mhi_cntrl->regs,
+			   WLAON_WARM_SW_ENTRY, &val);
+	MHI_CNTRL_LOG("WLAON_WARM_SW_ENTRY reg value is 0x%x\n", val);
+
+	mhi_write_reg_remap(mhi_cntrl, mhi_cntrl->regs,
+			    WLAON_WARM_SW_ENTRY, 0);
+
+#ifdef CONFIG_CNSS_QCA6390
+	mhi_mdelay(10);
+#endif
+
+	mhi_read_reg_remap(mhi_cntrl, mhi_cntrl->regs,
+			   WLAON_WARM_SW_ENTRY, &val);
+	MHI_CNTRL_LOG("WLAON_WARM_SW_ENTRY reg value is 0x%x\n", val);
+}
+
+#ifdef CONFIG_CNSS_QCA6390
+void mhi_set_pcie_mhictrl_reset(struct mhi_controller *mhi_cntrl)
+{
+	u32 val;
+
+	mhi_read_reg(mhi_cntrl, mhi_cntrl->regs, MHISTATUS, &val);
+	MHI_CNTRL_LOG("MHISTATUS reg value is 0x%x\n", val);
+
+	/*
+	 * Observed on Hastings that after SOC_GLOBAL_RESET, MHISTATUS
+	 * has SYSERR bit set and thus need to set MHICTRL_RESET
+	 * to clear SYSERR.
+	 */
+	mhi_write_reg(mhi_cntrl, mhi_cntrl->regs, MHICTRL, MHICTRL_RESET_MASK);
+
+	mhi_mdelay(10);
+}
+#endif
+
+void mhi_set_pcie_soc_global_reset(struct mhi_controller *mhi_cntrl)
+{
+	u32 val;
+	u32 delay;
+
+	mhi_read_reg(mhi_cntrl, mhi_cntrl->regs, PCIE_SOC_GLOBAL_RESET, &val);
+	val |= PCIE_SOC_GLOBAL_RESET_V;
+	mhi_write_reg(mhi_cntrl, mhi_cntrl->regs, PCIE_SOC_GLOBAL_RESET, val);
+	MHI_CNTRL_LOG("Write reg PCIE_SOC_GLOBAL_RESET value is 0x%x\n", val);
+
+	/* TODO: exact time to sleep is uncertain */
+	delay = 10;
+	mhi_mdelay(delay);
+
+	/* Need to toggle V bit back otherwise stuck in reset status */
+	val &= ~PCIE_SOC_GLOBAL_RESET_V;
+	mhi_write_reg(mhi_cntrl, mhi_cntrl->regs, PCIE_SOC_GLOBAL_RESET, val);
+	MHI_CNTRL_LOG("Write reg PCIE_SOC_GLOBAL_RESET value is 0x%x\n", val);
+
+	mhi_mdelay(delay);
+}
+
+void mhi_pcie_sw_reset(struct mhi_controller *mhi_cntrl)
+{
+	/*
+	 * Following are needed to unload and reload wlan driver
+	 * dynamically without the need to press S1 reset.
+	 *
+	 * txvecdb, txvecstatus, rxvecdb and rxvecstatus registers
+	 * are not cleared upon global reset. Thus reset here per
+	 * FW suggestions.
+	 *
+	 * WLAON domain is cleared to prevent Q6 from going warm
+	 * boot path and enter dead loop.
+	 *
+	 * gloabl reset is triggered to reset SoC and SoC will be
+	 * in PBL state then.
+	 */
+	if (!mhi_cntrl)
+		return;
+
+	mhi_reset_pcie_txvecdb(mhi_cntrl);
+	mhi_reset_pcie_txvecstatus(mhi_cntrl);
+	mhi_reset_pcie_rxvecdb(mhi_cntrl);
+	mhi_reset_pcie_rxvecstatus(mhi_cntrl);
+	mhi_set_wlaon_sw_entry(mhi_cntrl);
+	mhi_set_pcie_soc_global_reset(mhi_cntrl);
+#ifdef CONFIG_CNSS_QCA6390
+	mhi_set_pcie_mhictrl_reset(mhi_cntrl);
+#endif
+}
+EXPORT_SYMBOL(mhi_pcie_sw_reset);
+#endif
+
 void mhi_power_down(struct mhi_controller *mhi_cntrl, bool graceful)
 {
 	enum MHI_PM_STATE cur_state;
@@ -1119,6 +1247,11 @@ void mhi_power_down(struct mhi_controller *mhi_cntrl, bool graceful)
 	mutex_unlock(&mhi_cntrl->pm_mutex);
 
 	mhi_queue_disable_transition(mhi_cntrl, transition_state);
+
+#ifdef CONFIG_MHI_SW_RESET
+	MHI_CNTRL_LOG("Doing software reset\n");
+	mhi_pcie_sw_reset(mhi_cntrl);
+#endif
 
 	MHI_CNTRL_LOG("Wait for shutdown to complete\n");
 	flush_work(&mhi_cntrl->st_worker);

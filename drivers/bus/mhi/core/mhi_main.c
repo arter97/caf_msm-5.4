@@ -55,6 +55,48 @@ int __must_check mhi_read_reg_field(struct mhi_controller *mhi_cntrl,
 	return 0;
 }
 
+static void mhi_reg_select_window(void __iomem *base, u32 offset)
+{
+	u32 window = (offset >> WINDOW_SHIFT) & WINDOW_VALUE_MASK;
+	u32 window_enable = WINDOW_ENABLE_BIT | window;
+
+	writel_relaxed(window_enable, base + PCIE_REMAP_1M_BAR_CTRL);
+	wmb();
+
+        /* Read it back to make sure the write has taken effect */
+/*	val = readl_relaxed(base + PCIE_REMAP_1M_BAR_CTRL);
+        if (val != window_enable) {
+                MHI_ERR("Failed to config window register to 0x%x, current value: 0x%x\n",
+			window_enable, val);
+	}
+*/
+}
+
+int __must_check mhi_read_reg_remap(struct mhi_controller *mhi_cntrl,
+				    void __iomem *base,
+				    u32 offset,
+				    u32 *out)
+{
+	u32 tmp;
+
+	if (offset < MAX_UNWINDOWED_ADDRESS) {
+		return mhi_read_reg(mhi_cntrl, base, offset, out);
+	} else {
+		mhi_reg_select_window(base, offset);
+		tmp = readl_relaxed(base + WINDOW_START +
+				    (offset & WINDOW_RANGE_MASK));
+
+		/* unexpected value, query the link status */
+		if (PCI_INVALID_READ(tmp) &&
+		    mhi_cntrl->link_status(mhi_cntrl, mhi_cntrl->priv_data))
+			return -EIO;
+
+		*out = tmp;
+
+		return 0;
+	}
+}
+
 int mhi_get_capability_offset(struct mhi_controller *mhi_cntrl,
 			      u32 capability,
 			      u32 *offset)
@@ -169,6 +211,21 @@ void mhi_write_reg_field(struct mhi_controller *mhi_cntrl,
 	tmp &= ~mask;
 	tmp |= (val << shift);
 	mhi_cntrl->write_reg(mhi_cntrl, base, offset, tmp);
+}
+
+void mhi_write_reg_remap(struct mhi_controller *mhi_cntrl,
+			 void __iomem *base,
+			 u32 offset,
+			 u32 val)
+{
+	if (offset < MAX_UNWINDOWED_ADDRESS) {
+		writel_relaxed(val, base + offset);
+	} else {
+		mhi_reg_select_window(base, offset);
+		writel_relaxed(val, base + WINDOW_START +
+			       (offset & WINDOW_RANGE_MASK));
+	}
+	wmb();
 }
 
 void mhi_write_db(struct mhi_controller *mhi_cntrl,

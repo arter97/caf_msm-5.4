@@ -2,9 +2,13 @@
 /* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved. */
 
 #include <linux/msm_rtb.h>
+#include <linux/delay.h>
 
 #ifndef _MHI_INT_H
 #define _MHI_INT_H
+
+#define CONFIG_CNSS_QCA6390 1
+#define CONFIG_MHI_SW_RESET 1
 
 extern struct bus_type mhi_bus_type;
 
@@ -238,6 +242,26 @@ extern struct bus_type mhi_bus_type;
 #define SOC_HW_VERSION_MAJOR_VER_SHFT (8)
 #define SOC_HW_VERSION_MINOR_VER_BMSK (0x000000FF)
 #define SOC_HW_VERSION_MINOR_VER_SHFT (0)
+
+#define PCIE_TXVECDB (0x360)
+#define PCIE_TXVECSTATUS (0x368)
+#define PCIE_RXVECDB (0x394)
+#define PCIE_RXVECSTATUS (0x39C)
+#define PCIE_SOC_GLOBAL_RESET (0x3008)
+#define PCIE_SOC_GLOBAL_RESET_V (1 << 0)
+#define WLAON_WARM_SW_ENTRY (0x1F80504)
+
+#define PCIE_REMAP_1M_BAR_CTRL (0x310C)
+#define MAX_UNWINDOWED_ADDRESS 0x80000
+#ifndef CONFIG_CNSS_QCA6390
+#define WINDOW_ENABLE_BIT 0x80000000
+#else
+#define WINDOW_ENABLE_BIT 0x40000000
+#endif
+#define WINDOW_SHIFT 19
+#define WINDOW_VALUE_MASK 0x3F
+#define WINDOW_START MAX_UNWINDOWED_ADDRESS
+#define WINDOW_RANGE_MASK 0x7FFFF
 
 /* timesync time calculations */
 #define LOCAL_TICKS_TO_US(x) (div_u64((x) * 100ULL, \
@@ -834,10 +858,14 @@ int __must_check mhi_read_reg(struct mhi_controller *mhi_cntrl,
 int __must_check mhi_read_reg_field(struct mhi_controller *mhi_cntrl,
 				    void __iomem *base, u32 offset, u32 mask,
 				    u32 shift, u32 *out);
+int __must_check mhi_read_reg_remap(struct mhi_controller *mhi_cntrl,
+				    void __iomem *base, u32 offset, u32 *out);
 void mhi_write_reg(struct mhi_controller *mhi_cntrl, void __iomem *base,
 		   u32 offset, u32 val);
 void mhi_write_reg_field(struct mhi_controller *mhi_cntrl, void __iomem *base,
 			 u32 offset, u32 mask, u32 shift, u32 val);
+void mhi_write_reg_remap(struct mhi_controller *mhi_cntrl, void __iomem *base,
+			 u32 offset, u32 val);
 void mhi_ring_er_db(struct mhi_event *mhi_event);
 void mhi_write_db(struct mhi_controller *mhi_cntrl, void __iomem *db_addr,
 		  dma_addr_t wp);
@@ -853,6 +881,14 @@ void mhi_destroy_sysfs(struct mhi_controller *mhi_cntrl);
 int mhi_early_notify_device(struct device *dev, void *data);
 void mhi_write_reg_offload(struct mhi_controller *mhi_cntrl,
 			void __iomem *base, u32 offset, u32 val);
+
+static inline void mhi_mdelay(u32 delay)
+{
+	if (in_interrupt() || irqs_disabled() || in_atomic())
+		mdelay(delay);
+	else
+		msleep(delay);
+}
 
 /* timesync log support */
 static inline void mhi_timesync_log(struct mhi_controller *mhi_cntrl)
