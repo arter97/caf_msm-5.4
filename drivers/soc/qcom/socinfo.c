@@ -57,6 +57,7 @@ enum {
 	HW_PLATFORM_HDK = 31,
 	HW_PLATFORM_ATP = 33,
 	HW_PLATFORM_IDP = 34,
+	HW_PLATFORM_WDP = 36,
 	HW_PLATFORM_INVALID
 };
 
@@ -81,6 +82,7 @@ static const char * const hw_platform[] = {
 	[HW_PLATFORM_HDK] = "HDK",
 	[HW_PLATFORM_ATP] = "ATP",
 	[HW_PLATFORM_IDP] = "IDP",
+	[HW_PLATFORM_WDP] = "WDP",
 };
 
 enum {
@@ -667,6 +669,7 @@ static const struct soc_id soc_id[] = {
 	{ 522, "SA8155P-IOT" },
 	{ 377, "SA6155P" },
 	{ 384, "SA6155"},
+	{ 401, "QCS610"},
 	{ 405, "SA8195P" },
 	{ 415, "LAHAINA" },
 	{ 439, "LAHAINAP" },
