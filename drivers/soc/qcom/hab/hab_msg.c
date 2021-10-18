@@ -315,6 +315,9 @@ int hab_msg_recv(struct physical_channel *pchan,
 			break;
 		}
 
+		pr_debug("%s exp payload %zu bytes\n",
+				pchan->name, sizebytes);
+
 		exp_desc = kzalloc(sizebytes, GFP_ATOMIC);
 		if (!exp_desc)
 			break;
