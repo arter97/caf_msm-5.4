@@ -1055,16 +1055,18 @@ static void _enable_gpuhtw_llc(struct kgsl_mmu *mmu,
 			"System cache no-write-alloc is disabled for GPU pagetables\n");
 }
 
-static int set_smmu_aperture(struct kgsl_device *device, int cb_num)
+int kgsl_set_smmu_aperture(struct kgsl_device *device)
 {
+	struct kgsl_iommu *iommu = _IOMMU_PRIV(&(device->mmu));
+	struct kgsl_iommu_context *ctx = &iommu->user_context;
 	int ret;
 
 	if (!test_bit(KGSL_MMU_SMMU_APERTURE, &device->mmu.features))
 		return 0;
 
-	ret = qcom_scm_kgsl_set_smmu_aperture(cb_num);
+	ret = qcom_scm_kgsl_set_smmu_aperture(ctx->cb_num);
 	if (ret == -EBUSY)
-		ret = qcom_scm_kgsl_set_smmu_aperture(cb_num);
+		ret = qcom_scm_kgsl_set_smmu_aperture(ctx->cb_num);
 
 	if (ret)
 		dev_err(device->dev, "Unable to set the SMMU aperture: %d. The aperture needs to be set to use per-process pagetables\n",
@@ -1133,7 +1135,7 @@ static int _init_global_pt(struct kgsl_mmu *mmu, struct kgsl_pagetable *pt)
 	ctx->cb_num = (int) cb_num;
 
 	if (!test_bit(KGSL_MMU_GLOBAL_PAGETABLE, &device->mmu.features)) {
-		ret = set_smmu_aperture(device, cb_num);
+		ret = kgsl_set_smmu_aperture(device);
 
 		if (ret)
 			goto done;
@@ -1230,6 +1232,7 @@ static int _init_secure_pt(struct kgsl_mmu *mmu, struct kgsl_pagetable *pt)
 	struct kgsl_iommu_context *ctx = &iommu->secure_context;
 	int secure_vmid = VMID_CP_PIXEL;
 	struct kgsl_global_memdesc *md;
+	int cb_num;
 
 	if (!mmu->secured)
 		return -EPERM;
@@ -1258,6 +1261,17 @@ static int _init_secure_pt(struct kgsl_mmu *mmu, struct kgsl_pagetable *pt)
 
 	iommu_set_fault_handler(iommu_pt->domain,
 				kgsl_iommu_fault_handler, pt);
+
+	ret = iommu_domain_get_attr(iommu_pt->domain,
+				DOMAIN_ATTR_CONTEXT_BANK, &cb_num);
+	if (ret) {
+		dev_err(device->dev, "get DOMAIN_ATTR_CONTEXT_BANK failed: %d\n",
+			ret);
+		_free_pt(ctx, pt);
+		return ret;
+	}
+
+	ctx->cb_num = cb_num;
 
 	/* Map any pending secure global buffers */
 	list_for_each_entry(md, &device->globals, node) {

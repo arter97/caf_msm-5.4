@@ -78,6 +78,8 @@ static DEFINE_SPINLOCK(time_sync_lock);
 #define FORCE_WAKE_DELAY_MAX_US			6000
 #define FORCE_WAKE_DELAY_TIMEOUT_US		60000
 
+#define REG_RETRY_MAX_TIMES		3
+
 #define LINK_TRAINING_RETRY_MAX_TIMES		3
 #define LINK_TRAINING_RETRY_DELAY_MS		500
 
@@ -134,6 +136,13 @@ static struct cnss_pci_reg qdss_csr[] = {
 	{ "QDSSCSR_PRESERVEETF", QDSS_APB_DEC_CSR_PRESERVEETF_OFFSET },
 	{ "QDSSCSR_PRESERVEETR0", QDSS_APB_DEC_CSR_PRESERVEETR0_OFFSET },
 	{ "QDSSCSR_PRESERVEETR1", QDSS_APB_DEC_CSR_PRESERVEETR1_OFFSET },
+	{ NULL },
+};
+
+static struct cnss_pci_reg pci_scratch[] = {
+	{ "PCIE_SCRATCH_0", PCIE_SCRATCH_0_SOC_PCIE_REG },
+	{ "PCIE_SCRATCH_1", PCIE_SCRATCH_1_SOC_PCIE_REG },
+	{ "PCIE_SCRATCH_2", PCIE_SCRATCH_2_SOC_PCIE_REG },
 	{ NULL },
 };
 
@@ -687,6 +696,8 @@ int cnss_pci_check_link_status(struct cnss_pci_data *pci_priv)
 
 static void cnss_pci_select_window(struct cnss_pci_data *pci_priv, u32 offset)
 {
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+
 	u32 window = (offset >> WINDOW_SHIFT) & WINDOW_VALUE_MASK;
 	u32 window_enable = WINDOW_ENABLE_BIT | window;
 	u32 val;
@@ -708,7 +719,8 @@ static void cnss_pci_select_window(struct cnss_pci_data *pci_priv, u32 offset)
 	if (val != window_enable) {
 		cnss_pr_err("Failed to config window register to 0x%x, current value: 0x%x\n",
 			    window_enable, val);
-		if (!cnss_pci_check_link_status(pci_priv))
+		if (!cnss_pci_check_link_status(pci_priv) &&
+		    !test_bit(CNSS_IN_PANIC, &plat_priv->driver_state))
 			CNSS_ASSERT(0);
 	}
 }
@@ -1094,6 +1106,36 @@ retry:
 	return ret;
 }
 
+static void cnss_pci_soc_scratch_reg_dump(struct cnss_pci_data *pci_priv)
+{
+	u32 reg_offset, val;
+	int i;
+
+	switch (pci_priv->device_id) {
+	case QCA6390_DEVICE_ID:
+	case QCA6490_DEVICE_ID:
+		break;
+	default:
+		return;
+	}
+
+	if (in_interrupt() || irqs_disabled())
+		return;
+
+	if (cnss_pci_check_link_status(pci_priv))
+		return;
+
+	cnss_pr_dbg("Start to dump SOC Scratch registers\n");
+
+	for (i = 0; pci_scratch[i].name; i++) {
+		reg_offset = pci_scratch[i].offset;
+		if (cnss_pci_reg_read(pci_priv, reg_offset, &val))
+			return;
+		cnss_pr_dbg("PCIE_SOC_REG_%s = 0x%x\n",
+			    pci_scratch[i].name, val);
+	}
+}
+
 int cnss_suspend_pci_link(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0;
@@ -1118,6 +1160,9 @@ int cnss_suspend_pci_link(struct cnss_pci_data *pci_priv)
 		if (pci_set_power_state(pci_priv->pci_dev, PCI_D3hot))
 			cnss_pr_err("Failed to set D3Hot, err =  %d\n", ret);
 	}
+
+	/* Always do PCIe L2 suspend during power off/PCIe link recovery */
+	pci_priv->drv_connected_last = 0;
 
 	ret = cnss_set_pci_link(pci_priv, PCI_LINK_DOWN);
 	if (ret)
@@ -1196,8 +1241,6 @@ int cnss_pci_recover_link_down(struct cnss_pci_data *pci_priv)
 	 */
 	msleep(WAKE_EVENT_TIMEOUT);
 
-	/* Always do PCIe L2 suspend/resume during link down recovery */
-	pci_priv->drv_connected_last = 0;
 	ret = cnss_suspend_pci_link(pci_priv);
 	if (ret)
 		cnss_pr_err("Failed to suspend PCI link, err = %d\n", ret);
@@ -1213,6 +1256,7 @@ int cnss_pci_recover_link_down(struct cnss_pci_data *pci_priv)
 		  jiffies + msecs_to_jiffies(DEV_RDDM_TIMEOUT));
 
 	mhi_debug_reg_dump(pci_priv->mhi_ctrl);
+	cnss_pci_soc_scratch_reg_dump(pci_priv);
 
 	return 0;
 }
@@ -1335,6 +1379,11 @@ int cnss_pci_link_down(struct device *dev)
 		return -ENODEV;
 	}
 
+	if (pci_priv->pci_link_down_ind) {
+		cnss_pr_dbg("PCI link down recovery is already in progress\n");
+		return -EBUSY;
+	}
+
 	if (pci_priv->drv_connected_last &&
 	    of_property_read_bool(plat_priv->plat_dev->dev.of_node,
 				  "cnss-enable-self-recovery"))
@@ -1423,18 +1472,20 @@ static void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	u32 mem_addr, val, pbl_log_max_size, sbl_log_max_size;
-	u32 sbl_log_def_start, sbl_log_def_end;
+	u32 pbl_log_sram_start, sbl_log_def_start, sbl_log_def_end;
 	u32 pbl_stage, sbl_log_start, sbl_log_size;
 	u32 pbl_wlan_boot_cfg, pbl_bootstrap_status;
 	int i;
 
 	switch (pci_priv->device_id) {
 	case QCA6390_DEVICE_ID:
+		pbl_log_sram_start = QCA6390_DEBUG_PBL_LOG_SRAM_START;
 		pbl_log_max_size = QCA6390_DEBUG_PBL_LOG_SRAM_MAX_SIZE;
 		sbl_log_max_size = QCA6390_DEBUG_SBL_LOG_SRAM_MAX_SIZE;
 		sbl_log_def_start = QCA6390_V2_SBL_DATA_START;
 		sbl_log_def_end = QCA6390_V2_SBL_DATA_END;
 	case QCA6490_DEVICE_ID:
+		pbl_log_sram_start = QCA6490_DEBUG_PBL_LOG_SRAM_START;
 		pbl_log_max_size = QCA6490_DEBUG_PBL_LOG_SRAM_MAX_SIZE;
 		sbl_log_max_size = QCA6490_DEBUG_SBL_LOG_SRAM_MAX_SIZE;
 		if (plat_priv->device_version.major_version == FW_V2_NUMBER) {
@@ -1465,7 +1516,7 @@ static void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 
 	cnss_pr_dbg("Dumping PBL log data\n");
 	for (i = 0; i < pbl_log_max_size; i += sizeof(val)) {
-		mem_addr = DEBUG_PBL_LOG_SRAM_START + i;
+		mem_addr = pbl_log_sram_start + i;
 		if (cnss_pci_reg_read(pci_priv, mem_addr, &val))
 			break;
 		cnss_pr_dbg("SRAM[0x%x] = 0x%x\n", mem_addr, val);
@@ -1508,6 +1559,7 @@ static int cnss_pci_handle_mhi_poweron_timeout(struct cnss_pci_data *pci_priv)
 	} else {
 		cnss_pr_dbg("RDDM cookie is not set\n");
 		mhi_debug_reg_dump(pci_priv->mhi_ctrl);
+		cnss_pci_soc_scratch_reg_dump(pci_priv);
 		/* Dump PBL/SBL error log if RDDM cookie is not set */
 		cnss_pci_dump_bl_sram_mem(pci_priv);
 		return -ETIMEDOUT;
@@ -1683,20 +1735,20 @@ static int cnss_pci_set_mhi_state(struct cnss_pci_data *pci_priv,
 		break;
 	case CNSS_MHI_SUSPEND:
 		mutex_lock(&pci_priv->mhi_ctrl->pm_mutex);
+retry:
 		if (pci_priv->drv_connected_last) {
 			ret = mhi_pm_fast_suspend(pci_priv->mhi_ctrl, true);
 		} else {
 			ret = mhi_pm_suspend(pci_priv->mhi_ctrl);
-			/* in some corner case, when cnss try to suspend,
-			 * there is still packets pending in mhi layer,
-			 * so retry suspend to save roll back effort.
-			 */
-			while (ret == -EBUSY && retry < MHI_SUSPEND_RETRY_CNT) {
-				usleep_range(5000, 6000);
-				retry++;
-				cnss_pr_err("mhi is busy, retry #%u", retry);
-				ret = mhi_pm_suspend(pci_priv->mhi_ctrl);
-			}
+		}
+		/* in some corner case, when cnss try to suspend,
+		 * there is still packets pending in mhi layer,
+		 * so retry suspend to save roll back effort.
+		 */
+		if (ret == -EBUSY && retry++ < MHI_SUSPEND_RETRY_CNT) {
+			usleep_range(5000, 6000);
+			cnss_pr_err("mhi is busy, retry #%u", retry);
+			goto retry;
 		}
 		mutex_unlock(&pci_priv->mhi_ctrl->pm_mutex);
 		break;
@@ -1713,6 +1765,12 @@ static int cnss_pci_set_mhi_state(struct cnss_pci_data *pci_priv,
 		break;
 	case CNSS_MHI_TRIGGER_RDDM:
 		ret = mhi_force_rddm_mode(pci_priv->mhi_ctrl);
+		if (ret) {
+			cnss_pr_err("Failed to trigger RDDM, err = %d\n", ret);
+
+			cnss_pr_dbg("Sending host reset req\n");
+			ret = mhi_force_reset(pci_priv->mhi_ctrl);
+		}
 		break;
 	case CNSS_MHI_RDDM_DONE:
 		break;
@@ -1938,6 +1996,7 @@ int cnss_pci_start_mhi(struct cnss_pci_data *pci_priv)
 	int ret = 0;
 	struct cnss_plat_data *plat_priv;
 	unsigned int timeout = 0;
+	int retry = 0;
 
 	if (!pci_priv) {
 		cnss_pr_err("pci_priv is NULL\n");
@@ -1963,9 +2022,14 @@ int cnss_pci_start_mhi(struct cnss_pci_data *pci_priv)
 	else /* For perf builds the timeout is 10 (default) * 3 seconds */
 		pci_priv->mhi_ctrl->timeout_ms *= 3;
 
+retry:
 	ret = cnss_pci_store_qrtr_node_id(pci_priv);
-	if (ret)
-		return ret;
+	if (ret) {
+		if (retry++ < REG_RETRY_MAX_TIMES)
+			goto retry;
+		else
+			return ret;
+	}
 
 	/* Start the timer to dump MHI/PBL/SBL debug data periodically */
 	mod_timer(&pci_priv->boot_debug_timer,
@@ -3125,6 +3189,8 @@ static void cnss_pci_event_cb(struct msm_pcie_notify *notify)
 	struct pci_dev *pci_dev;
 	struct cnss_pci_data *pci_priv;
 	struct device *dev;
+	struct cnss_plat_data *plat_priv = NULL;
+	int ret = 0;
 
 	if (!notify)
 		return;
@@ -3139,6 +3205,23 @@ static void cnss_pci_event_cb(struct msm_pcie_notify *notify)
 	dev = &pci_priv->pci_dev->dev;
 
 	switch (notify->event) {
+	case MSM_PCIE_EVENT_LINK_RECOVER:
+		cnss_pr_dbg("PCI link recover callback\n");
+
+		plat_priv = pci_priv->plat_priv;
+		if (!plat_priv) {
+			cnss_pr_err("plat_priv is NULL\n");
+			return;
+		}
+
+		plat_priv->ctrl_params.quirks |= BIT(LINK_DOWN_SELF_RECOVERY);
+
+		ret = msm_pcie_pm_control(MSM_PCIE_HANDLE_LINKDOWN,
+					  pci_dev->bus->number, pci_dev, NULL,
+					  PM_OPTIONS_DEFAULT);
+		if (ret)
+			cnss_pci_handle_linkdown(pci_priv);
+		break;
 	case MSM_PCIE_EVENT_LINKDOWN:
 		cnss_pr_dbg("PCI link down event callback\n");
 		cnss_pci_handle_linkdown(pci_priv);
@@ -3182,8 +3265,9 @@ static int cnss_reg_pci_event(struct cnss_pci_data *pci_priv)
 	struct msm_pcie_register_event *pci_event;
 
 	pci_event = &pci_priv->msm_pci_event;
-	pci_event->events = MSM_PCIE_EVENT_LINKDOWN |
-		MSM_PCIE_EVENT_WAKEUP;
+	pci_event->events = MSM_PCIE_EVENT_LINK_RECOVER |
+			    MSM_PCIE_EVENT_LINKDOWN |
+			    MSM_PCIE_EVENT_WAKEUP;
 
 	if (cnss_pci_is_drv_supported(pci_priv))
 		pci_event->events = pci_event->events |
@@ -4884,6 +4968,7 @@ static void cnss_pci_dump_debug_reg(struct cnss_pci_data *pci_priv)
 	cnss_pr_dbg("Start to dump debug registers\n");
 
 	mhi_debug_reg_dump(pci_priv->mhi_ctrl);
+	cnss_pci_soc_scratch_reg_dump(pci_priv);
 	cnss_pci_dump_ce_reg(pci_priv, CNSS_CE_COMMON);
 	cnss_pci_dump_ce_reg(pci_priv, CNSS_CE_09);
 	cnss_pci_dump_ce_reg(pci_priv, CNSS_CE_10);
@@ -4910,6 +4995,7 @@ int cnss_pci_force_fw_assert_hdlr(struct cnss_pci_data *pci_priv)
 	if (!cnss_pci_check_link_status(pci_priv))
 		mhi_debug_reg_dump(pci_priv->mhi_ctrl);
 
+	cnss_pci_soc_scratch_reg_dump(pci_priv);
 	cnss_pci_dump_misc_reg(pci_priv);
 	cnss_pci_dump_shadow_reg(pci_priv);
 
@@ -4972,7 +5058,7 @@ static void cnss_pci_remove_dump_seg(struct cnss_pci_data *pci_priv,
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	struct device *dev = &pci_priv->pci_dev->dev;
-	phys_addr_t pa;
+	phys_addr_t pa = 0;
 
 	cnss_va_to_pa(dev, size, va, dma, &pa, DMA_ATTR_FORCE_CONTIGUOUS);
 	cnss_minidump_remove_region(plat_priv, type, seg_no, va, pa, size);
@@ -5091,6 +5177,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 	}
 
 	mhi_debug_reg_dump(pci_priv->mhi_ctrl);
+	cnss_pci_soc_scratch_reg_dump(pci_priv);
 	cnss_pci_dump_misc_reg(pci_priv);
 	cnss_pci_dump_shadow_reg(pci_priv);
 	cnss_pci_dump_qdss_reg(pci_priv);
@@ -5372,6 +5459,7 @@ static void cnss_dev_rddm_timeout_hdlr(struct timer_list *t)
 		cnss_pr_err("Unable to collect ramdumps due to abrupt reset\n");
 
 	mhi_debug_reg_dump(pci_priv->mhi_ctrl);
+	cnss_pci_soc_scratch_reg_dump(pci_priv);
 
 	cnss_schedule_recovery(&pci_priv->pci_dev->dev, CNSS_REASON_TIMEOUT);
 }
@@ -5399,6 +5487,7 @@ static void cnss_boot_debug_timeout_hdlr(struct timer_list *t)
 	cnss_pr_dbg("Dump MHI/PBL/SBL debug data every %ds during MHI power on\n",
 		    BOOT_DEBUG_TIMEOUT_MS / 1000);
 	mhi_debug_reg_dump(pci_priv->mhi_ctrl);
+	cnss_pci_soc_scratch_reg_dump(pci_priv);
 	cnss_pci_dump_bl_sram_mem(pci_priv);
 
 	mod_timer(&pci_priv->boot_debug_timer,
@@ -5984,6 +6073,12 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 
 	cnss_pr_dbg("PCI is probing, vendor ID: 0x%x, device ID: 0x%x\n",
 		    id->vendor, pci_dev->device);
+
+	if (!plat_priv) {
+		cnss_pr_err("Find match plat_priv with rc number failure\n");
+		ret = -ENODEV;
+		goto out;
+	}
 
 	pci_priv = devm_kzalloc(dev, sizeof(*pci_priv), GFP_KERNEL);
 	if (!pci_priv) {

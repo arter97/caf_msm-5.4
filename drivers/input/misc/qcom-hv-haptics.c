@@ -27,7 +27,8 @@
 #include <linux/qpnp/qpnp-pbs.h>
 
 /* status register definitions in HAPTICS_CFG module */
-#define HAP_CFG_REVISION2_REG			0x01
+#define HAP_CFG_REVISION1_REG			0x00
+
 #define HAP_CFG_V1				0x1
 #define HAP_CFG_V2				0x2
 #define HAP_CFG_V3				0x3
@@ -44,6 +45,7 @@
 #define FIFO_REAL_TIME_FILL_STATUS_MASK_V1	GENMASK(6, 0)
 /* STATUS_DATA_MSB in V2 when MOD_STATUS_SEL is 5 and MOD_STATUS_XT.SEL is 1 */
 #define FIFO_REAL_TIME_FILL_STATUS_MSB_MASK_V2	GENMASK(1, 0)
+#define FIFO_REAL_TIME_FILL_STATUS_MSB_MASK_V3	GENMASK(2, 0)
 #define FIFO_EMPTY_FLAG_BIT_V2			BIT(6)
 #define FIFO_FULL_FLAG_BIT_V2			BIT(5)
 
@@ -367,6 +369,7 @@ enum pmic_type {
 
 enum wa_flags {
 	TOGGLE_CAL_RC_CLK = BIT(0),
+	TOGGLE_MODULE_EN = BIT(1),
 };
 
 static const char * const src_str[] = {
@@ -518,6 +521,7 @@ struct haptics_chip {
 	u32				hbst_addr_base;
 	u32				wa_flags;
 	u8				cfg_revision;
+	u8				cfg_rev1;
 	u8				ptn_revision;
 	u8				hpwr_intf_ctl;
 	u16				hbst_revision;
@@ -824,6 +828,15 @@ static int get_fifo_play_length_us(struct fifo_cfg *fifo, u32 t_lra_us)
 		break;
 	case T_LRA_DIV_8:
 		length_us /= 8;
+		break;
+	case T_LRA_X_2:
+		length_us *= 2;
+		break;
+	case T_LRA_X_4:
+		length_us *= 4;
+		break;
+	case T_LRA_X_8:
+		length_us *= 8;
 		break;
 	case F_8KHZ:
 		length_us = 1000 * fifo->num_s / 8;
@@ -1485,6 +1498,33 @@ static int haptics_open_loop_drive_config(struct haptics_chip *chip, bool en)
 	return rc;
 }
 
+static int haptics_module_enable(struct haptics_chip *chip, bool enable)
+{
+	u8 val;
+	int rc;
+
+	val = enable ? HAPTICS_EN_BIT : 0;
+	rc = haptics_write(chip, chip->cfg_addr_base,
+		HAP_CFG_EN_CTL_REG, &val, 1);
+	if (rc < 0)
+		return rc;
+
+	dev_dbg(chip->dev, "haptics module %s\n",
+			enable ? "enabled" : "disabled");
+	return 0;
+}
+
+static int haptics_toggle_module_enable(struct haptics_chip *chip)
+{
+	int rc;
+
+	rc = haptics_module_enable(chip, false);
+	if (rc < 0)
+		return rc;
+
+	return haptics_module_enable(chip, true);
+}
+
 static int haptics_enable_play(struct haptics_chip *chip, bool en)
 {
 	struct haptics_play_info *play = &chip->play;
@@ -1520,10 +1560,15 @@ static int haptics_enable_play(struct haptics_chip *chip, bool en)
 
 	if (play->pattern_src == FIFO) {
 		rc = haptics_boost_vreg_enable(chip, en);
-		if (rc < 0)
+		if (rc < 0) {
 			dev_err(chip->dev, "Notify vreg %s failed, rc=%d\n",
 					en ? "enabling" : "disabling", rc);
+			return rc;
+		}
 	}
+
+	if ((chip->wa_flags & TOGGLE_MODULE_EN) && !en)
+		rc = haptics_toggle_module_enable(chip);
 
 	return rc;
 }
@@ -1685,7 +1730,7 @@ static int haptics_update_fifo_sample_v2(struct haptics_chip *chip,
 static int haptics_get_fifo_fill_status(struct haptics_chip *chip, u32 *fill)
 {
 	int rc;
-	u8 val[2];
+	u8 val[2], fill_status_mask;
 	bool empty = false, full = false;
 
 	if (chip->ptn_revision == HAP_PTN_V1) {
@@ -1719,8 +1764,10 @@ static int haptics_get_fifo_fill_status(struct haptics_chip *chip, u32 *fill)
 		if (rc < 0)
 			return rc;
 
-		*fill = ((val[0] & FIFO_REAL_TIME_FILL_STATUS_MSB_MASK_V2)
-				<< 8) | val[1];
+		fill_status_mask = (chip->cfg_revision == HAP_CFG_V2) ?
+				FIFO_REAL_TIME_FILL_STATUS_MSB_MASK_V2 :
+				FIFO_REAL_TIME_FILL_STATUS_MSB_MASK_V3;
+		*fill = ((val[0] & fill_status_mask) << 8) | val[1];
 		empty = !!(val[0] & FIFO_EMPTY_FLAG_BIT_V2);
 		full = !!(val[0] & FIFO_FULL_FLAG_BIT_V2);
 	}
@@ -1863,33 +1910,6 @@ static void haptics_fifo_empty_irq_config(struct haptics_chip *chip,
 		disable_irq_nosync(chip->fifo_empty_irq);
 		chip->fifo_empty_irq_en = false;
 	}
-}
-
-static int haptics_module_enable(struct haptics_chip *chip, bool enable)
-{
-	u8 val;
-	int rc;
-
-	val = enable ? HAPTICS_EN_BIT : 0;
-	rc = haptics_write(chip, chip->cfg_addr_base,
-		HAP_CFG_EN_CTL_REG, &val, 1);
-	if (rc < 0)
-		return rc;
-
-	dev_dbg(chip->dev, "haptics module %s\n",
-			enable ? "enabled" : "disabled");
-	return 0;
-}
-
-static int haptics_toggle_module_enable(struct haptics_chip *chip)
-{
-	int rc;
-
-	rc = haptics_module_enable(chip, false);
-	if (rc < 0)
-		return rc;
-
-	return haptics_module_enable(chip, true);
 }
 
 static int haptics_set_fifo(struct haptics_chip *chip, struct fifo_cfg *fifo)
@@ -2594,6 +2614,8 @@ static int haptics_config_wa(struct haptics_chip *chip)
 		chip->wa_flags |= TOGGLE_CAL_RC_CLK;
 		break;
 	case PM5100:
+		if (!chip->cfg_rev1)
+			chip->wa_flags |= TOGGLE_MODULE_EN;
 		break;
 	default:
 		dev_err(chip->dev, "PMIC type %d does not match\n",
@@ -3857,11 +3879,13 @@ static int haptics_get_revision(struct haptics_chip *chip)
 	u8 val[2];
 
 	rc = haptics_read(chip, chip->cfg_addr_base,
-			HAP_CFG_REVISION2_REG, val, 1);
+			HAP_CFG_REVISION1_REG, val, 2);
 	if (rc < 0)
 		return rc;
 
-	chip->cfg_revision = val[0];
+	chip->cfg_rev1 = val[0];
+	chip->cfg_revision = val[1];
+
 	rc = haptics_read(chip, chip->ptn_addr_base,
 			HAP_PTN_REVISION2_REG, val, 1);
 	if (rc < 0)

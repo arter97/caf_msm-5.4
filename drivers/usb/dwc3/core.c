@@ -1157,6 +1157,15 @@ int dwc3_core_init(struct dwc3 *dwc)
 		dwc3_writel(dwc->regs, DWC3_GUCTL1, reg);
 	}
 
+	/* Force Gen1 speed on Gen2 controller if "force_gen1" is present */
+	if (dwc->force_gen1) {
+		for (i = 0; i < dwc->num_ssphy; i++) {
+			reg = dwc3_readl(dwc->regs, DWC3_LLUCTL(i));
+			reg |= DWC3_FORCE_GEN1;
+			dwc3_writel(dwc->regs, DWC3_LLUCTL(i), reg);
+		}
+	}
+
 	return 0;
 
 err3:
@@ -1410,6 +1419,8 @@ static void dwc3_get_properties(struct dwc3 *dwc)
 				"snps,usb3_lpm_capable");
 	dwc->usb2_lpm_disable = device_property_read_bool(dev,
 				"snps,usb2-lpm-disable");
+	dwc->usb2_gadget_lpm_disable = device_property_read_bool(dev,
+				"snps,usb2-gadget-lpm-disable");
 	device_property_read_u8(dev, "snps,rx-thr-num-pkt-prd",
 				&rx_thr_num_pkt_prd);
 	device_property_read_u8(dev, "snps,rx-max-burst-prd",
@@ -1458,8 +1469,6 @@ static void dwc3_get_properties(struct dwc3 *dwc)
 				"snps,dis-tx-ipgap-linecheck-quirk");
 	dwc->parkmode_disable_ss_quirk = device_property_read_bool(dev,
 				"snps,parkmode-disable-ss-quirk");
-	dwc->usb2_l1_disable = device_property_read_bool(dev,
-				"snps,usb2-l1-disable");
 
 	dwc->tx_de_emphasis_quirk = device_property_read_bool(dev,
 				"snps,tx_de_emphasis_quirk");
@@ -1501,6 +1510,9 @@ static void dwc3_get_properties(struct dwc3 *dwc)
 
 	device_property_read_u8(dev, "max-num-endpoints",
 				&dwc->num_eps);
+
+	dwc->force_gen1 = device_property_read_bool(dev, "snps,force-gen1");
+
 	dwc->lpm_nyet_threshold = lpm_nyet_threshold;
 	dwc->tx_de_emphasis = tx_de_emphasis;
 
@@ -1577,7 +1589,7 @@ static int dwc3_extract_num_phys(struct dwc3 *dwc)
 {
 	struct device_node *phy_node;
 	int i;
-	u32 num_phy;
+	int num_phy;
 
 	/*
 	 * Extract the number of PHYs in a controller by counting the number
@@ -1589,9 +1601,19 @@ static int dwc3_extract_num_phys(struct dwc3 *dwc)
 	 * as this driver also sets the type to "USB_PHY_TYPE_USB2".
 	 */
 	num_phy = of_count_phandle_with_args(dwc->dev->of_node, "usb-phy", NULL);
+	if (num_phy <= 0 || num_phy % 2) {
+		dev_err(dwc->dev, "Unable to extract num_phy or odd number of usb phandles defined\n");
+		return -EINVAL;
+	}
+
 	dwc->num_hsphy = num_phy / 2;
 	for (i = 0; i < num_phy; i++) {
 		phy_node = of_parse_phandle(dwc->dev->of_node, "usb-phy", i);
+		if (!phy_node) {
+			dev_err(dwc->dev, "Unable to parse usb phy_node%d\n", i);
+			return -EINVAL;
+		}
+
 		if ((i % 2) && strcmp(phy_node->name, "usb_nop_phy"))
 			dwc->num_ssphy++;
 		else if (!(i % 2) && !strcmp(phy_node->name, "usb_nop_phy")) {
