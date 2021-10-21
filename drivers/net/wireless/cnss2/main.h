@@ -44,8 +44,8 @@
 #define CNSS_RAMDUMP_VERSION		0
 #define MAX_FIRMWARE_NAME_LEN		40
 #define FW_V2_NUMBER                    2
-#define POWER_ON_RETRY_MAX_TIMES        3
-#define POWER_ON_RETRY_DELAY_MS         200
+#define POWER_ON_RETRY_MAX_TIMES        4
+#define POWER_ON_RETRY_DELAY_MS         500
 #define CNSS_FS_NAME			"cnss"
 #define CNSS_FS_NAME_SIZE		15
 #define CNSS_DEVICE_NAME_SIZE		16
