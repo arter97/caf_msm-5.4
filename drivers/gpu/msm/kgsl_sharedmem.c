@@ -136,7 +136,18 @@ imported_mem_show(struct kgsl_process_private *priv,
 			}
 		}
 
-		kgsl_mem_entry_put(entry);
+		/*
+		 * If refcount on mem entry is the last refcount, we will
+		 * call kgsl_mem_entry_destroy and detach it from process
+		 * list. When there is no refcount on the process private,
+		 * we will call kgsl_destroy_process_private to do cleanup.
+		 * During cleanup, we will try to remove the same sysfs
+		 * node which is in use by the current thread and this
+		 * situation will end up in a deadloack.
+		 * To avoid this situation, use a worker to put the refcount
+		 * on mem entry.
+		 */
+		kgsl_mem_entry_put_deferred(entry);
 		spin_lock(&priv->mem_lock);
 	}
 	spin_unlock(&priv->mem_lock);
@@ -227,12 +238,6 @@ static ssize_t memtype_sysfs_show(struct kobject *kobj,
 	u64 size = 0;
 	int id = 0;
 
-	/*
-	 * sysfs_remove_file waits for reads to complete before the node is
-	 * deleted and process private is freed only once kobj is released.
-	 * This implies that priv will not be freed until this function
-	 * completes, and no further locking is needed.
-	 */
 	priv = container_of(kobj, struct kgsl_process_private, kobj_memtype);
 	memtype = container_of(attr, struct kgsl_memtype, attr);
 
@@ -253,7 +258,7 @@ static ssize_t memtype_sysfs_show(struct kobject *kobj,
 		if (type == memtype->type)
 			size += memdesc->size;
 
-		kgsl_mem_entry_put(entry);
+		kgsl_mem_entry_put_deferred(entry);
 		spin_lock(&priv->mem_lock);
 	}
 	spin_unlock(&priv->mem_lock);
@@ -498,7 +503,7 @@ done:
 
 #include <soc/qcom/secure_buffer.h>
 
-static int lock_sgt(struct sg_table *sgt, u64 size)
+int kgsl_lock_sgt(struct sg_table *sgt, u64 size)
 {
 	struct scatterlist *sg;
 	int dest_perms = PERM_READ | PERM_WRITE;
@@ -534,7 +539,7 @@ static int lock_sgt(struct sg_table *sgt, u64 size)
 	return 0;
 }
 
-static int unlock_sgt(struct sg_table *sgt)
+int kgsl_unlock_sgt(struct sg_table *sgt)
 {
 	int dest_perms = PERM_READ | PERM_WRITE | PERM_EXEC;
 	int source_vm = VMID_CP_PIXEL;
@@ -746,7 +751,7 @@ void kgsl_free_secure_page(struct page *page)
 	sg_init_table(&sgl, 1);
 	sg_set_page(&sgl, page, PAGE_SIZE, 0);
 
-	unlock_sgt(&sgt);
+	kgsl_unlock_sgt(&sgt);
 	__free_page(page);
 }
 
@@ -768,7 +773,7 @@ struct page *kgsl_alloc_secure_page(void)
 	sg_init_table(&sgl, 1);
 	sg_set_page(&sgl, page, PAGE_SIZE, 0);
 
-	status = lock_sgt(&sgt, PAGE_SIZE);
+	status = kgsl_lock_sgt(&sgt, PAGE_SIZE);
 	if (status) {
 		if (status == -EADDRNOTAVAIL)
 			return NULL;
@@ -958,7 +963,7 @@ static void kgsl_free_secure_system_pages(struct kgsl_memdesc *memdesc)
 {
 	int i;
 	struct scatterlist *sg;
-	int ret = unlock_sgt(memdesc->sgt);
+	int ret = kgsl_unlock_sgt(memdesc->sgt);
 	int order = get_order(PAGE_SIZE);
 
 	if (ret) {
@@ -993,7 +998,7 @@ static void kgsl_free_secure_system_pages(struct kgsl_memdesc *memdesc)
 
 static void kgsl_free_secure_pool_pages(struct kgsl_memdesc *memdesc)
 {
-	int ret = unlock_sgt(memdesc->sgt);
+	int ret = kgsl_unlock_sgt(memdesc->sgt);
 
 	if (ret) {
 		/*
@@ -1180,7 +1185,7 @@ static int kgsl_alloc_secure_pages(struct kgsl_device *device,
 	/* Now that we've moved to a sg table don't need the pages anymore */
 	kvfree(pages);
 
-	ret = lock_sgt(sgt, size);
+	ret = kgsl_lock_sgt(sgt, size);
 	if (ret) {
 		if (ret != -EADDRNOTAVAIL)
 			kgsl_pool_free_sgt(sgt);

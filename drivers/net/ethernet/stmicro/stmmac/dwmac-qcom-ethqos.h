@@ -58,6 +58,7 @@ do  {\
 
 #define RGMII_IO_MACRO_CONFIG		0x0
 #define SDCC_HC_REG_DLL_CONFIG		0x4
+#define SDCC_TEST_CTL			0x8
 #define SDCC_HC_REG_DDR_CONFIG		0xC
 #define SDCC_HC_REG_DLL_CONFIG2		0x10
 #define SDC4_STATUS			0x14
@@ -134,27 +135,15 @@ struct ethqos_emac_por {
 	unsigned int value;
 };
 
-static const struct ethqos_emac_por emac_v2_3_0_por[] = {
-	{ .offset = RGMII_IO_MACRO_CONFIG,	.value = 0x00C01343 },
-	{ .offset = SDCC_HC_REG_DLL_CONFIG,	.value = 0x2004642C },
-	{ .offset = SDCC_HC_REG_DDR_CONFIG,	.value = 0x00000000 },
-	{ .offset = SDCC_HC_REG_DLL_CONFIG2,	.value = 0x00200000 },
-	{ .offset = SDCC_USR_CTL,		.value = 0x00010800 },
-	{ .offset = RGMII_IO_MACRO_CONFIG2,	.value = 0x00002060 },
-};
-
-static const struct ethqos_emac_por emac_v2_3_2_por[] = {
-	{ .offset = RGMII_IO_MACRO_CONFIG,	.value = 0x00C01343 },
-	{ .offset = SDCC_HC_REG_DLL_CONFIG,	.value = 0x2004642C },
-	{ .offset = SDCC_HC_REG_DDR_CONFIG,	.value = 0x80040800 },
-	{ .offset = SDCC_HC_REG_DLL_CONFIG2,	.value = 0x00200000 },
-	{ .offset = SDCC_USR_CTL,		.value = 0x00010800 },
-	{ .offset = RGMII_IO_MACRO_CONFIG2,	.value = 0x00002060 },
+struct ethqos_emac_driver_data {
+	struct ethqos_emac_por *por;
+	unsigned int num_por;
 };
 
 struct qcom_ethqos {
 	struct platform_device *pdev;
 	void __iomem *rgmii_base;
+	void __iomem *ioaddr;
 
 	struct msm_bus_scale_pdata *bus_scale_vec;
 	u32 bus_hdl;
@@ -163,12 +152,17 @@ struct qcom_ethqos {
 	unsigned int speed;
 	unsigned int vote_idx;
 
+	struct iommu_domain *iommu_domain;
+	unsigned int *emac_reg_base_address;
+	unsigned int *rgmii_reg_base_address;
+	u32 emac_mem_size;
+
 	int gpio_phy_intr_redirect;
 	u32 phy_intr;
 	/* Work struct for handling phy interrupt */
 	struct work_struct emac_phy_work;
 
-	const struct ethqos_emac_por *por;
+	struct ethqos_emac_por *por;
 	unsigned int num_por;
 	unsigned int emac_ver;
 
