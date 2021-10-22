@@ -1862,8 +1862,11 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	priv = netdev_priv(ndev);
 
 	res = platform_get_resource(ethqos->pdev, IORESOURCE_MEM, 0);
-	if (!res)
+	if (!res) {
 		ETHQOSERR("get emac-base resource failed\n");
+		ret = -ENOMEM;
+		goto err_clk;
+	}
 
 	ethqos->emac_mem_size = resource_size(res);
 
