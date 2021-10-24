@@ -75,6 +75,7 @@
 #define QCA8081_PHY_ID				0x004dd101
 
 /* Link mode bit indices */
+#define QCA808X_LINK_MODE_1000BASEX_FULL_BIT	41
 #define QCA808X_LINK_MODE_2500BASET_FULL_BIT	47
 
 MODULE_DESCRIPTION("Atheros AR803x and QCA808X PHY driver");
@@ -261,6 +262,31 @@ static int at803x_probe(struct phy_device *phydev)
 
 	phydev->priv = priv;
 
+	return 0;
+}
+
+static int at803x_get_features(struct phy_device *phydev)
+{
+	int err;
+
+	err = genphy_read_abilities(phydev);
+	if (err)
+		return err;
+
+	if (phydev->drv->phy_id == QCA8081_PHY_ID) {
+		err = phy_read_mmd(phydev, MDIO_MMD_PMAPMD, MDIO_PMA_NG_EXTABLE);
+		if (err < 0)
+			return err;
+
+		linkmode_mod_bit(QCA808X_LINK_MODE_2500BASET_FULL_BIT, phydev->supported,
+				err & MDIO_PMA_NG_EXTABLE_2_5GBT);
+	}
+
+	if (phydev->drv->phy_id != ATH8031_PHY_ID)
+		return 0;
+
+	linkmode_clear_bit(QCA808X_LINK_MODE_1000BASEX_FULL_BIT,
+			   phydev->supported);
 	return 0;
 }
 
@@ -542,6 +568,7 @@ static struct phy_driver at803x_driver[] = {
 	.ack_interrupt	= at803x_ack_interrupt,
 	.set_wol		= at803x_set_wol,
 	.get_wol		= at803x_get_wol,
+	.get_features		= at803x_get_features,
 	.suspend		= genphy_suspend,
 	.resume			= genphy_resume,
 	.read_status		= qca808x_read_status,
