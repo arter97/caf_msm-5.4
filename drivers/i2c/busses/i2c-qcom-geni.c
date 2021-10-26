@@ -686,7 +686,9 @@ static struct platform_driver geni_i2c_driver = {
 early_module_platform_driver_async(geni_i2c_driver, EARLY_SUBSYS_PLATFORM,
 EARLY_INIT_LEVEL4);
 
+#ifndef MODULE
 early_init(_geni_i2c_driver_init_sync, EARLY_SUBSYS_2, EARLY_INIT_LEVEL0);
+#endif
 
 MODULE_DESCRIPTION("I2C Controller Driver for GENI based QUP cores");
 MODULE_LICENSE("GPL v2");

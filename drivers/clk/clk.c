@@ -3575,6 +3575,7 @@ static int __init clk_debug_init(void)
 }
 early_late_initcall(clk_debug_init, EARLY_SUBSYS_6, EARLY_INIT_LEVEL3);
 
+#ifndef MODULE
 static DECLARE_COMPLETION(clk_debug_init_end);
 static bool is_clk_debug_sync;
 
@@ -3599,6 +3600,7 @@ static int __init clk_debug_init_wait_end(void)
 	return 0;
 }
 late_initcall(clk_debug_init_wait_end);
+#endif
 #else
 static inline void clk_debug_register(struct clk_core *core) { }
 static inline void clk_debug_reparent(struct clk_core *core,

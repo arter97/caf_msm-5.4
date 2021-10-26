@@ -1554,15 +1554,17 @@ static void __exit i2c_dev_exit(void)
 {
 	platform_driver_unregister(&geni_i2c_driver);
 }
+early_module_init(i2c_dev_init, EARLY_SUBSYS_PLATFORM, EARLY_INIT_LEVEL2);
 
+#ifndef MODULE
 static int __init i2c_dev_ready_wait(void)
 {
 	wait_for_completion(&geni_i2c_ready);
 	return 0;
 }
 
-early_module_init(i2c_dev_init, EARLY_SUBSYS_PLATFORM, EARLY_INIT_LEVEL2);
 early_init(i2c_dev_ready_wait, EARLY_SUBSYS_2, EARLY_INIT_LEVEL0);
+#endif
 module_exit(i2c_dev_exit);
 MODULE_LICENSE("GPL v2");
 MODULE_ALIAS("platform:i2c_geni");

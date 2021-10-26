@@ -3751,6 +3751,7 @@ void sd_print_result(const struct scsi_disk *sdkp, const char *msg, int result)
 			  msg, host_byte(result), driver_byte(result));
 }
 
+#ifndef MODULE
 static int __init early_rootdev_wait(void)
 {
 	if (!strnstr(saved_command_line, ".sdhci", strlen(saved_command_line)))
@@ -3759,3 +3760,4 @@ static int __init early_rootdev_wait(void)
 }
 
 early_init(early_rootdev_wait, EARLY_SUBSYS_1, EARLY_INIT_LEVEL5);
+#endif
