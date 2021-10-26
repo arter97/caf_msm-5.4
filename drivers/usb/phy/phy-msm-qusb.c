@@ -216,7 +216,7 @@ static void qusb_phy_enable_clocks(struct qusb_phy *qphy, bool on)
 		clk_prepare_enable(qphy->core_clk);
 		clk_prepare_enable(qphy->cfg_ahb_clk);
 	} else {
-	//	clk_disable_unprepare(qphy->cfg_ahb_clk);
+		clk_disable_unprepare(qphy->cfg_ahb_clk);
 		/*
 		 * FSM depedency beween iface_clk and core_clk.
 		 * Hence turned off core_clk before iface_clk.

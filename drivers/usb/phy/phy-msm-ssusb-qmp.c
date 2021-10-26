@@ -883,8 +883,8 @@ static void msm_ssphy_qmp_enable_clks(struct msm_ssphy_qmp *phy, bool on)
 		//select XO instead of PHY pipe clock
 		clk_set_parent(phy->pipe_clk_mux, phy->ref_clk_src);
 
-	/*	if (phy->cfg_ahb_clk)
-			clk_disable_unprepare(phy->cfg_ahb_clk);*/
+		if (phy->cfg_ahb_clk)
+			clk_disable_unprepare(phy->cfg_ahb_clk);
 
 		clk_disable_unprepare(phy->aux_clk);
 		if (phy->com_aux_clk)
