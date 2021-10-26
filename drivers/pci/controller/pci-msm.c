@@ -7358,9 +7358,6 @@ static int msm_pcie_pm_suspend(struct pci_dev *dev,
 
 	PCIE_DBG(pcie_dev, "RC%d: entry\n", pcie_dev->rc_idx);
 
-#ifndef DISABLE_PCI_SUSPEND
-	return 0;
-#endif
 	spin_lock_irqsave(&pcie_dev->irq_lock, irqsave_flags);
 	pcie_dev->suspending = true;
 	spin_unlock_irqrestore(&pcie_dev->irq_lock, irqsave_flags);
@@ -7488,10 +7485,6 @@ static int msm_pcie_pm_resume(struct pci_dev *dev,
 	struct msm_pcie_dev_t *pcie_dev = PCIE_BUS_PRIV_DATA(dev->bus);
 
 	PCIE_DBG(pcie_dev, "RC%d: entry\n", pcie_dev->rc_idx);
-
-#ifndef DISABLE_PCI_RESUME
-	return 0;
-#endif
 
 	if (pcie_dev->use_pinctrl && pcie_dev->pins_default)
 		pinctrl_select_state(pcie_dev->pinctrl,
