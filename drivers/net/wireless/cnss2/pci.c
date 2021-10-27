@@ -2615,13 +2615,9 @@ static int cnss_qca6174_powerup(struct cnss_pci_data *pci_priv)
 
 	return 0;
 suspend_link:
-#ifdef CONFIG_HGH_SUPPORT_PCI_LINK
 	cnss_suspend_pci_link(pci_priv);
-#endif
 power_off:
-#ifdef CONFIG_HGH_SUPPORT_PCI_LINK
 	cnss_power_off_device(plat_priv);
-#endif
 out:
 	return ret;
 }
@@ -2642,13 +2638,11 @@ static int cnss_qca6174_shutdown(struct cnss_pci_data *pci_priv)
 	cnss_pci_set_monitor_wake_intr(pci_priv, false);
 	cnss_pci_set_auto_suspended(pci_priv, 0);
 
-#ifdef CONFIG_HGH_SUPPORT_PCI_LINK
 	ret = cnss_suspend_pci_link(pci_priv);
 	if (ret)
 		cnss_pr_err("Failed to suspend PCI link, err = %d\n", ret);
 
 	cnss_power_off_device(plat_priv);
-#endif
 
 	clear_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state);
 	clear_bit(CNSS_DRIVER_IDLE_SHUTDOWN, &plat_priv->driver_state);
@@ -3368,19 +3362,15 @@ int cnss_pci_suspend_bus(struct cnss_pci_data *pci_priv)
 		cnss_pr_err("Failed to set D3Hot, err = %d\n", ret);
 
 skip_disable_pci:
-#ifdef CONFIG_HGH_SUPPORT_PCI_LINK
 	if (cnss_set_pci_link(pci_priv, PCI_LINK_DOWN)) {
 		ret = -EAGAIN;
 		goto resume_mhi;
 	}
-#endif
 	pci_priv->pci_link_state = PCI_LINK_DOWN;
 
 	return 0;
 
-#ifdef CONFIG_HGH_SUPPORT_PCI_LINK
 resume_mhi:
-#endif
 	if (!pci_is_enabled(pci_dev))
 		if (pci_enable_device(pci_dev))
 			cnss_pr_err("Failed to enable PCI device\n");
@@ -3400,14 +3390,12 @@ int cnss_pci_resume_bus(struct cnss_pci_data *pci_priv)
 	if (pci_priv->pci_link_state == PCI_LINK_UP)
 		goto out;
 
-#ifdef CONFIG_HGH_SUPPORT_PCI_LINK
 	if (cnss_set_pci_link(pci_priv, PCI_LINK_UP)) {
 		cnss_fatal_err("Failed to resume PCI link from suspend\n");
 		cnss_pci_link_down(&pci_dev->dev);
 		ret = -EAGAIN;
 		goto out;
 	}
-#endif
 
 	pci_priv->pci_link_state = PCI_LINK_UP;
 
@@ -6195,7 +6183,6 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	if (cnss_is_dual_wlan_enabled() && !plat_priv->enumerate_done)
 		return 0;
 
-#ifdef CONFIG_HGH_SUPPORT_PCI_LINK
 	ret = cnss_suspend_pci_link(pci_priv);
 	if (ret)
 		cnss_pr_err("Failed to suspend PCI link, err = %d\n", ret);
@@ -6204,7 +6191,6 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 		cnss_disable_redundant_vreg(plat_priv);
 
 	cnss_power_off_device(plat_priv);
-#endif
 
 	return 0;
 
