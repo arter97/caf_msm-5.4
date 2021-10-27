@@ -1238,8 +1238,7 @@ void crypto_qti_ice_set_fde_flag(int flag)
 		part_cfg->decr_bypass = decr_bypass;
 		kobject_uevent(&part_cfg->kobj, KOBJ_CHANGE);
 	} else {
-		dev_err(ice_dev->pdev,
-			"%s: Cannot set FDE flag=%d for %s\n",
+		pr_err("%s: Cannot set FDE flag=%d for %s\n",
 			__func__, flag, CRYPTO_UD_VOLNAME);
 	}
 }
