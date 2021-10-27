@@ -474,7 +474,7 @@ static int __init slpi_pinctrl_init(void)
 	return platform_driver_register(&slpi_pinctrl_driver);
 }
 early_module_init(slpi_pinctrl_init, EARLY_SUBSYS_PLATFORM,
-		EARLY_INIT_LEVEL1);
+		EARLY_INIT_LEVEL2);
 
 static void __exit slpi_pinctrl_exit(void)
 {
