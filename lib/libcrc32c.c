@@ -71,7 +71,7 @@ const char *crc32c_impl(void)
 }
 EXPORT_SYMBOL(crc32c_impl);
 
-module_init(libcrc32c_mod_init);
+early_module_init(libcrc32c_mod_init, EARLY_SUBSYS_1, EARLY_INIT_LEVEL5);
 module_exit(libcrc32c_mod_fini);
 
 MODULE_AUTHOR("Clay Haapala <chaapala@cisco.com>");
