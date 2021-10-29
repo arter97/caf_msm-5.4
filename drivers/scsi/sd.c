@@ -3275,6 +3275,7 @@ static int sd_format_disk_name(char *prefix, int index, char *buf, int buflen)
 }
 
 static DECLARE_COMPLETION(scsi_sd_probe_domain);
+static atomic_t scsi_sd_count = ATOMIC_INIT(0);
 /**
  *	sd_probe - called during driver initialization and whenever a
  *	new scsi device is attached to the system. It is called once
@@ -3344,6 +3345,8 @@ static int sd_probe(struct device *dev)
 	atomic_set(&sdkp->openers, 0);
 	atomic_set(&sdkp->device->ioerr_cnt, 0);
 
+	atomic_inc(&scsi_sd_count);
+
 	if (!sdp->request_queue->rq_timeout) {
 		if (sdp->type != TYPE_MOD)
 			blk_queue_rq_timeout(sdp->request_queue, SD_TIMEOUT);
@@ -3412,10 +3415,12 @@ static int sd_probe(struct device *dev)
 	sd_printk(KERN_NOTICE, sdkp, "Attached SCSI %sdisk\n",
 		  sdp->removable ? "removable " : "");
 	scsi_autopm_put_device(sdp);
-	complete(&scsi_sd_probe_domain);
+	if(!atomic_dec_and_test(&scsi_sd_count))
+		complete(&scsi_sd_probe_domain);
 	return 0;
 
  out_free_index:
+	atomic_dec(&scsi_sd_count);
 	ida_free(&sd_index_ida, index);
  out_put:
 	put_disk(gd);
