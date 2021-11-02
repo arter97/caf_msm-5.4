@@ -357,6 +357,19 @@ static void qcom_wdt_resume(void)
 	return;
 }
 
+#if defined(CONFIG_QTI_QUIN_GVM)
+int qcom_wdt_pet_suspend(struct device *dev)
+{
+	return 0;
+}
+EXPORT_SYMBOL(qcom_wdt_pet_suspend);
+
+int qcom_wdt_pet_resume(struct device *dev)
+{
+	return 0;
+}
+EXPORT_SYMBOL(qcom_wdt_pet_resume);
+#else
 int qcom_wdt_pet_suspend(struct device *dev)
 {
 	struct msm_watchdog_data *wdog_dd =
@@ -402,6 +415,7 @@ int qcom_wdt_pet_resume(struct device *dev)
 	return 0;
 }
 EXPORT_SYMBOL(qcom_wdt_pet_resume);
+#endif
 #endif
 
 static struct syscore_ops qcom_wdt_syscore_ops = {
