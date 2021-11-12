@@ -1662,10 +1662,12 @@ static struct spi_driver qti_can_driver = {
 };
 early_module_spi_driver(qti_can_driver, EARLY_SUBSYS_4, EARLY_INIT_LEVEL4);
 
+#ifndef MODULE
 static int __init qti_can_driver_sync(void) {
 	qti_can_driver.driver.probe_type = PROBE_DEFAULT_STRATEGY;
 	return 0;
 }
 early_init(qti_can_driver_sync, EARLY_SUBSYS_4, EARLY_INIT_LEVEL3);
+#endif
 MODULE_DESCRIPTION("QTI CAN controller module");
 MODULE_LICENSE("GPL v2");

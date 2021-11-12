@@ -4628,6 +4628,7 @@ static struct platform_driver sdhci_msm_driver = {
 	},
 };
 
+#ifndef MODULE
 static int root_dev_ready_wait(void)
 {
 	if (strnstr(saved_command_line, ".sdhci",
@@ -4636,6 +4637,7 @@ static int root_dev_ready_wait(void)
 	return 0;
 }
 early_init(root_dev_ready_wait, EARLY_SUBSYS_1, EARLY_INIT_LEVEL3);
+#endif
 
 early_module_platform_driver(sdhci_msm_driver, EARLY_SUBSYS_1,
 EARLY_INIT_LEVEL2);
