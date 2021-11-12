@@ -487,6 +487,7 @@ static int verity_verify_io(struct dm_verity_io *io)
 	struct bvec_iter start;
 	unsigned b;
 	struct crypto_wait wait;
+	struct bio *bio = dm_bio_from_per_bio_data(io, v->ti->per_io_data_size);
 
 	for (b = 0; b < io->n_blocks; b++) {
 		int r;
@@ -541,9 +542,17 @@ static int verity_verify_io(struct dm_verity_io *io)
 		else if (verity_fec_decode(v, io, DM_VERITY_BLOCK_TYPE_DATA,
 					   cur_block, NULL, &start) == 0)
 			continue;
-		else if (verity_handle_err(v, DM_VERITY_BLOCK_TYPE_DATA,
+		else {
+			if (bio->bi_status) {
+				/*
+				 * Error correction failed; Just return error
+				 */
+				return -EIO;
+			}
+			if (verity_handle_err(v, DM_VERITY_BLOCK_TYPE_DATA,
 					   cur_block))
-			return -EIO;
+				return -EIO;
+		}
 	}
 
 	return 0;
@@ -880,36 +889,36 @@ out:
 }
 
 
-static int verity_parse_pre_opt_args(struct dm_arg_set *as,struct dm_verity *v)
+static int verity_parse_pre_opt_args(struct dm_arg_set *as, struct dm_verity *v)
 {
-       int r;
-       unsigned int argc;
-       const char *arg_name;
-       struct dm_target *ti = v->ti;
-       static struct dm_arg _args[] = {
-              {0, DM_VERITY_OPTS_MAX, "Invalid number of feature args"},
-       };
+	int r;
+	unsigned int argc;
+	const char *arg_name;
+	struct dm_target *ti = v->ti;
+	static struct dm_arg _args[] = {
+		{0, DM_VERITY_OPTS_MAX, "Invalid number of feature args"},
+	};
 
-       r = dm_read_arg_group(_args, as, &argc, &ti->error);
-       if (r)
-              return -EINVAL;
+	r = dm_read_arg_group(_args, as, &argc, &ti->error);
+	if (r)
+		return -EINVAL;
 
-       if (!argc)
-              return 0;
+	if (!argc)
+		return 0;
 
-       do {
-              arg_name = dm_shift_arg(as);
-              argc--;
+	do {
+		arg_name = dm_shift_arg(as);
+		argc--;
 
-              if (!strcasecmp(arg_name, DM_VERITY_OPT_DEVICE_WAIT)) {
+		if (!strcasecmp(arg_name, DM_VERITY_OPT_DEVICE_WAIT)) {
 
-                      dm_device_wait = 1;
-                      continue;
-              }
+			dm_device_wait = 1;
+			continue;
+		}
 
-       } while (argc);
+	} while (argc);
 
-       return 0;
+	return 0;
 }
 
 static int verity_parse_opt_args(struct dm_arg_set *as, struct dm_verity *v,
@@ -1034,14 +1043,14 @@ static int verity_ctr(struct dm_target *ti, unsigned argc, char **argv)
 		goto bad;
 	}
 
-        /* Optional parameters which are parsed pre required args. */
-        if ((argc - 10)) {
-                as.argc = argc - 10;
-                as.argv = argv + 10;
-                r = verity_parse_pre_opt_args(&as, v);
-                if (r < 0)
-                        goto bad;
-        }
+	/* Optional parameters which are parsed pre required args. */
+	if ((argc - 10)) {
+		as.argc = argc - 10;
+		as.argv = argv + 10;
+		r = verity_parse_pre_opt_args(&as, v);
+		if (r < 0)
+			goto bad;
+	}
 
 	if (sscanf(argv[0], "%u%c", &num, &dummy) != 1 ||
 	    num > 1) {
@@ -1055,10 +1064,10 @@ retry_dev1:
 
 	r = dm_get_device(ti, argv[1], FMODE_READ, &v->data_dev);
 	if (r) {
-                if (r == -ENODEV && dm_device_wait) {
-                       msleep(100);
-                       goto retry_dev1;
-                }
+		if (r == -ENODEV && dm_device_wait) {
+			msleep(100);
+			goto retry_dev1;
+		}
 		ti->error = "Data device lookup failed";
 		goto bad;
 	}
@@ -1066,10 +1075,10 @@ retry_dev1:
 retry_dev2:
 	r = dm_get_device(ti, argv[2], FMODE_READ, &v->hash_dev);
 	if (r) {
-                if (r == -ENODEV && dm_device_wait) {
-                       msleep(100);
-                       goto retry_dev2;
-                }
+		if (r == -ENODEV && dm_device_wait) {
+			msleep(100);
+			goto retry_dev2;
+		}
 		ti->error = "Hash device lookup failed";
 		goto bad;
 	}
