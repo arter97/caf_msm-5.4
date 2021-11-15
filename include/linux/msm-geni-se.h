@@ -51,6 +51,7 @@ enum se_protocol_types {
  * @geni_gpi_sleep:	Handle to the sleep pinctrl state.
  * @num_clk_levels:	Number of valid clock levels in clk_perf_tbl.
  * @clk_perf_tbl:	Table of clock frequency input to Serial Engine clock.
+ * @skip_bw_vote:	Used for PMIC over i2c use case to skip the BW vote.
  */
 struct se_geni_rsc {
 	struct device *ctrl_dev;
@@ -73,6 +74,7 @@ struct se_geni_rsc {
 	int	clk_freq_out;
 	unsigned int num_clk_levels;
 	unsigned long *clk_perf_tbl;
+	bool skip_bw_vote;
 };
 
 #define PINCTRL_DEFAULT	"default"
@@ -398,6 +400,7 @@ if (print) { \
 #define SPI_CORE2X_VOTE	100000
 #define UART_CORE2X_VOTE	100000
 #define UART_CONSOLE_CORE2X_VOTE	19200
+#define QUP_SE_VERSION_2_7	0x20070000
 
 #if IS_ENABLED(CONFIG_MSM_GENI_SE)
 /**

@@ -25,6 +25,7 @@
 #include <linux/slab.h>
 #include <soc/qcom/boot_stats.h>
 #include <linux/early_async.h>
+#include <linux/suspend.h>
 
 #define SE_I2C_TX_TRANS_LEN		(0x26C)
 #define SE_I2C_RX_TRANS_LEN		(0x270)
@@ -135,6 +136,7 @@ struct geni_i2c_dev {
 	bool first_resume;
 	bool gpi_reset;
 	bool disable_dma_mode;
+	bool prev_cancel_pending; //Halt cancel till IOS in good state
 };
 
 static struct geni_i2c_dev *gi2c_dev_dbg[MAX_SE];
@@ -172,7 +174,7 @@ struct geni_i2c_clk_fld {
 
 static struct geni_i2c_clk_fld geni_i2c_clk_map[] = {
 	{KHz(100), 7, 10, 11, 26},
-	{KHz(400), 2,  5, 12, 24},
+	{KHz(400), 2,  7, 10, 24},
 	{KHz(1000), 1, 3,  9, 18},
 };
 
@@ -240,6 +242,43 @@ static void geni_i2c_err(struct geni_i2c_dev *gi2c, int err)
 	geni_se_dump_dbg_regs(&gi2c->i2c_rsc, gi2c->base, gi2c->ipcl);
 err_ret:
 	gi2c->err = gi2c_log[err].err;
+}
+
+static int do_pending_cancel(struct geni_i2c_dev *gi2c)
+{
+	int timeout = 0;
+	u32 geni_ios = 0;
+
+	geni_ios = geni_read_reg_nolog(gi2c->base, SE_GENI_IOS);
+	if ((geni_ios & 0x3) != 0x3) {
+		GENI_SE_ERR(gi2c->ipcl, true, gi2c->dev,
+			"%s: Can't do pending cancel, IOS bad state: 0x%x\n",
+			__func__, geni_ios);
+		return -EINVAL;
+	}
+
+	if (gi2c->se_mode == GSI_ONLY) {
+		dmaengine_terminate_all(gi2c->tx_c);
+		gi2c->cfg_sent = 0;
+	} else {
+		reinit_completion(&gi2c->xfer);
+		geni_cancel_m_cmd(gi2c->base);
+		timeout = wait_for_completion_timeout(&gi2c->xfer, HZ);
+		if (!timeout) {
+			GENI_SE_ERR(gi2c->ipcl, true, gi2c->dev,
+				"%s:Pending Cancel failed\n", __func__);
+			reinit_completion(&gi2c->xfer);
+			geni_abort_m_cmd(gi2c->base);
+			timeout = wait_for_completion_timeout(&gi2c->xfer, HZ);
+			if (!timeout)
+				GENI_SE_ERR(gi2c->ipcl, true, gi2c->dev,
+				"%s:Abort failed\n", __func__);
+		}
+	}
+	gi2c->prev_cancel_pending = false;
+	GENI_SE_ERR(gi2c->ipcl, true, gi2c->dev,
+			"%s: Pending Cancel done\n", __func__);
+	return timeout;
 }
 
 static int geni_i2c_prepare(struct geni_i2c_dev *gi2c)
@@ -922,6 +961,8 @@ static int geni_i2c_gsi_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 		timeout = wait_for_completion_timeout(&gi2c->xfer,
 						gi2c->xfer_timeout);
 		if (!timeout) {
+			u32 geni_ios = 0;
+
 			GENI_SE_ERR(gi2c->ipcl, true, gi2c->dev,
 				"I2C gsi xfer timeout:%u flags:%d addr:0x%x\n",
 				gi2c->xfer_timeout, gi2c->cur->flags,
@@ -929,6 +970,15 @@ static int geni_i2c_gsi_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 			geni_se_dump_dbg_regs(&gi2c->i2c_rsc, gi2c->base,
 						gi2c->ipcl);
 			gi2c->err = -ETIMEDOUT;
+
+			/* WAR: Set flag to mark cancel pending if IOS stuck */
+			geni_ios = geni_read_reg_nolog(gi2c->base, SE_GENI_IOS);
+			if ((geni_ios & 0x3) != 0x3) { //SCL:b'1, SDA:b'0
+				GENI_SE_DBG(gi2c->ipcl, true, gi2c->dev,
+					"%s: IO lines not in good state\n", __func__);
+				gi2c->prev_cancel_pending = true;
+				goto geni_i2c_gsi_cancel_pending;
+			}
 		}
 geni_i2c_err_prep_sg:
 		if (gi2c->err) {
@@ -951,6 +1001,7 @@ geni_i2c_err_prep_sg:
 			/* Resend cfg tre for every new message on shared se */
 			gi2c->cfg_sent = 0;
 
+geni_i2c_gsi_cancel_pending:
 		if (msgs[i].flags & I2C_M_RD)
 			geni_se_iommu_unmap_buf(rx_dev, &gi2c->rx_ph,
 				msgs[i].len, DMA_FROM_DEVICE);
@@ -994,6 +1045,13 @@ static int geni_i2c_xfer(struct i2c_adapter *adap,
 			pm_runtime_set_suspended(gi2c->dev);
 			return ret;
 		}
+	}
+
+	// WAR : Complete previous pending cancel cmd
+	if (gi2c->prev_cancel_pending) {
+		ret = do_pending_cancel(gi2c);
+		if (ret)
+			return ret; //Don't perform xfer is cancel failed
 	}
 
 	GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev,
@@ -1113,9 +1171,20 @@ static int geni_i2c_xfer(struct i2c_adapter *adap,
 		timeout = wait_for_completion_timeout(&gi2c->xfer,
 						gi2c->xfer_timeout);
 		if (!timeout) {
+			u32 geni_ios = 0;
+
 			GENI_SE_ERR(gi2c->ipcl, true, gi2c->dev,
 				"I2C xfer timeout: %d\n", gi2c->xfer_timeout);
 			geni_i2c_err(gi2c, GENI_TIMEOUT);
+
+			/* WAR: Set flag to mark cancel pending if IOS bad */
+			geni_ios = geni_read_reg_nolog(gi2c->base, SE_GENI_IOS);
+			if ((geni_ios & 0x3) != 0x3) { //SCL:b'1, SDA:b'0
+				GENI_SE_DBG(gi2c->ipcl, true, gi2c->dev,
+					"%s: IO lines not in good state\n", __func__);
+				gi2c->prev_cancel_pending = true;
+				goto geni_i2c_txn_ret;
+			}
 		}
 
 		if (gi2c->err) {
@@ -1239,6 +1308,9 @@ static int geni_i2c_probe(struct platform_device *pdev)
 		gi2c->first_resume = true;
 		dev_info(&pdev->dev, "LE-VM usecase\n");
 	}
+
+	if (of_property_read_bool(pdev->dev.of_node, "qcom,leica-used-i2c"))
+		gi2c->i2c_rsc.skip_bw_vote = true;
 
 	gi2c->i2c_rsc.wrapper_dev = &wrapper_pdev->dev;
 	gi2c->i2c_rsc.ctrl_dev = gi2c->dev;
@@ -1396,7 +1468,20 @@ static int geni_i2c_resume_early(struct device *device)
 {
 	struct geni_i2c_dev *gi2c = dev_get_drvdata(device);
 
+#ifdef CONFIG_DEEPSLEEP
+	if (mem_sleep_current == PM_SUSPEND_MEM)
+		gi2c->se_mode = UNINITIALIZED;
+#endif
 	GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev, "%s\n", __func__);
+	return 0;
+}
+
+static int geni_i2c_hib_resume_noirq(struct device *device)
+{
+	struct geni_i2c_dev *gi2c = dev_get_drvdata(device);
+
+	GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev, "%s\n", __func__);
+	gi2c->se_mode = UNINITIALIZED;
 	return 0;
 }
 
@@ -1442,19 +1527,17 @@ static int geni_i2c_runtime_resume(struct device *dev)
 	if (!gi2c->is_le_vm) {
 		/* Do not control clk/gpio/icb for LE-VM */
 		ret = se_geni_resources_on(&gi2c->i2c_rsc);
-
 		if (ret)
 			return ret;
 
 		ret = geni_i2c_prepare(gi2c);
 		if (ret) {
-			dev_err(gi2c->dev, "I2C prepare failed\n");
+			dev_err(gi2c->dev, "I2C prepare failed: %d\n", ret);
 			return ret;
 		}
 
 		if (gi2c->se_mode == FIFO_SE_DMA)
 			enable_irq(gi2c->irq);
-
 	} else if (!gi2c->first_resume) {
 		/*
 		 * For first resume call in le, do nothing, and in
@@ -1464,7 +1547,7 @@ static int geni_i2c_runtime_resume(struct device *dev)
 		 */
 		ret = geni_i2c_prepare(gi2c);
 		if (ret) {
-			dev_err(gi2c->dev, "I2C prepare failed\n");
+			dev_err(gi2c->dev, "I2C prepare failed:%d\n", ret);
 			return ret;
 		}
 
@@ -1527,6 +1610,9 @@ static const struct dev_pm_ops geni_i2c_pm_ops = {
 	.resume_early		= geni_i2c_resume_early,
 	.runtime_suspend	= geni_i2c_runtime_suspend,
 	.runtime_resume		= geni_i2c_runtime_resume,
+	.freeze                 = geni_i2c_suspend_late,
+	.restore                = geni_i2c_hib_resume_noirq,
+	.thaw			= geni_i2c_hib_resume_noirq,
 };
 
 static const struct of_device_id geni_i2c_dt_match[] = {

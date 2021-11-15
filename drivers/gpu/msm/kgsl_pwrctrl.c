@@ -4,6 +4,7 @@
  */
 
 #include <linux/interconnect.h>
+#include <linux/msm_kgsl.h>
 #include <linux/of_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
@@ -1205,8 +1206,8 @@ static void kgsl_pwrctrl_clk(struct kgsl_device *device, int state,
 		return;
 
 	if (state == KGSL_PWRFLAGS_OFF) {
-		if (test_and_clear_bit(KGSL_PWRFLAGS_CLK_ON,
-			&pwr->power_flags)) {
+		if (test_bit(KGSL_PWRFLAGS_CLK_ON,
+						&pwr->power_flags)) {
 			trace_kgsl_clk(device, state,
 					kgsl_pwrctrl_active_freq(pwr));
 			/* Disable gpu-bimc-interface clocks */
@@ -1243,9 +1244,11 @@ static void kgsl_pwrctrl_clk(struct kgsl_device *device, int state,
 					pwr->num_pwrlevels - 1);
 			}
 		}
+
+		clear_bit(KGSL_PWRFLAGS_CLK_ON, &pwr->power_flags);
 	} else if (state == KGSL_PWRFLAGS_ON) {
-		if (!test_and_set_bit(KGSL_PWRFLAGS_CLK_ON,
-			&pwr->power_flags)) {
+		if (!test_bit(KGSL_PWRFLAGS_CLK_ON,
+				&pwr->power_flags)) {
 			trace_kgsl_clk(device, state,
 					kgsl_pwrctrl_active_freq(pwr));
 			/* High latency clock maintenance. */
@@ -1280,8 +1283,9 @@ static void kgsl_pwrctrl_clk(struct kgsl_device *device, int state,
 
 			/* Turn on the IOMMU clocks */
 			kgsl_mmu_enable_clk(&device->mmu);
-		}
 
+			set_bit(KGSL_PWRFLAGS_CLK_ON, &pwr->power_flags);
+		}
 	}
 }
 
@@ -1426,8 +1430,8 @@ static int _get_clocks(struct kgsl_device *device)
 		for (i = 0; i < KGSL_MAX_CLKS; i++) {
 			if (pwr->grp_clks[i] || strcmp(clocks[i], name))
 				continue;
-			/* apb_pclk should only be enabled if CORESIGHT is enabled */
-			if (!strcmp(name, "apb_pclk") && !IS_ENABLED(CONFIG_CORESIGHT))
+			/* apb_pclk should only be enabled if QCOM_KGSL_QDSS_STM is enabled */
+			if (!strcmp(name, "apb_pclk") && !IS_ENABLED(CONFIG_QCOM_KGSL_QDSS_STM))
 				continue;
 
 			pwr->grp_clks[i] = devm_clk_get(dev, name);
@@ -1878,6 +1882,7 @@ static int _wake(struct kgsl_device *device)
 		kgsl_pwrctrl_clk(device, KGSL_PWRFLAGS_ON, KGSL_STATE_ACTIVE);
 
 		device->ftbl->deassert_gbif_halt(device);
+		pwr->last_stat_updated = ktime_get();
 		/*
 		 * No need to turn on/off irq here as it no longer affects
 		 * power collapse
@@ -2258,3 +2263,42 @@ int kgsl_pwrctrl_set_default_gpu_pwrlevel(struct kgsl_device *device)
 	/* Request adjusted DCVS level */
 	return device->ftbl->gpu_clock_set(device, pwr->active_pwrlevel);
 }
+
+int kgsl_gpu_num_freqs(void)
+{
+	struct kgsl_device *device = kgsl_get_device(0);
+
+	if (!device)
+		return -ENODEV;
+
+	return device->pwrctrl.num_pwrlevels;
+}
+EXPORT_SYMBOL(kgsl_gpu_num_freqs);
+
+int kgsl_gpu_stat(struct kgsl_gpu_freq_stat *stats, u32 numfreq)
+{
+	struct kgsl_device *device = kgsl_get_device(0);
+	struct kgsl_pwrctrl *pwr;
+	int i;
+
+	if (!device)
+		return -ENODEV;
+
+	pwr = &device->pwrctrl;
+
+	if (!stats || (numfreq < pwr->num_pwrlevels))
+		return -EINVAL;
+
+	mutex_lock(&device->mutex);
+	kgsl_pwrscale_update_stats(device);
+
+	for (i = 0; i < pwr->num_pwrlevels; i++) {
+		stats[i].freq = pwr->pwrlevels[i].gpu_freq;
+		stats[i].active_time = pwr->clock_times[i];
+		stats[i].idle_time = pwr->time_in_pwrlevel[i] - pwr->clock_times[i];
+	}
+	mutex_unlock(&device->mutex);
+
+	return 0;
+}
+EXPORT_SYMBOL(kgsl_gpu_stat);

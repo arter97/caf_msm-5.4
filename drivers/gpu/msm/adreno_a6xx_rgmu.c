@@ -146,6 +146,9 @@ static int a6xx_rgmu_oob_set(struct kgsl_device *device,
 	struct a6xx_rgmu_device *rgmu = to_a6xx_rgmu(ADRENO_DEVICE(device));
 	int ret, set, check;
 
+	if (req == oob_perfcntr && rgmu->num_oob_perfcntr++)
+		return 0;
+
 	set = BIT(req + 16);
 	check = BIT(req + 16);
 
@@ -160,6 +163,8 @@ static int a6xx_rgmu_oob_set(struct kgsl_device *device,
 	if (ret) {
 		unsigned int status;
 
+		if (req == oob_perfcntr)
+			rgmu->num_oob_perfcntr--;
 		gmu_core_regread(device, A6XX_RGMU_CX_PCC_DEBUG, &status);
 		dev_err(&rgmu->pdev->dev,
 				"Timed out while setting OOB req:%s status:0x%x\n",
@@ -181,6 +186,11 @@ static int a6xx_rgmu_oob_set(struct kgsl_device *device,
 static void a6xx_rgmu_oob_clear(struct kgsl_device *device,
 		enum oob_request req)
 {
+	struct a6xx_rgmu_device *rgmu = to_a6xx_rgmu(ADRENO_DEVICE(device));
+
+	if (req == oob_perfcntr && --rgmu->num_oob_perfcntr)
+		return;
+
 	gmu_core_regwrite(device, A6XX_GMU_HOST2GMU_INTR_SET, BIT(req + 24));
 	trace_kgsl_gmu_oob_clear(BIT(req + 24));
 }
@@ -550,10 +560,17 @@ void a6xx_rgmu_snapshot(struct adreno_device *adreno_dev,
 
 static void a6xx_rgmu_suspend(struct adreno_device *adreno_dev)
 {
+	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
+	struct a6xx_rgmu_device *rgmu = to_a6xx_rgmu(adreno_dev);
+
 	a6xx_rgmu_irq_disable(adreno_dev);
 
 	a6xx_rgmu_disable_clks(adreno_dev);
 	a6xx_rgmu_disable_gdsc(adreno_dev);
+
+	dev_err(&rgmu->pdev->dev, "Suspended rgmu\n");
+
+	device->state = KGSL_STATE_NONE;
 }
 
 static int a6xx_rgmu_enable_clks(struct adreno_device *adreno_dev)
@@ -712,6 +729,8 @@ static void a6xx_rgmu_power_off(struct adreno_device *adreno_dev)
 	a6xx_rgmu_disable_gdsc(adreno_dev);
 
 	kgsl_pwrctrl_clear_l3_vote(device);
+
+	device->state = KGSL_STATE_NONE;
 }
 
 static int a6xx_rgmu_clock_set(struct adreno_device *adreno_dev,
@@ -896,6 +915,7 @@ static int a6xx_boot(struct adreno_device *adreno_dev)
 
 	set_bit(RGMU_PRIV_GPU_STARTED, &rgmu->flags);
 
+	device->pwrctrl.last_stat_updated = ktime_get();
 	device->state = KGSL_STATE_ACTIVE;
 
 	trace_kgsl_pwr_set_state(device, KGSL_STATE_ACTIVE);
@@ -934,6 +954,7 @@ static void a6xx_rgmu_touch_wakeup(struct adreno_device *adreno_dev)
 
 	set_bit(RGMU_PRIV_GPU_STARTED, &rgmu->flags);
 
+	device->pwrctrl.last_stat_updated = ktime_get();
 	device->state = KGSL_STATE_ACTIVE;
 
 	trace_kgsl_pwr_set_state(device, KGSL_STATE_ACTIVE);
@@ -1002,6 +1023,7 @@ static int a6xx_first_boot(struct adreno_device *adreno_dev)
 	set_bit(RGMU_PRIV_FIRST_BOOT_DONE, &rgmu->flags);
 	set_bit(RGMU_PRIV_GPU_STARTED, &rgmu->flags);
 
+	device->pwrctrl.last_stat_updated = ktime_get();
 	device->state = KGSL_STATE_ACTIVE;
 
 	trace_kgsl_pwr_set_state(device, KGSL_STATE_ACTIVE);
@@ -1141,6 +1163,7 @@ static int a6xx_rgmu_pm_suspend(struct adreno_device *adreno_dev)
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	struct a6xx_rgmu_device *rgmu = to_a6xx_rgmu(adreno_dev);
 	int ret;
+	int retry = NUM_TIMES_WAIT_ACTIVE_COUNT_RETRY;
 
 	if (test_bit(RGMU_PRIV_PM_SUSPEND, &rgmu->flags))
 		return 0;
@@ -1151,7 +1174,10 @@ static int a6xx_rgmu_pm_suspend(struct adreno_device *adreno_dev)
 	reinit_completion(&device->halt_gate);
 
 	/* wait for active count so device can be put in slumber */
-	ret = kgsl_active_count_wait(device, 0, HZ);
+	do {
+		ret = kgsl_active_count_wait(device, 0, HZ);
+	} while (ret && retry--);
+
 	if (ret) {
 		dev_err(device->dev,
 			"Timed out waiting for the active count\n");
@@ -1255,11 +1281,11 @@ static int a6xx_rgmu_clocks_probe(struct a6xx_rgmu_device *rgmu,
 		return ret;
 	/*
 	 * Voting for apb_pclk will enable power and clocks required for
-	 * QDSS path to function. However, if CORESIGHT is not enabled,
+	 * QDSS path to function. However, if QCOM_KGSL_QDSS_STM is not enabled,
 	 * QDSS is essentially unusable. Hence, if QDSS cannot be used,
 	 * don't vote for this clock.
 	 */
-	if (!IS_ENABLED(CONFIG_CORESIGHT)) {
+	if (!IS_ENABLED(CONFIG_QCOM_KGSL_QDSS_STM)) {
 		for (i = 0; i < ret; i++) {
 			if (!strcmp(rgmu->clks[i].id, "apb_pclk")) {
 				rgmu->clks[i].clk = NULL;

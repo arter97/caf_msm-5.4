@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2013-2020, Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2021, Linux Foundation. All rights reserved.
  */
 
 #include <linux/acpi.h>
@@ -80,6 +80,7 @@ static int ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(struct ufs_hba *hba,
 						       u32 clk_40ns_cycles);
 static void ufs_qcom_parse_limits(struct ufs_qcom_host *host);
 static void ufs_qcom_parse_lpm(struct ufs_qcom_host *host);
+static void ufs_qcom_parse_wb(struct ufs_qcom_host *host);
 static int ufs_qcom_set_dme_vs_core_clk_ctrl_max_freq_mode(struct ufs_hba *hba);
 static int ufs_qcom_init_sysfs(struct ufs_hba *hba);
 static int ufs_qcom_update_qos_constraints(struct qos_cpu_group *qcg,
@@ -1934,7 +1935,8 @@ static void ufs_qcom_set_caps(struct ufs_hba *hba)
 			UFSHCD_CAP_HIBERN8_WITH_CLK_GATING |
 			UFSHCD_CAP_CLK_SCALING | UFSHCD_CAP_AUTO_BKOPS_SUSPEND |
 			UFSHCD_CAP_RPM_AUTOSUSPEND;
-		hba->caps |= UFSHCD_CAP_WB_EN;
+		if (!host->disable_wb_support)
+			hba->caps |= UFSHCD_CAP_WB_EN;
 	}
 
 	if (host->hw_ver.major >= 0x2) {
@@ -2703,6 +2705,7 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	struct platform_device *pdev = to_platform_device(dev);
 	struct ufs_qcom_host *host;
 	struct resource *res;
+	struct device_node *np = dev->of_node;
 
 	host = devm_kzalloc(dev, sizeof(*host), GFP_KERNEL);
 	if (!host) {
@@ -2759,6 +2762,16 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 			dev_err(dev, "%s: PHY get failed %d\n", __func__, err);
 			goto out_variant_clear;
 		}
+	}
+
+	/*
+	 * Check whether primary UFS boot device is probed using
+	 * primary_boot_device_probed flag, if its not set defer the probe.
+	 */
+	if ((of_property_read_bool(np, "secondary-storage")) && (!ufs_qcom_hosts[0]
+		|| !ufs_qcom_hosts[0]->hba->primary_boot_device_probed)) {
+		err = -EPROBE_DEFER;
+		goto out_variant_clear;
 	}
 
 	host->device_reset = devm_gpiod_get_optional(dev, "reset",
@@ -2853,6 +2866,7 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	if (host->disable_lpm)
 		pm_runtime_forbid(host->hba->dev);
 
+	ufs_qcom_parse_wb(host);
 	ufs_qcom_set_caps(hba);
 	ufs_qcom_advertise_quirks(hba);
 
@@ -3456,6 +3470,19 @@ static void ufs_qcom_parse_lpm(struct ufs_qcom_host *host)
 			 __func__);
 }
 
+/*
+ *  ufs_qcom_parse_wb - read from DTS whether WB support should be enabled.
+ */
+static void ufs_qcom_parse_wb(struct ufs_qcom_host *host)
+{
+	struct device_node *node = host->hba->dev->of_node;
+
+	host->disable_wb_support = of_property_read_bool(node,
+			"qcom,disable-wb-support");
+	if (host->disable_wb_support)
+		pr_info("%s: WB support disabled\n", __func__);
+}
+
 /**
  * ufs_qcom_device_reset() - toggle the (optional) device reset line
  * @hba: per-adapter instance
@@ -3775,6 +3802,11 @@ static const struct dev_pm_ops ufs_qcom_pm_ops = {
 	.runtime_suspend = ufshcd_pltfrm_runtime_suspend,
 	.runtime_resume  = ufshcd_pltfrm_runtime_resume,
 	.runtime_idle    = ufshcd_pltfrm_runtime_idle,
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+	.freeze		= ufshcd_pltfrm_freeze,
+	.restore	= ufshcd_pltfrm_restore,
+	.thaw		= ufshcd_pltfrm_thaw,
+#endif
 };
 
 static struct platform_driver ufs_qcom_pltform = {

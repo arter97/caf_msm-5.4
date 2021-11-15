@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2015-2020, The Linux Foundation. All rights reserved. */
+/* Copyright (c) 2015-2021, The Linux Foundation. All rights reserved. */
 
 #include <linux/interrupt.h>
 #include <linux/module.h>
@@ -316,7 +316,7 @@ static inline u64 qtimer_time(void)
 }
 
 static void qti_canfd_receive_frame(struct qti_can *priv_data,
-				  struct canfd_receive_frame *frame)
+				    struct canfd_receive_frame *frame)
 {
 	struct canfd_frame *cf;
 	struct sk_buff *skb;
@@ -440,7 +440,7 @@ static void qti_can_receive_frame(struct qti_can *priv_data,
 		netdev->stats.rx_packets++;
 	} else {
 		buff_frames_disc_cntr++;
-		dev_kfree_skb(skb);
+		kfree_skb(skb);
 	}
 }
 
@@ -497,12 +497,11 @@ static int qti_can_process_response(struct qti_can *priv_data,
 
 	LOGDI("<%x %2d [%d]\n", resp->cmd, resp->len, resp->seq);
 	if (resp->cmd == CMD_CAN_RECEIVE_FRAME) {
-		if(resp->len > CAN_STANDARD_PACKET_SIZE) {
+		if (resp->len > CAN_STANDARD_PACKET_SIZE) {
 			LOGDI("can fd receive\n");
 			frame = (struct canfd_receive_frame *)&resp->data;
 			qti_canfd_receive_frame(priv_data, frame);
-		}
-		else {
+		} else {
 			struct can_receive_frame *frame =
 					(struct can_receive_frame *)&resp->data;
 			if ((resp->len - (frame->dlc + sizeof(frame->dlc))) <
@@ -517,13 +516,10 @@ static int qti_can_process_response(struct qti_can *priv_data,
 				/* Error. This should never happen */
 				LOGDE("%s error: Saving %d bytes\n", __func__, length);
 				memcpy(priv_data->assembly_buffer, (char *)resp,
-					   length);
+				       length);
 				priv_data->assembly_buffer_size = length;
 			} else {
-				/*if(frame->flags & 0x80)
-					qti_canfd_receive_frame(priv_data, frame);
-				else*/
-					qti_can_receive_frame(priv_data, frame);
+				qti_can_receive_frame(priv_data, frame);
 			}
 		}
 	} else if (resp->cmd == CMD_PROPERTY_READ) {
@@ -633,19 +629,19 @@ static int qti_can_process_rx(struct qti_can *priv_data, char *rx_buf)
 	if (rx_buf[0] == CMD_CAN_RECEIVE_FRAME) {
 		if (rx_buf[1] > CAN_FD_PACKET_SIZE) {
 			resp = (struct spi_miso *)rx_buf;
-			LOGDI("spi -> cmd %X len %d seq %d\n",resp->cmd,resp->len,resp->seq);
-			if(resp->seq == 0){
+			LOGDI("spi -> cmd %X len %d seq %d\n", resp->cmd, resp->len, resp->seq);
+			if (resp->seq == 0) {
 				//store canfd frame in buffer;
-				memset(priv_data->fd_buffer, 0 , RX_FD_BUFFER_SIZE);
+				memset(priv_data->fd_buffer, 0, RX_FD_BUFFER_SIZE);
 				memcpy(priv_data->fd_buffer, resp, CAN_FD_PACKET_SIZE + 4);
 			}
-			if(resp->seq == 1){
+			if (resp->seq == 1) {
 				// add data of second spi packet frame to resp_fd
-				frame = (struct can_receive_frame*) resp->data;
+				frame = (struct can_receive_frame *)resp->data;
 				memcpy((priv_data->fd_buffer) + CAN_FD_PACKET_SIZE + 4,
-					   frame->data, frame->dlc - CAN_FD_PACKET_DATA);
+				       frame->data, frame->dlc - CAN_FD_PACKET_DATA);
 				data = priv_data->fd_buffer;
-				resp_fd = (struct spi_miso*)data;
+				resp_fd = (struct spi_miso *)data;
 				ret = qti_can_process_response(priv_data, resp_fd, 0);
 			}
 			return ret;
@@ -724,8 +720,8 @@ static int qti_can_do_spi_transaction(struct qti_can *priv_data)
 
 	spi = priv_data->spidev;
 	dev = &spi->dev;
-	msg = devm_kzalloc(&spi->dev, sizeof(*msg), GFP_KERNEL);
-	xfer = devm_kzalloc(&spi->dev, sizeof(*xfer), GFP_KERNEL);
+	msg = kzalloc(sizeof(*msg), GFP_KERNEL);
+	xfer = kzalloc(sizeof(*xfer), GFP_KERNEL);
 	if (!xfer || !msg)
 		return -ENOMEM;
 	LOGDI(">%x %2d [%d]\n", priv_data->tx_buf[0],
@@ -733,7 +729,7 @@ static int qti_can_do_spi_transaction(struct qti_can *priv_data)
 
 	if (checksum_enable) {
 		req = (struct spi_mosi *)(priv_data->tx_buf);
-		if(req->cmd == CMD_CAN_SEND_FRAME)
+		if (req->cmd == CMD_CAN_SEND_FRAME)
 			checksum_tx_len = XFER_BUFFER_SIZE - 2;
 		else
 			checksum_tx_len = (req->len) + 4;
@@ -781,6 +777,8 @@ static int qti_can_do_spi_transaction(struct qti_can *priv_data)
 	} else if (ret == 0) {
 		qti_can_process_rx(priv_data, priv_data->rx_buf);
 	}
+	kfree(msg);
+	kfree(xfer);
 	return ret;
 }
 
@@ -917,7 +915,7 @@ static int qti_can_write(struct qti_can *priv_data,
 {
 	char *tx_buf, *rx_buf;
 	char fd_buf[CAN_FD_PACKET_DATA] = "";
-	bool send_fd_frame = 0;
+	bool send_fd_frame = false;
 	int data_length_left = 0, k = 0;
 	int ret, i;
 	struct spi_mosi *req;
@@ -945,21 +943,17 @@ static int qti_can_write(struct qti_can *priv_data,
 		req_d->can_if = can_channel;
 		req_d->mid = cf->can_id;
 		req_d->dlc = cf->len;
-		/*if(cf->flags)
-			req_d->flags = ((cf->flags)<< 5)|0x90;*/
-		// setting enable canfd bit for flags & iso; iso enabled by default
-		if(req_d->dlc > CAN_FD_PACKET_DATA) {
-			send_fd_frame = 1;
-			for(i = 0; i < CAN_FD_PACKET_DATA; i++)
+		if (req_d->dlc > CAN_FD_PACKET_DATA) {
+			send_fd_frame = true;
+			for (i = 0; i < CAN_FD_PACKET_DATA; i++)
 				req_d->data[i] = cf->data[i];
-			while(i < cf->len){
+			while (i < cf->len) {
 				fd_buf[k] = cf->data[i];
 				i++;
 				k++;
 			}
 			req->seq = 0;
-		}
-		else {
+		} else {
 			for (i = 0; i < cf->len; i++)
 				req_d->data[i] = cf->data[i];
 		}
@@ -980,7 +974,7 @@ static int qti_can_write(struct qti_can *priv_data,
 		req->seq = 1;
 		data_length_left = cf->len - CAN_FD_PACKET_DATA;
 		memset(req_d->data, 0, CAN_FD_PACKET_DATA);
-		for(i = 0; i < data_length_left; i++)
+		for (i = 0; i < data_length_left; i++)
 			req_d->data[i] = fd_buf[i];
 		ret = qti_can_do_spi_transaction(priv_data);
 	}
@@ -1035,7 +1029,7 @@ static void qti_can_send_can_frame(struct work_struct *ws)
 	cf = (struct canfd_frame *)tx_work->skb->data;
 	qti_can_write(priv_data, can_channel, cf);
 
-	dev_kfree_skb(tx_work->skb);
+	kfree_skb(tx_work->skb);
 	kfree(tx_work);
 }
 
@@ -1120,9 +1114,7 @@ static int qti_can_data_buffering(struct net_device *netdev,
 		mutex_unlock(&priv_data->spi_lock);
 		return -EINVAL;
 	}
-	add_request = devm_kzalloc(&spi->dev,
-				   sizeof(struct qti_can_buffer),
-				   GFP_KERNEL);
+	add_request = kzalloc(sizeof(*add_request), GFP_KERNEL);
 	if (!add_request) {
 		mutex_unlock(&priv_data->spi_lock);
 		return -ENOMEM;
@@ -1131,6 +1123,7 @@ static int qti_can_data_buffering(struct net_device *netdev,
 	if (copy_from_user(add_request, ifr->ifr_data,
 			   sizeof(struct qti_can_buffer))) {
 		mutex_unlock(&priv_data->spi_lock);
+		kfree(add_request);
 		return -EFAULT;
 	}
 
@@ -1154,6 +1147,7 @@ static int qti_can_data_buffering(struct net_device *netdev,
 	}
 
 	ret = qti_can_do_spi_transaction(priv_data);
+	kfree(add_request);
 	mutex_unlock(&priv_data->spi_lock);
 
 	if (ret == 0 && priv_data->can_fw_cmd_timeout_req) {
@@ -1237,9 +1231,8 @@ static int qti_can_frame_filter(struct net_device *netdev,
 		return -EINVAL;
 	}
 
-	filter_request =
-		devm_kzalloc(&spi->dev, sizeof(struct can_filter_req),
-			     GFP_KERNEL);
+	filter_request = kzalloc(sizeof(*filter_request),
+				 GFP_KERNEL);
 	if (!filter_request) {
 		mutex_unlock(&priv_data->spi_lock);
 		return -ENOMEM;
@@ -1248,6 +1241,7 @@ static int qti_can_frame_filter(struct net_device *netdev,
 	if (copy_from_user(filter_request, ifr->ifr_data,
 			   sizeof(struct can_filter_req))) {
 		mutex_unlock(&priv_data->spi_lock);
+		kfree(filter_request);
 		return -EFAULT;
 	}
 
@@ -1266,6 +1260,7 @@ static int qti_can_frame_filter(struct net_device *netdev,
 	add_filter->mask = filter_request->mask;
 
 	ret = qti_can_do_spi_transaction(priv_data);
+	kfree(filter_request);
 	mutex_unlock(&priv_data->spi_lock);
 	return ret;
 }
@@ -1384,9 +1379,7 @@ static int qti_can_do_blocking_ioctl(struct net_device *netdev,
 	mutex_lock(&priv_data->spi_lock);
 	if (spi_cmd == CMD_FIRMWARE_UPGRADE_DATA ||
 	    spi_cmd == CMD_BOOT_ROM_UPGRADE_DATA) {
-		ioctl_data =
-			devm_kzalloc(&spi->dev,
-				     sizeof(struct qti_can_ioctl_req),
+		ioctl_data = kzalloc(sizeof(*ioctl_data),
 				     GFP_KERNEL);
 		if (!ioctl_data) {
 			mutex_unlock(&priv_data->spi_lock);
@@ -1396,6 +1389,7 @@ static int qti_can_do_blocking_ioctl(struct net_device *netdev,
 		if (copy_from_user(ioctl_data, ifr->ifr_data,
 				   sizeof(struct qti_can_ioctl_req))) {
 			mutex_unlock(&priv_data->spi_lock);
+			kfree(ioctl_data);
 			return -EFAULT;
 		}
 
@@ -1426,6 +1420,8 @@ static int qti_can_do_blocking_ioctl(struct net_device *netdev,
 	reinit_completion(&priv_data->response_completion);
 
 	ret = qti_can_send_spi_locked(priv_data, spi_cmd, len, data);
+
+	kfree(ioctl_data);
 	mutex_unlock(&priv_data->spi_lock);
 
 	if (ret == 0) {
@@ -1461,18 +1457,20 @@ static int qti_can_netdev_do_ioctl(struct net_device *netdev,
 		 */
 		if (ifr->ifr_data > (void __user *)IFR_DATA_OFFSET) {
 			mutex_lock(&priv_data->spi_lock);
-			mode = devm_kzalloc(&spi->dev, sizeof(int), GFP_KERNEL);
+			mode = kzalloc(sizeof(*mode), GFP_KERNEL);
 			if (!mode) {
 				mutex_unlock(&priv_data->spi_lock);
 				return -ENOMEM;
 			}
 			if (copy_from_user(mode, ifr->ifr_data, sizeof(int))) {
 				mutex_unlock(&priv_data->spi_lock);
+				kfree(mode);
 				return -EFAULT;
 			}
 			priv_data->driver_mode = *mode;
 			LOGDE("qti_can_driver_mode %d\n",
 			      priv_data->driver_mode);
+			kfree(mode);
 			mutex_unlock(&priv_data->spi_lock);
 		}
 		qti_can_send_release_can_buffer_cmd(netdev);
@@ -1579,9 +1577,8 @@ static struct qti_can *qti_can_create_priv_data(struct spi_device *spi)
 		err = -ENOMEM;
 		goto cleanup_privdata;
 	}
-	priv_data->fd_buffer = devm_kzalloc(dev,
-						  RX_FD_BUFFER_SIZE,
-						  GFP_KERNEL);
+	priv_data->fd_buffer = devm_kzalloc(dev, RX_FD_BUFFER_SIZE,
+					    GFP_KERNEL);
 	if (!priv_data->fd_buffer) {
 		err = -ENOMEM;
 		goto cleanup_privdata;

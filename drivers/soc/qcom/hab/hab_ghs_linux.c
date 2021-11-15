@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
  */
 #include "hab.h"
 #include "hab_ghs.h"
@@ -151,5 +151,11 @@ int hab_hypervisor_register_os(void)
 	return 0;
 }
 
-void dump_hab_wq(void *hyp_data) {};
+void dump_hab_wq(struct physical_channel *pchan) {};
 void hab_pipe_read_dump(struct physical_channel *pchan) {};
+int hab_stat_log(struct physical_channel **pchans, int pchan_cnt, char *dest,
+			int dest_size)
+{
+	return 0;
+};
+

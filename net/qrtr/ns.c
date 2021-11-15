@@ -86,19 +86,19 @@ static struct qrtr_node *node_get(unsigned int node_id)
 		return node;
 
 	/* If node didn't exist, allocate and insert it to the tree */
-	node = kzalloc(sizeof(*node), GFP_KERNEL);
+	node = kzalloc(sizeof(*node), GFP_ATOMIC);
 	if (!node)
 		return NULL;
 
 	node->id = node_id;
 	xa_init(&node->servers);
 
-	xa_store(&nodes, node_id, node, GFP_KERNEL);
+	xa_store(&nodes, node_id, node, GFP_ATOMIC);
 
 	return node;
 }
 
-unsigned int qrtr_get_service_id(unsigned int node_id, unsigned int port_id)
+int qrtr_get_service_id(unsigned int node_id, unsigned int port_id)
 {
 	struct qrtr_server *srv;
 	struct qrtr_node *node;
@@ -106,14 +106,14 @@ unsigned int qrtr_get_service_id(unsigned int node_id, unsigned int port_id)
 
 	node = node_get(node_id);
 	if (!node)
-		return 0;
+		return -EINVAL;
 
 	xa_for_each(&node->servers, index, srv) {
 		if (srv->node == node_id && srv->port == port_id)
 			return srv->service;
 	}
 
-	return 0;
+	return -EINVAL;
 }
 EXPORT_SYMBOL(qrtr_get_service_id);
 

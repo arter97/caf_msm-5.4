@@ -215,6 +215,14 @@ struct cpu_gpu_lock {
 	 (1 << A6XX_INT_TSB_WRITE_ERROR))
 
 /**
+ * retry times of wait active count to become 0,
+ * currently, we wait 10 seconds here, if still
+ * failed after 10 secs, then we can say *gmu*
+ * is gettig troubles here
+ */
+#define NUM_TIMES_WAIT_ACTIVE_COUNT_RETRY 10
+
+/**
  * to_a6xx_core - return the a6xx specific GPU core struct
  * @adreno_dev: An Adreno GPU device handle
  *
@@ -283,10 +291,8 @@ static inline bool a6xx_is_smmu_stalled(struct kgsl_device *device)
  *
  * Disable the regulator and wait @timeout milliseconds for it to enter the
  * disabled state.
- *
- * Return: True if the regulator was disabled or false if it timed out
  */
-bool a6xx_cx_regulator_disable_wait(struct regulator *reg,
+void a6xx_cx_regulator_disable_wait(struct regulator *reg,
 				struct kgsl_device *device, u32 timeout);
 
 /* Preemption functions */

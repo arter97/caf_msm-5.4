@@ -44,6 +44,7 @@ extern void __qcom_scm_phy_update_scm_level_shifter(struct device *dev, u32 val)
 #define QCOM_SCM_PIL_PAS_SHUTDOWN		0x06
 #define QCOM_SCM_PIL_PAS_IS_SUPPORTED		0x07
 #define QCOM_SCM_PIL_PAS_MSS_RESET		0x0a
+#define QCOM_SCM_PIL_PAS_DSENTER		0x2f
 extern bool __qcom_scm_pas_supported(struct device *dev, u32 peripheral);
 extern int  __qcom_scm_pas_init_image(struct device *dev, u32 peripheral,
 		dma_addr_t metadata_phys);
@@ -51,6 +52,7 @@ extern int  __qcom_scm_pas_mem_setup(struct device *dev, u32 peripheral,
 		phys_addr_t addr, phys_addr_t size);
 extern int  __qcom_scm_pas_auth_and_reset(struct device *dev, u32 peripheral);
 extern int  __qcom_scm_pas_shutdown(struct device *dev, u32 peripheral);
+extern int  __qcom_scm_pas_dsentry(struct device *dev, u32 peripheral);
 extern int  __qcom_scm_pas_mss_reset(struct device *dev, bool reset);
 
 #define QCOM_SCM_SVC_UTIL			0x03
@@ -175,6 +177,7 @@ extern int __qcom_scm_dcvs_update_ca_v2(struct device *dev, int level,
 #define QCOM_SCM_SVC_ES				0x10
 #define QCOM_SCM_ES_CONFIG_SET_ICE_KEY		0x05
 #define QCOM_SCM_ES_CLEAR_ICE_KEY		0x06
+#define QCOM_SCM_ES_DERIVE_RAW_SECRET		0x07
 extern int __qcom_scm_config_set_ice_key(struct device *dev, uint32_t index,
 					 phys_addr_t paddr, size_t size,
 					 uint32_t cipher,
@@ -182,6 +185,10 @@ extern int __qcom_scm_config_set_ice_key(struct device *dev, uint32_t index,
 					 unsigned int food);
 extern int __qcom_scm_clear_ice_key(struct device *dev, uint32_t index,
 				    unsigned int food);
+extern int __qcom_scm_derive_raw_secret(struct device *dev,
+					phys_addr_t paddr_key, size_t key_size,
+					phys_addr_t paddr_secret,
+					size_t secret_size);
 
 #define QCOM_SCM_SVC_HDCP			0x11
 #define QCOM_SCM_HDCP_INVOKE			0x01
@@ -265,7 +272,10 @@ extern int __qcom_scm_paravirt_smmu_detach(struct device *dev,
 // OEM Services and Function IDs
 #define QCOM_SCM_SVC_OEM_POWER		0x09
 #define QCOM_SCM_OEM_POWER_REBOOT	0x22
+#define QCOM_SCM_OEM_POWER_CUSTOM_REBOOT	0x23
 extern int __qcom_scm_reboot(struct device *dev);
+extern int __qcom_scm_custom_reboot(struct device *dev,
+				enum qcom_scm_custom_reset_type reboot_type);
 
 // TOS Services and Function IDs
 #define QCOM_SCM_SVC_QSEELOG		0x01

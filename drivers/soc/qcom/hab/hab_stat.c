@@ -21,7 +21,7 @@ int hab_stat_deinit(struct hab_driver *driver)
  * If all goes well the return value is the formated print and concatenated
  * original dest string.
  */
-static int hab_stat_buffer_print(char *dest,
+int hab_stat_buffer_print(char *dest,
 		int dest_size, const char *fmt, ...)
 {
 	va_list args;
@@ -91,10 +91,11 @@ int hab_stat_show_ctx(struct hab_driver *driver,
 					driver->ctx_cnt);
 	list_for_each_entry(ctx, &hab_driver.uctx_list, node) {
 		ret = hab_stat_buffer_print(buf, size,
-			"ctx %d K %d close %d vc %d exp %d imp %d open %d\n",
+		"ctx %d K %d close %d vc %d exp %d imp %d open %d ref %d\n",
 			ctx->owner, ctx->kernel, ctx->closing,
 			ctx->vcnt, ctx->export_total,
-			ctx->import_total, ctx->pending_cnt);
+			ctx->import_total, ctx->pending_cnt,
+			get_refcnt(ctx->refcount));
 	}
 	spin_unlock_bh(&hab_driver.drvlock);
 
@@ -119,14 +120,41 @@ static int print_ctx_total_expimp(struct uhab_context *ctx,
 	int exp_cnt = 0, imp_cnt = 0;
 	struct export_desc *exp = NULL;
 	int exim_size = 0;
+	int ret = 0;
+
+	read_lock(&ctx->exp_lock);
+	list_for_each_entry(exp, &ctx->exp_whse, node) {
+		pfn_table =	(struct compressed_pfns *)exp->payload;
+		exim_size = get_pft_tbl_total_size(pfn_table);
+		exp_total += exim_size;
+		exp_cnt++;
+	}
+	read_unlock(&ctx->exp_lock);
+
+	spin_lock_bh(&ctx->imp_lock);
+	list_for_each_entry(exp, &ctx->imp_whse, node) {
+		if (habmm_imp_hyp_map_check(ctx->import_ctx, exp)) {
+			pfn_table =	(struct compressed_pfns *)exp->payload;
+			exim_size = get_pft_tbl_total_size(pfn_table);
+			imp_total += exim_size;
+			imp_cnt++;
+		}
+	}
+	spin_unlock_bh(&ctx->imp_lock);
+
+	if (exp_cnt || exp_total || imp_cnt || imp_total)
+		hab_stat_buffer_print(buf, size,
+				"ctx %d exp %d size %d imp %d size %d\n",
+				ctx->owner, exp_cnt, exp_total,
+				imp_cnt, imp_total);
+	else
+		return 0;
 
 	read_lock(&ctx->exp_lock);
 	hab_stat_buffer_print(buf, size, "export[expid:vcid:size]: ");
 	list_for_each_entry(exp, &ctx->exp_whse, node) {
 		pfn_table =	(struct compressed_pfns *)exp->payload;
 		exim_size = get_pft_tbl_total_size(pfn_table);
-		exp_total += exim_size;
-		exp_cnt++;
 		hab_stat_buffer_print(buf, size,
 			"[%d:%x:%d] ", exp->export_id,
 			exp->vcid_local, exim_size);
@@ -140,39 +168,52 @@ static int print_ctx_total_expimp(struct uhab_context *ctx,
 		if (habmm_imp_hyp_map_check(ctx->import_ctx, exp)) {
 			pfn_table =	(struct compressed_pfns *)exp->payload;
 			exim_size = get_pft_tbl_total_size(pfn_table);
-			imp_total += exim_size;
-			imp_cnt++;
 			hab_stat_buffer_print(buf, size,
 				"[%d:%x:%d] ", exp->export_id,
 				exp->vcid_local, exim_size);
 		}
 	}
-	hab_stat_buffer_print(buf, size, "\n");
+	ret = hab_stat_buffer_print(buf, size, "\n");
 	spin_unlock_bh(&ctx->imp_lock);
 
-	if (exp_cnt || exp_total || imp_cnt || imp_total)
-		return hab_stat_buffer_print(buf, size,
-				"ctx %d exp %d size %d imp %d size %d\n",
-				ctx->owner, exp_cnt, exp_total,
-				imp_cnt, imp_total);
-	else
-		return 0;
+	return ret;
 }
 
 int hab_stat_show_expimp(struct hab_driver *driver,
 		int pid, char *buf, int size)
 {
-	struct uhab_context *ctx;
-	int ret;
+	struct uhab_context *ctx = NULL;
+	int ret = 0;
+	struct virtual_channel *vchan = NULL;
+	int mmid = 0;
+	struct physical_channel *pchans[HABCFG_MMID_NUM];
+	int pchan_count = 0;
+
+	(void)driver;
 
 	ret = strlcpy(buf, "", size);
 
 	spin_lock_bh(&hab_driver.drvlock);
 	list_for_each_entry(ctx, &hab_driver.uctx_list, node) {
-		if (pid == ctx->owner)
+		if (pid == ctx->owner) {
 			ret = print_ctx_total_expimp(ctx, buf, size);
+
+			list_for_each_entry(vchan, &ctx->vchannels, node) {
+				if (vchan->pchan->habdev->id != mmid) {
+					mmid = vchan->pchan->habdev->id;
+					pchans[pchan_count++] = vchan->pchan;
+					if (pchan_count >= HABCFG_MMID_NUM)
+						break;
+				}
+			}
+			break;
+		}
 	}
 	spin_unlock_bh(&hab_driver.drvlock);
+
+	/* print pchannel status, drvlock is not required */
+	if (pchan_count > 0)
+		ret = hab_stat_log(pchans, pchan_count, buf, size);
 
 	return ret;
 }
@@ -229,7 +270,7 @@ int dump_hab_buf(void *buf, int size)
 	return size;
 }
 
-void dump_hab(void)
+void dump_hab(int mmid)
 {
 	struct physical_channel *pchan = NULL;
 	int i = 0;
@@ -239,14 +280,13 @@ void dump_hab(void)
 	for (i = 0; i < hab_driver.ndevices; i++) {
 		struct hab_device *habdev = &hab_driver.devp[i];
 
-		/* only care gfx and mis */
-		if (habdev->id == MM_GFX || habdev->id == MM_MISC) {
-
+		if (habdev->id == mmid) {
 			list_for_each_entry(pchan, &habdev->pchannels, node) {
 				if (pchan->vcnt > 0) {
 					pr_info("***** dump pchan %s vcnt %d *****\n",
 						pchan->name, pchan->vcnt);
 					hab_pipe_read_dump(pchan);
+					break;
 				}
 			}
 			dump_hab_buf(str, 8); /* separator */
