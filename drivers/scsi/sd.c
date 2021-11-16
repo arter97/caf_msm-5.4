@@ -3417,7 +3417,7 @@ static int sd_probe(struct device *dev)
 	sd_printk(KERN_NOTICE, sdkp, "Attached SCSI %sdisk\n",
 		  sdp->removable ? "removable " : "");
 	scsi_autopm_put_device(sdp);
-	if(!atomic_dec_and_test(&scsi_sd_count))
+	if(atomic_dec_and_test(&scsi_sd_count))
 		complete(&scsi_sd_probe_domain);
 	return 0;
 
