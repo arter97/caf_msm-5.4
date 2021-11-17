@@ -90,7 +90,7 @@ struct iommu_group_attribute iommu_group_attr_##_name =		\
 
 static LIST_HEAD(iommu_device_list);
 static DEFINE_SPINLOCK(iommu_device_lock);
-
+static DEFINE_MUTEX(iommu_param_mutex);
 /*
  * Use a function instead of an array here because the domain-type is a
  * bit-field, so an array would waste memory.
@@ -155,24 +155,31 @@ EXPORT_SYMBOL_GPL(iommu_device_unregister);
 
 static struct iommu_param *iommu_get_dev_param(struct device *dev)
 {
-	struct iommu_param *param = dev->iommu_param;
+	struct iommu_param *param;
 
+	mutex_lock(&iommu_param_mutex);
+	param = dev->iommu_param;
 	if (param)
-		return param;
+		goto unlock;
 
 	param = kzalloc(sizeof(*param), GFP_KERNEL);
 	if (!param)
-		return NULL;
+		goto unlock;
 
 	mutex_init(&param->lock);
 	dev->iommu_param = param;
+
+unlock:
+	mutex_unlock(&iommu_param_mutex);
 	return param;
 }
 
 static void iommu_free_dev_param(struct device *dev)
 {
+	mutex_lock(&iommu_param_mutex);
 	kfree(dev->iommu_param);
 	dev->iommu_param = NULL;
+	mutex_unlock(&iommu_param_mutex);
 }
 
 int iommu_probe_device(struct device *dev)
