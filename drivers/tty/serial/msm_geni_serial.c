@@ -183,6 +183,7 @@ struct msm_geni_serial_ver_info {
 	int hw_step_ver;
 	int m_fw_ver;
 	int s_fw_ver;
+	int hw_ver;
 };
 
 struct uart_gsi {
@@ -1973,6 +1974,10 @@ static void msm_geni_serial_set_manual_flow(bool enable,
 {
 	u32 uart_manual_rfr = 0;
 
+	/* Avoid Manual RFR for HW version < 2.7. */
+	if (!(port->ver_info.hw_ver >= QUP_SE_VERSION_2_7))
+		return;
+
 	if (!enable) {
 		uart_manual_rfr |= (UART_MANUAL_RFR_EN);
 		geni_write_reg_nolog(uart_manual_rfr, port->uport.membase,
@@ -3658,7 +3663,7 @@ static const struct of_device_id msm_geni_device_tbl[] = {
 
 static int msm_geni_serial_get_ver_info(struct uart_port *uport)
 {
-	int hw_ver, ret = 0;
+	int ret = 0;
 	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
 
 	/* clks_on/off only for HSUART, as console remains actve */
@@ -3678,18 +3683,28 @@ static int msm_geni_serial_get_ver_info(struct uart_port *uport)
 		__func__,
 		msm_port->ver_info.m_fw_ver, msm_port->ver_info.s_fw_ver);
 
-	hw_ver = geni_se_qupv3_hw_version(msm_port->wrapper_dev,
+	msm_port->ver_info.hw_ver =
+		geni_se_qupv3_hw_version(msm_port->wrapper_dev,
 		&msm_port->ver_info.hw_major_ver,
 		&msm_port->ver_info.hw_minor_ver,
 		&msm_port->ver_info.hw_step_ver);
-	if (hw_ver)
+	if (msm_port->ver_info.hw_ver)
 		dev_err(uport->dev, "%s:Err getting HW version %d\n",
-						__func__, hw_ver);
+						__func__, msm_port->ver_info.hw_ver);
 	else
 		IPC_LOG_MSG(msm_port->ipc_log_misc, "%s: HW Ver:%x.%x.%x\n",
 			__func__, msm_port->ver_info.hw_major_ver,
 			msm_port->ver_info.hw_minor_ver,
 			msm_port->ver_info.hw_step_ver);
+
+	/* GSI mode changes */
+	msm_port->gsi_mode = geni_read_reg(uport->membase,
+				GENI_IF_FIFO_DISABLE_RO) & FIFO_IF_DISABLE;
+	dev_info(uport->dev, "gsi_mode:%d\n", msm_port->gsi_mode);
+	if (msm_port->gsi_mode) {
+		msm_port->gsi = devm_kzalloc(uport->dev,
+					sizeof(*msm_port->gsi), GFP_KERNEL);
+	}
 
 	msm_geni_serial_enable_interrupts(uport);
 exit_ver_info:
@@ -4020,14 +4035,6 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 
 	dev_info(&pdev->dev, "Serial port%d added.FifoSize %d is_console%d\n",
 				line, uport->fifosize, is_console);
-
-	dev_port->gsi_mode = geni_read_reg(uport->membase,
-				GENI_IF_FIFO_DISABLE_RO) & FIFO_IF_DISABLE;
-	dev_err(uport->dev, "gsi_mode:%d\n", dev_port->gsi_mode);
-	if (dev_port->gsi_mode) {
-		dev_port->gsi = devm_kzalloc(uport->dev,
-					sizeof(*dev_port->gsi), GFP_KERNEL);
-	}
 
 	device_create_file(uport->dev, &dev_attr_loopback);
 	device_create_file(uport->dev, &dev_attr_xfer_mode);
