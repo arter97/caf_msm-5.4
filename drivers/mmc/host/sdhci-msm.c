@@ -4636,11 +4636,11 @@ static int root_dev_ready_wait(void)
 		wait_for_completion(&root_dev_ready);
 	return 0;
 }
-early_init(root_dev_ready_wait, EARLY_SUBSYS_1, EARLY_INIT_LEVEL3);
+early_init(root_dev_ready_wait, EARLY_SUBSYS_1, EARLY_INIT_LEVEL2);
 #endif
 
 early_module_platform_driver(sdhci_msm_driver, EARLY_SUBSYS_1,
-EARLY_INIT_LEVEL2);
+EARLY_INIT_LEVEL1);
 
 MODULE_DESCRIPTION("Qualcomm Secure Digital Host Controller Interface driver");
 MODULE_LICENSE("GPL v2");

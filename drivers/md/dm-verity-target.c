@@ -1247,7 +1247,7 @@ static void __exit dm_verity_exit(void)
 	dm_unregister_target(&verity_target);
 }
 
-early_module_init(dm_verity_init, EARLY_SUBSYS_1, EARLY_INIT_LEVEL4);
+early_module_init(dm_verity_init, EARLY_SUBSYS_1, EARLY_INIT_LEVEL3);
 module_exit(dm_verity_exit);
 
 MODULE_AUTHOR("Mikulas Patocka <mpatocka@redhat.com>");

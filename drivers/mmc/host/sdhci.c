@@ -4739,7 +4739,7 @@ static void __exit sdhci_drv_exit(void)
 {
 }
 
-early_module_init(sdhci_drv_init, EARLY_SUBSYS_1, EARLY_INIT_LEVEL2);
+early_module_init(sdhci_drv_init, EARLY_SUBSYS_1, EARLY_INIT_LEVEL1);
 module_exit(sdhci_drv_exit);
 
 module_param(debug_quirks, uint, 0444);

@@ -152,5 +152,5 @@ static void __exit sha2_ce_mod_fini(void)
 }
 
 early_module_cpu_feature_match(SHA2, sha2_ce_mod_init, EARLY_SUBSYS_1,
-EARLY_INIT_LEVEL4);
+EARLY_INIT_LEVEL3);
 module_exit(sha2_ce_mod_fini);

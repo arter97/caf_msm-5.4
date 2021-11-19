@@ -3789,7 +3789,7 @@ static struct platform_driver ufs_qcom_pltform = {
 	},
 };
 early_module_platform_driver(ufs_qcom_pltform, EARLY_SUBSYS_1,
-EARLY_INIT_LEVEL3);
+EARLY_INIT_LEVEL2);
 
 #ifndef MODULE
 static int __init ufs_qti_pltform_sync(void)
@@ -3797,7 +3797,7 @@ static int __init ufs_qti_pltform_sync(void)
 	ufs_qcom_pltform.driver.probe_type = PROBE_DEFAULT_STRATEGY;
 	return 0;
 }
-early_init(ufs_qti_pltform_sync, EARLY_SUBSYS_1, EARLY_INIT_LEVEL2);
+early_init(ufs_qti_pltform_sync, EARLY_SUBSYS_1, EARLY_INIT_LEVEL1);
 #endif
 
 MODULE_LICENSE("GPL v2");

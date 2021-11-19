@@ -1214,4 +1214,4 @@ static int __init init_pipe_fs(void)
 	return err;
 }
 
-early_fs_initcall(init_pipe_fs, EARLY_SUBSYS_1, EARLY_INIT_LEVEL4);
+early_fs_initcall(init_pipe_fs, EARLY_SUBSYS_1, EARLY_INIT_LEVEL3);
