@@ -194,3 +194,18 @@ static int __init early_subsys_wait(void)
 	return 0;
 }
 early_init(early_subsys_wait, EARLY_SUBSYS_1, EARLY_INIT_LEVEL7);
+
+static DECLARE_COMPLETION(rootdev_done);
+static int __init early_rootdev_sync(void)
+{
+	complete(&rootdev_done);
+	return 0;
+}
+early_init(early_rootdev_sync, EARLY_SUBSYS_1, EARLY_INIT_LEVEL6);
+
+static int __init early_rootdev_wait(void)
+{
+	wait_for_completion(&rootdev_done);
+	return 0;
+}
+late_initcall_sync(early_rootdev_wait);
