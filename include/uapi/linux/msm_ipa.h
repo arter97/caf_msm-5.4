@@ -46,6 +46,8 @@
  */
 #define IPAHAL_NAT_INVALID_PROTOCOL   0xFF
 
+#define IPA_ETH_API_VER 2
+
 /**
  * commands supported by IPA driver
  */
@@ -141,6 +143,7 @@
 #define IPA_IOCTL_ADD_EoGRE_MAPPING             88
 #define IPA_IOCTL_DEL_EoGRE_MAPPING             89
 #define IPA_IOCTL_SET_IPPT_SW_FLT               90
+#define IPA_IOCTL_FLT_MEM_PERIPHERAL_SET_PRIO_HIGH 91
 
 /**
  * max size of the header to be inserted
@@ -187,7 +190,7 @@
  * Max number of clients supported for mac based exception
  */
 
-#define IPA_MAX_NUM_MAC_FLT 5
+#define IPA_MAX_NUM_MAC_FLT 32
 #define IPA_MAX_NUM_IPv4_SEGS_FLT 16
 #define IPA_MAX_NUM_IFACE_FLT 4
 
@@ -299,6 +302,8 @@
 /* IPA Linux mhip instance stats structures */
 #define IPA_LNX_MHIP_INSTANCE_INFO_STRUCT_LEN (16 + 112 + 120)
 #define IPA_LNX_MHIP_INST_STATS_STRUCT_LEN (8 + 248)
+/* IPA Linux consolidated stats structure */
+#define IPA_LNX_CONSOLIDATED_STATS_STRUCT_LEN (8 + 48)
 /* IPA Linux Instance allocation info structures */
 #define IPA_LNX_EACH_INST_ALLOC_INFO_STRUCT_LEN (24 + 12 + 12 + 16)
 #define IPA_LNX_STATS_ALL_INFO_STRUCT_LEN (32 + 128 + 128 + 128)
@@ -2564,10 +2569,13 @@ struct ipa_ioc_nat_pdn_entry {
  * struct ipa_ioc_vlan_iface_info - add vlan interface
  * @name: interface name
  * @vlan_id: VLAN ID
+ * @add_vlan_done: VLAN config done flag
  */
 struct ipa_ioc_vlan_iface_info {
 	char name[IPA_RESOURCE_NAME_MAX];
 	uint16_t vlan_id;
+#define IPACM_RESTART_FUNCTIONALITY
+	uint8_t add_vlan_done;
 };
 
 /**
@@ -3062,6 +3070,8 @@ enum ipacm_per_client_device_type {
 	IPACM_CLIENT_DEVICE_TYPE_WLAN = 1,
 	IPACM_CLIENT_DEVICE_TYPE_ETH = 2,
 	IPACM_CLIENT_DEVICE_TYPE_ODU = 3,
+#define DUAL_NIC_OFFLOAD
+	IPACM_CLIENT_DEVICE_TYPE_ETH1 = 4,
 	IPACM_CLIENT_DEVICE_MAX
 };
 
@@ -3123,6 +3133,8 @@ struct ipa_tether_device_info {
  */
 enum ipa_vlan_ifaces {
 	IPA_VLAN_IF_ETH,
+	IPA_VLAN_IF_ETH0,
+	IPA_VLAN_IF_ETH1,
 	IPA_VLAN_IF_RNDIS,
 	IPA_VLAN_IF_ECM
 };
@@ -3622,6 +3634,9 @@ struct ipa_ioc_sw_flt_list_type {
 #define IPA_IOC_SET_IPPT_SW_FLT _IOWR(IPA_IOC_MAGIC, \
 				IPA_IOCTL_SET_IPPT_SW_FLT, \
 				struct ipa_ioc_sw_flt_list_type)
+#define IPA_IOC_FLT_MEM_PERIPHERAL_SET_PRIO_HIGH _IOWR(IPA_IOC_MAGIC, \
+				IPA_IOCTL_FLT_MEM_PERIPHERAL_SET_PRIO_HIGH, \
+				enum ipa_client_type)
 /*
  * unique magic number of the Tethering bridge ioctls
  */

@@ -127,6 +127,7 @@ struct kgsl_driver {
 	struct mutex process_mutex;
 	rwlock_t proclist_lock;
 	struct mutex devlock;
+	struct mutex kernel_map_mutex;
 	struct {
 		atomic_long_t vmalloc;
 		atomic_long_t vmalloc_max;
@@ -442,6 +443,8 @@ long kgsl_ioctl_timeline_signal(struct kgsl_device_private *dev_priv,
 		unsigned int cmd, void *data);
 long kgsl_ioctl_timeline_destroy(struct kgsl_device_private *dev_priv,
 		unsigned int cmd, void *data);
+long kgsl_ioctl_drawctxt_set_shadow_mem(struct kgsl_device_private *dev_priv,
+		unsigned int cmd, void *data);
 
 void kgsl_mem_entry_destroy(struct kref *kref);
 
@@ -562,9 +565,12 @@ kgsl_mem_entry_put(struct kgsl_mem_entry *entry)
 }
 
 /**
- * kgsl_mem_entry_put_deferred() - use a worker to put the refcount
- * on mem entry from a sysfs handler or debugfs handler.
- * @entry - The memory entry
+ * kgsl_mem_entry_put_deferred() - Puts refcount and triggers deferred
+ * mem_entry destroy when refcount is the last refcount.
+ * @entry: memory entry to be put.
+ *
+ * Use this to put a memory entry when we don't want to block
+ * the caller while destroying memory entry.
  */
 void kgsl_mem_entry_put_deferred(struct kgsl_mem_entry *entry);
 

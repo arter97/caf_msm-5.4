@@ -1206,6 +1206,23 @@ int __qcom_scm_pas_shutdown(struct device *dev, u32 peripheral)
 	return ret ? : desc.res[0];
 }
 
+int __qcom_scm_pas_dsentry(struct device *dev, u32 peripheral)
+{
+	int ret;
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_PIL,
+		.cmd = QCOM_SCM_PIL_PAS_DSENTER,
+		.owner = ARM_SMCCC_OWNER_SIP,
+	};
+
+	desc.args[0] = peripheral;
+	desc.arginfo = QCOM_SCM_ARGS(1);
+
+	ret = qcom_scm_call(dev, &desc);
+
+	return ret ? : desc.res[0];
+}
+
 int __qcom_scm_pas_mss_reset(struct device *dev, bool reset)
 {
 	struct qcom_scm_desc desc = {
@@ -2249,6 +2266,21 @@ int __qcom_scm_reboot(struct device *dev)
 	};
 
 	desc.arginfo = QCOM_SCM_ARGS(0);
+
+	return qcom_scm_call_atomic(dev, &desc);
+}
+
+int __qcom_scm_custom_reboot(struct device *dev,
+			enum qcom_scm_custom_reset_type reboot_type)
+{
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_OEM_POWER,
+		.cmd = QCOM_SCM_OEM_POWER_CUSTOM_REBOOT,
+		.owner = ARM_SMCCC_OWNER_OEM,
+	};
+
+	desc.args[0] = reboot_type;
+	desc.arginfo = QCOM_SCM_ARGS(1);
 
 	return qcom_scm_call_atomic(dev, &desc);
 }

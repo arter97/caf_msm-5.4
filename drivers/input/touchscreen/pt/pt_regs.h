@@ -41,12 +41,17 @@
 #define PT_PIP2_MAX_FILE_SIZE           0x18000
 #define PT_PIP2_FILE_SECTOR_SIZE        0x1000
 
+#ifndef CONFIG_DRM
+#define CONFIG_DRM
+#endif
+
 #include <linux/device.h>
+#include <linux/fb.h>
+#include <linux/notifier.h>
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
-#elif defined(CONFIG_FB)
-#include <linux/notifier.h>
-#include <linux/fb.h>
+#elif defined(CONFIG_DRM)
+#include <drm/drm_panel.h>
 #endif
 
 #include <asm/unaligned.h>
@@ -116,12 +121,26 @@
 #endif
 
 /* Power Management Macros Enablement */
-#ifndef CONFIG_PM_SLEEP
-#define CONFIG_PM_SLEEP
+
+#ifndef CONFIG_PM
+#define CONFIG_PM
 #endif
 
 #ifndef CONFIG_PM_RUNTIME
 #define CONFIG_PM_RUNTIME
+#endif
+
+#ifndef CONFIG_PM_SLEEP
+#define CONFIG_PM_SLEEP
+#endif
+
+/* Pin Control Macro Enablement */
+#ifndef PT_PINCTRL_EN
+#define PT_PINCTRL_EN
+#endif
+
+#ifndef TT7XXX_EXAMPLE
+#define TT7XXX_EXAMPLE
 #endif
 
 /*
@@ -1448,6 +1467,7 @@ struct pt_core_data {
 	bool irq_wake;
 	bool irq_disabled;
 	bool hw_detected;
+	bool runtime;
 	u8 easy_wakeup_gesture;
 #ifdef EASYWAKE_TSG6
 	u8 gesture_id;
@@ -1489,7 +1509,7 @@ struct pt_core_data {
 	int raw_cmd_status;
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	struct early_suspend es;
-#elif defined(CONFIG_FB)
+#elif defined(CONFIG_FB) || defined(CONFIG_DRM)
 	struct notifier_block fb_notifier;
 	enum pt_fb_state fb_state;
 #endif

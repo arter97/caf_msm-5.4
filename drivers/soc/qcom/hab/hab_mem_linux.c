@@ -47,6 +47,7 @@ static struct pages_list *pages_list_create(
 	struct pages_list *pglist = NULL;
 	unsigned long pfn;
 	int i, j, k = 0, size;
+	unsigned long region_total_page = 0;
 
 	if (!pfn_table)
 		return ERR_PTR(-EINVAL);
@@ -71,11 +72,29 @@ static struct pages_list *pages_list_create(
 	}
 
 	for (i = 0; i < pfn_table->nregions; i++) {
+		if (pfn_table->region[i].size <= 0) {
+			pr_err("pfn_table->region[%d].size %d is less than 1\n",
+				i, pfn_table->region[i].size);
+			goto err_region_total_page;
+		}
+
+		region_total_page += pfn_table->region[i].size;
+		if (region_total_page > exp->payload_count) {
+			pr_err("payload_count %d but region_total_page %lu\n",
+				exp->payload_count, region_total_page);
+			goto err_region_total_page;
+		}
+
 		for (j = 0; j < pfn_table->region[i].size; j++) {
 			pages[k] = pfn_to_page(pfn+j);
 			k++;
 		}
 		pfn += pfn_table->region[i].size + pfn_table->region[i].space;
+	}
+	if (region_total_page != exp->payload_count) {
+		pr_err("payload_count %d and region_total_page %lu are not equal\n",
+			exp->payload_count, region_total_page);
+		goto err_region_total_page;
 	}
 
 	pglist->pages = pages;
@@ -88,6 +107,11 @@ static struct pages_list *pages_list_create(
 	kref_init(&pglist->refcount);
 
 	return pglist;
+
+err_region_total_page:
+	vfree(pages);
+	kfree(pglist);
+	return ERR_PTR(-EINVAL);
 }
 
 static void pages_list_add(struct pages_list *pglist)
@@ -292,6 +316,8 @@ static int habmem_compress_pfns(
 	if (IS_ERR_OR_NULL(dmabuf) || !pfns || !data_size)
 		return -EINVAL;
 
+	pr_debug("page_count %d\n", page_count);
+
 	/* DMA buffer from fd */
 	if (dmabuf->ops != &dma_buf_ops) {
 		attach = dma_buf_attach(dmabuf, hab_driver.dev);
@@ -313,6 +339,8 @@ static int habmem_compress_pfns(
 		platform_data->sg_table = sg_table;
 		page_offset = exp_super->offset >> PAGE_SHIFT;
 
+		pr_debug("page_offset %lu\n", page_offset);
+
 		for_each_sg(sg_table->sgl, s, sg_table->nents, i) {
 			spage_size = s->length >> PAGE_SHIFT;
 
@@ -329,6 +357,10 @@ static int habmem_compress_pfns(
 				pfns->region[j-1].space =
 					page_to_pfn(nth_page(page, 0)) -
 					page_to_pfn(pre_page) - 1;
+				pr_debug("j %d, space %d, ppfn %lu, pfn %lu\n",
+					j, pfns->region[j-1].space,
+					page_to_pfn(pre_page),
+					page_to_pfn(nth_page(page, 0)));
 			}
 
 			pfns->region[j].size = spage_size - page_offset;
@@ -370,6 +402,8 @@ static int habmem_compress_pfns(
 	*data_size = sizeof(struct compressed_pfns) +
 		sizeof(struct region) * pfns->nregions;
 
+	pr_debug("first_pfn %lu, nregions %d, data_size %u\n",
+			pfns->first_pfn, pfns->nregions, *data_size);
 	return 0;
 err:
 	if (!IS_ERR_OR_NULL(attach)) {
@@ -399,6 +433,11 @@ static int habmem_add_export_compress(struct virtual_channel *vchan,
 	uint32_t sizebytes = sizeof(*exp_super) +
 				sizeof(struct compressed_pfns) +
 				page_count * sizeof(struct region);
+
+	pr_debug("exp_desc %zu, comp_pfns %zu, region %zu, page_count %d\n",
+		sizeof(struct export_desc),
+		sizeof(struct compressed_pfns),
+		sizeof(struct region), page_count);
 
 	exp_super = habmem_add_export(vchan,
 			sizebytes,
@@ -827,6 +866,7 @@ static void hab_mem_dma_buf_vunmap(struct dma_buf *dmabuf, void *vaddr)
 }
 
 static struct dma_buf_ops dma_buf_ops = {
+	.cache_sgt_mapping = true,
 	.map_dma_buf = hab_mem_map_dma_buf,
 	.unmap_dma_buf = hab_mem_unmap_dma_buf,
 	.mmap = hab_mem_mmap,

@@ -53,6 +53,11 @@
 #include <linux/preempt.h>
 #include <linux/of_reserved_mem.h>
 
+#ifdef CONFIG_HIBERNATION
+#include <linux/suspend.h>
+#include <linux/notifier.h>
+#endif
+
 #define CREATE_TRACE_POINTS
 #include <trace/events/fastrpc.h>
 
@@ -63,6 +68,8 @@
 #define FASTRPC_DMAHANDLE_NOMAP (16)
 
 #define FASTRPC_ENOSUCH 39
+#define VMID_SSC_Q6     5
+#define VMID_ADSP_Q6    6
 #define DEBUGFS_SIZE 3072
 #define PID_SIZE 10
 
@@ -496,6 +503,7 @@ struct fastrpc_channel_ctx {
 	struct mutex rpmsg_mutex;
 	uint64_t sesscount;
 	uint64_t ssrcount;
+	int in_hib;
 	void *handle;
 	uint64_t prevssrcount;
 	int issubsystemup;
@@ -1028,7 +1036,7 @@ skip_buf_cache:
 		if (fl->sctx->smmu.cb)
 			buf->phys &= ~((uint64_t)fl->sctx->smmu.cb << 32);
 		vmid = fl->apps->channel[fl->cid].vmid;
-		if (vmid) {
+		if ((vmid) && (fl->apps->channel[fl->cid].in_hib == 0)) {
 			int srcVM[2] = {VMID_HLOS, vmid};
 			int hyp_err = 0;
 
@@ -1315,7 +1323,7 @@ static void fastrpc_mmap_free(struct fastrpc_mmap *map, uint32_t flags)
 			sess = fl->sctx;
 
 		vmid = fl->apps->channel[fl->cid].vmid;
-		if (vmid && map->phys) {
+		if (vmid && map->phys && (me->channel[fl->cid].in_hib == 0)) {
 			int hyp_err = 0;
 			int srcVM[2] = {VMID_HLOS, vmid};
 
@@ -1974,7 +1982,7 @@ static int context_alloc(struct fastrpc_file *fl, uint32_t kernel,
 		sizeof(*ctx->overs) * (bufs) +
 		sizeof(*ctx->overps) * (bufs);
 
-	VERIFY(err, NULL != (ctx = kzalloc(sizeof(*ctx) + size, GFP_KERNEL)));
+	VERIFY(err, NULL != (ctx = kvzalloc(sizeof(*ctx) + size, GFP_KERNEL)));
 	if (err) {
 		err = -ENOMEM;
 		goto bail;
@@ -2161,7 +2169,7 @@ static void context_free(struct smq_invoke_ctx *ctx)
 
 	trace_fastrpc_context_free((uint64_t)ctx,
 		ctx->msg.invoke.header.ctx, ctx->handle, ctx->sc);
-	kfree(ctx);
+	kvfree(ctx);
 }
 
 static void fastrpc_queue_completed_async_job(struct smq_invoke_ctx *ctx)
@@ -3912,6 +3920,8 @@ static int fastrpc_init_create_static_process(struct fastrpc_file *fl,
 			mutex_lock(&fl->map_mutex);
 			err = fastrpc_mmap_create(fl, -1, 0, init->mem,
 				 init->memlen, ADSP_MMAP_REMOTE_HEAP_ADDR, &mem);
+			if (mem)
+				mem->is_filemap = true;
 			mutex_unlock(&fl->map_mutex);
 			if (err || !mem)
 				goto bail;
@@ -4521,7 +4531,8 @@ static int fastrpc_munmap_on_dsp_rh(struct fastrpc_file *fl, uint64_t phys,
 		if (err)
 			goto bail;
 	} else if (flags == ADSP_MMAP_REMOTE_HEAP_ADDR) {
-		if (me->channel[fl->cid].rhvm.vmid) {
+		if ((me->channel[fl->cid].rhvm.vmid)
+				&& (me->channel[fl->cid].in_hib == 0)) {
 			err = hyp_assign_phys(phys,
 					(uint64_t)size,
 					me->channel[fl->cid].rhvm.vmid,
@@ -5551,6 +5562,7 @@ static int fastrpc_channel_open(struct fastrpc_file *fl)
 		me->channel[cid].prevssrcount =
 					me->channel[cid].ssrcount;
 	}
+	me->channel[cid].in_hib = 0;
 	mutex_unlock(&me->channel[cid].smd_mutex);
 
 bail:
@@ -6761,12 +6773,120 @@ static void fastrpc_deinit(void)
 	mutex_destroy(&me->mut_uid);
 }
 
+#ifdef CONFIG_HIBERNATION
+static bool hibernation;
+
+static int fastrpc_hibernation_notifier(struct notifier_block *nb,
+						unsigned long event, void *dummy)
+{
+	if (event == PM_HIBERNATION_PREPARE)
+		hibernation = true;
+	else if (event == PM_POST_HIBERNATION)
+		hibernation = false;
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block fastrpc_notif_block = {
+	.notifier_call = fastrpc_hibernation_notifier,
+};
+
+static int fastrpc_hibernation_restore(struct device *dev)
+{
+	int err = 0;
+	struct fastrpc_apps *me = &gfa;
+	struct smq_phy_page range;
+	struct device_node *ion_node, *node;
+	struct platform_device *ion_pdev;
+	struct cma *cma;
+	uint32_t val;
+
+	if (!hibernation)
+		return 0;
+
+	if (of_device_is_compatible(dev->of_node,
+					"qcom,msm-adsprpc-mem-region")) {
+		me->dev = dev;
+		range.addr = 0;
+		ion_node = of_find_compatible_node(NULL, NULL, "qcom,msm-ion");
+		if (ion_node) {
+			for_each_available_child_of_node(ion_node, node) {
+				if (of_property_read_u32(node, "reg", &val))
+					continue;
+				if (val != ION_ADSP_HEAP_ID)
+					continue;
+				ion_pdev = of_find_device_by_node(node);
+				if (!ion_pdev)
+					break;
+				cma = dev_get_cma_area(&ion_pdev->dev);
+				if (cma) {
+					range.addr = cma_get_base(cma);
+					range.size = (size_t)cma_get_size(cma);
+				}
+				break;
+			}
+		}
+		if (range.addr && !of_property_read_bool(dev->of_node,
+							 "restrict-access")) {
+			int srcVM[1] = {VMID_HLOS};
+			int destVM[4] = {VMID_HLOS, VMID_MSS_MSA, VMID_SSC_Q6,
+						VMID_ADSP_Q6};
+			int destVMperm[4] = {PERM_READ | PERM_WRITE | PERM_EXEC,
+				PERM_READ | PERM_WRITE | PERM_EXEC,
+				PERM_READ | PERM_WRITE | PERM_EXEC,
+				PERM_READ | PERM_WRITE | PERM_EXEC,
+				};
+
+			VERIFY(err, !hyp_assign_phys(range.addr, range.size,
+					srcVM, 1, destVM, destVMperm, 4));
+			if (err)
+				return err;
+			me->range.addr = range.addr;
+			me->range.size = range.size;
+		}
+	}
+	return err;
+}
+
+#else
+
+static int fastrpc_hibernation_restore(struct device *dev)
+{
+	return 0;
+}
+#endif
+
+#ifdef CONFIG_PM_SLEEP
+static int fastrpc_restore(struct device *dev)
+{
+	struct fastrpc_apps *me = &gfa;
+	int cid;
+	int err = 0;
+
+	pr_info("adsprpc: restore enter\n");
+	for (cid = 0; cid < NUM_CHANNELS; cid++)
+		me->channel[cid].in_hib = 1;
+
+	err = fastrpc_hibernation_restore(dev);
+	if (err)
+		return err;
+	pr_info("adsprpc: restore exit\n");
+	return 0;
+}
+
+static const struct dev_pm_ops fastrpc_pm = {
+	.restore = fastrpc_restore,
+};
+#endif
 static struct platform_driver fastrpc_driver = {
 	.probe = fastrpc_probe,
 	.driver = {
 		.name = "fastrpc",
 		.of_match_table = fastrpc_match_table,
 		.suppress_bind_attrs = true,
+#ifdef CONFIG_PM_SLEEP
+		.pm = &fastrpc_pm,
+#endif
 	},
 };
 
@@ -6854,6 +6974,7 @@ static int __init fastrpc_device_init(void)
 		if (i == CDSP_DOMAIN_ID)
 			me->channel[i].dev = me->non_secure_dev;
 		me->channel[i].ssrcount = 0;
+		me->channel[i].in_hib = 0;
 		me->channel[i].prevssrcount = 0;
 		me->channel[i].issubsystemup = 1;
 		me->channel[i].ramdumpenabled = 0;
@@ -6877,6 +6998,13 @@ static int __init fastrpc_device_init(void)
 			__func__, err);
 		goto device_create_bail;
 	}
+
+#ifdef CONFIG_HIBERNATION
+	err = register_pm_notifier(&fastrpc_notif_block);
+	if (err)
+		goto device_create_bail;
+#endif
+
 	me->rpmsg_register = 1;
 
 	fastrpc_register_wakeup_source(me->non_secure_dev,

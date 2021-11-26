@@ -1270,6 +1270,36 @@ static inline void *saveable_highmem_page(struct zone *z, unsigned long p)
 }
 #endif /* CONFIG_HIGHMEM */
 
+static bool kernel_pte_present(struct page *page)
+{
+	pgd_t *pgdp;
+	pud_t *pudp, pud;
+	pmd_t *pmdp, pmd;
+	pte_t *ptep;
+	unsigned long addr = (unsigned long)page_address(page);
+
+	pgdp = pgd_offset_k(addr);
+	if (pgd_none(READ_ONCE(*pgdp)))
+		return false;
+
+	pudp = pud_offset(pgdp, addr);
+	pud = READ_ONCE(*pudp);
+	if (pud_none(pud))
+		return false;
+	if (pud_sect(pud))
+		return true;
+
+	pmdp = pmd_offset(pudp, addr);
+	pmd = READ_ONCE(*pmdp);
+	if (pmd_none(pmd))
+		return false;
+	if (pmd_sect(pmd))
+		return true;
+
+	ptep = pte_offset_kernel(pmdp, addr);
+	return pte_valid(READ_ONCE(*ptep));
+}
+
 /**
  * saveable_page - Check if the given page is saveable.
  *
@@ -1301,6 +1331,14 @@ static struct page *saveable_page(struct zone *zone, unsigned long pfn)
 
 	if (PageReserved(page)
 	    && (!kernel_page_present(page) || pfn_is_nosave(pfn)))
+		return NULL;
+
+	/*
+	 * Even if page is not reserved and if it's not present in kernel PTE;
+	 * don't snapshot it ! This happens to the pages allocated using
+	 * __dma_alloc_coherent with DMA_ATTR_NO_KERNEL_MAPPING flag set.
+	 */
+	if (!kernel_pte_present(page))
 		return NULL;
 
 	if (page_is_guard(page))
@@ -2008,7 +2046,7 @@ asmlinkage __visible int swsusp_save(void)
 
 	nr_pages += nr_highmem;
 	nr_copy_pages = nr_pages;
-	nr_meta_pages = DIV_ROUND_UP(nr_pages * sizeof(long), PAGE_SIZE);
+	nr_meta_pages = DIV_ROUND_UP(nr_pages * sizeof(u64), PAGE_SIZE);
 
 	pr_info("Hibernation image created (%d pages copied)\n", nr_pages);
 
@@ -2063,16 +2101,16 @@ static int init_header(struct swsusp_info *info)
  * PFNs corresponding to set bits in @bm are stored in the area of memory
  * pointed to by @buf (1 page at a time).
  */
-static inline void pack_pfns(unsigned long *buf, struct memory_bitmap *bm)
+static inline void pack_pfns(u64 *buf, struct memory_bitmap *bm)
 {
 	int j;
 
-	for (j = 0; j < PAGE_SIZE / sizeof(long); j++) {
+	for (j = 0; j < PAGE_SIZE / sizeof(u64); j++) {
 		buf[j] = memory_bm_next_pfn(bm);
 		if (unlikely(buf[j] == BM_END_OF_MAP))
 			break;
 		/* Save page key for data page (s390 only). */
-		page_key_read(buf + j);
+		page_key_read((unsigned long *)buf + j);
 	}
 }
 

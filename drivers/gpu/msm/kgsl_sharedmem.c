@@ -22,8 +22,6 @@
 
 static bool sharedmem_noretry_flag;
 
-static DEFINE_MUTEX(kernel_map_global_lock);
-
 #define MEMTYPE(_type, _name) { \
 	.type = _type, \
 	.attr = { .name = _name, .mode = 0444 } \
@@ -482,7 +480,7 @@ static vm_fault_t kgsl_paged_vmfault(struct kgsl_memdesc *memdesc,
 
 static void kgsl_paged_unmap_kernel(struct kgsl_memdesc *memdesc)
 {
-	mutex_lock(&kernel_map_global_lock);
+	mutex_lock(&kgsl_driver.kernel_map_mutex);
 	if (!memdesc->hostptr) {
 		/* If already unmapped the refcount should be 0 */
 		WARN_ON(memdesc->hostptr_count);
@@ -496,14 +494,14 @@ static void kgsl_paged_unmap_kernel(struct kgsl_memdesc *memdesc)
 	atomic_long_sub(memdesc->size, &kgsl_driver.stats.vmalloc);
 	memdesc->hostptr = NULL;
 done:
-	mutex_unlock(&kernel_map_global_lock);
+	mutex_unlock(&kgsl_driver.kernel_map_mutex);
 }
 
 #if IS_ENABLED(CONFIG_QCOM_SECURE_BUFFER)
 
 #include <soc/qcom/secure_buffer.h>
 
-static int lock_sgt(struct sg_table *sgt, u64 size)
+int kgsl_lock_sgt(struct sg_table *sgt, u64 size)
 {
 	struct scatterlist *sg;
 	int dest_perms = PERM_READ | PERM_WRITE;
@@ -539,7 +537,7 @@ static int lock_sgt(struct sg_table *sgt, u64 size)
 	return 0;
 }
 
-static int unlock_sgt(struct sg_table *sgt)
+int kgsl_unlock_sgt(struct sg_table *sgt)
 {
 	int dest_perms = PERM_READ | PERM_WRITE | PERM_EXEC;
 	int source_vm = VMID_CP_PIXEL;
@@ -569,7 +567,7 @@ static int kgsl_paged_map_kernel(struct kgsl_memdesc *memdesc)
 	if (memdesc->size > ULONG_MAX)
 		return -ENOMEM;
 
-	mutex_lock(&kernel_map_global_lock);
+	mutex_lock(&kgsl_driver.kernel_map_mutex);
 	if ((!memdesc->hostptr) && (memdesc->pages != NULL)) {
 		pgprot_t page_prot = pgprot_writecombine(PAGE_KERNEL);
 
@@ -585,7 +583,7 @@ static int kgsl_paged_map_kernel(struct kgsl_memdesc *memdesc)
 	if (memdesc->hostptr)
 		memdesc->hostptr_count++;
 
-	mutex_unlock(&kernel_map_global_lock);
+	mutex_unlock(&kgsl_driver.kernel_map_mutex);
 
 	return ret;
 }
@@ -751,7 +749,7 @@ void kgsl_free_secure_page(struct page *page)
 	sg_init_table(&sgl, 1);
 	sg_set_page(&sgl, page, PAGE_SIZE, 0);
 
-	unlock_sgt(&sgt);
+	kgsl_unlock_sgt(&sgt);
 	__free_page(page);
 }
 
@@ -773,7 +771,7 @@ struct page *kgsl_alloc_secure_page(void)
 	sg_init_table(&sgl, 1);
 	sg_set_page(&sgl, page, PAGE_SIZE, 0);
 
-	status = lock_sgt(&sgt, PAGE_SIZE);
+	status = kgsl_lock_sgt(&sgt, PAGE_SIZE);
 	if (status) {
 		if (status == -EADDRNOTAVAIL)
 			return NULL;
@@ -963,7 +961,7 @@ static void kgsl_free_secure_system_pages(struct kgsl_memdesc *memdesc)
 {
 	int i;
 	struct scatterlist *sg;
-	int ret = unlock_sgt(memdesc->sgt);
+	int ret = kgsl_unlock_sgt(memdesc->sgt);
 	int order = get_order(PAGE_SIZE);
 
 	if (ret) {
@@ -998,7 +996,7 @@ static void kgsl_free_secure_system_pages(struct kgsl_memdesc *memdesc)
 
 static void kgsl_free_secure_pool_pages(struct kgsl_memdesc *memdesc)
 {
-	int ret = unlock_sgt(memdesc->sgt);
+	int ret = kgsl_unlock_sgt(memdesc->sgt);
 
 	if (ret) {
 		/*
@@ -1185,7 +1183,7 @@ static int kgsl_alloc_secure_pages(struct kgsl_device *device,
 	/* Now that we've moved to a sg table don't need the pages anymore */
 	kvfree(pages);
 
-	ret = lock_sgt(sgt, size);
+	ret = kgsl_lock_sgt(sgt, size);
 	if (ret) {
 		if (ret != -EADDRNOTAVAIL)
 			kgsl_pool_free_sgt(sgt);

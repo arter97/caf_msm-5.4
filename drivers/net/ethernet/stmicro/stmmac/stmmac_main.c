@@ -99,6 +99,7 @@ MODULE_PARM_DESC(eee_timer, "LPI tx expiration time in msec");
 #define DWC_ETH_QOS_MICREL_INTR_LEVEL 0x4000
 #define PHY_ID_KSZ9031		0x00221620
 #define MICREL_PHY_ID PHY_ID_KSZ9031
+#define PHY_ID_KSZ9131		0x00221640
 
 /* By default the driver will use the ring mode to manage tx and rx descriptors,
  * but allow user to force to use the chain instead of the ring
@@ -387,6 +388,11 @@ static void stmmac_eee_ctrl_timer(struct timer_list *t)
 bool stmmac_eee_init(struct stmmac_priv *priv)
 {
 	int tx_lpi_timer = priv->tx_lpi_timer;
+
+	if (priv->phydev && ((priv->phydev->phy_id &
+	     priv->phydev->drv->phy_id_mask)
+	     == PHY_ID_KSZ9131))
+		return false;
 
 	/* Using PCS we cannot dial with the phy registers at this stage
 	 * so we do not support extra feature like EEE.
@@ -1106,7 +1112,7 @@ static int stmmac_init_phy(struct net_device *dev)
 			}
 		}
 
-		if (priv->plat->phy_intr_en_extn_stm) {
+		if (priv->plat->phy_intr_en_extn_stm && priv->plat->phy_intr_en) {
 			priv->phydev->irq = PHY_IGNORE_INTERRUPT;
 			priv->phydev->interrupts =  PHY_INTERRUPT_ENABLED;
 			if (priv->phydev->drv->ack_interrupt &&
@@ -2860,6 +2866,9 @@ static int stmmac_open(struct net_device *dev)
 	if (!priv->plat->mac2mac_en)
 		phylink_start(priv->phylink);
 
+	if (!priv->phy_irq_enabled)
+		priv->plat->phy_irq_enable(priv);
+
 	/* Request the IRQ lines */
 	ret = request_irq(dev->irq, stmmac_interrupt,
 			  IRQF_SHARED, dev->name, dev);
@@ -2937,6 +2946,9 @@ static int stmmac_release(struct net_device *dev)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
 	u32 chan;
+
+	if (priv->phy_irq_enabled)
+		priv->plat->phy_irq_disable(priv);
 
 	/* Stop and disconnect the PHY */
 	if (!priv->plat->mac2mac_en) {
@@ -4990,8 +5002,10 @@ int stmmac_suspend(struct device *dev)
 
 	stmmac_disable_all_queues(priv);
 
-	for (chan = 0; chan < priv->plat->tx_queues_to_use; chan++)
-		del_timer_sync(&priv->tx_queue[chan].txtimer);
+	if (!priv->tx_coal_timer_disable) {
+		for (chan = 0; chan < priv->plat->tx_queues_to_use; chan++)
+			del_timer_sync(&priv->tx_queue[chan].txtimer);
+	}
 
 	if (priv->eee_enabled) {
 		priv->tx_path_in_lpi_mode = false;
@@ -5128,8 +5142,13 @@ int stmmac_resume(struct device *dev)
 			phylink_start(priv->phylink);
 		rtnl_unlock();
 #endif
-	if (!priv->plat->mac2mac_en)
+	if (!priv->plat->mac2mac_en) {
 		phylink_mac_change(priv->phylink, true);
+	} else {
+		stmmac_mac2mac_adjust_link(priv->plat->mac2mac_rgmii_speed,
+					   priv);
+		netif_carrier_on(ndev);
+	}
 
 	return 0;
 }
