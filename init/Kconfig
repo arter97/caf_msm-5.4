@@ -930,8 +930,8 @@ config FAIR_GROUP_SCHED
 
 config CFS_BANDWIDTH
 	bool "CPU bandwidth provisioning for FAIR_GROUP_SCHED"
-	depends on FAIR_GROUP_SCHED && !SCHED_WALT
-	default n
+	depends on FAIR_GROUP_SCHED
+	default y
 	help
 	  This option allows users to define CPU bandwidth rates (limits) for
 	  tasks running within the fair group scheduler.  Groups with no limit

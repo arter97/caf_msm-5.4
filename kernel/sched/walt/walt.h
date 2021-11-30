@@ -26,10 +26,12 @@ fixup_cumulative_runnable_avg(struct walt_sched_stats *stats,
 			      s64 pred_demand_scaled_delta)
 {
 	stats->cumulative_runnable_avg_scaled += demand_scaled_delta;
-	BUG_ON((s64)stats->cumulative_runnable_avg_scaled < 0);
+	if ((s64)stats->cumulative_runnable_avg_scaled < 0)
+		stats->cumulative_runnable_avg_scaled = 0;
 
 	stats->pred_demands_sum_scaled += pred_demand_scaled_delta;
-	BUG_ON((s64)stats->pred_demands_sum_scaled < 0);
+	if ((s64)stats->pred_demands_sum_scaled < 0)
+		stats->pred_demands_sum_scaled = 0;
 }
 
 static inline void
@@ -65,37 +67,49 @@ walt_dec_cumulative_runnable_avg(struct rq *rq, struct task_struct *p)
 		walt_fixup_cum_window_demand(rq, -(s64)p->wts.demand_scaled);
 }
 
+extern void
+fixup_walt_sched_stats_common(struct rq *rq, struct task_struct *p,
+				u16 updated_demand_scaled,
+				u16 updated_pred_demand_scaled);
+
+extern void inc_rq_walt_stats(struct rq *rq, struct task_struct *p);
+extern void dec_rq_walt_stats(struct rq *rq, struct task_struct *p);
+
 static inline void walt_adjust_nr_big_tasks(struct rq *rq, int delta, bool inc)
 {
 	sched_update_nr_prod(cpu_of(rq), 0, true);
 	rq->wrq.walt_stats.nr_big_tasks += inc ? delta : -delta;
 
-	BUG_ON(rq->wrq.walt_stats.nr_big_tasks < 0);
+	if (rq->wrq.walt_stats.nr_big_tasks < 0)
+		rq->wrq.walt_stats.nr_big_tasks = 0;
 }
 
-static inline void inc_rq_walt_stats(struct rq *rq, struct task_struct *p)
+static inline void inc_nr_big_task(struct walt_sched_stats *stats,
+				struct task_struct *p)
 {
 	if (p->wts.misfit)
-		rq->wrq.walt_stats.nr_big_tasks++;
+		stats->nr_big_tasks++;
 
 	p->wts.rtg_high_prio = task_rtg_high_prio(p);
 	if (p->wts.rtg_high_prio)
-		rq->wrq.walt_stats.nr_rtg_high_prio_tasks++;
+		stats->nr_rtg_high_prio_tasks++;
 
-	walt_inc_cumulative_runnable_avg(rq, p);
 }
 
-static inline void dec_rq_walt_stats(struct rq *rq, struct task_struct *p)
+static inline void dec_nr_big_task(struct walt_sched_stats *stats,
+				struct task_struct *p)
 {
 	if (p->wts.misfit)
-		rq->wrq.walt_stats.nr_big_tasks--;
+		stats->nr_big_tasks--;
 
 	if (p->wts.rtg_high_prio)
-		rq->wrq.walt_stats.nr_rtg_high_prio_tasks--;
+		stats->nr_rtg_high_prio_tasks--;
 
-	BUG_ON(rq->wrq.walt_stats.nr_big_tasks < 0);
+	if (stats->nr_big_tasks < 0)
+		stats->nr_big_tasks = 0;
 
-	walt_dec_cumulative_runnable_avg(rq, p);
+	if (stats->nr_rtg_high_prio_tasks < 0)
+		stats->nr_rtg_high_prio_tasks = 0;
 }
 
 extern void fixup_busy_time(struct task_struct *p, int new_cpu);
@@ -213,6 +227,9 @@ static inline int cpu_boost_init(void) { }
 #endif
 
 extern bool walt_try_pull_rt_task(struct rq *this_rq);
+extern void walt_fixup_nr_big_tasks(struct rq *rq, struct task_struct *p,
+					int delta, bool inc);
+
 #else /* CONFIG_SCHED_WALT */
 
 static inline void walt_sched_init_rq(struct rq *rq) { }
@@ -263,6 +280,11 @@ inc_rq_walt_stats(struct rq *rq, struct task_struct *p) { }
 static inline void
 dec_rq_walt_stats(struct rq *rq, struct task_struct *p) { }
 
+static inline void
+fixup_walt_sched_stats_common(struct rq *rq, struct task_struct *p,
+				u16 updated_demand_scaled,
+				u16 updated_pred_demand_scaled) { }
+
 static inline u64 sched_irqload(int cpu)
 {
 	return 0;
@@ -287,4 +309,37 @@ static inline bool walt_try_pull_rt_task(struct rq *this_rq)
 
 #endif /* CONFIG_SCHED_WALT */
 
+#if defined(CONFIG_SCHED_WALT) && defined(CONFIG_CFS_BANDWIDTH)
+extern void walt_init_cfs_rq_stats(struct cfs_rq *cfs_rq);
+extern void walt_inc_cfs_rq_stats(struct cfs_rq *cfs_rq, struct task_struct *p);
+extern void walt_dec_cfs_rq_stats(struct cfs_rq *cfs_rq, struct task_struct *p);
+extern void walt_inc_throttled_cfs_rq_stats(struct walt_sched_stats *stats,
+						struct cfs_rq *cfs_rq);
+extern void walt_dec_throttled_cfs_rq_stats(struct walt_sched_stats *stats,
+						struct cfs_rq *cfs_rq);
+extern void walt_fixup_sched_stats_fair(struct rq *rq,
+					struct task_struct *p,
+					u16 updated_demand_scaled,
+					u16 updated_pred_demand_scaled);
+
+#else
+static inline void walt_init_cfs_rq_stats(struct cfs_rq *cfs_rq) {}
+static inline void
+walt_inc_cfs_rq_stats(struct cfs_rq *cfs_rq, struct task_struct *p) {}
+static inline void
+walt_dec_cfs_rq_stats(struct cfs_rq *cfs_rq, struct task_struct *p) {}
+
+static inline void walt_fixup_sched_stats_fair(struct rq *rq,
+					struct task_struct *p,
+					u16 updated_demand_scaled,
+					u16 updated_pred_demand_scaled)
+{
+	fixup_walt_sched_stats_common(rq, p, updated_demand_scaled,
+					updated_pred_demand_scaled);
+}
+
+#define walt_inc_throttled_cfs_rq_stats(...)
+#define walt_dec_throttled_cfs_rq_stats(...)
+
+#endif
 #endif
