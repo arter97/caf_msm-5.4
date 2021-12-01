@@ -23,6 +23,9 @@
 #include <linux/mm.h>
 #include <linux/ftrace.h>
 
+#define CPU_PLAT			7
+#define CPU_SUBSYS_(i)		(EARLY_SUBSYS_NUM - (i))
+
 struct subsystem_work {
 	struct work_struct work;
 	int id;
@@ -104,7 +107,7 @@ static void early_system_init(struct work_struct *w)
 		if (subsys_work) {
 			subsys_work->id = id;
 			INIT_WORK(&subsys_work->work, early_subsys_init);
-			queue_work_on(WORK_CPU_UNBOUND, system_unbound_wq,
+			queue_work_on(CPU_SUBSYS_(id), system_wq,
 				&subsys_work->work);
 		} else {
 			pr_err("no mem to start early_subsys_init\n");
@@ -136,7 +139,7 @@ static int early_devices_probe(struct platform_device *pdev)
 	work = kzalloc(sizeof(struct work_struct), GFP_KERNEL);
 	if (work) {
 		INIT_WORK(work, early_system_init);
-		queue_work_on(WORK_CPU_UNBOUND, system_unbound_wq, work);
+		queue_work_on(CPU_PLAT, system_wq, work);
 	} else {
 		pr_err("no mem to start early_system_init\n");
 	}
