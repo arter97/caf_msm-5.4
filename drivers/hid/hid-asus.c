@@ -849,7 +849,7 @@ static int asus_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	if (drvdata->quirks & QUIRK_IS_MULTITOUCH)
 		drvdata->tp = &asus_i2c_tp;
 
-	if (drvdata->quirks & QUIRK_T100_KEYBOARD) {
+	if ((drvdata->quirks & QUIRK_T100_KEYBOARD) && hid_is_usb(hdev)) {
 		struct usb_interface *intf = to_usb_interface(hdev->dev.parent);
 
 		if (intf->altsetting->desc.bInterfaceNumber == T100_TPAD_INTF) {
@@ -875,6 +875,18 @@ static int asus_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		 */
 		hdev->quirks |= HID_QUIRK_MULTI_INPUT;
 		drvdata->tp = &asus_t100chi_tp;
+	}
+
+	if ((drvdata->quirks & QUIRK_MEDION_E1239T) && hid_is_usb(hdev)) {
+		struct usb_host_interface *alt =
+			to_usb_interface(hdev->dev.parent)->altsetting;
+
+		if (alt->desc.bInterfaceNumber == MEDION_E1239T_TPAD_INTF) {
+			/* For separate input-devs for tp and tp toggle key */
+			hdev->quirks |= HID_QUIRK_MULTI_INPUT;
+			drvdata->quirks |= QUIRK_SKIP_INPUT_MAPPING;
+			drvdata->tp = &medion_e1239t_tp;
+		}
 	}
 
 	if (drvdata->quirks & QUIRK_NO_INIT_REPORTS)
