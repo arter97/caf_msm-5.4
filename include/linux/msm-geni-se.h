@@ -400,6 +400,7 @@ if (print) { \
 #define SPI_CORE2X_VOTE	100000
 #define UART_CORE2X_VOTE	100000
 #define UART_CONSOLE_CORE2X_VOTE	19200
+#define QUP_SE_VERSION_2_7	0x20070000
 
 #if IS_ENABLED(CONFIG_MSM_GENI_SE)
 /**
@@ -760,6 +761,15 @@ void geni_se_rx_dma_unprep(struct device *wrapper_dev,
  */
 int geni_se_qupv3_hw_version(struct device *wrapper_dev, unsigned int *major,
 			     unsigned int *minor, unsigned int *step);
+
+/**
+ * geni_se_qupv3_get_hw_version() - Get the QUPv3 Hardware version
+ * @wrapper_dev:	Pointer to the corresponding QUPv3 wrapper core.
+ *
+ * Return:		QUP HW version return on success,
+ *			standard Linux error codes on failure/error
+ */
+int geni_se_qupv3_get_hw_version(struct device *wrapper_dev);
 
 /**
  * geni_se_iommu_map_buf() - Map a single buffer into QUPv3 context bank

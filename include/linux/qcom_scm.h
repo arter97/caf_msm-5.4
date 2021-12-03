@@ -109,6 +109,7 @@ extern int qcom_scm_pas_mem_setup(u32 peripheral, phys_addr_t addr,
 extern int qcom_scm_pas_mss_reset(bool reset);
 extern int qcom_scm_pas_auth_and_reset(u32 peripheral);
 extern int qcom_scm_pas_shutdown(u32 peripheral);
+extern int qcom_scm_pas_dsentry(u32 peripheral);
 extern int qcom_scm_get_sec_dump_state(u32 *dump_state);
 extern int qcom_scm_tz_blsp_modify_owner(int food, u64 subsystem, int *out);
 extern int qcom_scm_io_readl(phys_addr_t addr, unsigned int *val);
@@ -121,6 +122,7 @@ extern void qcom_scm_halt_spmi_pmic_arbiter(void);
 extern void qcom_scm_deassert_ps_hold(void);
 extern void qcom_scm_mmu_sync(bool sync);
 extern int qcom_scm_restore_sec_cfg(u32 device_id, u32 spare);
+extern int qcom_scm_load_qup_fw(void);
 extern int qcom_scm_iommu_secure_ptbl_size(u32 spare, size_t *size);
 extern int qcom_scm_iommu_secure_ptbl_init(u64 addr, u32 size, u32 spare);
 extern int qcom_scm_mem_protect_video(u32 cp_start, u32 cp_size,
@@ -259,6 +261,7 @@ static inline int qcom_scm_pas_mss_reset(bool reset) { return -ENODEV; }
 static inline int qcom_scm_pas_auth_and_reset(u32 peripheral)
 		{ return -ENODEV; }
 static inline int qcom_scm_pas_shutdown(u32 peripheral) { return -ENODEV; }
+static inline int qcom_scm_pas_dsentry(u32 peripheral) { return -ENODEV; }
 static inline int qcom_scm_get_sec_dump_state(u32 *dump_state)
 		{return -ENODEV; }
 static inline int qcom_scm_tz_blsp_modify_owner(int food, u64 subsystem,
@@ -280,6 +283,7 @@ static inline void qcom_scm_deassert_ps_hold(void) {}
 static inline void qcom_scm_mmu_sync(bool sync) {}
 static inline int qcom_scm_restore_sec_cfg(u32 device_id, u32 spare)
 		{ return -ENODEV; }
+static inline int qcom_scm_load_qup_fw(void) { return -ENODEV; }
 static inline int qcom_scm_iommu_secure_ptbl_size(u32 spare, size_t *size)
 		{ return -ENODEV; }
 static inline int qcom_scm_iommu_secure_ptbl_init(u64 addr, u32 size, u32 spare)

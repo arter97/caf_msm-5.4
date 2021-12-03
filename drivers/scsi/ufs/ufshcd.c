@@ -7920,6 +7920,8 @@ out:
 static void ufshcd_async_scan(void *data, async_cookie_t cookie)
 {
 	struct ufs_hba *hba = (struct ufs_hba *)data;
+	struct device *dev = hba->dev;
+	struct device_node *np = dev->of_node;
 	int ret;
 
 	/* Initialize hba, detect and initialize UFS device */
@@ -7929,6 +7931,9 @@ static void ufshcd_async_scan(void *data, async_cookie_t cookie)
 
 	/* Probe and add UFS logical units  */
 	ret = ufshcd_add_lus(hba);
+
+	if (!of_property_read_bool(np, "secondary-storage"))
+		hba->primary_boot_device_probed = true;
 out:
 	/*
 	 * If we failed to initialize the device or the device is not
@@ -8946,12 +8951,26 @@ static int ufshcd_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	/* enable the host irq as host controller would be active soon */
 	ufshcd_enable_irq(hba);
 
-#if !defined(CONFIG_SCSI_UFSHCD_QTI)
+
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+	if (hba->restore) {
+		/* Configure UTRL and UTMRL base address registers */
+		ufshcd_writel(hba, lower_32_bits(hba->utrdl_dma_addr),
+			      REG_UTP_TRANSFER_REQ_LIST_BASE_L);
+		ufshcd_writel(hba, upper_32_bits(hba->utrdl_dma_addr),
+			      REG_UTP_TRANSFER_REQ_LIST_BASE_H);
+		ufshcd_writel(hba, lower_32_bits(hba->utmrdl_dma_addr),
+			      REG_UTP_TASK_REQ_LIST_BASE_L);
+		ufshcd_writel(hba, upper_32_bits(hba->utmrdl_dma_addr),
+			      REG_UTP_TASK_REQ_LIST_BASE_H);
+		/* Commit the registers */
+		mb();
+	}
+#else
 	ret = ufshcd_vreg_set_hpm(hba);
 	if (ret)
 		goto disable_irq_and_vops_clks;
 #endif
-
 	/*
 	 * Call vendor specific resume callback. As these callbacks may access
 	 * vendor specific host controller register space call them when the
@@ -8961,6 +8980,10 @@ static int ufshcd_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	if (ret)
 #if defined(CONFIG_SCSI_UFSHCD_QTI)
 		goto disable_irq_and_vops_clks;
+
+	/* Resuming from hibernate, assume that link was OFF */
+	if (hba->restore)
+		ufshcd_set_link_off(hba);
 #else
 		goto disable_vreg;
 #endif
@@ -9052,6 +9075,12 @@ disable_vreg:
 #endif
 out:
 	hba->pm_op_in_progress = 0;
+
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+	if (hba->restore)
+		hba->restore = false;
+#endif
+
 	if (ret)
 		ufshcd_update_reg_hist(&hba->ufs_stats.resume_err, (u32)ret);
 	return ret;
@@ -9077,7 +9106,8 @@ int ufshcd_system_suspend(struct ufs_hba *hba)
 	    (ufs_get_pm_lvl_to_dev_pwr_mode(hba->spm_lvl) ==
 	     hba->curr_dev_pwr_mode) &&
 	    (ufs_get_pm_lvl_to_link_pwr_state(hba->spm_lvl) ==
-	     hba->uic_link_state))
+	     hba->uic_link_state) &&
+	     !hba->dev_info.b_rpm_dev_flush_capable)
 		goto out;
 
 	if (pm_runtime_suspended(hba->dev)) {
@@ -9213,6 +9243,63 @@ int ufshcd_runtime_idle(struct ufs_hba *hba)
 }
 EXPORT_SYMBOL(ufshcd_runtime_idle);
 
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+int ufshcd_system_freeze(struct ufs_hba *hba)
+{
+	int ret = 0;
+
+	/*
+	 * Run time resume the controller to make sure
+	 * the PM work queue threads do not try to resume
+	 * the child (scsi host), which leads to errors as
+	 * the controller is not yet resumed.
+	 */
+	pm_runtime_get_sync(hba->dev);
+	ret = ufshcd_system_suspend(hba);
+	pm_runtime_put_sync(hba->dev);
+
+	/*
+	 * Ensure no runtime PM operations take
+	 * place in the hibernation and restore sequence
+	 * on successful freeze operation.
+	 */
+	if (!ret)
+		pm_runtime_disable(hba->dev);
+
+	return ret;
+}
+EXPORT_SYMBOL(ufshcd_system_freeze);
+
+int ufshcd_system_restore(struct ufs_hba *hba)
+{
+	int ret = 0;
+
+	hba->restore = true;
+	ret = ufshcd_system_resume(hba);
+
+	/*
+	 * Now any runtime PM operations can be
+	 * allowed on successful restore operation
+	 */
+	if (!ret)
+		pm_runtime_enable(hba->dev);
+
+	return ret;
+}
+EXPORT_SYMBOL(ufshcd_system_restore);
+
+int ufshcd_system_thaw(struct ufs_hba *hba)
+{
+	int ret = 0;
+
+	ret = ufshcd_system_resume(hba);
+	if (!ret)
+		pm_runtime_enable(hba->dev);
+
+	return ret;
+}
+EXPORT_SYMBOL(ufshcd_system_thaw);
+#endif /* CONFIG_SCSI_UFSHCD_QTI */
 /**
  * ufshcd_shutdown - shutdown routine
  * @hba: per adapter instance
@@ -9274,6 +9361,7 @@ void ufshcd_remove(struct ufs_hba *hba)
 	ufs_bsg_remove(hba);
 	ufs_sysfs_remove_nodes(hba->dev);
 	scsi_remove_host(hba->host);
+	destroy_workqueue(hba->eh_wq);
 	/* disable interrupts */
 	ufshcd_disable_intr(hba, hba->intr_mask);
 	ufshcd_hba_stop(hba, true);
@@ -9546,6 +9634,7 @@ out_remove_scsi_host:
 exit_gating:
 	ufshcd_exit_clk_scaling(hba);
 	ufshcd_exit_clk_gating(hba);
+	destroy_workqueue(hba->eh_wq);
 out_disable:
 	hba->is_irq_enabled = false;
 	ufshcd_hba_exit(hba);
