@@ -495,7 +495,6 @@ static int virtio_regulator_init_reg(struct reg_virtio *reg)
 	reg->rdesc.owner	= THIS_MODULE;
 	reg->rdesc.type		= REGULATOR_VOLTAGE;
 	reg->rdesc.ops		= &virtio_regulator_ops;
-	reg->rdesc.n_voltages = 2;
 
 	init_data = of_get_regulator_init_data(dev, reg->of_node, &reg->rdesc);
 	if (init_data == NULL)
