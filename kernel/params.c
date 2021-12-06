@@ -954,6 +954,6 @@ static int __init param_sysfs_init(void)
 
 	return 0;
 }
-subsys_initcall(param_sysfs_init);
+early_subsys_initcall(param_sysfs_init, EARLY_SUBSYS_PLATFORM, EARLY_INIT_LEVEL8);
 
 #endif /* CONFIG_SYSFS */
