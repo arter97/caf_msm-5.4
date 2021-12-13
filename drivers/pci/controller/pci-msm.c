@@ -790,7 +790,7 @@ struct msm_pcie_dev_t {
 
 	enum msm_pcie_link_status link_status;
 	bool user_suspend;
-	uint32_t disable_pc;
+	bool disable_pc;
 
 	struct pci_saved_state *default_state;
 	struct pci_saved_state *saved_state;
@@ -7973,8 +7973,8 @@ int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr, void *user,
 		break;
 	case MSM_PCIE_DISABLE_PC:
 		PCIE_DBG(pcie_dev,
-			 "User of RC%d with vendor_id:0x%x device_id:0x%x requests to keep the link always alive.\n",
-			 pcie_dev->rc_idx, pcidev->vendor, pcidev->device);
+			 "User of RC%d requests to keep the link always alive.\n",
+			 pcie_dev->rc_idx);
 		spin_lock_irqsave(&pcie_dev->cfg_lock, pcie_dev->irqsave_flags);
 		if (pcie_dev->suspending) {
 			PCIE_ERR(pcie_dev,
@@ -7982,20 +7982,17 @@ int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr, void *user,
 				 pcie_dev->rc_idx);
 			ret = MSM_PCIE_ERROR;
 		} else {
-			pcie_dev->disable_pc++;
+			pcie_dev->disable_pc = true;
 		}
 		spin_unlock_irqrestore(&pcie_dev->cfg_lock,
 				       pcie_dev->irqsave_flags);
 		break;
 	case MSM_PCIE_ENABLE_PC:
 		PCIE_DBG(pcie_dev,
-			 "User of RC%d with vendor_id:0x%x device_id:0x%x cancels the request of alive link.\n",
-			 pcie_dev->rc_idx, pcidev->vendor, pcidev->device);
+			 "User of RC%d cancels the request of alive link.\n",
+			 pcie_dev->rc_idx);
 		spin_lock_irqsave(&pcie_dev->cfg_lock, pcie_dev->irqsave_flags);
-		if (pcie_dev->disable_pc > 0)
-			pcie_dev->disable_pc--;
-		else
-			PCIE_ERR(pcie_dev, "PCIe:RC%d cannot call ENABLE_PC", pcie_dev->rc_idx);
+		pcie_dev->disable_pc = false;
 		spin_unlock_irqrestore(&pcie_dev->cfg_lock,
 				       pcie_dev->irqsave_flags);
 		break;
