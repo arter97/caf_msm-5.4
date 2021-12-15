@@ -991,6 +991,9 @@ static int ethqos_mdio_read(struct stmmac_priv  *priv, int phyaddr, int phyreg)
 static int ethqos_phy_intr_config(struct qcom_ethqos *ethqos)
 {
 	int ret = 0;
+	struct platform_device *pdev = ethqos->pdev;
+	struct net_device *dev = platform_get_drvdata(pdev);
+	struct stmmac_priv *priv = netdev_priv(dev);
 
 	ethqos->phy_intr = platform_get_irq_byname(ethqos->pdev, "phy-intr");
 
@@ -1000,6 +1003,8 @@ static int ethqos_phy_intr_config(struct qcom_ethqos *ethqos)
 				"PHY IRQ configuration information not found\n");
 		}
 		ret = 1;
+	} else {
+		priv->phy_intr_wol_irq = ethqos->phy_intr;
 	}
 
 	return ret;
@@ -1501,10 +1506,15 @@ static void ethqos_set_early_eth_param(struct stmmac_priv *priv,
 	if (pparams.is_valid_ipv6_addr) {
 		INIT_DELAYED_WORK(&ethqos->ipv6_addr_assign_wq,
 				  ethqos_is_ipv6_NW_stack_ready);
-		ret = qcom_ethqos_add_ipv6addr(&pparams, priv->dev);
-		if (ret)
+		if (ethqos->emac_ver == EMAC_HW_v2_3_1) {
 			schedule_delayed_work(&ethqos->ipv6_addr_assign_wq,
 					      msecs_to_jiffies(1000));
+		} else {
+			ret = qcom_ethqos_add_ipv6addr(&pparams, priv->dev);
+			if (ret)
+				schedule_delayed_work(&ethqos->ipv6_addr_assign_wq,
+						      msecs_to_jiffies(1000));
+		}
 	}
 #endif
 	return;
@@ -1830,7 +1840,7 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 
 	ethqos->pdev = pdev;
 
-	ethqos_init_reqgulators(ethqos);
+	ethqos_init_regulators(ethqos);
 	ethqos_init_gpio(ethqos);
 
 	plat_dat = stmmac_probe_config_dt(pdev, &stmmac_res.mac);
@@ -2221,7 +2231,7 @@ static int qcom_ethqos_hib_restore(struct device *dev)
 
 	priv = netdev_priv(ndev);
 
-	ret = ethqos_init_reqgulators(ethqos);
+	ret = ethqos_init_regulators(ethqos);
 	if (ret)
 		return ret;
 
