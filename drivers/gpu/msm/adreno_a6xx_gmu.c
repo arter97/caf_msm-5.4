@@ -1038,11 +1038,21 @@ void a6xx_holi_gmu_sptprac_disable(struct adreno_device *adreno_dev)
 #define GX_CLK_OFF		BIT(7)
 #define is_on(val)		(!(val & (GX_GDSC_POWER_OFF | GX_CLK_OFF)))
 
-bool a6xx_gmu_gx_is_on(struct kgsl_device *device)
+bool a6xx_gmu_gx_is_on(struct adreno_device *adreno_dev)
 {
 	unsigned int val;
 
-	gmu_core_regread(device, A6XX_GMU_SPTPRAC_PWR_CLK_STATUS, &val);
+	gmu_core_regread(KGSL_DEVICE(adreno_dev),
+			A6XX_GMU_SPTPRAC_PWR_CLK_STATUS, &val);
+	return is_on(val);
+}
+
+bool a619_holi_gx_is_on(struct adreno_device *adreno_dev)
+{
+	unsigned int val;
+
+	adreno_read_gmu_wrapper(adreno_dev,
+			A6XX_GMU_SPTPRAC_PWR_CLK_STATUS, &val);
 	return is_on(val);
 }
 
@@ -1660,7 +1670,7 @@ static void a6xx_gmu_pwrctrl_suspend(struct adreno_device *adreno_dev)
 
 	if (adreno_has_gbif(adreno_dev)) {
 		/* Halt GX traffic */
-		if (a6xx_gmu_gx_is_on(device)) {
+		if (a6xx_gmu_gx_is_on(adreno_dev)) {
 			kgsl_regwrite(device, A6XX_RBBM_GBIF_HALT,
 				A6XX_GBIF_GX_HALT_MASK);
 			adreno_wait_for_halt_ack(device,
@@ -1673,7 +1683,7 @@ static void a6xx_gmu_pwrctrl_suspend(struct adreno_device *adreno_dev)
 		kgsl_regwrite(device, A6XX_GBIF_HALT, 0x0);
 	}
 
-	if (a6xx_gmu_gx_is_on(device))
+	if (a6xx_gmu_gx_is_on(adreno_dev))
 		kgsl_regwrite(device, A6XX_RBBM_SW_RESET_CMD, 0x1);
 
 	/* Allow the software reset to complete */
@@ -1685,7 +1695,7 @@ static void a6xx_gmu_pwrctrl_suspend(struct adreno_device *adreno_dev)
 	 * the regulator interface.
 	 */
 	if (gmu->gx_gdsc) {
-		if (a6xx_gmu_gx_is_on(device)) {
+		if (a6xx_gmu_gx_is_on(adreno_dev)) {
 			/* Switch gx gdsc control from GMU to CPU
 			 * force non-zero reference count in clk driver
 			 * so next disable call will turn
@@ -1717,7 +1727,7 @@ static void a6xx_gmu_pwrctrl_suspend(struct adreno_device *adreno_dev)
 				gmu_core_regrmw(device, A6XX_GPU_CPR_FSM_CTL,
 					1, 1);
 
-			if (a6xx_gmu_gx_is_on(device))
+			if (a6xx_gmu_gx_is_on(adreno_dev))
 				dev_err(&gmu->pdev->dev,
 					"gx is stuck on\n");
 		}
@@ -1786,12 +1796,14 @@ void a6xx_gmu_suspend(struct adreno_device *adreno_dev)
 {
 	struct a6xx_gmu_device *gmu = to_a6xx_gmu(adreno_dev);
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
+	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 
 	a6xx_gmu_irq_disable(adreno_dev);
 
 	a6xx_gmu_pwrctrl_suspend(adreno_dev);
 
 	clk_bulk_disable_unprepare(gmu->num_clks, gmu->clks);
+	clear_bit(KGSL_PWRFLAGS_CLK_ON, &pwr->power_flags);
 
 	a6xx_cx_regulator_disable_wait(gmu->cx_gdsc, device, 5000);
 
@@ -1912,7 +1924,7 @@ static void a6xx_gmu_send_nmi(struct adreno_device *adreno_dev, bool force)
 	 * Do not send NMI if the SMMU is stalled because GMU will not be able
 	 * to save cm3 state to DDR.
 	 */
-	if (a6xx_gmu_gx_is_on(device) && a6xx_is_smmu_stalled(device)) {
+	if (a6xx_gmu_gx_is_on(adreno_dev) && a6xx_is_smmu_stalled(device)) {
 		dev_err(&gmu->pdev->dev,
 			"Skipping NMI because SMMU is stalled\n");
 		return;
@@ -2152,6 +2164,7 @@ int a6xx_gmu_enable_clks(struct adreno_device *adreno_dev)
 {
 	struct a6xx_gmu_device *gmu = to_a6xx_gmu(adreno_dev);
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
+	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 	int ret;
 
 	a6xx_rdpm_cx_freq_update(gmu, GMU_FREQUENCY / 1000);
@@ -2175,6 +2188,7 @@ int a6xx_gmu_enable_clks(struct adreno_device *adreno_dev)
 	}
 
 	device->state = KGSL_STATE_AWARE;
+	set_bit(KGSL_PWRFLAGS_CLK_ON, &pwr->power_flags);
 
 	return 0;
 }
@@ -2298,6 +2312,7 @@ err:
 
 clks_gdsc_off:
 	clk_bulk_disable_unprepare(gmu->num_clks, gmu->clks);
+	clear_bit(KGSL_PWRFLAGS_CLK_ON, &pwr->power_flags);
 
 gdsc_off:
 	/* Poll to make sure that the CX is off */
@@ -2312,6 +2327,7 @@ static int a6xx_gmu_boot(struct adreno_device *adreno_dev)
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	struct a6xx_gmu_device *gmu = to_a6xx_gmu(adreno_dev);
+	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 	int ret = 0;
 
 	trace_kgsl_pwr_request_state(device, KGSL_STATE_AWARE);
@@ -2378,6 +2394,7 @@ err:
 
 clks_gdsc_off:
 	clk_bulk_disable_unprepare(gmu->num_clks, gmu->clks);
+	clear_bit(KGSL_PWRFLAGS_CLK_ON, &pwr->power_flags);
 
 gdsc_off:
 	/* Poll to make sure that the CX is off */
@@ -2415,7 +2432,6 @@ static int a6xx_gmu_acd_set(struct kgsl_device *device, bool val)
 static const struct gmu_dev_ops a6xx_gmudev = {
 	.oob_set = a6xx_gmu_oob_set,
 	.oob_clear = a6xx_gmu_oob_clear,
-	.gx_is_on = a6xx_gmu_gx_is_on,
 	.ifpc_store = a6xx_gmu_ifpc_store,
 	.ifpc_show = a6xx_gmu_ifpc_show,
 	.cooperative_reset = a6xx_gmu_cooperative_reset,
@@ -2830,6 +2846,7 @@ static int a6xx_gmu_power_off(struct adreno_device *adreno_dev)
 {
 	struct a6xx_gmu_device *gmu = to_a6xx_gmu(adreno_dev);
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
+	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 	int ret = 0;
 
 	if (device->gmu_fault)
@@ -2864,6 +2881,7 @@ static int a6xx_gmu_power_off(struct adreno_device *adreno_dev)
 	a6xx_hfi_stop(adreno_dev);
 
 	clk_bulk_disable_unprepare(gmu->num_clks, gmu->clks);
+	clear_bit(KGSL_PWRFLAGS_CLK_ON, &pwr->power_flags);
 
 	/* Poll to make sure that the CX is off */
 	a6xx_cx_regulator_disable_wait(gmu->cx_gdsc, device, 5000);
@@ -2892,11 +2910,9 @@ void a6xx_enable_gpu_irq(struct adreno_device *adreno_dev)
 
 void a6xx_disable_gpu_irq(struct adreno_device *adreno_dev)
 {
-	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
+	kgsl_pwrctrl_irq(KGSL_DEVICE(adreno_dev), KGSL_PWRFLAGS_OFF);
 
-	kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_OFF);
-
-	if (a6xx_gmu_gx_is_on(device))
+	if (a6xx_gmu_gx_is_on(adreno_dev))
 		adreno_irqctrl(adreno_dev, 0);
 
 }

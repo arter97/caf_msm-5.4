@@ -1798,14 +1798,13 @@ static int dwc3_probe(struct platform_device *pdev)
 	dwc->dwc_ipc_log_ctxt = ipc_log_context_create(NUM_LOG_PAGES,
 					dev_name(dwc->dev), 0);
 	if (!dwc->dwc_ipc_log_ctxt)
-		dev_err(dwc->dev, "Error getting ipc_log_ctxt\n");
-
+		dev_dbg(dwc->dev, "ipc_log_ctxt is not available\n");
 	snprintf(dma_ipc_log_ctx_name, sizeof(dma_ipc_log_ctx_name),
 					"%s.ep_events", dev_name(dwc->dev));
 	dwc->dwc_dma_ipc_log_ctxt = ipc_log_context_create(2 * NUM_LOG_PAGES,
 						dma_ipc_log_ctx_name, 0);
 	if (!dwc->dwc_dma_ipc_log_ctxt)
-		dev_err(dwc->dev, "Error getting ipc_log_ctxt for ep_events\n");
+		dev_dbg(dwc->dev, "ipc_log_ctxt for ep_events is not available\n");
 
 	dwc3_instance[count] = dwc;
 	dwc->index = count;
@@ -1981,7 +1980,7 @@ static int dwc3_resume_common(struct dwc3 *dwc, pm_message_t msg)
 		if (PMSG_IS_AUTO(msg))
 			break;
 
-		ret = dwc3_core_init(dwc);
+		ret = dwc3_core_init_for_resume(dwc);
 		if (ret)
 			return ret;
 
