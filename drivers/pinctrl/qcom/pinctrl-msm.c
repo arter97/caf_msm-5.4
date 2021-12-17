@@ -1100,41 +1100,31 @@ static void configure_tlmm_dc_polarity(struct irq_data *d,
 	const struct msm_pingroup *g;
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
 	struct msm_pinctrl *pctrl = gpiochip_get_data(gc);
-	unsigned int polarity = 0, val;
+	unsigned int polarity = 1, val;
 	unsigned long flags;
 
 	if (type & (IRQ_TYPE_EDGE_RISING | IRQ_TYPE_LEVEL_HIGH)) {
-
 		/*
 		 * Since the default polarity is set to 0, change it to 1 for
 		 * Rising edge and active high interrupt type such that the line
 		 * is not inverted.
 		 */
-
-		polarity = 1;
-
 		raw_spin_lock_irqsave(&pctrl->lock, flags);
-
 		g = &pctrl->soc->groups[d->hwirq];
-
 		val = readl_relaxed(msm_pinctrl_data->regs[g->tile] +
 						g->dir_conn_reg + (offset * 4));
 		val |= polarity << 8;
-
 		writel_relaxed(val, msm_pinctrl_data->regs[g->tile] +
 						g->dir_conn_reg + (offset * 4));
-
 		raw_spin_unlock_irqrestore(&pctrl->lock, flags);
 	}
 }
 
 static void enable_tlmm_dc(irq_hw_number_t irq)
 {
-	struct irq_data *dir_conn_data = NULL;
+	struct irq_data *dir_conn_data = irq_get_irq_data(irq);
 
-	dir_conn_data = irq_get_irq_data(irq);
-
-	if (!dir_conn_data)
+	if (!dir_conn_data || !(dir_conn_data->chip))
 		return;
 
 	dir_conn_data->chip->irq_unmask(dir_conn_data);
@@ -1537,13 +1527,14 @@ static void msm_gpio_setup_dir_connects(struct msm_pinctrl *pctrl)
 
 		gpio_irq = irq_create_mapping(child_domain, dc->gpio);
 		irq_set_parent(gpio_irq, dirconn_irq);
+		irq_set_chip_data(gpio_irq, &(pctrl->chip));
+		irq_set_chip_and_handler_name(gpio_irq, &(pctrl->irq_chip), NULL, NULL);
 
 		gpio_irq_data = irq_get_irq_data(gpio_irq);
-		irq_set_handler_data(dirconn_irq, gpio_irq_data);
-
 		if (!gpio_irq_data)
 			continue;
 
+		irq_set_handler_data(dirconn_irq, gpio_irq_data);
 		msm_dirconn_cfg_reg(gpio_irq_data, offset);
 	}
 }
