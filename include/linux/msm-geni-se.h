@@ -58,8 +58,9 @@ struct ssc_qup_ssr {
  */
 struct se_rsc_ssr {
 	struct list_head active_list;
-	int (*force_suspend)(struct device *ctrl_dev);
-	int (*force_resume)(struct device *ctrl_dev);
+	void (*force_suspend)(struct device *ctrl_dev);
+	void (*force_resume)(struct device *ctrl_dev);
+	bool ssr_enable;
 };
 
 /**
@@ -182,6 +183,12 @@ struct se_geni_rsc {
 #define IO1_SEL_TX			BIT(2)
 #define IO2_DATA_IN_SEL_PAD2		(GENMASK(11, 10))
 #define IO3_DATA_IN_SEL_PAD2		BIT(15)
+#define OTHER_IO_OE			BIT(12)
+#define IO2_DATA_IN_SEL			BIT(11)
+#define RX_DATA_IN_SEL			BIT(8)
+#define IO_MACRO_IO3_SEL		(GENMASK(7, 6))
+#define IO_MACRO_IO2_SEL		BIT(5)
+#define IO_MACRO_IO0_SEL		BIT(0)
 
 /* GENI_FORCE_DEFAULT_REG fields */
 #define FORCE_DEFAULT	(BIT(0))
@@ -436,6 +443,7 @@ if (print) { \
 #define SPI_CORE2X_VOTE	100000
 #define UART_CORE2X_VOTE	100000
 #define UART_CONSOLE_CORE2X_VOTE	19200
+#define QUP_SE_VERSION_2_7	0x20070000
 
 #if IS_ENABLED(CONFIG_MSM_GENI_SE)
 /**
@@ -796,6 +804,15 @@ void geni_se_rx_dma_unprep(struct device *wrapper_dev,
  */
 int geni_se_qupv3_hw_version(struct device *wrapper_dev, unsigned int *major,
 			     unsigned int *minor, unsigned int *step);
+
+/**
+ * geni_se_qupv3_get_hw_version() - Get the QUPv3 Hardware version
+ * @wrapper_dev:	Pointer to the corresponding QUPv3 wrapper core.
+ *
+ * Return:		QUP HW version return on success,
+ *			standard Linux error codes on failure/error
+ */
+int geni_se_qupv3_get_hw_version(struct device *wrapper_dev);
 
 /**
  * geni_se_iommu_map_buf() - Map a single buffer into QUPv3 context bank

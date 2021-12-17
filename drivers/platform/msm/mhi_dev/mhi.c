@@ -91,6 +91,7 @@ static void mhi_dev_event_msi_cb(void *req);
 static void mhi_dev_cmd_event_msi_cb(void *req);
 
 static int mhi_dev_alloc_cmd_ack_buf_req(struct mhi_dev *mhi);
+static int mhi_dev_ring_init(struct mhi_dev *dev);
 
 
 static struct mhi_dev_uevent_info channel_state_info[MHI_MAX_CHANNELS];
@@ -1481,7 +1482,7 @@ static void mhi_hwc_cb(void *priv, enum ipa_mhi_event_type event,
 			return;
 		}
 
-		mhi_log(MHI_MSG_CRITICAL, "Device in M0 State\n");
+		mhi_log(MHI_MSG_INFO, "Device in M0 State\n");
 		break;
 	case IPA_MHI_EVENT_DATA_AVAILABLE:
 		rc = mhi_dev_notify_sm_event(MHI_DEV_EVENT_HW_ACC_WAKEUP);
@@ -1940,12 +1941,7 @@ static int mhi_dev_process_cmd_ring(struct mhi_dev *mhi,
 				mhi_log(MHI_MSG_VERBOSE,
 					"Failed to enable chdb for ch %d\n",
 						ch_id);
-				rc = mhi_dev_send_cmd_comp_event(mhi,
-					MHI_CMD_COMPL_CODE_UNDEFINED);
-				if (rc)
-					mhi_log(MHI_MSG_VERBOSE,
-						"Error with compl event\n");
-				return;
+				goto send_undef_completion_event;
 			}
 		}
 
@@ -1959,12 +1955,7 @@ static int mhi_dev_process_cmd_ring(struct mhi_dev *mhi,
 		if (rc) {
 			mhi_log(MHI_MSG_ERROR,
 				"start ring failed for ch %d\n", ch_id);
-			rc = mhi_dev_send_cmd_comp_event(mhi,
-						MHI_CMD_COMPL_CODE_UNDEFINED);
-			if (rc)
-				mhi_log(MHI_MSG_ERROR,
-					"Error with compl event\n");
-			return rc;
+			goto send_undef_completion_event;
 		}
 
 		mhi->ring[mhi->ch_ring_start + ch_id].state =
@@ -1990,13 +1981,19 @@ static int mhi_dev_process_cmd_ring(struct mhi_dev *mhi,
 					mhi_log(MHI_MSG_ERROR,
 					"error starting event ring %d\n",
 					mhi->ch_ctx_cache[ch_id].err_indx);
-					return rc;
+					goto send_undef_completion_event;
 				}
 			}
 			mutex_lock(&mhi->ch[ch_id].ch_lock);
-			mhi_dev_alloc_evt_buf_evt_req(mhi, &mhi->ch[ch_id],
+			rc = mhi_dev_alloc_evt_buf_evt_req(mhi, &mhi->ch[ch_id],
 					evt_ring);
 			mutex_unlock(&mhi->ch[ch_id].ch_lock);
+			if (rc) {
+				mhi_log(MHI_MSG_ERROR,
+					"Failed to alloc ereqs for er %d\n",
+					mhi->ch_ctx_cache[ch_id].err_indx);
+				goto send_undef_completion_event;
+			}
 		}
 
 		if (MHI_USE_DMA(mhi))
@@ -2022,6 +2019,20 @@ send_start_completion_event:
 		mhi_dev_trigger_cb(ch_id);
 		mhi_uci_chan_state_notify(mhi, ch_id, MHI_STATE_CONNECTED);
 		break;
+
+send_undef_completion_event:
+		mhi->ch_ctx_cache[ch_id].ch_state = MHI_DEV_CH_STATE_DISABLED;
+		mhi->ch[ch_id].state = MHI_DEV_CH_UNINT;
+
+		rc = mhi_dev_send_cmd_comp_event(mhi,
+				MHI_CMD_COMPL_CODE_UNDEFINED);
+		if (rc)
+			mhi_log(MHI_MSG_VERBOSE, "Error with compl event\n");
+
+		mhi_dev_mmio_disable_chdb_a7(mhi, ch_id);
+
+		return rc;
+
 	case MHI_DEV_RING_EL_STOP:
 		if (ch_id >= HW_CHANNEL_BASE) {
 			rc = mhi_hwc_chcmd(mhi, ch_id, el->generic.type);
@@ -2727,6 +2738,26 @@ static int mhi_dev_cache_host_cfg(struct mhi_dev *mhi)
 					mhi->cfg.event_rings;
 	mhi->ch_ctx_shadow.size = sizeof(struct mhi_dev_ch_ctx) *
 					mhi->cfg.channels;
+
+	/* Allocate ring elements, during M0 when host
+	 * would have updated MHICFG register
+	 */
+
+	if (!mhi->ring) {
+		mhi->ring = devm_kcalloc(&pdev->dev,
+				(mhi->cfg.channels + mhi->cfg.event_rings + 1),
+				sizeof(struct mhi_dev_ring),
+				GFP_KERNEL);
+		if (!mhi->ring) {
+			pr_err("no memory while allocating ring ctx\n");
+			rc = -ENOMEM;
+			goto exit;
+		}
+		mhi_log(MHI_MSG_INFO,
+			"MEM_ALLOC: size:%d RING_ALLOC\n",
+			(sizeof(struct mhi_dev_ring) *
+			(mhi->cfg.channels + mhi->cfg.event_rings + 1)));
+	}
 	/*
 	 * This func mhi_dev_cache_host_cfg will be called when
 	 * processing mhi device reset as well, do not allocate
@@ -2773,6 +2804,13 @@ static int mhi_dev_cache_host_cfg(struct mhi_dev *mhi)
 	}
 	memset(mhi->ch_ctx_cache, 0, sizeof(struct mhi_dev_ch_ctx) *
 						mhi->cfg.channels);
+
+	rc = mhi_dev_ring_init(mhi);
+	if (rc) {
+		pr_err("MHI dev ring init failed\n");
+		goto exit;
+	}
+
 	if (MHI_USE_DMA(mhi)) {
 		data_transfer.phy_addr = mhi->cmd_ctx_cache_dma_handle;
 		data_transfer.host_pa = mhi->cmd_ctx_shadow.host_pa;
@@ -2803,10 +2841,23 @@ static int mhi_dev_cache_host_cfg(struct mhi_dev *mhi)
 					mhi->ev_ctx_cache->rp,
 					mhi->ev_ctx_cache->wp);
 
-	return mhi_ring_start(&mhi->ring[0],
+	rc = mhi_ring_start(&mhi->ring[0],
 			(union mhi_dev_ring_ctx *)mhi->cmd_ctx_cache, mhi);
+	if (rc) {
+		pr_err("MHI ring start failed:%d\n", rc);
+		goto exit;
+	}
 
+	return 0;
 exit:
+	if (mhi->ring) {
+		devm_kfree(&pdev->dev, mhi->ring);
+		mhi->ring = NULL;
+		mhi_log(MHI_MSG_INFO,
+			"MEM_DEALLOC: size:%d RING_ALLOC\n",
+			(sizeof(struct mhi_dev_ring) *
+			(mhi->cfg.channels + mhi->cfg.event_rings + 1)));
+	}
 	if (mhi->cmd_ctx_cache)
 		dma_free_coherent(&pdev->dev,
 			sizeof(struct mhi_dev_cmd_ctx),
@@ -3051,13 +3102,20 @@ static int mhi_dev_alloc_evt_buf_evt_req(struct mhi_dev *mhi,
 
 	/* Allocate event requests */
 	ch->ereqs = kcalloc(ch->evt_req_size, sizeof(*ch->ereqs), GFP_KERNEL);
-	if (!ch->ereqs)
-		return -ENOMEM;
+	if (!ch->ereqs) {
+		mhi_log(MHI_MSG_ERROR,
+			"Failed to alloc ereqs for Channel %d\n", ch->ch_id);
+		rc = -ENOMEM;
+		goto free_ereqs;
+	}
 
 	/* Allocate buffers to queue transfer completion events */
 	ch->tr_events = kcalloc(ch->evt_buf_size, sizeof(*ch->tr_events),
 			GFP_KERNEL);
 	if (!ch->tr_events) {
+		mhi_log(MHI_MSG_ERROR,
+			"Failed to alloc tr_events buffer for Channel %d\n",
+			ch->ch_id);
 		rc = -ENOMEM;
 		goto free_ereqs;
 	}
@@ -3243,7 +3301,7 @@ void mhi_dev_close_channel(struct mhi_dev_client *handle)
 	ch->tr_events = NULL;
 	kfree(handle);
 	mhi_log(MHI_MSG_INFO,
-		"MEM_ALLOC:ch:%d size:%d CLNT_HANDLE\n",
+		"MEM_DEALLOC:ch:%d size:%d CLNT_HANDLE\n",
 		ch->ch_id, sizeof(struct mhi_dev_client));
 
 	mutex_unlock(&ch->ch_lock);
@@ -3471,7 +3529,7 @@ int mhi_dev_write_channel(struct mhi_req *wreq)
 		 * Expected usage is when there is a write
 		 * to the MHI core -> notify SM.
 		 */
-		mhi_log(MHI_MSG_INFO, "Wakeup by chan:%d\n", ch->ch_id);
+		mhi_log(MHI_MSG_CRITICAL, "Wakeup by chan:%d\n", ch->ch_id);
 		rc = mhi_dev_notify_sm_event(MHI_DEV_EVENT_CORE_WAKEUP);
 		if (rc) {
 			pr_err("error sending core wakeup event\n");
@@ -3724,13 +3782,6 @@ static void mhi_dev_enable(struct work_struct *work)
 			return;
 		}
 	}
-
-	rc = mhi_dev_ring_init(mhi);
-	if (rc) {
-		pr_err("MHI dev ring init failed\n");
-		return;
-	}
-
 
 	rc = mhi_dev_mmio_get_mhi_state(mhi, &state, &mhi_reset);
 	if (rc) {
@@ -4044,14 +4095,6 @@ static int mhi_init(struct mhi_dev *mhi)
 		pr_err("Failed to update the MMIO init\n");
 		return rc;
 	}
-
-	if (!mhi->ring)
-		mhi->ring = devm_kzalloc(&pdev->dev,
-				(sizeof(struct mhi_dev_ring) *
-				(mhi->cfg.channels + mhi->cfg.event_rings + 1)),
-				GFP_KERNEL);
-	if (!mhi->ring)
-		return -ENOMEM;
 
 	/*
 	 * mhi_init is also called during device reset, in

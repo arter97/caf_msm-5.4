@@ -651,7 +651,7 @@ static int mhi_uci_send_async(struct uci_client *uci_handle,
 	int bytes_to_write;
 	struct mhi_req *ureq;
 
-	uci_log(UCI_DBG_VERBOSE,
+	uci_log(UCI_DBG_DBG,
 		"Async write for ch %d size %d\n",
 		uci_handle->out_chan, size);
 
@@ -865,7 +865,7 @@ static int mhi_uci_read_async(struct uci_client *uci_handle, int *bytes_avail)
 	struct mhi_req *ureq;
 	struct mhi_dev_client *client_handle;
 
-	uci_log(UCI_DBG_ERROR,
+	uci_log(UCI_DBG_DBG,
 		"Async read for ch %d\n", uci_handle->in_chan);
 
 	ureq = mhi_uci_get_req(uci_handle);
@@ -1031,7 +1031,7 @@ static int open_client_mhi_channels(struct uci_client *uci_client)
 			uci_ctxt.event_notifier);
 	if (rc < 0) {
 		uci_log(UCI_DBG_ERROR,
-			"Failed to open chan %d, ret 0x%x\n",
+			"Failed to open chan %d, ret %d\n",
 			uci_client->out_chan, rc);
 		goto handle_in_err;
 	}
@@ -1184,16 +1184,20 @@ static int mhi_uci_client_release(struct inode *mhi_inode,
 		count = 0;
 
 		spin_lock_irqsave(&uci_handle->req_lock, flags);
-		while (!(list_empty(&uci_handle->in_use_list))) {
-			ureq = container_of(uci_handle->in_use_list.next,
+		if (!(uci_handle->f_flags & O_SYNC)) {
+			while (!(list_empty(&uci_handle->in_use_list))) {
+				ureq = container_of(
+					uci_handle->in_use_list.next,
 					struct mhi_req, list);
-			list_del_init(&ureq->list);
-			ureq->is_stale = true;
-			uci_log(UCI_DBG_VERBOSE,
-				"Adding back req for chan %d to free list\n",
-				ureq->chan);
-			list_add_tail(&ureq->list, &uci_handle->req_list);
-			count++;
+				list_del_init(&ureq->list);
+				ureq->is_stale = true;
+				uci_log(UCI_DBG_VERBOSE,
+					"Add back req for chan %d to list\n",
+					ureq->chan);
+				list_add_tail(&ureq->list,
+					&uci_handle->req_list);
+				count++;
+			}
 		}
 		spin_unlock_irqrestore(&uci_handle->req_lock, flags);
 		if (count)
@@ -2094,13 +2098,15 @@ static void mhi_uci_at_ctrl_client_cb(struct mhi_dev_client_cb_data *cb_data)
 		mhi_dev_close_channel(client->out_handle);
 		mhi_dev_close_channel(client->in_handle);
 
-		/* Add back reqs for in-use list, if any, to free list */
-		while (!(list_empty(&client->in_use_list))) {
-			ureq = container_of(client->in_use_list.next,
-					struct mhi_req, list);
-			list_del_init(&ureq->list);
-			/* Add to in-use list */
-			list_add_tail(&ureq->list, &client->req_list);
+		/* Add back reqs in-use list, if any, to free list */
+		if (!(client->f_flags & O_SYNC)) {
+			while (!(list_empty(&client->in_use_list))) {
+				ureq = container_of(client->in_use_list.next,
+							struct mhi_req, list);
+				list_del_init(&ureq->list);
+				/* Add to in-use list */
+				list_add_tail(&ureq->list, &client->req_list);
+			}
 		}
 
 		for (i = 0; i < (client->in_chan_attr->nr_trbs); i++) {

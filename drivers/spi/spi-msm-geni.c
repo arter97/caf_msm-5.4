@@ -185,11 +185,13 @@ struct spi_geni_master {
 	bool slave_cross_connected;
 	bool use_fixed_timeout;
 	struct spi_geni_ssr spi_ssr;
+	bool master_cross_connect;
 };
 
 static void spi_slv_setup(struct spi_geni_master *mas);
-static int ssr_spi_force_suspend(struct device *dev);
-static int ssr_spi_force_resume(struct device *dev);
+static void ssr_spi_force_suspend(struct device *dev);
+static void ssr_spi_force_resume(struct device *dev);
+static void spi_master_setup(struct spi_geni_master *mas);
 
 static ssize_t spi_slave_state_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -216,6 +218,17 @@ static ssize_t spi_slave_state_store(struct device *dev,
 }
 
 static DEVICE_ATTR_RW(spi_slave_state);
+
+static void spi_master_setup(struct spi_geni_master *mas)
+{
+	geni_write_reg(OTHER_IO_OE | IO2_DATA_IN_SEL | RX_DATA_IN_SEL |
+		IO_MACRO_IO3_SEL | IO_MACRO_IO2_SEL | IO_MACRO_IO0_SEL,
+					mas->base, GENI_CFG_REG80);
+	geni_write_reg(START_TRIGGER, mas->base, SE_GENI_CFG_SEQ_START);
+
+	/* ensure data is written to hardware register */
+	wmb();
+}
 
 static void spi_slv_setup(struct spi_geni_master *mas)
 {
@@ -1202,6 +1215,9 @@ static int spi_geni_mas_setup(struct spi_master *spi)
 
 		if (spi->slave)
 			spi_slv_setup(mas);
+
+		if (mas->master_cross_connect)
+			spi_master_setup(mas);
 	}
 
 	geni_se_init(mas->base, 0x0, (mas->tx_fifo_depth - 2));
@@ -1288,6 +1304,9 @@ setup_ipc:
 		mas->tx_fifo_width);
 	if (!mas->shared_ee)
 		mas->setup = true;
+
+	if (spi->slave)
+		mas->slave_setup = true;
 
 	/*
 	 * Bypass hw_version read for LE. QUP common registers
@@ -2211,12 +2230,18 @@ static int spi_geni_probe(struct platform_device *pdev)
 	geni_mas->disable_dma = of_property_read_bool(pdev->dev.of_node,
 		"qcom,disable-dma");
 
+	if (of_property_read_bool(pdev->dev.of_node, "qcom,master-cross-connect"))
+		geni_mas->master_cross_connect = true;
+
 	slave_en  = of_property_read_bool(pdev->dev.of_node,
 			 "qcom,slv-ctrl");
 	if (slave_en) {
 		spi->slave = true;
 		spi->slave_abort = spi_slv_abort;
 	}
+
+	rsc->rsc_ssr.ssr_enable = of_property_read_bool(pdev->dev.of_node,
+			"ssr-enable");
 
 	geni_mas->slave_cross_connected =
 		of_property_read_bool(pdev->dev.of_node, "slv-cross-connected");
@@ -2291,6 +2316,19 @@ static int spi_geni_runtime_suspend(struct device *dev)
 	}
 
 	GENI_SE_DBG(geni_mas->ipc, false, NULL, "%s:\n", __func__);
+
+	if (geni_mas->shared_se) {
+		if (geni_mas->tx != NULL) {
+			ret = dmaengine_pause(geni_mas->tx);
+			if (ret) {
+				GENI_SE_ERR(geni_mas->ipc, true, NULL,
+				"%s dmaengine_pause failed: %d\n", __func__, ret);
+			}
+			GENI_SE_DBG(geni_mas->ipc, false, NULL,
+			"%s: Shared_SE dma_pause\n", __func__);
+		}
+	}
+
 	/* Do not unconfigure the GPIOs for a shared_se usecase */
 	if (geni_mas->shared_ee && !geni_mas->shared_se)
 		goto exit_rt_suspend;
@@ -2340,6 +2378,19 @@ static int spi_geni_runtime_resume(struct device *dev)
 	}
 
 	GENI_SE_DBG(geni_mas->ipc, false, NULL, "%s:\n", __func__);
+
+	if (geni_mas->shared_se) {
+		/* very first time mas->tx channel is not getting updated */
+		if (geni_mas->tx != NULL) {
+			ret = dmaengine_resume(geni_mas->tx);
+			if (ret) {
+				GENI_SE_ERR(geni_mas->ipc, true, NULL,
+				"%s dmaengine_resume failed: %d\n", __func__, ret);
+			}
+			GENI_SE_DBG(geni_mas->ipc, false, NULL,
+			"%s: Shared_SE dma_resume call\n", __func__);
+		}
+	}
 
 	if (geni_mas->shared_ee)
 		goto exit_rt_resume;
@@ -2411,7 +2462,7 @@ static int spi_geni_suspend(struct device *dev)
 }
 #endif
 
-static int ssr_spi_force_suspend(struct device *dev)
+static void ssr_spi_force_suspend(struct device *dev)
 {
 	struct spi_master *spi = get_spi_master(dev);
 	struct spi_geni_master *mas = spi_master_get_devdata(spi);
@@ -2436,11 +2487,9 @@ static int ssr_spi_force_suspend(struct device *dev)
 
 	GENI_SE_DBG(mas->ipc, false, mas->dev, "force suspend done\n");
 	mutex_unlock(&mas->spi_ssr.ssr_lock);
-
-	return ret;
 }
 
-static int ssr_spi_force_resume(struct device *dev)
+static void ssr_spi_force_resume(struct device *dev)
 {
 	struct spi_master *spi = get_spi_master(dev);
 	struct spi_geni_master *mas = spi_master_get_devdata(spi);
@@ -2450,8 +2499,6 @@ static int ssr_spi_force_resume(struct device *dev)
 	enable_irq(mas->irq);
 	GENI_SE_DBG(mas->ipc, false, mas->dev, "force resume done\n");
 	mutex_unlock(&mas->spi_ssr.ssr_lock);
-
-	return 0;
 }
 
 static const struct dev_pm_ops spi_geni_pm_ops = {

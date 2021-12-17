@@ -1226,7 +1226,7 @@ int geni_se_resources_init(struct se_geni_rsc *rsc,
 	INIT_LIST_HEAD(&rsc->ab_list);
 	INIT_LIST_HEAD(&rsc->ib_list);
 
-	if (geni_se_dev->ssr.subsys_name) {
+	if (geni_se_dev->ssr.subsys_name && rsc->rsc_ssr.ssr_enable) {
 		INIT_LIST_HEAD(&rsc->rsc_ssr.active_list);
 		list_add(&rsc->rsc_ssr.active_list,
 				&geni_se_dev->ssr.active_list_head);
@@ -1513,6 +1513,28 @@ int geni_se_qupv3_hw_version(struct device *wrapper_dev, unsigned int *major,
 	return 0;
 }
 EXPORT_SYMBOL(geni_se_qupv3_hw_version);
+
+/**
+ * geni_se_qupv3_get_hw_version() - Get the QUPv3 Hardware version
+ * @wrapper_dev:	Pointer to the corresponding QUPv3 wrapper core.
+ *
+ * Return:		QUP hw version return on success,
+ *			standard Linux error codes on failure/error
+ */
+int geni_se_qupv3_get_hw_version(struct device *wrapper_dev)
+{
+	struct geni_se_device *geni_se_dev;
+
+	if (!wrapper_dev)
+		return -EINVAL;
+
+	geni_se_dev = dev_get_drvdata(wrapper_dev);
+	if (unlikely(!geni_se_dev))
+		return -ENODEV;
+
+	return geni_read_reg(geni_se_dev->base, QUPV3_HW_VER);
+}
+EXPORT_SYMBOL(geni_se_qupv3_get_hw_version);
 
 /**
  * geni_se_iommu_map_buf() - Map a single buffer into QUPv3 context bank
