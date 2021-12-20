@@ -42,6 +42,7 @@ static const struct smb_base_address smb_base[] = {
 		.usbin_base = 0x2900,
 		.misc_base  = 0x2c00,
 		.dcdc_base  = 0x2700,
+		.boost_base = 0x2b00,
 	},
 };
 
@@ -1454,6 +1455,10 @@ static struct smb_irq_info smblite_irqs[] = {
 	[SWITCHER_POWER_OK_IRQ] = {
 		.name		= "switcher-power-ok",
 		.handler	= smblite_switcher_power_ok_irq_handler,
+	},
+	[BOOST_MODE_ACTIVE_IRQ] = {
+		.name		= "boost-mode-active",
+		.handler	= smblite_boost_mode_active_irq_handler,
 	},
 	/* BATTERY IRQs */
 	[BAT_TEMP_IRQ] = {

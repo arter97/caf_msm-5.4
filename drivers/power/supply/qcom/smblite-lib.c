@@ -1339,6 +1339,34 @@ int smblite_lib_set_prop_batt_capacity(struct smb_charger *chg,
 	return 0;
 }
 
+int smblite_lib_set_prop_batt_sys_soc(struct smb_charger *chg, int val)
+{
+	int rc;
+	u8 sys_soc;
+
+	if (val < 0 || val > 100) {
+		smblite_lib_err(chg, "Invalid system soc = %d\n", val);
+		return -EINVAL;
+	}
+
+	sys_soc = DIV_ROUND_CLOSEST(val * 255, 100);
+
+	/* This is used to trigger SOC based auto-recharge */
+	rc = smblite_lib_write(chg, CHGR_QG_SOC_REG(chg->base), sys_soc);
+	if (rc < 0) {
+		smblite_lib_err(chg, "Couldn't write to CHGR_QG_SOC_REG rc=%d\n",
+				rc);
+		return rc;
+	}
+
+	rc = smblite_lib_write(chg, CHGR_QG_SOC_UPDATE_REG(chg->base), SOC_UPDATE_PCT_BIT);
+	if (rc < 0)
+		smblite_lib_err(chg, "Couldn't write to CHGR_QG_SOC_UPDATE_REG rc=%d\n",
+				rc);
+
+	return rc;
+}
+
 int smblite_lib_set_prop_batt_status(struct smb_charger *chg,
 				  const union power_supply_propval *val)
 {
@@ -1563,12 +1591,52 @@ static bool is_boost_en(struct smb_charger *chg)
 	return (stat & CHARGING_DISABLED_FROM_BOOST_BIT);
 }
 
+#define BOOST_SS_TIMEOUT_COUNT 4
+static int smblite_lib_check_boost_ss(struct smb_charger *chg)
+{
+	int rc, cnt = 0;
+	bool is_ss_done = false;
+	u8 boost_status = 0;
+
+	/*
+	 * POLL on BOOST_SW_DONE bit for 80ms with 20ms interval for
+	 * BOOST start-up to be done.
+	 */
+	while (cnt < BOOST_SS_TIMEOUT_COUNT) {
+		rc = smblite_lib_read(chg, BOOST_BST_STATUS_REG(chg->base),
+				      &boost_status);
+		if (rc < 0)
+			smblite_lib_err(chg, "Couldn't read BOOST_BST_STATUS_REG rc=%d\n",
+					rc);
+
+		if (!rc && (boost_status & BOOST_SOFTSTART_DONE_BIT)) {
+			is_ss_done = true;
+			break;
+		}
+
+		cnt++;
+		msleep(20);
+	}
+
+	smblite_lib_dbg(chg, PR_MISC,
+			"Concurrent-mode: BOOST_STATUS=%x, cnt=%d\n", boost_status, cnt);
+
+	/* In case of BOOST failure disable concurrency mode and return failure. */
+	if (!is_ss_done) {
+		smblite_lib_err(chg, "Boost ss-done failed, failed to enable concurrency\n");
+		return -ETIME;
+	}
+
+	return 0;
+}
+
 #define CONCURRENCY_REDUCED_ICL_UA 300000
 int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable)
 {
 	int rc = 0, icl_ua = 0, settled_icl_ua = 0, usb_present = 0;
 	union power_supply_propval pval = {0, };
 	u8 apsd_status = 0;
+	bool boost_enabled = is_boost_en(chg);
 
 	if (!is_concurrent_mode_supported(chg)) {
 		smblite_lib_dbg(chg, PR_MISC, "concurrency-mode: support disabled\n");
@@ -1605,9 +1673,9 @@ int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable)
 		 * When boost is enabled and usb is inserted chargering will be disabled causing
 		 * AICL to be always zero, Skip calculating ICL for this.
 		 */
-		if (is_boost_en(chg)) {
+		if (boost_enabled) {
 			smblite_lib_dbg(chg, PR_MISC,
-				"settled_icl_ua=0: boost is already enabled. Skipping ICL vote.\n");
+				"boost is already enabled. Skipping ICL vote.\n");
 		} else {
 			/*
 			 * On charger insertion, if concurrency mode is enabled it can cause
@@ -1666,6 +1734,21 @@ int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable)
 		if (rc < 0)
 			goto failure;
 
+		/*
+		 * If Audio playback is in progress and charger is inserted, on enabling
+		 * concurrency there is a possibility of it to fail if the BOOST soft-start
+		 * is not complete. Avoid this by polling on BOOST_SW_DONE bit which gets
+		 * set after concurrency is successfully enabled and then returning back to
+		 * the caller. In case of failure disable concurrency-mode and return failure.
+		 */
+		if (boost_enabled) {
+			rc = smblite_lib_check_boost_ss(chg);
+			if (rc < 0) {
+				smblite_lib_concurrent_mode_config(chg, false);
+				goto boost_ss_failure;
+			}
+		}
+
 		chg->concurrent_mode_status = true;
 		smblite_lib_dbg(chg, PR_MISC, "Concurrent Mode enabled successfully: settled_icl_ua=%duA, icl_ua=%duA, is_hvdcp3=%d\n",
 					settled_icl_ua, icl_ua,
@@ -1689,8 +1772,14 @@ int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable)
 			smblite_lib_err(chg, "Couldn't read APSD_RESULT_STATUS rc=%d\n",
 					rc);
 
-		/* Try to Restore vbus to MAX(6V) if QC adapter is connected */
-		if ((apsd_status & QC_3P0_BIT) && usb_present)
+		/*
+		 * Try to Restore vbus to MAX(6V) only if:
+		 *	1. QC adapter is connected.
+		 *	2. USB is present.
+		 *	3. Boost is disabled : DPDM request does not take
+		 *			       effect with boost enabled.
+		 */
+		if ((apsd_status & QC_3P0_BIT) && usb_present && !boost_enabled)
 			chg->hvdcp3_detected = smblite_lib_hvdcp3_force_max_vbus(chg);
 
 		rc = smblite_lib_run_aicl(chg, RERUN_AICL);
@@ -1706,6 +1795,7 @@ int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable)
 
 failure:
 	rc = -EINVAL;
+boost_ss_failure:
 	smblite_lib_err(chg, "Failed to %s concurrent mode, rc=%d\n",
 			(enable ? "Enable" : "Disable"), rc);
 
@@ -1750,6 +1840,16 @@ int smblite_lib_get_prop_usb_online(struct smb_charger *chg,
 		val->intval = true;
 		smblite_lib_dbg(chg, PR_MISC,
 			"USB_ONLINE set due to boost_en and input_present\n");
+		return 0;
+	}
+
+	/*
+	 * USB_ONLINE is reported as 0 for Debug board + USB present use-case
+	 * because USE_USBIN bit is set to 0. Report USB_ONLINE = 1 for
+	 * Debug Board + USB present use-case.
+	 */
+	if (input_present && chg->is_debug_batt) {
+		val->intval = true;
 		return 0;
 	}
 
@@ -3812,6 +3912,43 @@ irqreturn_t smblite_usb_id_irq_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+irqreturn_t smblite_boost_mode_active_irq_handler(int irq, void *data)
+{
+	struct smb_irq_data *irq_data = data;
+	struct smb_charger *chg = irq_data->parent_data;
+	union power_supply_propval pval = {0, };
+	bool is_qc = false, boost_enabled = is_boost_en(chg);
+	u8 apsd_status = 0;
+	int rc = 0;
+
+	rc = smblite_lib_get_prop_usb_present(chg, &pval);
+	if (rc < 0)
+		smblite_lib_dbg(chg, PR_MISC,
+				"Couldn't get USB preset status rc=%d\n", rc);
+
+	/* Try to restore VBUS to MAX(6V) once boost is disabled and USB is present. */
+	if (!boost_enabled && pval.intval) {
+		rc = smblite_lib_read(chg, APSD_RESULT_STATUS_REG(chg->base), &apsd_status);
+		if (rc < 0)
+			smblite_lib_err(chg, "Couldn't read APSD_RESULT_STATUS rc=%d\n",
+					rc);
+
+		/* Restore vbus to MAX(6V) only if QC adapter is connected */
+		if (apsd_status & QC_3P0_BIT) {
+			is_qc = true;
+			smblite_lib_rerun_apsd_if_required(chg);
+		}
+	}
+
+	smblite_lib_dbg(chg, PR_INTERRUPT, "IRQ: %s, BOOST_EN=%s, usb_present=%d, qc_adapter=%s\n",
+			irq_data->name,
+			(boost_enabled ? "True" : "False"),
+			pval.intval,
+			(is_qc ? "True" : "False"));
+
+	return IRQ_HANDLED;
+}
+
 /***************
  * Work Queues *
  ***************/
@@ -4259,6 +4396,7 @@ int smblite_lib_init(struct smb_charger *chg)
 	struct iio_channel **iio_list;
 	struct smblite_remote_bms *remote_bms;
 
+	mutex_init(&chg->dpdm_lock);
 	INIT_WORK(&chg->bms_update_work, bms_update_work);
 	INIT_WORK(&chg->jeita_update_work, jeita_update_work);
 	INIT_DELAYED_WORK(&chg->icl_change_work, smblite_lib_icl_change_work);

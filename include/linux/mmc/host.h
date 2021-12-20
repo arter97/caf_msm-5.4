@@ -450,6 +450,7 @@ struct mmc_host {
 #define MMC_CAP_HW_RESET	(1 << 31)	/* Hardware reset */
 
 	u32			caps2;		/* More host capabilities */
+	u32			cached_caps2;
 
 #define MMC_CAP2_BOOTPART_NOACC	(1 << 0)	/* Boot partition no access */
 #define MMC_CAP2_FULL_PWR_CYCLE	(1 << 2)	/* Can do full power cycle */
@@ -598,6 +599,10 @@ struct mmc_host {
 
 #if defined(CONFIG_SDC_QTI)
 	atomic_t active_reqs;
+#endif
+
+#if defined(CONFIG_SDC_QTI)
+	bool			crash_on_err;
 #endif
 	unsigned long		private[0] ____cacheline_aligned;
 };
