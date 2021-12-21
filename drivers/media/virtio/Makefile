@@ -11,4 +11,4 @@ virtio-video-objs := \
 
 obj-$(CONFIG_VIRTIO_VIDEO) += virtio-video.o
 
-ccflags-y += -DDRIVER_VERSION=\"2.1.1\"
+ccflags-y += -DDRIVER_VERSION=\"2.3.0\"
