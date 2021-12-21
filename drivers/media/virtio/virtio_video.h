@@ -34,10 +34,6 @@
 
 #define DRIVER_NAME "virtio-video"
 
-#define VIRTIO_ID_VIDEO_DEC 31
-#define VIRTIO_ID_VIDEO_ENC 30
-#define VIRTIO_ID_VIDEO_CAM 100
-
 #define MIN_BUFS_MIN 0
 #define MIN_BUFS_MAX VIDEO_MAX_FRAME
 #define MIN_BUFS_STEP 1
