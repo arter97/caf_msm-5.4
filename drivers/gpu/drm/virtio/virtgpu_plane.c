@@ -154,7 +154,7 @@ static void virtio_gpu_primary_plane_update(struct drm_plane *plane,
 		vgfb = to_virtio_gpu_framebuffer(plane->state->fb);
 		bo = gem_to_virtio_gpu_obj(vgfb->base.obj[0]);
 		handle = bo->hw_res_handle;
-		if (bo->dumb) {
+		if (bo->dumb || bo->imported) {
 			virtio_gpu_cmd_transfer_to_host_2d
 				(vgdev, bo, 0,
 				 cpu_to_le32(plane->state->src_w >> 16),

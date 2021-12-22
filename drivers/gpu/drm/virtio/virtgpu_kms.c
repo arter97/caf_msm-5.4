@@ -108,6 +108,8 @@ static void virtio_gpu_get_capsets(struct virtio_gpu_device *vgdev,
 	vgdev->num_capsets = num_capsets;
 }
 
+static u64 virtio_gpu_dmamask = 0;
+
 int virtio_gpu_init(struct drm_device *dev)
 {
 	static vq_callback_t *callbacks[4] = {
@@ -141,6 +143,9 @@ int virtio_gpu_init(struct drm_device *dev)
 	dev->dev_private = vgdev;
 	vgdev->vdev = dev_to_virtio(dev->dev);
 	vgdev->dev = dev->dev;
+
+	dev->dev->dma_mask = &virtio_gpu_dmamask;
+	dma_set_mask(dev->dev, DMA_BIT_MASK(64));
 
 	spin_lock_init(&vgdev->display_info_lock);
 	ida_init(&vgdev->ctx_id_ida);
