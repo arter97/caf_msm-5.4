@@ -68,13 +68,13 @@ struct virtio_gpu_object_params {
 };
 
 struct virtio_gpu_object {
-	struct drm_gem_object gem_base;
 	uint32_t hw_res_handle;
 
 	struct sg_table *pages;
 	uint32_t mapped;
 	void *vmap;
 	bool dumb;
+	bool imported;
 	struct ttm_place                placement_code;
 	struct ttm_placement		placement;
 	struct ttm_buffer_object	tbo;
@@ -82,7 +82,7 @@ struct virtio_gpu_object {
 	bool created;
 };
 #define gem_to_virtio_gpu_obj(gobj) \
-	container_of((gobj), struct virtio_gpu_object, gem_base)
+	container_of((gobj), struct virtio_gpu_object, tbo.base)
 
 struct virtio_gpu_vbuffer;
 struct virtio_gpu_device;
@@ -355,6 +355,9 @@ void virtio_gpu_fence_event_process(struct virtio_gpu_device *vdev,
 				    u64 last_seq);
 
 /* virtio_gpu_object */
+int virtio_gpu_object_create_private(struct virtio_gpu_device *vgdev,
+				size_t size, struct virtio_gpu_object **bo_ptr);
+void virtio_gpu_object_delete_private(struct kref *kref);
 int virtio_gpu_object_create(struct virtio_gpu_device *vgdev,
 			     struct virtio_gpu_object_params *params,
 			     struct virtio_gpu_object **bo_ptr,
@@ -408,7 +411,7 @@ static inline int virtio_gpu_object_reserve(struct virtio_gpu_object *bo,
 	if (unlikely(r != 0)) {
 		if (r != -ERESTARTSYS) {
 			struct virtio_gpu_device *qdev =
-				bo->gem_base.dev->dev_private;
+				bo->tbo.base.dev->dev_private;
 			dev_err(qdev->dev, "%p reserve failed\n", bo);
 		}
 		return r;

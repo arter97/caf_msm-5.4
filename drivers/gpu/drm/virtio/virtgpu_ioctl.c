@@ -91,7 +91,7 @@ void virtio_gpu_unref_list(struct list_head *head)
 		bo = buf->bo;
 		qobj = container_of(bo, struct virtio_gpu_object, tbo);
 
-		drm_gem_object_put_unlocked(&qobj->gem_base);
+		drm_gem_object_put_unlocked(&qobj->tbo.base);
 	}
 }
 
@@ -320,7 +320,7 @@ static int virtio_gpu_resource_create_ioctl(struct drm_device *dev, void *data,
 	dma_fence_put(&fence->f);
 	if (IS_ERR(qobj))
 		return PTR_ERR(qobj);
-	obj = &qobj->gem_base;
+	obj = &qobj->tbo.base;
 
 	ret = drm_gem_handle_create(file_priv, obj, &handle);
 	if (ret) {
@@ -347,7 +347,7 @@ static int virtio_gpu_resource_info_ioctl(struct drm_device *dev, void *data,
 
 	qobj = gem_to_virtio_gpu_obj(gobj);
 
-	ri->size = qobj->gem_base.size;
+	ri->size = qobj->tbo.base.size;
 	ri->res_handle = qobj->hw_res_handle;
 	drm_gem_object_put_unlocked(gobj);
 	return 0;
