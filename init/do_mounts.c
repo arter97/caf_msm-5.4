@@ -574,32 +574,30 @@ void __init mount_root(void)
  * Prepare the namespace - decide what/where to mount, load ramdisks, etc.
  */
 static DEFINE_MUTEX(namespace_mutex);
+static bool namespace_ready = false;
 void __init prepare_namespace(void)
 {
 	int is_floppy;
 	static int first_time = 1;
 
-	mutex_lock(&namespace_mutex);
-	if ((!is_early_userspace) || (is_early_userspace && (!first_time))) {
-		if (root_delay) {
-			pr_info(
-			"Waiting %d sec before mounting root device...\n",
-			root_delay);
-			ssleep(root_delay);
-		}
-
-		/*
-		 * wait for the known devices to complete their probing
-		 *
-		 * Note: this is a potential source of long boot delays.
-		 * For example, it is not atypical to wait 5 seconds here
-		 * for the touchpad of a laptop to initialize.
-		 */
-		if (!is_early_userspace)
-			wait_for_device_probe();
+	if (root_delay) {
+		pr_info(
+		"Waiting %d sec before mounting root device...\n",
+		root_delay);
+		ssleep(root_delay);
 	}
 
-	if ((!is_early_userspace) || (is_early_userspace && first_time)) {
+	/*
+	 * wait for the known devices to complete their probing
+	 *
+	 * Note: this is a potential source of long boot delays.
+	 * For example, it is not atypical to wait 5 seconds here
+	 * for the touchpad of a laptop to initialize.
+	 */
+	wait_for_device_probe();
+
+	mutex_lock(&namespace_mutex);
+	if(!namespace_ready) {
 		md_run_setup();
 
 		if (saved_root_name[0]) {
@@ -637,13 +635,13 @@ void __init prepare_namespace(void)
 		mount_root();
 	}
 out:
-	if ((!is_early_userspace) || (is_early_userspace && first_time)) {
+	if(!namespace_ready) {
 		devtmpfs_mount("dev");
 		ksys_mount((char __user *)".", (char __user *)"/",
 			NULL, MS_MOVE, NULL);
 		ksys_chroot((char __user *)".");
+		namespace_ready = true;
 	}
-	first_time = 0;
 	mutex_unlock(&namespace_mutex);
 }
 
@@ -671,7 +669,37 @@ void __init init_rootfs(void)
 
 static int __init early_prepare_namespace(void)
 {
-	prepare_namespace();
+	mutex_lock(&namespace_mutex);
+	if(!namespace_ready) {
+		md_run_setup();
+
+		if (saved_root_name[0]) {
+			root_device_name = saved_root_name;
+			if (!memcmp(root_device_name, "mtd", 3) ||
+				!memcmp(root_device_name, "ubi", 3)) {
+				mount_block_root(root_device_name,
+					root_mountflags);
+				goto out;
+			}
+			ROOT_DEV = name_to_dev_t(root_device_name);
+			if (memcmp(root_device_name, "/dev/", 5) == 0)
+				root_device_name += 5;
+		}
+
+		if (initrd_load())
+			goto out;
+
+		mount_root();
+	}
+out:
+	if(!namespace_ready) {
+		devtmpfs_mount("dev");
+		ksys_mount((char __user *)".", (char __user *)"/",
+			NULL, MS_MOVE, NULL);
+		ksys_chroot((char __user *)".");
+		namespace_ready = true;
+	}
+	mutex_unlock(&namespace_mutex);
 	return 0;
 }
 early_init(early_prepare_namespace, EARLY_SUBSYS_1, EARLY_INIT_LEVEL6);
