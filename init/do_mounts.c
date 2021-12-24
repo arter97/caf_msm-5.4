@@ -578,7 +578,6 @@ static bool namespace_ready = false;
 void __init prepare_namespace(void)
 {
 	int is_floppy;
-	static int first_time = 1;
 
 	if (root_delay) {
 		pr_info(
