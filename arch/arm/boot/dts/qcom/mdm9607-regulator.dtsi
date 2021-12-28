@@ -382,7 +382,7 @@
 		qcom,cpr-quot-adjust-scaling-factor-max = <1400>;
 		qcom,disable-closed-loop-in-pc;
 		qcom,cpr-cpus = <&CPU0>;
-		qcom,cpr-thermal-sensor-id = <4>;
+		qcom,cpr-thermal-sensor-id = <1>;
 		qcom,cpr-disable-temp-threshold = <10>;
 		qcom,cpr-enable-temp-threshold = <15>;
 		qcom,cpr-enable;

@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1296,11 +1297,13 @@
 		qcom,disable-ocr;
 		qcom,mx-restriction-temp = <10>;
 		qcom,mx-restriction-temp-hysteresis = <5>;
+		qcom,mx-restriction-sensor_id = <1>;
 		qcom,mx-retention-min =
 			<RPM_SMD_REGULATOR_LEVEL_NOM_PLUS>;
 		vdd-mx-supply = <&mdm9607_l12_floor_level>;
 		qcom,vdd-restriction-temp = <10>;
 		qcom,vdd-restriction-temp-hysteresis = <15>;
+		qcom,vdd-restriction-sensor-id = <1>;
 		vdd-dig-supply = <&mdm9607_s3_floor_level>;
 		qcom,therm-ddr-lm-info = <2 78 70>;
 
