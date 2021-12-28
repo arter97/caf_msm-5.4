@@ -591,7 +591,7 @@ int hgsl_hyp_channel_pool_get(
 	if (id) {
 		ret = hgsl_hyp_channel_pool_get_by_id(priv, id, &hab_channel);
 		if (ret)
-			LOGE("Failed to find channel %d, ret %d", id, ret);
+			LOGD("Failed to find channel %d, ret %d", id, ret);
 	} else {
 		if (list_empty(&priv->free_channels)) {
 			ret = hgsl_rpc_create_channel(priv, &hab_channel);
@@ -1406,10 +1406,8 @@ int hgsl_hyp_set_metainfo(struct hgsl_hyp_priv_t *priv,
 
 	RPC_TRACE();
 	ret = hgsl_hyp_channel_pool_get(priv, 0, &hab_channel);
-	if (ret) {
-		LOGE("Failed to get hab channel %d", ret);
+	if (ret)
 		goto out;
-	}
 
 	send_buf = &hab_channel->send_buf;
 	recv_buf = &hab_channel->recv_buf;
@@ -1437,14 +1435,12 @@ int hgsl_hyp_set_metainfo(struct hgsl_hyp_priv_t *priv,
 		goto out;
 	}
 	if (rval != GSL_SUCCESS) {
-		LOGE("RPC_MEMORY_SET_METAINFO failed, %d", rval);
+		LOGD("RPC_MEMORY_SET_METAINFO failed, %d", rval);
 		ret = -EINVAL;
 		goto out;
 	}
 
 out:
-	if (ret)
-		LOGE("ret %d", ret);
 	hgsl_hyp_channel_pool_put(hab_channel);
 	RPC_TRACE_DONE();
 	return ret;
