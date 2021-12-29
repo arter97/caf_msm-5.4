@@ -7315,9 +7315,9 @@ static int __init pcie_init_wait(void)
 }
 early_init(pcie_init_wait, EARLY_SUBSYS_5, EARLY_INIT_LEVEL3);
 
-early_subsys_initcall_sync(pcie_init, EARLY_SUBSYS_5, EARLY_INIT_LEVEL4);
+early_device_initcall(pcie_init, EARLY_SUBSYS_5, EARLY_INIT_LEVEL4);
 #else
-subsys_initcall_sync(pcie_init);
+module_init(pcie_init);
 #endif
 module_exit(pcie_exit);
 
