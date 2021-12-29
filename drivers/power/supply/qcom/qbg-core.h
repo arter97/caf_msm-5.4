@@ -159,6 +159,8 @@ struct qti_qbg {
 	struct iio_dev		*indio_dev;
 	struct iio_chan_spec	*iio_chan;
 	struct nvmem_device	**sdam;
+	struct nvmem_cell       *debug_mask_nvmem_low;
+	struct nvmem_cell       *debug_mask_nvmem_high;
 	struct fifo_data	fifo[MAX_FIFO_COUNT];
 	struct qbg_essential_params	essential_params;
 	struct work_struct	status_change_work;
@@ -175,6 +177,7 @@ struct qti_qbg {
 	struct iio_channel	*batt_temp_chan;
 	struct iio_channel	**ext_iio_chans;
 	struct rtc_device	*rtc;
+	struct wakeup_source    *qbg_ws;
 	ktime_t			last_fast_char_time;
 	wait_queue_head_t	qbg_wait_q;
 	const char		*irq_name;
@@ -230,6 +233,7 @@ struct qti_qbg {
 	int			context_count;
 	bool			profile_loaded;
 	bool			battery_missing;
+	bool			battery_unknown;
 	bool			data_ready;
 	bool			in_fast_char;
 };

@@ -856,9 +856,12 @@ static int smblite_lib_icl_irq_disable_vote_callback(struct votable *votable,
 		return 0;
 
 	if (chg->irq_info[USBIN_ICL_CHANGE_IRQ].enabled) {
-		if (disable)
+		if (disable) {
+			irq_set_status_flags(chg->irq_info[USBIN_ICL_CHANGE_IRQ].irq,
+						IRQ_DISABLE_UNLAZY);
 			disable_irq_nosync(
 				chg->irq_info[USBIN_ICL_CHANGE_IRQ].irq);
+		}
 	} else {
 		if (!disable)
 			enable_irq(chg->irq_info[USBIN_ICL_CHANGE_IRQ].irq);
@@ -881,6 +884,7 @@ static int smblite_lib_temp_change_irq_disable_vote_callback(
 	if (chg->irq_info[TEMP_CHANGE_IRQ].enabled && disable) {
 		if (chg->irq_info[TEMP_CHANGE_IRQ].wake)
 			disable_irq_wake(chg->irq_info[TEMP_CHANGE_IRQ].irq);
+		irq_set_status_flags(chg->irq_info[TEMP_CHANGE_IRQ].irq, IRQ_DISABLE_UNLAZY);
 		disable_irq_nosync(chg->irq_info[TEMP_CHANGE_IRQ].irq);
 	} else if (!chg->irq_info[TEMP_CHANGE_IRQ].enabled && !disable) {
 		enable_irq(chg->irq_info[TEMP_CHANGE_IRQ].irq);
@@ -1583,12 +1587,12 @@ static bool is_boost_en(struct smb_charger *chg)
 	if (chg->subtype != PM5100)
 		return false;
 
-	rc = smblite_lib_read(chg, CHGR_CHG_EN_STATUS_REG(chg->base), &stat);
+	rc = smblite_lib_read(chg, BOOST_BST_EN_REG(chg->base), &stat);
 	if (rc < 0)
-		smblite_lib_err(chg, "Couldn't read CHGR_EN_STATUS_REG rc=%d\n",
+		smblite_lib_err(chg, "Couldn't read BOOST_BST_EN_REG rc=%d\n",
 				rc);
 
-	return (stat & CHARGING_DISABLED_FROM_BOOST_BIT);
+	return (stat & DCIN_BST_EN_BIT);
 }
 
 #define BOOST_SS_TIMEOUT_COUNT 4
@@ -1744,7 +1748,33 @@ int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable)
 		if (boost_enabled) {
 			rc = smblite_lib_check_boost_ss(chg);
 			if (rc < 0) {
+				/*
+				 * Disable concurrency mode to move back the switcher to
+				 * BOOST-mode and wait for SS_DONE for BOOST to settle.
+				 */
+				boost_enabled = is_boost_en(chg);
+				smblite_lib_dbg(chg, PR_MISC,
+					"Concurrency failed, Disabling concurrency BOOST_EN=%s - going back to BOOST mode\n",
+					(boost_enabled ? "True" : "False"));
+
 				smblite_lib_concurrent_mode_config(chg, false);
+
+				if (boost_enabled) {
+					rc = smblite_lib_check_boost_ss(chg);
+					if (rc < 0) {
+						smblite_lib_dbg(chg, PR_MISC,
+						"SS_DONE failed for BOOST-mode rc=%d\n", rc);
+						/*
+						 * This is a gross failure where concurrency and
+						 * subsequently BOOST failed.
+						 */
+						rc = -EFAULT;
+					} else {
+						/* Concurrency failed, but BOOST came up. */
+						rc = -ETIME;
+					}
+				}
+
 				goto boost_ss_failure;
 			}
 		}
