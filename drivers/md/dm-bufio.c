@@ -2005,7 +2005,7 @@ static void __exit dm_bufio_exit(void)
 	BUG_ON(bug);
 }
 
-early_module_init(dm_bufio_init, EARLY_SUBSYS_1, EARLY_INIT_LEVEL4);
+early_module_init(dm_bufio_init, EARLY_SUBSYS_1, EARLY_INIT_LEVEL3);
 module_exit(dm_bufio_exit)
 
 module_param_named(max_cache_size_bytes, dm_bufio_cache_size, ulong, S_IRUGO | S_IWUSR);

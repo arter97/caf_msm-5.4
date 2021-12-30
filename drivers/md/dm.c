@@ -3442,7 +3442,7 @@ static const struct dax_operations dm_dax_ops = {
 /*
  * module hooks
  */
-early_module_init(dm_init, EARLY_SUBSYS_1, EARLY_INIT_LEVEL4);
+early_module_init(dm_init, EARLY_SUBSYS_1, EARLY_INIT_LEVEL3);
 module_exit(dm_exit);
 
 module_param(major, uint, 0);

@@ -3286,7 +3286,7 @@ static void __exit mmc_exit(void)
 	mmc_unregister_bus();
 }
 
-early_subsys_initcall(mmc_init, EARLY_SUBSYS_1, EARLY_INIT_LEVEL1);
+early_subsys_initcall(mmc_init, EARLY_SUBSYS_1, EARLY_INIT_LEVEL0);
 module_exit(mmc_exit);
 
 MODULE_LICENSE("GPL");

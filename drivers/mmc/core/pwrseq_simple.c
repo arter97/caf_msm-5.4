@@ -161,5 +161,5 @@ static struct platform_driver mmc_pwrseq_simple_driver = {
 };
 
 early_module_platform_driver(mmc_pwrseq_simple_driver, EARLY_SUBSYS_1,
-EARLY_INIT_LEVEL2);
+EARLY_INIT_LEVEL1);
 MODULE_LICENSE("GPL v2");

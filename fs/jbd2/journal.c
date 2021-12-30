@@ -2706,6 +2706,6 @@ static void __exit journal_exit(void)
 }
 
 MODULE_LICENSE("GPL");
-early_module_init(journal_init, EARLY_SUBSYS_1, EARLY_INIT_LEVEL4);
+early_module_init(journal_init, EARLY_SUBSYS_1, EARLY_INIT_LEVEL3);
 module_exit(journal_exit);
 

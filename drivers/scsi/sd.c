@@ -3766,5 +3766,5 @@ static int __init early_rootdev_wait(void)
 	return 0;
 }
 
-early_init(early_rootdev_wait, EARLY_SUBSYS_1, EARLY_INIT_LEVEL5);
+early_init(early_rootdev_wait, EARLY_SUBSYS_1, EARLY_INIT_LEVEL4);
 #endif
