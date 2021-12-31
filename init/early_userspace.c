@@ -208,7 +208,8 @@ early_init(early_rootdev_sync, EARLY_SUBSYS_1, EARLY_INIT_LEVEL6);
 
 static int __init early_rootdev_wait(void)
 {
-	wait_for_completion(&rootdev_done);
+	if (is_early_userspace)
+		wait_for_completion(&rootdev_done);
 	return 0;
 }
 late_initcall_sync(early_rootdev_wait);
