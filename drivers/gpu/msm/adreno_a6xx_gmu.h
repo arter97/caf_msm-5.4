@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 #ifndef __ADRENO_A6XX_GMU_H
 #define __ADRENO_A6XX_GMU_H
@@ -207,6 +207,12 @@ struct a6xx_gmu_device {
 	void __iomem *rdpm_mx_virt;
 	/** @log_stream_enable: GMU log streaming enable */
 	bool log_stream_enable;
+	/** @pdc_cfg_base: Base address of PDC cfg registers */
+	void __iomem *pdc_cfg_base;
+	/** @pdc_seq_base: Base address of PDC seq registers */
+	void __iomem *pdc_seq_base;
+	/** @num_oob_perfcntr: Number of active oob_perfcntr requests */
+	u32 num_oob_perfcntr;
 };
 
 /* Helper function to get to a6xx gmu device from adreno device */
@@ -242,12 +248,12 @@ int a6xx_build_rpmh_tables(struct adreno_device *adreno_dev);
 
 /**
  * a6xx_gmu_gx_is_on - Check if GX is on
- * @device: Pointer to KGSL device
+ * @adreno_dev: Pointer to the adreno device
  *
  * This function reads pwr status registers to check if GX
  * is on or off
  */
-bool a6xx_gmu_gx_is_on(struct kgsl_device *device);
+bool a6xx_gmu_gx_is_on(struct adreno_device *adreno_dev);
 
 /**
  * a6xx_gmu_device_snapshot - A6XX GMU snapshot function

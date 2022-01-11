@@ -16,9 +16,9 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/slab.h>
+#include <linux/suspend.h>
 #include <linux/uaccess.h>
 #include <soc/qcom/boot_stats.h>
-#include <linux/suspend.h>
 #include <linux/hashtable.h>
 
 #define MARKER_STRING_WIDTH 40
@@ -65,7 +65,8 @@ static struct kobject *bootkpi_obj;
 static int num_markers;
 static DECLARE_HASHTABLE(marker_htable, 5);
 
-static inline u64 get_time_in_msec(u64 counter)
+#ifdef CONFIG_QCOM_SOC_SLEEP_STATS
+static u64 get_time_in_msec(u64 counter)
 {
 	counter *= MSEC_PER_SEC;
 	do_div(counter, MSM_ARCH_TIMER_FREQ);
@@ -93,6 +94,9 @@ static void measure_wake_up_time(void)
 	} else
 		destroy_marker("M - STR Wakeup");
 }
+#else
+static void measure_wake_up_time(void) {}
+#endif
 
 /**
  * boot_kpi_pm_notifier() - PM notifier callback function.
@@ -249,17 +253,13 @@ static void boot_marker_cleanup(void)
 	spin_lock(&boot_marker_list.slock);
 	list_for_each_entry_safe(marker, temp_addr, &boot_marker_list.list,
 			list) {
+		num_markers--;
+		hash_del(&marker->hash);
 		list_del(&marker->list);
 		kfree(marker);
 	}
 	spin_unlock(&boot_marker_list.slock);
 }
-
-void place_marker(const char *name)
-{
-	_create_boot_marker((char *)name, msm_timer_get_sclk_ticks());
-}
-EXPORT_SYMBOL(place_marker);
 
 void destroy_marker(const char *name)
 {
@@ -267,7 +267,7 @@ void destroy_marker(const char *name)
 }
 EXPORT_SYMBOL(destroy_marker);
 
-static void set_bootloader_stats(void)
+static void set_bootloader_stats(bool hibernation_restore)
 {
 	if (IS_ERR_OR_NULL(boot_stats)) {
 		pr_err("boot_marker: imem not initialized!\n");
@@ -276,15 +276,35 @@ static void set_bootloader_stats(void)
 
 	_create_boot_marker("M - APPSBL Start - ",
 		readl_relaxed(&boot_stats->bootloader_start));
-	_create_boot_marker("M - APPSBL Kernel Load Start - ",
-		readl_relaxed(&boot_stats->bootloader_load_kernel_start));
-	_create_boot_marker("M - APPSBL Kernel Load End - ",
-		readl_relaxed(&boot_stats->bootloader_load_kernel_end));
-	_create_boot_marker("D - APPSBL Kernel Load Time - ",
-		readl_relaxed(&boot_stats->bootloader_load_kernel));
+	if (!hibernation_restore) {
+		_create_boot_marker("M - APPSBL Kernel Load Start - ",
+			readl_relaxed(&boot_stats->bootloader_load_kernel_start));
+		_create_boot_marker("M - APPSBL Kernel Load End - ",
+			readl_relaxed(&boot_stats->bootloader_load_kernel_end));
+		_create_boot_marker("D - APPSBL Kernel Load Time - ",
+			readl_relaxed(&boot_stats->bootloader_load_kernel));
+	} else {
+		_create_boot_marker("M - APPSBL Hibernation Image Load Start -",
+			readl_relaxed(&boot_stats->bootloader_load_kernel_start));
+		_create_boot_marker("M - APPSBL Hibernation Image Load End - ",
+			readl_relaxed(&boot_stats->bootloader_load_kernel_end));
+	}
 	_create_boot_marker("M - APPSBL End - ",
 		readl_relaxed(&boot_stats->bootloader_end));
 }
+
+void place_marker(const char *name)
+{
+#ifdef CONFIG_HIBERNATION
+	if (!strcmp(name, "M - Image Kernel Start")) {
+		/* In restore phase, remove Cold Boot KPIs */
+		boot_marker_cleanup();
+		set_bootloader_stats(true);
+	}
+#endif /* CONFIG_HIBERNATION */
+	_create_boot_marker((char *)name, msm_timer_get_sclk_ticks());
+}
+EXPORT_SYMBOL(place_marker);
 
 static ssize_t bootkpi_reader(struct file *fp, struct kobject *obj,
 		struct bin_attribute *bin_attr, char *user_buffer, loff_t off,
@@ -324,7 +344,6 @@ static ssize_t bootkpi_reader(struct file *fp, struct kobject *obj,
 					marker->marker_name,
 					TS_WHOLE_NUM_WIDTH, ts_whole_num,
 					TS_PRECISION_WIDTH, ts_precision);
-
 
 		}
 
@@ -518,7 +537,7 @@ static int __init boot_stats_init(void)
 			return ret;
 		}
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
-		set_bootloader_stats();
+		set_bootloader_stats(false);
 #endif
 	} else {
 		iounmap(boot_stats);

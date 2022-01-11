@@ -78,8 +78,20 @@ static int dwc3_ep0_start_trans(struct dwc3_ep *dep)
 	params.param1 = lower_32_bits(dwc->ep0_trb_addr);
 
 	ret = dwc3_send_gadget_ep_cmd(dep, DWC3_DEPCMD_STARTTRANSFER, &params);
-	if (ret < 0)
+	if (ret < 0) {
+		if (ret == -ETIMEDOUT) {
+			/*
+			 * If start transfer is timing out then mark it as an error
+			 * event since the controller is already in an unknown
+			 * state.
+			 */
+			dbg_log_string("%s: error event seen\n", __func__);
+			dwc->err_evt_seen = true;
+			dwc3_notify_event(dwc, DWC3_CONTROLLER_ERROR_EVENT, 0);
+			dwc3_notify_event(dwc, DWC3_CONTROLLER_NOTIFY_CLEAR_DB, 0);
+		}
 		return ret;
+	}
 
 	dwc->ep0_next_event = DWC3_EP0_COMPLETE;
 
@@ -1167,7 +1179,14 @@ void dwc3_ep0_end_control_data(struct dwc3 *dwc, struct dwc3_ep *dep)
 		dev_dbg(dwc->dev, "%s: send ep cmd ENDTRANSFER failed",
 			dep->name);
 		dbg_event(dep->number, "EENDXFER", ret);
+
+		/* Skip clearing DWC3_EP_TRANSFER_STARTED
+		 * if ENDTRANSFER cmd failed.
+		 */
+		goto out;
 	}
+	dep->flags &= ~DWC3_EP_TRANSFER_STARTED;
+out:
 	dep->resource_index = 0;
 }
 

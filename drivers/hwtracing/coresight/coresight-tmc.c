@@ -304,7 +304,7 @@ static ssize_t trigger_cntr_show(struct device *dev,
 	struct tmc_drvdata *drvdata = dev_get_drvdata(dev->parent);
 	unsigned long val = drvdata->trigger_cntr;
 
-	return sprintf(buf, "%#lx\n", val);
+	return scnprintf(buf, PAGE_SIZE, "%#lx\n", val);
 }
 
 static ssize_t trigger_cntr_store(struct device *dev,
@@ -329,7 +329,7 @@ static ssize_t buffer_size_show(struct device *dev,
 {
 	struct tmc_drvdata *drvdata = dev_get_drvdata(dev->parent);
 
-	return sprintf(buf, "%#x\n", drvdata->size);
+	return scnprintf(buf, PAGE_SIZE, "%#x\n", drvdata->size);
 }
 
 static ssize_t buffer_size_store(struct device *dev,
@@ -628,7 +628,7 @@ static int tmc_probe(struct amba_device *adev, const struct amba_id *id)
 
 	if (drvdata->config_type == TMC_CONFIG_TYPE_ETR) {
 		drvdata->out_mode = TMC_ETR_OUT_MODE_MEM;
-		 drvdata->pcie_path = TMC_ETR_PCIE_HW_PATH;
+		 drvdata->pcie_path = TMC_ETR_PCIE_SW_PATH;
 		drvdata->size = tmc_etr_get_default_buffer_size(dev);
 	} else {
 		drvdata->size = readl_relaxed(drvdata->base + TMC_RSZ) * 4;

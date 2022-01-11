@@ -8,7 +8,9 @@
 #include <linux/mailbox_client.h>
 #include <linux/mailbox/qmp.h>
 #include "minidump_private.h"
-
+#ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
+#include <soc/qcom/boot_stats.h>
+#endif
 #define SECURE_PAGE_MAGIC 0xEEEEEEEE
 struct device;
 struct module;
@@ -44,6 +46,7 @@ struct pil_priv {
 	phys_addr_t base_addr;
 	phys_addr_t region_start;
 	phys_addr_t region_end;
+	void *region;
 	bool is_region_allocated;
 	struct pil_image_info __iomem *info;
 	int id;

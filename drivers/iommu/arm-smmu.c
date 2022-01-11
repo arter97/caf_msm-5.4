@@ -47,7 +47,9 @@
 
 #include <linux/amba/bus.h>
 #include <linux/fsl/mc.h>
-
+#ifdef CONFIG_DEEPSLEEP
+#include <linux/suspend.h>
+#endif
 #include "arm-smmu.h"
 #include "iommu-logger.h"
 
@@ -1361,6 +1363,7 @@ static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 	bool fatal_asf = smmu->options & ARM_SMMU_OPT_FATAL_ASF;
 	phys_addr_t phys_soft;
 	uint64_t pte;
+	unsigned int ias = smmu_domain->pgtbl_info[0].pgtbl_cfg.ias;
 	bool non_fatal_fault = test_bit(DOMAIN_ATTR_NON_FATAL_FAULTS,
 					smmu_domain->attributes);
 
@@ -1399,6 +1402,16 @@ static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 		flags |= IOMMU_FAULT_TRANSACTION_STALLED;
 
 	iova = arm_smmu_cb_readq(smmu, idx, ARM_SMMU_CB_FAR);
+
+	/*
+	 * The address in the CB's FAR is not sign-extended, so lets perform the
+	 * sign extension here, as arm_smmu_iova_to_phys() expects the
+	 * IOVA to be sign extended.
+	 */
+	if ((iova & BIT_ULL(ias)) &&
+	    (test_bit(DOMAIN_ATTR_SPLIT_TABLES, smmu_domain->attributes)))
+		iova |= GENMASK_ULL(63, ias + 1);
+
 	phys_soft = arm_smmu_iova_to_phys(domain, iova);
 	frsynra = arm_smmu_gr1_read(smmu, ARM_SMMU_GR1_CBFRSYNRA(cfg->cbndx));
 	tmp = report_iommu_fault(domain, smmu->dev, iova, flags);
@@ -1706,6 +1719,9 @@ static void arm_smmu_write_context_bank(struct arm_smmu_device *smmu, int idx,
 	 * who are not io-coherent.
 	 */
 	smmu_domain = cb_cfg_to_smmu_domain(cfg);
+
+	if (smmu->smmu_restore)
+		attributes = smmu_domain->attributes;
 
 	/*
 	 * Override cacheability, shareability, r/w allocation for
@@ -2242,6 +2258,8 @@ static int arm_smmu_init_domain_context(struct iommu_domain *domain,
 			goto out_clear_smmu;
 		}
 	}
+
+	smmu_domain->pgtbl_fmt = fmt;
 
 	iop = container_of(smmu_domain->pgtbl_ops[0], struct io_pgtable, ops);
 	ret = iommu_logger_register(&smmu_domain->logger, domain, dev, iop);
@@ -4202,6 +4220,10 @@ static int arm_smmu_enable_s1_translations(struct arm_smmu_domain *smmu_domain)
 	reg = arm_smmu_cb_read(smmu, idx, ARM_SMMU_CB_SCTLR);
 	reg |= SCTLR_M;
 
+#ifdef CONFIG_HIBERNATION
+	clear_bit(DOMAIN_ATTR_S1_BYPASS, smmu_domain->attributes);
+#endif
+
 	arm_smmu_cb_write(smmu, idx, ARM_SMMU_CB_SCTLR, reg);
 	arm_smmu_power_off(smmu, smmu->pwr);
 	return ret;
@@ -4290,7 +4312,8 @@ static void arm_smmu_device_reset(struct arm_smmu_device *smmu)
 	 * Reset stream mapping groups: Initial values mark all SMRn as
 	 * invalid and all S2CRn as bypass unless overridden.
 	 */
-	if (!(smmu->options & ARM_SMMU_OPT_SKIP_INIT)) {
+	if (!(smmu->options & ARM_SMMU_OPT_SKIP_INIT) ||
+			(IS_ENABLED(CONFIG_HIBERNATION) && smmu->smmu_restore)) {
 		for (i = 0; i < smmu->num_mapping_groups; ++i)
 			arm_smmu_write_sme(smmu, i);
 
@@ -5104,9 +5127,9 @@ static int arm_smmu_device_dt_probe(struct platform_device *pdev)
 	 * management code in GKI results in slow unmap calls. To alleviate
 	 * that, we can remove the latency incurred by enabling/disabling the
 	 * power resources, by always keeping them on.
+	 *
 	 */
-	if (IS_ENABLED(CONFIG_ARM_SMMU_POWER_ALWAYS_ON) &&
-	    of_property_read_bool(dev->of_node, "qcom,power-always-on"))
+	if (IS_ENABLED(CONFIG_ARM_SMMU_POWER_ALWAYS_ON))
 		arm_smmu_power_on(smmu->pwr);
 
 	/*
@@ -5165,8 +5188,7 @@ static int arm_smmu_device_remove(struct platform_device *pdev)
 	arm_smmu_power_off(smmu, smmu->pwr);
 
 	/* Remove the extra reference that was taken in the probe function */
-	if (IS_ENABLED(CONFIG_ARM_SMMU_POWER_ALWAYS_ON) &&
-	    of_property_read_bool(pdev->dev.of_node, "qcom,power-always-on"))
+	if (IS_ENABLED(CONFIG_ARM_SMMU_POWER_ALWAYS_ON))
 		arm_smmu_power_off(smmu, smmu->pwr);
 
 	arm_smmu_exit_power_resources(smmu->pwr);
@@ -5202,26 +5224,138 @@ static int __maybe_unused arm_smmu_runtime_suspend(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused arm_smmu_pm_resume(struct device *dev)
+static int __maybe_unused arm_smmu_pm_resume_common(struct device *dev)
 {
-	if (pm_runtime_suspended(dev))
+	struct arm_smmu_device *smmu = dev_get_drvdata(dev);
+
+	if (pm_runtime_suspended(dev) && !smmu->smmu_restore)
 		return 0;
 
-	return arm_smmu_runtime_resume(dev);
+	arm_smmu_runtime_resume(dev);
+
+	smmu->smmu_restore = false;
+
+	return 0;
+}
+
+static int __maybe_unused arm_smmu_pm_restore_early(struct device *dev)
+{
+	struct arm_smmu_device *smmu = dev_get_drvdata(dev);
+	struct arm_smmu_domain *smmu_domain;
+	struct io_pgtable_ops *pgtbl_ops;
+	struct io_pgtable_cfg *pgtbl_cfg;
+	struct arm_smmu_cb *cb;
+	int idx, ret;
+	bool split_tables = false;
+
+	/* restore the secure pools */
+	for (idx = 0; idx < smmu->num_context_banks; idx++) {
+		cb = &smmu->cbs[idx];
+		if (!cb->cfg)
+			continue;
+
+		smmu_domain = cb_cfg_to_smmu_domain(cb->cfg);
+		if (!arm_smmu_has_secure_vmid(smmu_domain))
+			continue;
+
+		split_tables = test_bit(DOMAIN_ATTR_SPLIT_TABLES,
+						smmu_domain->attributes);
+		pgtbl_cfg = &smmu_domain->pgtbl_info[0].pgtbl_cfg;
+		pgtbl_ops = alloc_io_pgtable_ops(smmu_domain->pgtbl_fmt,
+					  pgtbl_cfg, smmu_domain);
+		if (!pgtbl_ops) {
+			dev_err(smmu->dev, "failed to allocate page tables during pm restore for cxt %d %s\n",
+				idx, dev_name(dev));
+			return -ENOMEM;
+		}
+		smmu_domain->pgtbl_ops[0] = pgtbl_ops;
+		if (split_tables) {
+			pgtbl_cfg = &smmu_domain->pgtbl_info[1].pgtbl_cfg;
+			pgtbl_ops = alloc_io_pgtable_ops(smmu_domain->pgtbl_fmt,
+							pgtbl_cfg, smmu_domain);
+			if (!pgtbl_ops) {
+				free_io_pgtable_ops(smmu_domain->pgtbl_ops[0]);
+				return -ENOMEM;
+			}
+			smmu_domain->pgtbl_ops[1] = pgtbl_ops;
+		}
+		arm_smmu_secure_domain_lock(smmu_domain);
+		arm_smmu_assign_table(smmu_domain);
+		arm_smmu_secure_domain_unlock(smmu_domain);
+		arm_smmu_init_context_bank(smmu_domain,
+					smmu_domain->pgtbl_info);
+	}
+	smmu->smmu_restore = true;
+	ret = arm_smmu_pm_resume_common(dev);
+	smmu->smmu_restore = false;
+	return ret;
+}
+
+
+static int __maybe_unused arm_smmu_pm_freeze_late(struct device *dev)
+{
+	struct arm_smmu_device *smmu = dev_get_drvdata(dev);
+	struct arm_smmu_domain *smmu_domain;
+	struct arm_smmu_cb *cb;
+	int idx, ret;
+
+	ret = arm_smmu_power_on(smmu->pwr);
+	if (ret) {
+		dev_err(smmu->dev, "Whoops! Couldn't power on the smmu during pm freeze !!\n");
+		return ret;
+	}
+
+	/* destroy the secure pools */
+	for (idx = 0; idx < smmu->num_context_banks; idx++) {
+		cb = &smmu->cbs[idx];
+		if (cb && cb->cfg) {
+			smmu_domain = cb_cfg_to_smmu_domain(cb->cfg);
+			if (smmu_domain &&
+			    arm_smmu_has_secure_vmid(smmu_domain)) {
+				free_io_pgtable_ops(smmu_domain->pgtbl_ops[0]);
+				free_io_pgtable_ops(smmu_domain->pgtbl_ops[1]);
+				arm_smmu_secure_domain_lock(smmu_domain);
+				arm_smmu_secure_pool_destroy(smmu_domain);
+				arm_smmu_unassign_table(smmu_domain);
+				arm_smmu_secure_domain_unlock(smmu_domain);
+			}
+		}
+	}
+	arm_smmu_power_off(smmu, smmu->pwr);
+	return 0;
 }
 
 static int __maybe_unused arm_smmu_pm_suspend(struct device *dev)
 {
+
+#ifdef CONFIG_DEEPSLEEP
+	if (mem_sleep_current == PM_SUSPEND_MEM)
+		return arm_smmu_pm_freeze_late(dev);
+#endif
 	if (pm_runtime_suspended(dev))
 		return 0;
 
 	return arm_smmu_runtime_suspend(dev);
 }
 
+static int __maybe_unused arm_smmu_pm_resume(struct device *dev)
+{
+#ifdef CONFIG_DEEPSLEEP
+	if (mem_sleep_current == PM_SUSPEND_MEM)
+		return arm_smmu_pm_restore_early(dev);
+#endif
+		return arm_smmu_pm_resume_common(dev);
+}
+
 static const struct dev_pm_ops arm_smmu_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(arm_smmu_pm_suspend, arm_smmu_pm_resume)
-	SET_RUNTIME_PM_OPS(arm_smmu_runtime_suspend,
-			   arm_smmu_runtime_resume, NULL)
+	.suspend = arm_smmu_pm_suspend,
+	.poweroff = arm_smmu_pm_suspend,
+	.resume = arm_smmu_pm_resume,
+	.thaw_early = arm_smmu_pm_restore_early,
+	.freeze_late = arm_smmu_pm_freeze_late,
+	.restore_early = arm_smmu_pm_restore_early,
+	.runtime_suspend = arm_smmu_runtime_suspend,
+	.runtime_resume = arm_smmu_runtime_resume,
 };
 
 static const struct of_device_id qsmmuv500_tbu_of_match[] = {

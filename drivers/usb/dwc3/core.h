@@ -657,7 +657,7 @@
 #define NUM_LOG_PAGES	12
 
 /* Force Gen1 speed on Gen2 link*/
-#define  DWC3_FORCE_GEN1		BIT(10)
+#define DWC3_FORCE_GEN1			BIT(10)
 
 /* Structures */
 
@@ -1067,10 +1067,10 @@ struct dwc3_scratchpad_array {
  * @role_sw: usb_role_switch handle
  * @role_switch_default_mode: default operation mode of controller while
  *			usb role is USB_ROLE_NONE.
- * @usb2_phy: pointer to USB2 PHY 0
- * @usb2_phy1: pointer to USB2 PHY 1
- * @usb3_phy: pointer to USB3 PHY 0
- * @usb3_phy: pointer to USB3 PHY 1
+ * @usb2_phy: array of pointers to USB2 PHYs
+ * @usb3_phy: array of pointers to USB3 PHYs
+ * @num_hsphy: Number of HS ports controlled by the core
+ * @num_dsphy: Number of SS ports controlled by the core
  * @usb2_generic_phy: pointer to USB2 PHY
  * @usb3_generic_phy: pointer to USB3 PHY
  * @phys_ready: flag to indicate that PHYs are ready
@@ -1086,7 +1086,6 @@ struct dwc3_scratchpad_array {
  * @link_state: link state
  * @speed: device speed (super, high, full, low)
  * @hwparams: copy of hwparams registers
- * @root: debugfs root folder pointer
  * @regset: debugfs pointer to regdump file
  * @dbg_lsp_select: current debug lsp mux register selection
  * @test_mode: true when we're entering a USB test mode
@@ -1175,7 +1174,6 @@ struct dwc3_scratchpad_array {
  * @is_remote_wakeup_enabled: remote wakeup status from host perspective
  * @wait_linkstate: waitqueue for waiting LINK to move into required state
  * @remote_wakeup_work: use to perform remote wakeup from this context
- * @dual_port: If true, this core supports two ports
  * @force_gen1: use to force gen1 speed on gen2 controller
  */
 struct dwc3 {
@@ -1210,8 +1208,10 @@ struct dwc3 {
 
 	struct reset_control	*reset;
 
-	struct usb_phy		*usb2_phy, *usb2_phy1;
-	struct usb_phy		*usb3_phy, *usb3_phy1;
+	struct usb_phy		**usb2_phy;
+	struct usb_phy		**usb3_phy;
+	u32			num_hsphy;
+	u32			num_ssphy;
 
 	struct phy		*usb2_generic_phy;
 	struct phy		*usb3_generic_phy;
@@ -1314,7 +1314,6 @@ struct dwc3 {
 	u8			num_eps;
 
 	struct dwc3_hwparams	hwparams;
-	struct dentry		*root;
 	struct debugfs_regset32	*regset;
 
 	u32			dbg_lsp_select;
@@ -1433,7 +1432,6 @@ struct dwc3 {
 	bool			is_remote_wakeup_enabled;
 	wait_queue_head_t	wait_linkstate;
 	struct work_struct	remote_wakeup_work;
-	bool			dual_port;
 };
 
 #define INCRX_BURST_MODE 0

@@ -32,7 +32,7 @@ static LIST_HEAD(adc_tm_device_list);
 #define ADC5_GEN3_STATUS1			0x46
 #define ADC5_GEN3_STATUS1_CONV_FAULT		BIT(7)
 #define ADC5_GEN3_STATUS1_THR_CROSS		BIT(6)
-#define ADC5_GEN3_STATUS1_EOC			BIT(1)
+#define ADC5_GEN3_STATUS1_EOC			BIT(0)
 
 #define ADC5_GEN3_TM_EN_STS			0x47
 
@@ -41,12 +41,16 @@ static LIST_HEAD(adc_tm_device_list);
 #define ADC5_GEN3_TM_LOW_STS			0x49
 
 #define ADC5_GEN3_EOC_STS			0x4a
+#define ADC5_GEN3_EOC_CHAN_0			BIT(0)
 
 #define ADC5_GEN3_EOC_CLR			0x4b
 
 #define ADC5_GEN3_TM_HIGH_STS_CLR		0x4c
 
 #define ADC5_GEN3_TM_LOW_STS_CLR		0x4d
+
+#define ADC5_GEN3_CONV_ERR_CLR			0x4e
+#define ADC5_GEN3_CONV_ERR_CLR_REQ		BIT(0)
 
 #define ADC5_GEN3_SID				0x4f
 #define ADC5_GEN3_SID_MASK			0xf
@@ -55,6 +59,7 @@ static LIST_HEAD(adc_tm_device_list);
 #define ADC5_GEN3_CHAN_CONV_REQ			BIT(7)
 
 #define ADC5_GEN3_TIMER_SEL			0x51
+#define ADC5_GEN3_TIME_IMMEDIATE		0x1
 
 #define ADC5_GEN3_DIG_PARAM			0x52
 #define ADC5_GEN3_DIG_PARAM_CAL_SEL_MASK	GENMASK(5, 4)
@@ -372,23 +377,23 @@ static int adc5_gen3_configure(struct adc5_chip *adc,
 	buf[0] &= (u8) ~ADC5_GEN3_SID_MASK;
 	buf[0] &= prop->sid;
 
-	/* Use channel 0 by default for immediate conversion */
-	buf[1] = 0;
+	/*
+	 * Use channel 0 by default for immediate conversion and
+	 * to indicate there is an actual conversion request
+	 */
+	buf[1] = ADC5_GEN3_CHAN_CONV_REQ | 0;
 
-	buf[2] = prop->timer;
+	buf[2] = ADC5_GEN3_TIME_IMMEDIATE;
 
 	/* Digital param selection */
 	adc5_gen3_update_dig_param(adc, prop, &buf[3]);
 
 	/* Update fast average sample value */
 	buf[4] &= (u8) ~ADC5_GEN3_FAST_AVG_CTL_SAMPLES_MASK;
-	buf[4] |= prop->avg_samples;
+	buf[4] |= prop->avg_samples | ADC5_GEN3_FAST_AVG_CTL_EN;
 
-	/*
-	 * Select ADC channel and indicate there is an actual
-	 * conversion request
-	 */
-	buf[5] = ADC5_GEN3_CHAN_CONV_REQ | prop->channel;
+	/* Select ADC channel */
+	buf[5] = prop->channel;
 
 	/* Select HW settle delay for channel */
 	buf[6] &= (u8) ~ADC5_GEN3_HW_SETTLE_DELAY_MASK;
@@ -481,7 +486,7 @@ static int adc5_gen3_do_conversion(struct adc5_chip *adc,
 		goto unlock;
 
 	/* To indicate conversion request is only to clear a status */
-	val = ~ADC5_GEN3_CHAN_CONV_REQ | prop->channel;
+	val = 0;
 	ret = adc5_write(adc, ADC5_GEN3_PERPH_CH, &val, 1);
 	if (ret < 0)
 		goto unlock;
@@ -504,7 +509,7 @@ static void adc5_gen3_dump_regs_debug(struct adc5_chip *adc)
 
 	for (j = 0; j < 2; j++) {
 		if (!j) {
-			offset = 0;
+			offset = adc->base;
 			pr_debug("ADC SDAM DUMP\n");
 		} else {
 			if (adc->debug_base)
@@ -515,7 +520,7 @@ static void adc5_gen3_dump_regs_debug(struct adc5_chip *adc)
 		}
 
 		for (i = 0; i < ADC_SDAM_REG_DUMP; i++) {
-			rc = adc5_read(adc, offset, buf, sizeof(buf));
+			rc = regmap_bulk_read(adc->regmap, offset, buf, sizeof(buf));
 			if (rc < 0) {
 				pr_err("debug register dump failed\n");
 				return;
@@ -529,16 +534,17 @@ static void adc5_gen3_dump_regs_debug(struct adc5_chip *adc)
 static irqreturn_t adc5_gen3_isr(int irq, void *dev_id)
 {
 	struct adc5_chip *adc = dev_id;
-	u8 status, tm_status[2];
+	u8 status, tm_status[2], eoc_status, val;
 	int ret;
 
-	ret = adc5_read(adc, ADC5_GEN3_STATUS1, &status, 1);
+	ret = adc5_read(adc, ADC5_GEN3_EOC_STS, &eoc_status, 1);
 	if (ret < 0) {
-		pr_err("adc read status failed with %d\n", ret);
+		pr_err("adc read eoc status failed with %d\n", ret);
 		goto handler_end;
 	}
 
-	if (status & ADC5_GEN3_STATUS1_EOC)
+	/* CHAN0 is the preconfigured channel for immediate conversion */
+	if (eoc_status & ADC5_GEN3_EOC_CHAN_0)
 		complete(&adc->complete);
 
 	ret = adc5_read(adc, ADC5_GEN3_TM_HIGH_STS, tm_status, 2);
@@ -550,12 +556,34 @@ static irqreturn_t adc5_gen3_isr(int irq, void *dev_id)
 	if (tm_status[0] || tm_status[1])
 		schedule_work(&adc->tm_handler_work);
 
-	pr_debug("Interrupt status:%#x, high:%#x, low:%#x\n",
-			status, tm_status[0], tm_status[1]);
+	ret = adc5_read(adc, ADC5_GEN3_STATUS1, &status, 1);
+	if (ret < 0) {
+		pr_err("adc read status1 failed with %d\n", ret);
+		goto handler_end;
+	}
+
+	pr_debug("Interrupt status:%#x, EOC status:%#x, high:%#x, low:%#x\n",
+			status, eoc_status, tm_status[0], tm_status[1]);
 
 	if (status & ADC5_GEN3_STATUS1_CONV_FAULT) {
 		pr_err("Unexpected conversion fault\n");
 		adc5_gen3_dump_regs_debug(adc);
+
+		val = ADC5_GEN3_CONV_ERR_CLR_REQ;
+		ret = adc5_write(adc, ADC5_GEN3_CONV_ERR_CLR, &val, 1);
+		if (ret < 0)
+			goto handler_end;
+
+		/* To indicate conversion request is only to clear a status */
+		val = 0;
+		ret = adc5_write(adc, ADC5_GEN3_PERPH_CH, &val, 1);
+		if (ret < 0)
+			goto handler_end;
+
+		val = ADC5_GEN3_CONV_REQ_REQ;
+		ret = adc5_write(adc, ADC5_GEN3_CONV_REQ, &val, 1);
+		if (ret < 0)
+			goto handler_end;
 	}
 
 handler_end:
@@ -567,7 +595,7 @@ static void tm_handler_work(struct work_struct *work)
 	struct adc5_chip *adc = container_of(work, struct adc5_chip,
 						tm_handler_work);
 	struct adc5_channel_prop *chan_prop;
-	u8 tm_status[2], buf[14], val;
+	u8 tm_status[2], buf[16], val;
 	int ret, i;
 
 	mutex_lock(&adc->lock);
@@ -585,8 +613,12 @@ static void tm_handler_work(struct work_struct *work)
 	}
 
 	/* To indicate conversion request is only to clear a status */
-	val = (u8) ~ADC5_GEN3_CHAN_CONV_REQ;
+	val = 0;
 	ret = adc5_write(adc, ADC5_GEN3_PERPH_CH, &val, 1);
+	if (ret < 0) {
+		pr_err("adc write status clear conv_req failed with %d\n", ret);
+		goto work_unlock;
+	}
 
 	val = ADC5_GEN3_CONV_REQ_REQ;
 	ret = adc5_write(adc, ADC5_GEN3_CONV_REQ, &val, 1);
@@ -595,7 +627,7 @@ static void tm_handler_work(struct work_struct *work)
 		goto work_unlock;
 	}
 
-	ret = adc5_read(adc, ADC5_GEN3_CH1_DATA0, buf, sizeof(buf));
+	ret = adc5_read(adc, ADC5_GEN3_CH0_DATA0, buf, sizeof(buf));
 	if (ret < 0) {
 		pr_err("adc read data failed with %d\n", ret);
 		goto work_unlock;
@@ -607,28 +639,27 @@ static void tm_handler_work(struct work_struct *work)
 		bool upper_set = false, lower_set = false;
 		u8 data_low = 0, data_high = 0;
 		u16 code = 0;
-		int temp;
+		int temp, offset;
 
 		chan_prop = &adc->chan_props[i];
+		offset = chan_prop->tm_chan_index;
 		if (!chan_prop->adc_tm)
 			continue;
 
 		mutex_lock(&adc->lock);
-		if ((tm_status[0] & 0x1) && (chan_prop->high_thr_en))
+		if ((tm_status[0] & BIT(offset)) && (chan_prop->high_thr_en))
 			upper_set = true;
 
-		if ((tm_status[1] & 0x1) && (chan_prop->low_thr_en))
+		if ((tm_status[1] & BIT(offset)) && (chan_prop->low_thr_en))
 			lower_set = true;
 
-		tm_status[0] >>= 1;
-		tm_status[1] >>= 1;
 		mutex_unlock(&adc->lock);
 
 		if (!(upper_set || lower_set))
 			continue;
 
-		data_low = buf[2 * i];
-		data_high = buf[2 * i + 1];
+		data_low = buf[2 * offset];
+		data_high = buf[2 * offset + 1];
 		code = ((data_high << 8) | data_low);
 		pr_debug("ADC_TM threshold code:0x%x\n", code);
 
@@ -773,20 +804,23 @@ static int adc_tm5_gen3_configure(struct adc5_channel_prop *prop)
 	u32 mask = 0;
 	struct adc5_chip *adc = prop->chip;
 
-	mutex_lock(&adc->lock);
 	ret = adc5_gen3_poll_wait_hs(adc);
 	if (ret < 0)
-		goto tm_config_unlock;
+		return ret;
 
 	ret = adc5_read(adc, ADC5_GEN3_SID, buf, sizeof(buf));
 	if (ret < 0)
-		goto tm_config_unlock;
+		return ret;
 
 	/* Write SID */
 	buf[0] &= (u8) ~ADC5_GEN3_SID_MASK;
 	buf[0] &= prop->sid;
 
-	buf[1] = prop->tm_chan_index;
+	/*
+	 * Select TM channel and indicate there is an actual
+	 * conversion request
+	 */
+	buf[1] = ADC5_GEN3_CHAN_CONV_REQ | prop->tm_chan_index;
 
 	buf[2] = prop->timer;
 
@@ -795,13 +829,10 @@ static int adc_tm5_gen3_configure(struct adc5_channel_prop *prop)
 
 	/* Update fast average sample value */
 	buf[4] &= (u8) ~ADC5_GEN3_FAST_AVG_CTL_SAMPLES_MASK;
-	buf[4] |= prop->avg_samples;
+	buf[4] |= prop->avg_samples | ADC5_GEN3_FAST_AVG_CTL_EN;
 
-	/*
-	 * Select ADC channel and indicate there is an actual
-	 * conversion request
-	 */
-	buf[5] = ADC5_GEN3_CHAN_CONV_REQ | prop->channel;
+	/* Select ADC channel */
+	buf[5] = prop->channel;
 
 	/* Select HW settle delay for channel */
 	buf[6] &= (u8) ~ADC5_GEN3_HW_SETTLE_DELAY_MASK;
@@ -819,15 +850,10 @@ static int adc_tm5_gen3_configure(struct adc5_channel_prop *prop)
 
 	ret = adc5_write(adc, ADC5_GEN3_SID, buf, sizeof(buf));
 	if (ret < 0)
-		goto tm_config_unlock;
+		return ret;
 
 	conv_req = ADC5_GEN3_CONV_REQ_REQ;
-	ret = adc5_write(adc, ADC5_GEN3_CONV_REQ, &conv_req, 1);
-
-tm_config_unlock:
-	mutex_unlock(&adc->lock);
-
-	return ret;
+	return adc5_write(adc, ADC5_GEN3_CONV_REQ, &conv_req, 1);
 }
 
 static int adc_tm5_gen3_set_trip_temp(void *data,
@@ -1322,12 +1348,16 @@ static const struct adc5_channels adc5_chans_pmic[ADC5_MAX_CHANNEL] = {
 					SCALE_HW_CALIB_DEFAULT)
 	[ADC5_GEN3_VPH_PWR]		= ADC5_CHAN_VOLT("vph_pwr", 1,
 					SCALE_HW_CALIB_DEFAULT)
-	[ADC5_GEN3_VBAT_SNS_QBG]		= ADC5_CHAN_VOLT("vbat_sns", 3,
+	[ADC5_GEN3_VBAT_SNS_QBG]		= ADC5_CHAN_VOLT("vbat_sns", 1,
 					SCALE_HW_CALIB_DEFAULT)
 	[ADC5_GEN3_AMUX3_THM]	= ADC5_CHAN_TEMP("smb_temp", 0,
 					SCALE_HW_CALIB_PM7_SMB_TEMP)
 	[ADC5_GEN3_CHG_TEMP]		= ADC5_CHAN_TEMP("chg_temp", 0,
 					SCALE_HW_CALIB_PM7_CHG_TEMP)
+	[ADC5_GEN3_USB_SNS_V_16]	= ADC5_CHAN_TEMP("usb_sns_v_div_16", 3,
+					SCALE_HW_CALIB_DEFAULT)
+	[ADC5_GEN3_VIN_DIV16_MUX]	= ADC5_CHAN_TEMP("vin_div_16", 3,
+					SCALE_HW_CALIB_DEFAULT)
 	[ADC5_GEN3_IIN_FB]		= ADC5_CHAN_CUR("iin_fb", 4,
 					SCALE_HW_CALIB_CUR)
 	[ADC5_GEN3_ICHG_SMB]		= ADC5_CHAN_CUR("ichg_smb", 5,
@@ -1510,7 +1540,7 @@ static int adc5_get_dt_channel_data(struct adc5_chip *adc,
 static const struct adc5_data adc5_gen3_data_pmic = {
 	.name = "pm-adc5-gen3",
 	.full_scale_code_volt = 0x70e4,
-	.full_scale_code_cur = 0x2710,
+	.full_scale_code_cur = 0x2ee0,
 	.adc_chans = adc5_chans_pmic,
 	.decimation = (unsigned int [ADC5_DECIMATION_SAMPLES_MAX])
 				{85, 340, 1360},

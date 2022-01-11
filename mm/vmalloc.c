@@ -1730,7 +1730,7 @@ static void _vm_unmap_aliases(unsigned long start, unsigned long end, int flush)
 		rcu_read_lock();
 		list_for_each_entry_rcu(vb, &vbq->free, free_list) {
 			spin_lock(&vb->lock);
-			if (vb->dirty) {
+			if (vb->dirty && vb->dirty != VMAP_BBMAP_BITS) {
 				unsigned long va_start = vb->va->va_start;
 				unsigned long s, e;
 
@@ -3597,7 +3597,8 @@ static int s_show(struct seq_file *m, void *p)
 	}
 
 	v = va->vm;
-
+	if (v->flags & VM_LOWMEM)
+		return 0;
 	seq_printf(m, "0x%pK-0x%pK %7ld",
 		v->addr, v->addr + v->size, v->size);
 
@@ -3627,9 +3628,6 @@ static int s_show(struct seq_file *m, void *p)
 
 	if (is_vmalloc_addr(v->pages))
 		seq_puts(m, " vpages");
-
-	if (v->flags & VM_LOWMEM)
-		seq_puts(m, " lowmem");
 
 	show_numa_info(m, v);
 	seq_putc(m, '\n');

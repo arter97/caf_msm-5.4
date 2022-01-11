@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/init.h>
@@ -262,6 +262,7 @@ int btfm_slim_disable_ch(struct btfmslim *btfmslim, struct btfmslim_ch *ch,
 	uint8_t rxport, uint8_t grp, uint8_t nchan)
 {
 	int ret, i;
+	int chipset_ver;
 
 	if (!btfmslim || !ch)
 		return -EINVAL;
@@ -313,6 +314,14 @@ int btfm_slim_disable_ch(struct btfmslim *btfmslim, struct btfmslim_ch *ch,
 			}
 		}
 	}
+
+	chipset_ver = btpower_get_chipset_version();
+	BTFMSLIM_INFO("chipset soc version:%x", chipset_ver);
+	if (chipset_ver == QCA_SLATE_SOC_ID_0100) {
+		BTFMSLIM_INFO("chipset is Slate, calling slim suspend for LPI");
+		slim_vote_for_suspend(btfmslim->slim_pgd);
+	}
+
 error:
 	return ret;
 }
@@ -442,6 +451,8 @@ int btfm_slim_hw_init(struct btfmslim *btfmslim)
 
 	if (chipset_ver == QCA_HSP_SOC_ID_0100 ||
 		chipset_ver == QCA_HSP_SOC_ID_0110 ||
+		chipset_ver == QCA_HSP_SOC_ID_0210 ||
+		chipset_ver == QCA_HSP_SOC_ID_1211 ||
 		chipset_ver == QCA_HSP_SOC_ID_0200) {
 		BTFMSLIM_INFO("chipset is hastings prime, overwriting EA");
 		slim->e_addr[0] = 0x00;
@@ -498,6 +509,15 @@ int btfm_slim_hw_init(struct btfmslim *btfmslim)
 		slim_ifd->e_addr[0], slim_ifd->e_addr[1],
 		slim_ifd->e_addr[2], slim_ifd->e_addr[3],
 		slim_ifd->e_addr[4], slim_ifd->e_addr[5]);
+
+	if (chipset_ver == QCA_HSP_SOC_ID_0200 ||
+		chipset_ver == QCA_HSP_SOC_ID_0210 ||
+		chipset_ver == QCA_HSP_SOC_ID_1201 ||
+		chipset_ver == QCA_HSP_SOC_ID_1211 ||
+		chipset_ver == QCA_APACHE_SOC_ID_0121) {
+		BTFMSLIM_INFO("SB reset needed before getting LA, sleeping");
+		msleep(DELAY_FOR_PORT_OPEN_MS);
+	}
 
 	/* Assign Logical Address for PGD (Ported Generic Device)
 	 * enumeration address

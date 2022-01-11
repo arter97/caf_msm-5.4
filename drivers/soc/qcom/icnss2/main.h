@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2017-2020, 2021, The Linux Foundation.
+ * Copyright (c) 2017-2020, 2021, The Linux Foundation. All rights reserved.
  * All rights reserved.
  */
 
@@ -28,6 +28,8 @@
 #define QCA6750_PATH_PREFIX    "qca6750/"
 #define ICNSS_MAX_FILE_NAME      35
 #define ICNSS_PCI_EP_WAKE_OFFSET 4
+#define ICNSS_DISABLE_M3_SSR 0
+#define ICNSS_ENABLE_M3_SSR 1
 
 extern uint64_t dynamic_feature_mask;
 
@@ -60,6 +62,7 @@ enum icnss_driver_event_type {
 	ICNSS_DRIVER_EVENT_QDSS_TRACE_FREE,
 	ICNSS_DRIVER_EVENT_M3_DUMP_UPLOAD_REQ,
 	ICNSS_DRIVER_EVENT_QDSS_TRACE_REQ_DATA,
+	ICNSS_DRIVER_EVENT_SUBSYS_RESTART_LEVEL,
 	ICNSS_DRIVER_EVENT_MAX,
 };
 
@@ -120,6 +123,8 @@ enum icnss_driver_state {
 	ICNSS_DEL_SERVER,
 	ICNSS_COLD_BOOT_CAL,
 	ICNSS_QMI_DMS_CONNECTED,
+	ICNSS_SLATE_SSR_REGISTERED,
+	ICNSS_SLATE_UP,
 };
 
 struct ce_irq_list {
@@ -185,6 +190,10 @@ enum icnss_smp2p_msg_id {
 	ICNSS_TRIGGER_SSR,
 	ICNSS_PCI_EP_POWER_SAVE_ENTER = 6,
 	ICNSS_PCI_EP_POWER_SAVE_EXIT,
+};
+
+struct icnss_subsys_restart_level_data {
+	uint8_t restart_level;
 };
 
 struct icnss_stats {
@@ -265,6 +274,9 @@ struct icnss_stats {
 	u32 soc_wake_req;
 	u32 soc_wake_resp;
 	u32 soc_wake_err;
+	u32 restart_level_req;
+	u32 restart_level_resp;
+	u32 restart_level_err;
 };
 
 #define WLFW_MAX_TIMESTAMP_LEN 32
@@ -405,6 +417,8 @@ struct icnss_priv {
 	void *wpss_notify_handler;
 	struct notifier_block modem_ssr_nb;
 	struct notifier_block wpss_ssr_nb;
+	void *slate_notify_handler;
+	struct notifier_block slate_ssr_nb;
 	uint32_t diag_reg_read_addr;
 	uint32_t diag_reg_read_mem_type;
 	uint32_t diag_reg_read_len;
@@ -454,6 +468,8 @@ struct icnss_priv {
 	u32 hw_trc_override;
 	struct icnss_dms_data dms;
 	u8 use_nv_mac;
+	u8 is_slate_rfa;
+	struct completion slate_boot_complete;
 };
 
 struct icnss_reg_info {

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/of.h>
@@ -183,16 +183,6 @@ void gmu_core_dev_cooperative_reset(struct kgsl_device *device)
 		ops->cooperative_reset(device);
 }
 
-bool gmu_core_dev_gx_is_on(struct kgsl_device *device)
-{
-	const struct gmu_dev_ops *ops = GMU_DEVICE_OPS(device);
-
-	if (ops && ops->gx_is_on)
-		return ops->gx_is_on(device);
-
-	return true;
-}
-
 int gmu_core_dev_ifpc_show(struct kgsl_device *device)
 {
 	const struct gmu_dev_ops *ops = GMU_DEVICE_OPS(device);
@@ -221,4 +211,12 @@ int gmu_core_dev_wait_for_active_transition(struct kgsl_device *device)
 		return ops->wait_for_active_transition(device);
 
 	return 0;
+}
+
+void gmu_core_dev_force_first_boot(struct kgsl_device *device)
+{
+	const struct gmu_dev_ops *ops = GMU_DEVICE_OPS(device);
+
+	if (ops && ops->force_first_boot)
+		return ops->force_first_boot(device);
 }

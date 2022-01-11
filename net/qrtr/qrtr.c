@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015, Sony Mobile Communications Inc.
- * Copyright (c) 2013, 2018-2019 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013, 2018-2019, 2021, The Linux Foundation. All rights reserved.
  */
 #include <linux/kthread.h>
 #include <linux/module.h>
@@ -18,6 +18,7 @@
 
 #include <net/sock.h>
 #include <uapi/linux/sched/types.h>
+#include <soc/qcom/boot_stats.h>
 
 #include "qrtr.h"
 
@@ -39,6 +40,10 @@
 #define QRTR_STATE_INIT		-1
 
 #define AID_VENDOR_QRTR	KGIDT_INIT(2906)
+
+#if defined(CONFIG_RPMSG_QCOM_GLINK_NATIVE)
+extern bool glink_resume_pkt;
+#endif
 
 /**
  * struct qrtr_hdr_v1 - (I|R)PCrouter packet header version 1
@@ -136,6 +141,7 @@ static DEFINE_SPINLOCK(qrtr_port_lock);
 #define QRTR_BACKUP_HI_SIZE	SZ_16K
 #define QRTR_BACKUP_LO_NUM	20
 #define QRTR_BACKUP_LO_SIZE	SZ_1K
+
 static struct sk_buff_head qrtr_backup_lo;
 static struct sk_buff_head qrtr_backup_hi;
 static struct work_struct qrtr_backup_work;
@@ -184,6 +190,8 @@ struct qrtr_node {
 
 	struct wakeup_source *ws;
 	void *ilc;
+
+	u32 nonwake_svc[MAX_NON_WAKE_SVC_LEN];
 };
 
 struct qrtr_tx_flow_waiter {
@@ -258,9 +266,11 @@ static void qrtr_log_tx_msg(struct qrtr_node *node, struct qrtr_hdr_v1 *hdr,
 				  "TX CTRL: cmd:0x%x node[0x%x]\n",
 				  type, hdr->src_node_id);
 			if (le32_to_cpu(hdr->dst_node_id) == 0 ||
-			    le32_to_cpu(hdr->dst_node_id) == 3)
+			    le32_to_cpu(hdr->dst_node_id) == 3) {
+				place_marker("M - Modem QMI Readiness TX");
 				pr_err("qrtr: Modem QMI Readiness TX cmd:0x%x node[0x%x]\n",
 				       type, hdr->src_node_id);
+			}
 		}
 		else if (type == QRTR_TYPE_DEL_PROC)
 			QRTR_INFO(node->ilc,
@@ -268,6 +278,25 @@ static void qrtr_log_tx_msg(struct qrtr_node *node, struct qrtr_hdr_v1 *hdr,
 				  type, pkt.proc.node);
 	}
 }
+
+#if defined(CONFIG_RPMSG_QCOM_GLINK_NATIVE)
+static void qrtr_log_resume_pkt(struct qrtr_cb *cb, u64 pl_buf)
+{
+	int service_id;
+
+	if (glink_resume_pkt) {
+		glink_resume_pkt = false;
+		service_id = qrtr_get_service_id(cb->src_node, cb->src_port);
+		if (service_id < 0)
+			service_id = qrtr_get_service_id(cb->dst_node, cb->dst_port);
+		pr_info("[QRTR RESUME PKT]:src[0x%x:0x%x] dst[0x%x:0x%x] [%08x %08x]: service[0x%x]\n",
+			cb->src_node, cb->src_port,
+			cb->dst_node, cb->dst_port,
+			(unsigned int)pl_buf, (unsigned int)(pl_buf >> 32),
+			service_id);
+	}
+}
+#endif
 
 static void qrtr_log_rx_msg(struct qrtr_node *node, struct sk_buff *skb)
 {
@@ -287,6 +316,9 @@ static void qrtr_log_rx_msg(struct qrtr_node *node, struct sk_buff *skb)
 			  skb->len, cb->confirm_rx, cb->src_node, cb->src_port,
 			  cb->dst_node, cb->dst_port,
 			  (unsigned int)pl_buf, (unsigned int)(pl_buf >> 32));
+#if defined(CONFIG_RPMSG_QCOM_GLINK_NATIVE)
+		qrtr_log_resume_pkt(cb, pl_buf);
+#endif
 	} else {
 		skb_copy_bits(skb, 0, &pkt, sizeof(pkt));
 		if (cb->type == QRTR_TYPE_NEW_SERVER ||
@@ -308,9 +340,11 @@ static void qrtr_log_rx_msg(struct qrtr_node *node, struct sk_buff *skb)
 			QRTR_INFO(node->ilc,
 				  "RX CTRL: cmd:0x%x node[0x%x]\n",
 				  cb->type, cb->src_node);
-			if (cb->src_node == 0 || cb->src_node == 3)
+			if (cb->src_node == 0 || cb->src_node == 3) {
+				place_marker("M - Modem QMI Readiness RX");
 				pr_err("qrtr: Modem QMI Readiness RX cmd:0x%x node[0x%x]\n",
 				       cb->type, cb->src_node);
+			}
 		}
 	}
 }
@@ -808,7 +842,9 @@ int qrtr_endpoint_post(struct qrtr_endpoint *ep, const void *data, size_t len)
 	size_t size;
 	unsigned int ver;
 	size_t hdrlen;
-	int errcode;
+	int errcode, i;
+	bool wake = true;
+	int svc_id;
 
 	if (len == 0 || len & 3)
 		return -EINVAL;
@@ -908,9 +944,22 @@ int qrtr_endpoint_post(struct qrtr_endpoint *ep, const void *data, size_t len)
 			goto err;
 
 		/* Force wakeup for all packets except for sensors */
-		if (node->nid != 9)
+		if (node->nid != 9 && node->nid != 5)
 			pm_wakeup_ws_event(node->ws, qrtr_wakeup_ms, true);
 
+		if (node->nid == 5) {
+			svc_id = qrtr_get_service_id(cb->src_node, cb->src_port);
+			if (svc_id > 0) {
+				for (i = 0; i < MAX_NON_WAKE_SVC_LEN; i++) {
+					if (svc_id == node->nonwake_svc[i]) {
+						wake = false;
+						break;
+					}
+				}
+			}
+			if (wake)
+				pm_wakeup_ws_event(node->ws, qrtr_wakeup_ms, true);
+		}
 		qrtr_port_put(ipc);
 	}
 
@@ -1119,7 +1168,7 @@ static void qrtr_hello_work(struct kthread_work *work)
  * The specified endpoint must have the xmit function pointer set on call.
  */
 int qrtr_endpoint_register(struct qrtr_endpoint *ep, unsigned int net_id,
-			   bool rt)
+			   bool rt, u32 *svc_arr)
 {
 	struct qrtr_node *node;
 	struct sched_param param = {.sched_priority = 1};
@@ -1149,6 +1198,9 @@ int qrtr_endpoint_register(struct qrtr_endpoint *ep, unsigned int net_id,
 	}
 	if (rt)
 		sched_setscheduler(node->task, SCHED_FIFO, &param);
+
+	if (svc_arr)
+		memcpy(node->nonwake_svc, svc_arr, MAX_NON_WAKE_SVC_LEN * sizeof(int));
 
 	mutex_init(&node->qrtr_tx_lock);
 	INIT_RADIX_TREE(&node->qrtr_tx_flow, GFP_KERNEL);
@@ -1381,27 +1433,25 @@ static void qrtr_port_remove(struct qrtr_sock *ipc)
  */
 static int qrtr_port_assign(struct qrtr_sock *ipc, int *port)
 {
-	u32 min_port;
 	int rc;
 
 	if (!*port) {
-		min_port = QRTR_MIN_EPH_SOCKET;
-		rc = idr_alloc_u32(&qrtr_ports, ipc, &min_port, QRTR_MAX_EPH_SOCKET, GFP_ATOMIC);
-		if (!rc)
-			*port = min_port;
+		rc = idr_alloc_cyclic(&qrtr_ports, ipc, QRTR_MIN_EPH_SOCKET,
+				      QRTR_MAX_EPH_SOCKET + 1, GFP_ATOMIC);
+		if (rc >= 0)
+			*port = rc;
 	} else if (*port < QRTR_MIN_EPH_SOCKET &&
-		   !(capable(CAP_NET_ADMIN) ||
-		   in_egroup_p(AID_VENDOR_QRTR) ||
-		   in_egroup_p(GLOBAL_ROOT_GID))) {
+			!(capable(CAP_NET_ADMIN) ||
+			in_egroup_p(AID_VENDOR_QRTR) ||
+			in_egroup_p(GLOBAL_ROOT_GID))) {
 		rc = -EACCES;
 	} else if (*port == QRTR_PORT_CTRL) {
-		min_port = 0;
-		rc = idr_alloc_u32(&qrtr_ports, ipc, &min_port, 0, GFP_ATOMIC);
+		rc = idr_alloc(&qrtr_ports, ipc, 0, 1, GFP_ATOMIC);
 	} else {
-		min_port = *port;
-		rc = idr_alloc_u32(&qrtr_ports, ipc, &min_port, *port, GFP_ATOMIC);
-		if (!rc)
-			*port = min_port;
+		rc = idr_alloc_cyclic(&qrtr_ports, ipc, *port, *port + 1,
+				      GFP_ATOMIC);
+		if (rc >= 0)
+			*port = rc;
 	}
 
 	if (rc == -ENOSPC)
