@@ -2164,6 +2164,7 @@ static int stop_rx_sequencer(struct uart_port *uport)
 	 * Ensure that the cancel goes through before polling for the
 	 * cancel control bit.
 	 */
+	mdelay(1);
 	mb();
 	timeout = geni_wait_for_cmd_done(uport, is_irq_masked);
 	geni_status = geni_read_reg_nolog(uport->membase,
