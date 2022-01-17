@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -111,7 +111,7 @@
 		.intr_detection_bit = -1,		\
 		.intr_detection_width = -1,		\
 	}
-static const struct pinctrl_pin_desc scuba_pins[] = {
+static const struct pinctrl_pin_desc sa410m_pins[] = {
 	PINCTRL_PIN(0, "GPIO_0"),
 	PINCTRL_PIN(1, "GPIO_1"),
 	PINCTRL_PIN(2, "GPIO_2"),
@@ -377,7 +377,7 @@ static const unsigned int sdc2_clk_pins[] = { 131 };
 static const unsigned int sdc2_cmd_pins[] = { 132 };
 static const unsigned int sdc2_data_pins[] = { 133 };
 
-enum scuba_functions {
+enum sa410m_functions {
 	msm_mux_qup0,
 	msm_mux_gpio,
 	msm_mux_ddr_bist,
@@ -1173,7 +1173,7 @@ static const char * const pwm_9_groups[] = {
 	"gpio115",
 };
 
-static const struct msm_function scuba_functions[] = {
+static const struct msm_function sa410m_functions[] = {
 	FUNCTION(qup0),
 	FUNCTION(gpio),
 	FUNCTION(ddr_bist),
@@ -1374,7 +1374,7 @@ static const struct msm_function scuba_functions[] = {
  * pin descriptor registered with pinctrl core.
  * Clients would not be able to request these dummy pin groups.
  */
-static const struct msm_pingroup scuba_groups[] = {
+static const struct msm_pingroup sa410m_groups[] = {
 	[0] = PINGROUP(0, qup0, m_voc, ddr_bist, NA, phase_flag0, qdss_gpio8,
 		       atest_tsens, NA, NA, 0x7F000, 0),
 	[1] = PINGROUP(1, qup0, mpm_pwr, ddr_bist, NA, phase_flag1, qdss_gpio9,
@@ -1584,52 +1584,52 @@ static const struct msm_pingroup scuba_groups[] = {
 	[133] = SDC_QDSD_PINGROUP(sdc2_data, 0x86000, 9, 0),
 };
 
-static const int scuba_reserved_gpios[] = {
-	2, 3, -1
+static const int sa410m_reserved_gpios[] = {
+	0, 1, 2, 3, 14, 15, 16, 17, -1
 };
 
-static const struct msm_pinctrl_soc_data scuba_pinctrl = {
-	.pins = scuba_pins,
-	.npins = ARRAY_SIZE(scuba_pins),
-	.functions = scuba_functions,
-	.nfunctions = ARRAY_SIZE(scuba_functions),
-	.groups = scuba_groups,
-	.ngroups = ARRAY_SIZE(scuba_groups),
-	.reserved_gpios = scuba_reserved_gpios,
+static const struct msm_pinctrl_soc_data sa410m_pinctrl = {
+	.pins = sa410m_pins,
+	.npins = ARRAY_SIZE(sa410m_pins),
+	.functions = sa410m_functions,
+	.nfunctions = ARRAY_SIZE(sa410m_functions),
+	.groups = sa410m_groups,
+	.ngroups = ARRAY_SIZE(sa410m_groups),
+	.reserved_gpios = sa410m_reserved_gpios,
 	.ngpios = 127,
 };
 
-static int scuba_pinctrl_probe(struct platform_device *pdev)
+static int sa410m_pinctrl_probe(struct platform_device *pdev)
 {
-	return msm_pinctrl_probe(pdev, &scuba_pinctrl);
+	return msm_pinctrl_probe(pdev, &sa410m_pinctrl);
 }
 
-static const struct of_device_id scuba_pinctrl_of_match[] = {
-	{ .compatible = "qcom,scuba-pinctrl", },
+static const struct of_device_id sa410m_pinctrl_of_match[] = {
+	{ .compatible = "qcom,sa410m-pinctrl", },
 	{ },
 };
 
-static struct platform_driver scuba_pinctrl_driver = {
+static struct platform_driver sa410m_pinctrl_driver = {
 	.driver = {
-		.name = "scuba-pinctrl",
-		.of_match_table = scuba_pinctrl_of_match,
+		.name = "sa410m-pinctrl",
+		.of_match_table = sa410m_pinctrl_of_match,
 	},
-	.probe = scuba_pinctrl_probe,
+	.probe = sa410m_pinctrl_probe,
 	.remove = msm_pinctrl_remove,
 };
 
-static int __init scuba_pinctrl_init(void)
+static int __init sa410m_pinctrl_init(void)
 {
-	return platform_driver_register(&scuba_pinctrl_driver);
+	return platform_driver_register(&sa410m_pinctrl_driver);
 }
-arch_initcall(scuba_pinctrl_init);
+arch_initcall(sa410m_pinctrl_init);
 
-static void __exit scuba_pinctrl_exit(void)
+static void __exit sa410m_pinctrl_exit(void)
 {
-	platform_driver_unregister(&scuba_pinctrl_driver);
+	platform_driver_unregister(&sa410m_pinctrl_driver);
 }
-module_exit(scuba_pinctrl_exit);
+module_exit(sa410m_pinctrl_exit);
 
-MODULE_DESCRIPTION("QTI scuba pinctrl driver");
+MODULE_DESCRIPTION("QTI sa410m pinctrl driver");
 MODULE_LICENSE("GPL v2");
-MODULE_DEVICE_TABLE(of, scuba_pinctrl_of_match);
+MODULE_DEVICE_TABLE(of, sa410m_pinctrl_of_match);
