@@ -3269,6 +3269,8 @@ static int mmc_pm_notify(struct notifier_block *notify_block,
 	case PM_HIBERNATION_PREPARE:
 		if (host->bus_ops && host->bus_ops->pre_hibernate)
 			host->bus_ops->pre_hibernate(host);
+		/* Free cd-gpio IRQ before going into Hibernation */
+		mmc_gpiod_free_cd_irq(host);
 	case PM_SUSPEND_PREPARE:
 		spin_lock_irqsave(&host->lock, flags);
 		host->rescan_disable = 1;
@@ -3305,6 +3307,8 @@ static int mmc_pm_notify(struct notifier_block *notify_block,
 	case PM_POST_HIBERNATION:
 		if (host->bus_ops && host->bus_ops->post_hibernate)
 			host->bus_ops->post_hibernate(host);
+		/* Register cd-gpio IRQ Post Hibernation*/
+		mmc_gpiod_restore_cd_irq(host);
 	case PM_POST_SUSPEND:
 
 		spin_lock_irqsave(&host->lock, flags);
