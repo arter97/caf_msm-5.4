@@ -584,6 +584,11 @@ struct adreno_device {
 	const void *cp_init_cmds;
 	/** @irq_mask: The current interrupt mask for the GPU device */
 	u32 irq_mask;
+	/*
+	 * @perfcounter: Flag to clear perfcounters across contexts and
+	 * controls perfcounter ioctl read
+	 */
+	bool perfcounter;
 };
 
 /**
