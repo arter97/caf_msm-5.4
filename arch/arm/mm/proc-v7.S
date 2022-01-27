@@ -284,13 +284,15 @@ __v7_ca12mp_setup:
 __v7_ca15mp_setup:
 __v7_b15mp_setup:
 __v7_ca17mp_setup:
-	mov	r10, #0
+	movw r10, #0xF002
+	movt r10, #0xC002
 1:	adr	r0, __v7_setup_stack_ptr
 	ldr	r12, [r0]
 	add	r12, r12, r0			@ the local stack
 	stmia	r12, {r1-r6, lr}		@ v7_invalidate_l1 touches r0-r6
 	bl      v7_invalidate_l1
 	ldmia	r12, {r1-r6, lr}
+	mov r10, #0
 #ifdef CONFIG_SMP
 	orr	r10, r10, #(1 << 6)		@ Enable SMP/nAMP mode
 	ALT_SMP(mrc	p15, 0, r0, c1, c0, 1)
@@ -299,6 +301,8 @@ __v7_ca17mp_setup:
 	teq	r10, r0				@ Were they already set?
 	mcrne	p15, 0, r10, c1, c0, 1		@ No, update register
 #endif
+	movw r10, #0xF003
+	movt r10, #0xC003
 	b	__v7_setup_cont
 
 /*
@@ -471,6 +475,13 @@ __v7_pj4b_setup:
 #endif /* CONFIG_CPU_PJ4B */
 
 __v7_setup:
+	movw r10, #0xF002
+	movt r10, #0xC002
+	adr	r0, __v7_core_context_ptr
+	ldr	r12, [r0]
+	add	r12,  r12, r0
+	stmia	r12, {r0-r15}
+	mov	r10, r12
 	adr	r0, __v7_setup_stack_ptr
 	ldr	r12, [r0]
 	add	r12, r12, r0			@ the local stack
@@ -523,6 +534,13 @@ __errata_finish:
 	mcr	p15, 0, r3, c10, c2, 0		@ write PRRR
 	mcr	p15, 0, r6, c10, c2, 1		@ write NMRR
 #endif
+	movw    r10, #0xF004
+	movt    r10, #0xC004
+	adr	r11, __v7_core_context_ptr
+	ldr	r12, [r11]
+	add	r12,  r12, r11
+	stmia	r12, {r0-r15}
+	mov	r10, r12
 	dsb					@ Complete invalidations
 #ifndef CONFIG_ARM_THUMBEE
 	mrc	p15, 0, r0, c0, c1, 0		@ read ID_PFR0 for ThumbEE
@@ -547,11 +565,17 @@ __errata_finish:
 	bic	r0, r0, r3			@ clear bits them
 	orr	r0, r0, r6			@ set them
  THUMB(	orr	r0, r0, #1 << 30	)	@ Thumb exceptions
+	movw    r11, #0xF005
+	movt    r11, #0xC005
+	stmia	r10, {r0-r15}
 	ret	lr				@ return to head.S:__ret
 
 	.align	2
 __v7_setup_stack_ptr:
 	.word	PHYS_RELATIVE(__v7_setup_stack, .)
+
+__v7_core_context_ptr:
+	.word	PHYS_RELATIVE(__v7_core_context, .)
 ENDPROC(__v7_setup)
 
 	.bss
@@ -559,6 +583,8 @@ ENDPROC(__v7_setup)
 __v7_setup_stack:
 	.space	4 * 7				@ 7 registers
 
+__v7_core_context:
+	.space	4 * 16				@16 registers
 	__INITDATA
 
 	.weak cpu_v7_bugs_init

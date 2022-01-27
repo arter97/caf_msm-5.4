@@ -154,6 +154,8 @@ ENTRY(stext)
 #endif
 	ldr	r12, [r10, #PROCINFO_INITFUNC]
 	add	r12, r12, r10
+	movw r10, #0xF001
+	movt r10, #0xc001
 	ret	r12
 1:	b	__enable_mmu
 ENDPROC(stext)
@@ -412,8 +414,14 @@ ENDPROC(secondary_startup_arm)
 	 * r6  = &secondary_data
 	 */
 ENTRY(__secondary_switched)
+	movw r11, #0xB001
+	movt r11, #0xF001
+	stmia	r10, {r0-r15}
 	ldr	sp, [r7, #12]			@ get secondary_data.stack
 	mov	fp, #0
+	movw r11, #0xB002
+	movt r11, #0xF002
+	stmia	r10, {r0-r15}
 	b	secondary_start_kernel
 ENDPROC(__secondary_switched)
 
@@ -443,6 +451,9 @@ __secondary_data:
  *  r13 = *virtual* address to jump to upon completion
  */
 __enable_mmu:
+	movw r11, #0xD001
+	movt r11, #0xE001
+	stmia	r10, {r0-r15}
 #if defined(CONFIG_ALIGNMENT_TRAP) && __LINUX_ARM_ARCH__ < 6
 	orr	r0, r0, #CR_A
 #else
@@ -464,6 +475,8 @@ __enable_mmu:
 	mcr	p15, 0, r5, c3, c0, 0		@ load domain access register
 	mcr	p15, 0, r4, c2, c0, 0		@ load page table pointer
 #endif
+	movw r11, #0xD002
+	movt r11, #0xE002
 	b	__turn_mmu_on
 ENDPROC(__enable_mmu)
 
@@ -484,6 +497,9 @@ ENDPROC(__enable_mmu)
 	.align	5
 	.pushsection	.idmap.text, "ax"
 ENTRY(__turn_mmu_on)
+	movw r11, #0xD003
+	movt r11, #0xE003
+	stmia	r10, {r0-r15}
 	mov	r0, r0
 	instr_sync
 	mcr	p15, 0, r0, c1, c0, 0		@ write control reg
@@ -491,6 +507,10 @@ ENTRY(__turn_mmu_on)
 	instr_sync
 	mov	r3, r3
 	mov	r3, r13
+	movw r11, #0xD004
+	movt r11, #0xE004
+	add	r10, 0x80000000
+	stmia	r10, {r0-r15}
 	ret	r3
 __turn_mmu_on_end:
 ENDPROC(__turn_mmu_on)
