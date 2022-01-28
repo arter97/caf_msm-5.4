@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021-2022, The Linux Foundation. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"QBG_K: %s: " fmt, __func__
@@ -449,6 +449,24 @@ static int qbg_get_fifo_count(struct qti_qbg *chip, u32 *fifo_count)
 	return rc;
 }
 
+static int qbg_hpm_fifo_depth_half(struct qti_qbg *chip, int current_fifo_count, bool enable)
+{
+	int rc = 0;
+	u8 val = 0;
+
+	if (enable)
+		val = current_fifo_count / 2;
+	else
+		val = current_fifo_count * 2;
+
+	rc = qbg_sdam_write(chip, QBG_SDAM_BASE(chip, SDAM_CTRL0) +
+			QBG_SDAM_HPM_FIFO_COUNT_OFFSET, &val, 1);
+	if (rc < 0)
+		pr_err("Failed to write QBG SDAM, rc=%d\n", rc);
+
+	return rc;
+}
+
 static void update_ocv_for_boost(struct qti_qbg *chip)
 {
 	int ocv_for_boost = 0x00;
@@ -708,7 +726,23 @@ static int qbg_process_fifo(struct qti_qbg *chip, u32 fifo_count)
 		chip->kdata.fifo[i].tbat = tbat;
 		chip->kdata.fifo[i].ibat = ibat_t;
 		chip->kdata.fifo[i].data_tag = fifo[i].data_tag;
+		chip->kdata.fifo[i].qg_sts = fifo[i].qg_sts;
 	}
+
+	if (!chip->enable_fifo_depth_half && ((-1 * ibat) > chip->rated_capacity)) {
+		chip->enable_fifo_depth_half = true;
+		rc = qbg_hpm_fifo_depth_half(chip, fifo_count, chip->enable_fifo_depth_half);
+		qbg_dbg(chip, QBG_DEBUG_SDAM, "HPM FIFO count reduced by half ibat = %d rated_capacity=%d\n",
+				ibat, chip->rated_capacity);
+	} else if (chip->enable_fifo_depth_half && ((-1 * ibat) < chip->rated_capacity)) {
+		chip->enable_fifo_depth_half = false;
+		rc = qbg_hpm_fifo_depth_half(chip, fifo_count, chip->enable_fifo_depth_half);
+		qbg_dbg(chip, QBG_DEBUG_SDAM, "HPM FIFO count restored ibat = %d rated_capacity=%d\n",
+				ibat, chip->rated_capacity);
+	}
+
+	if (rc < 0)
+		pr_err("Failed to update fifo depth, rc=%d\n", rc);
 
 ret:
 	kfree(fifo);
@@ -1182,6 +1216,14 @@ static int qbg_load_battery_profile(struct qti_qbg *chip)
 		chip->fastchg_curr_ma = -EINVAL;
 		goto out;
 	}
+
+	rc = of_property_read_u32(profile_node, "qcom,capacity", &chip->rated_capacity);
+	if (rc < 0) {
+		pr_err("Failed to read battery rated capacity, rc:%d\n", rc);
+		chip->rated_capacity = -EINVAL;
+		goto out;
+	}
+	chip->rated_capacity *= MILLI_TO_10NANO;
 
 	rc = of_property_read_u32_array(profile_node, "qcom,battery-capacity", temp, 2);
 	if (rc) {
@@ -2157,9 +2199,9 @@ static int qbg_register_interrupts(struct qti_qbg *chip)
 
 	/*
 	 * Do not register for data-full to skip processing QBG
-	 * data if a valid battery is not detected
+	 * data if a valid battery or debug battery is not detected
 	 */
-	if (chip->battery_unknown)
+	if (chip->battery_unknown || is_debug_batt_id(chip))
 		return rc;
 
 	rc = devm_request_threaded_irq(chip->dev, chip->irq, NULL,

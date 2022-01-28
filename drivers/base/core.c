@@ -518,8 +518,10 @@ static void devlink_remove_symlinks(struct device *dev,
 		return;
 	}
 
-	snprintf(buf, len, "supplier:%s", dev_name(sup));
-	sysfs_remove_link(&con->kobj, buf);
+	if (device_is_registered(con)) {
+		snprintf(buf, len, "supplier:%s", dev_name(sup));
+		sysfs_remove_link(&con->kobj, buf);
+	}
 	snprintf(buf, len, "consumer:%s", dev_name(con));
 	sysfs_remove_link(&sup->kobj, buf);
 	kfree(buf);
@@ -1458,7 +1460,6 @@ static void fw_devlink_parse_fwtree(struct fwnode_handle *fwnode)
 	while ((child = fwnode_get_next_available_child_node(fwnode, child)))
 		fw_devlink_parse_fwtree(child);
 }
-
 
 /**
  * fw_devlink_create_devlink - Create a device link from a consumer to fwnode
