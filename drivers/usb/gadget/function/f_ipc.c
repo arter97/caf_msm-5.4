@@ -773,17 +773,14 @@ void *ipc_setup(void)
 {
 	struct ipc_opts *opts;
 
-	pr_debug("%s: called at %d\n", __func__, __LINE__);
 	opts = kzalloc(sizeof(*opts), GFP_KERNEL);
 	if (!opts)
 		goto err;
 
-	pr_debug("%s: called at %d\n", __func__, __LINE__);
 	ipc_dev = kzalloc(sizeof(*ipc_dev), GFP_KERNEL);
 	if (!ipc_dev)
 		goto dev_err;
 
-	pr_debug("%s: called at %d\n", __func__, __LINE__);
 	spin_lock_init(&ipc_dev->lock);
 	init_waitqueue_head(&ipc_dev->state_wq);
 	init_completion(&ipc_dev->read_done);
@@ -794,14 +791,11 @@ void *ipc_setup(void)
 
 	fipc_debugfs_init();
 
-	pr_debug("%s: called at %d\n", __func__, __LINE__);
 	return (void *)&opts->func_inst;
 
 dev_err:
-	pr_debug("%s: called at %d\n", __func__, __LINE__);
 	kfree(opts);
 err:
-	pr_debug("%s: called at %d\n", __func__, __LINE__);
 	return ERR_PTR(-ENOMEM);
 }
 
