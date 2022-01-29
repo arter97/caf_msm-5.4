@@ -3560,7 +3560,14 @@ static int android_enable_function(struct android_dev *dev,
 	struct android_usb_function *f;
 	struct android_usb_function_holder *f_holder;
 
+	pr_debug("name: %s\n", name);
+  if (*functions != NULL) {
+    pr_debug("f->name: %s\n", name, (*functions)->name);
+  } else {
+	  pr_debug("functions is null\n");
+  }
 	while ((f = *functions++)) {
+	  pr_debug("name: %s, f->name: %s\n", name, f->name);
 		if (!strcmp(name, f->name)) {
 			if (f->android_dev && f->android_dev != dev)
 				pr_err("%s is enabled in other device\n",
@@ -3583,6 +3590,7 @@ static int android_enable_function(struct android_dev *dev,
 			}
 		}
 	}
+	pr_debug("at %d\n", __LINE__);
 	return -EINVAL;
 }
 
@@ -3643,6 +3651,7 @@ functions_show(struct device *pdev, struct device_attribute *attr, char *buf)
 
 	mutex_lock(&dev->mutex);
 
+	pr_debug("buff: %s\n", buff);
 	list_for_each_entry(conf, &dev->configs, list_item) {
 		if (buff != buf)
 			*(buff-1) = ':';
@@ -3699,6 +3708,8 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 	strlcpy(buf, buff, sizeof(buf));
 	b = strim(buf);
 
+
+	pr_debug("buff: %s\n", buff);
 	while (b) {
 		conf_str = strsep(&b, ":");
 		if (!conf_str)

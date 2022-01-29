@@ -1105,6 +1105,8 @@ static const struct usb_device_id option_ids[] = {
 	{ USB_DEVICE(QUALCOMM_VENDOR_ID, 0x6613)}, /* Onda H600/ZTE MF330 */
 	{ USB_DEVICE(QUALCOMM_VENDOR_ID, 0x0023)}, /* ONYX 3G device */
 	{ USB_DEVICE(QUALCOMM_VENDOR_ID, 0x9000)}, /* SIMCom SIM5218 */
+	{ USB_DEVICE_INTERFACE_NUMBER(QUALCOMM_VENDOR_ID, 0x9025, 0)},   /* Qualcomm MDM Diag Port*/
+	{ USB_DEVICE_INTERFACE_NUMBER(QUALCOMM_VENDOR_ID, 0x9025, 2)},   /* Qualcomm MDM Legacy Modem Port*/
 	{ USB_DEVICE_INTERFACE_CLASS(SIERRA_VENDOR_ID, 0x68c0, 0xff),
 	  .driver_info = (kernel_ulong_t)&sierra_mc73xx_blacklist }, /* MC73xx */
 	{ USB_DEVICE(CMOTECH_VENDOR_ID, CMOTECH_PRODUCT_6001) },

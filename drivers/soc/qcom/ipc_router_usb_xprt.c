@@ -23,6 +23,7 @@
 #include <linux/skbuff.h>
 #include <linux/delay.h>
 #include <linux/sched.h>
+#include <linux/debugfs.h>
 #include <soc/qcom/subsystem_restart.h>
 
 #include <linux/usb/ipc_bridge.h>
@@ -73,6 +74,11 @@ struct msm_ipc_router_usb_xprt {
 	unsigned int xprt_version;
 	unsigned int xprt_option;
 };
+
+static struct msm_ipc_router_usb_xprt *usb_xprt_ctx;
+
+/* Debug FS Root node */
+static struct dentry *debugfs_root;
 
 struct msm_ipc_router_usb_xprt_work {
 	struct msm_ipc_router_xprt *xprt;
@@ -583,13 +589,21 @@ static int msm_ipc_router_usb_config_init(
 {
 	struct msm_ipc_router_usb_xprt *usb_xprtp;
 
-	usb_xprtp = kzalloc(sizeof(struct msm_ipc_router_usb_xprt),
+	IPC_RTR_ERR("%s: \n", __func__);
+	if (unlikely(usb_xprt_ctx)) {
+		IPC_RTR_ERR("%s: Already Inited \n", __func__);
+		return -1;
+	}
+	
+  usb_xprtp = kzalloc(sizeof(struct msm_ipc_router_usb_xprt),
 							GFP_KERNEL);
 	if (IS_ERR_OR_NULL(usb_xprtp)) {
 		IPC_RTR_ERR("%s: kzalloc() failed for usb_xprtp id:%s\n",
 				__func__, usb_xprt_config->ch_name);
 		return -ENOMEM;
 	}
+	
+  usb_xprt_ctx = usb_xprtp;
 
 	usb_xprtp->xprt.link_id = usb_xprt_config->link_id;
 	usb_xprtp->xprt_version = usb_xprt_config->xprt_version;
@@ -753,6 +767,89 @@ static const struct of_device_id msm_ipc_router_usb_xprt_match_table[] = {
 	{},
 };
 
+static ssize_t usb_ipc_xprt_debugfs_read(struct file *file,
+		char __user *user_buf, size_t count, loff_t *ppos)
+{
+	char *buf;
+	unsigned int len = 0, buf_len = 4096;
+	struct msm_ipc_router_usb_xprt *usb_xprtp =
+			(struct msm_ipc_router_usb_xprt *)file->private_data;
+	ssize_t ret_cnt;
+
+	if (unlikely(!usb_xprtp)) {
+		IPC_RTR_ERR("%s: USB Xprt NULL pointer ",__func__);
+		return -EINVAL;
+	}
+
+	buf = kzalloc(buf_len, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	len += scnprintf(buf + len, buf_len - len, "%25s\n",
+			"USB IPC Router XPRT Status");
+
+	len += scnprintf(buf + len, buf_len - len, "%55s\n",
+		"==================================================");
+	len += scnprintf(buf + len, buf_len - len,
+		"%25s %10s\n", "XPRT - Name : ", usb_xprtp->xprt_name);
+	len += scnprintf(buf + len, buf_len - len,
+		"%25s %10s\n", "XPRT - CH Name : ", usb_xprtp->ch_name);
+	len += scnprintf(buf + len, buf_len - len,
+		"%25s %10u\n", "XPRT - Link ID : ", usb_xprtp->xprt.link_id);
+	len += scnprintf(buf + len, buf_len - len,
+		"%25s %10u\n", "XPRT - Version : ", usb_xprtp->xprt_version);
+/*	len += scnprintf(buf + len, buf_len - len,
+		"%25s %10u\n", "Read from USB: ", usb_xprtp->read_from_usb);*/
+/*	len += scnprintf(buf + len, buf_len - len,
+		"%25s %10u\n", "Writen to IPC Core: ",
+					usb_xprtp->send_to_ipc_core);*/
+/*	len += scnprintf(buf + len, buf_len - len,
+		"%25s %10u\n", "Submitted to USB: ", usb_xprtp->send_to_usb);*/
+/*	len += scnprintf(buf + len, buf_len - len,
+		"%25s %10u\n", "Read from IPC Core: ",
+					usb_xprtp->recv_from_ipc_core);*/
+/*	len += scnprintf(buf + len, buf_len - len,
+		"%25s %10d\n", "USB XPRT Avail : ", usb_xprtp->xprt_avail);*/
+	len += scnprintf(buf + len, buf_len - len, "%55s\n",
+		"==================================================");
+
+	if (len > buf_len)
+		len = buf_len;
+
+	ret_cnt = simple_read_from_buffer(user_buf, count, ppos, buf, len);
+	kfree(buf);
+
+	return ret_cnt;
+}
+
+static const struct file_operations fops_usb_ipc_xprt = {
+	.read = usb_ipc_xprt_debugfs_read,
+	.open = simple_open,
+	.owner = THIS_MODULE,
+	.llseek = default_llseek,
+};
+
+static int msm_ipc_usb_xprt_debugfs_init(void)
+{
+	debugfs_root = debugfs_create_dir("usb_ipc_xprt", 0);
+	if (IS_ERR(debugfs_root)) {
+		IPC_RTR_ERR("%s: Cannot create debugfs %p ", __func__,
+				debugfs_root);
+		return -ENOMEM;
+	}
+
+	debugfs_create_file("stats", S_IRUSR | S_IRGRP | S_IROTH, debugfs_root,
+				usb_xprt_ctx, &fops_usb_ipc_xprt);
+	IPC_RTR_ERR("%s: debugfs created %p \n",__func__, debugfs_root);
+  return 0;
+}
+
+static void msm_ipc_usb_xprt_debugfs_exit(void)
+{
+	debugfs_remove_recursive(debugfs_root);
+	IPC_RTR_ERR("%s: debugfs destroyed \n",__func__);
+}
+
 static struct platform_driver msm_ipc_router_usb_xprt_driver = {
 	.probe = msm_ipc_router_usb_xprt_probe,
 	.driver = {
@@ -778,6 +875,11 @@ static int __init msm_ipc_router_usb_xprt_init(void)
 					ipc_router_usb_xprt_probe_worker);
 	schedule_delayed_work(&ipc_router_usb_xprt_probe_work,
 			msecs_to_jiffies(IPC_ROUTER_USB_XPRT_WAIT_TIMEOUT));
+	
+  rc = msm_ipc_usb_xprt_debugfs_init();
+	if (rc)
+		IPC_RTR_ERR("%s: debugfs not inited \n", __func__);
+
 	return 0;
 }
 
