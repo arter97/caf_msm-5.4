@@ -48,14 +48,6 @@
 			label = "mss_mem";
 		};
 
-    /*
-		audio_mem: audio_region@0 {
-			compatible = "shared-dma-pool";
-			reusable;
-			size = <0x400000>;
-		 };
-    */
-
 		qseecom_mem: qseecom_region@0 {
 			compatible = "shared-dma-pool";
 			reusable;
@@ -640,7 +632,6 @@
 
 	qcom,rmnet-ipa {
 		compatible = "qcom,rmnet-ipa3";
-		qcom,rmnet-ipa-ssr;
 	};
 
 	ipa_hw: qcom,ipa@07B00000 {
@@ -711,8 +702,7 @@
 			qcom,mhi-ifc-id = <0x030217cb>;
 			qcom,mhi-ep-msi = <0>;
 			qcom,mhi-version = <0x1000000>;
-			qcom,use-ipa-software-channel;
-		status = "disabled";
+			qcom,mhi-use-gsi;
 	};
 
 	blsp1_uart1: serial@78af000 {
@@ -981,7 +971,7 @@
 
 	qcom,ipc_router_usb_xprt {
 		compatible = "qcom,ipc-router-usb-xprt";
-		qcom,ch-name = "IPC";
+		qcom,ch-name = "IPCRTR";
 		qcom,xprt-remote = "apps";
 		qcom,xprt-linkid = <2>;
 		qcom,xprt-version = <1>;
@@ -1235,14 +1225,6 @@
 		qcom,adsp-state = <0>;
 		qcom,proc-img-to-load = "modem";
 	};
-
-  /*
-	qcom,msm-audio-ion {
-		compatible = "qcom,msm-audio-ion";
-		qcom,scm-mp-enabled;
-		memory-region = <&audio_mem>;
-	};
-  */
 
 	pcm0: qcom,msm-pcm {
 		compatible = "qcom,msm-pcm-dsp";
