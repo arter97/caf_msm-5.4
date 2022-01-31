@@ -1125,9 +1125,9 @@ static void process_tzcb_req(void *buf, size_t buf_len, struct file **arr_filp)
 	if (!srvr_info || srvr_info->state == SMCINVOKE_SERVER_STATE_DEFUNCT) {
 		/* ret equals Object_ERROR_DEFUNCT, at this point go to out */
 		if (!srvr_info)
-			pr_err("server is invalid\n");
+			pr_debug("server is invalid\n");
 		else {
-			pr_err("server is defunct, state= %d tzhandle = %d\n",
+			pr_debug("server is defunct, state= %d tzhandle = %d\n",
 				srvr_info->state, cb_req->hdr.tzhandle);
 		}
 		mutex_unlock(&g_smcinvoke_lock);
@@ -1190,9 +1190,9 @@ out:
 		} else if (!srvr_info ||
 			srvr_info->state == SMCINVOKE_SERVER_STATE_DEFUNCT) {
 			cb_req->result = OBJECT_ERROR_DEFUNCT;
-			pr_err("server invalid, res: %d\n", cb_req->result);
+			pr_debug("server invalid, res: %d\n", cb_req->result);
 		} else {
-			pr_err("%s: unexpected event happened, ret:%d\n", __func__, ret);
+			pr_debug("%s: unexpected event happened, ret:%d\n", __func__, ret);
 			cb_req->result = OBJECT_ERROR_ABORT;
 		}
 	}
