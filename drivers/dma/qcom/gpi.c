@@ -2690,6 +2690,20 @@ static int gpi_deep_sleep_exit_config(struct dma_chan *chan,
 
 	GPII_INFO(gpii, gpii_chan->chid, "enter\n");
 
+	/* Reset the ring channel for TX,RX to the base address */
+	for (i = 0; i < MAX_CHANNELS_PER_GPII; i++) {
+		gpii_chan = &gpii->gpii_chan[i];
+
+		ring_ch = &gpii_chan->ch_ring;
+		ring_ch->wp = ring_ch->base;
+		ring_ch->rp = ring_ch->base;
+	}
+
+	/* Reset Event ring to the base address */
+	ring_ev = &gpii->ev_ring;
+	ring_ev->wp = ring_ev->base;
+	ring_ev->rp = ring_ev->base;
+
 	ret = gpi_config_interrupts(gpii, DEFAULT_IRQ_SETTINGS, 0);
 	if (ret) {
 		GPII_ERR(gpii, gpii_chan->chid,
