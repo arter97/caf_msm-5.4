@@ -7120,6 +7120,9 @@ int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
 	is_rtg = task_in_related_thread_group(p);
 	curr_is_rtg = task_in_related_thread_group(cpu_rq(cpu)->curr);
 
+	if (sysctl_sched_prefer_spread == 2)
+		end_index = num_sched_clusters - 1;
+
 	fbt_env.fastpath = 0;
 	fbt_env.need_idle = need_idle;
 
