@@ -2149,7 +2149,7 @@ static int hgsl_ioctl_issueib(struct file *filep, unsigned long arg)
 	if (remote_issueib)
 		ret = hgsl_hyp_issueib(&priv->hyp_priv, &params, ibs);
 
-	if (!ret && copy_to_user(USRPTR(arg), &params, sizeof(params))) {
+	if (copy_to_user(USRPTR(arg), &params, sizeof(params))) {
 		LOGE("failed to copy param to user");
 		ret = -EFAULT;
 		goto out;
@@ -2249,7 +2249,7 @@ static int hgsl_ioctl_issueib_with_alloc_list(struct file *filep,
 		ret = hgsl_hyp_issueib_with_alloc_list(&priv->hyp_priv,
 			&params, ibs, allocations, be_descs, be_offsets);
 
-	if (!ret && copy_to_user(USRPTR(arg), &params, sizeof(params))) {
+	if (copy_to_user(USRPTR(arg), &params, sizeof(params))) {
 		LOGE("failed to copy param to user");
 		ret = -EFAULT;
 		goto out;
