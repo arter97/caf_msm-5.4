@@ -70,16 +70,13 @@ hab_vchan_free(struct kref *ref)
 	struct uhab_context *ctx = vchan->ctx;
 	struct virtual_channel *vc, *vc_tmp;
 	int irqs_disabled = irqs_disabled();
-	unsigned long flags;
-	
-	//hab_spin_lock(&vchan->rx_lock, irqs_disabled);
-	spin_lock_irqsave(&vchan->rx_lock, flags);
+
+	hab_spin_lock(&vchan->rx_lock, irqs_disabled);
 	list_for_each_entry_safe(message, msg_tmp, &vchan->rx_list, node) {
 		list_del(&message->node);
 		hab_msg_free(message);
 	}
-	//hab_spin_unlock(&vchan->rx_lock, irqs_disabled);
-	spin_unlock_irqrestore(&vchan->rx_lock, flags);
+	hab_spin_unlock(&vchan->rx_lock, irqs_disabled);
 
 	/* release vchan from pchan. no more msg for this vchan */
 	hab_write_lock(&pchan->vchans_lock, irqs_disabled);

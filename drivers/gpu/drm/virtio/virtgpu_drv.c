@@ -155,7 +155,7 @@ static struct virtio_device_id id_table[] = {
 };
 
 static unsigned int features[] = {
-#if defined(__LITTLE_ENDIAN) && !defined(CONFIG_MSM_VIRTIO_HAB)
+#ifdef __LITTLE_ENDIAN
 	/*
 	 * Gallium command stream send by virgl is native endian.
 	 * Because of that we only support little endian guests on
@@ -164,9 +164,6 @@ static unsigned int features[] = {
 	VIRTIO_GPU_F_VIRGL,
 #endif
 	VIRTIO_GPU_F_EDID,
-#ifdef CONFIG_MSM_VIRTIO_HAB
-	VIRTIO_GPU_F_VENDOR,
-#endif
 };
 static struct virtio_driver virtio_gpu_driver = {
 	.feature_table = features,

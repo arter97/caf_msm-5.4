@@ -7,11 +7,11 @@
 static int hab_rx_queue_empty(struct virtual_channel *vchan)
 {
 	int ret;
-	unsigned long flags;
+	int irqs_disabled = irqs_disabled();
 
-	spin_lock_irqsave(&vchan->rx_lock, flags);
+	hab_spin_lock(&vchan->rx_lock, irqs_disabled);
 	ret = list_empty(&vchan->rx_list);
-	spin_unlock_irqrestore(&vchan->rx_lock, flags);
+	hab_spin_unlock(&vchan->rx_lock, irqs_disabled);
 
 	return ret;
 }
@@ -52,7 +52,7 @@ hab_msg_dequeue(struct virtual_channel *vchan, struct hab_message **msg,
 	int ret = 0;
 	int wait = !(flags & HABMM_SOCKET_RECV_FLAGS_NON_BLOCKING);
 	int interruptible = !(flags & HABMM_SOCKET_RECV_FLAGS_UNINTERRUPTIBLE);
-	unsigned long irq_flags;
+	int irqs_disabled = irqs_disabled();
 
 	if (wait) {
 		if (hab_rx_queue_empty(vchan)) {
@@ -72,7 +72,7 @@ hab_msg_dequeue(struct virtual_channel *vchan, struct hab_message **msg,
 	 * and need empty check again in case the list is empty now due to
 	 * dequeue by other threads
 	 */
-	spin_lock_irqsave(&vchan->rx_lock, irq_flags);
+	hab_spin_lock(&vchan->rx_lock, irqs_disabled);
 
 	if ((!ret || (ret == -ERESTARTSYS)) && !list_empty(&vchan->rx_list)) {
 		message = list_first_entry(&vchan->rx_list,
@@ -96,7 +96,7 @@ hab_msg_dequeue(struct virtual_channel *vchan, struct hab_message **msg,
 		/* no message received, retain the original status */
 		*rsize = 0;
 
-	spin_unlock_irqrestore(&vchan->rx_lock, irq_flags);
+	hab_spin_unlock(&vchan->rx_lock, irqs_disabled);
 
 	*msg = message;
 	return ret;
@@ -105,11 +105,11 @@ hab_msg_dequeue(struct virtual_channel *vchan, struct hab_message **msg,
 static void hab_msg_queue(struct virtual_channel *vchan,
 					struct hab_message *message)
 {
-	unsigned long flags;
+	int irqs_disabled = irqs_disabled();
 
-	spin_lock_irqsave(&vchan->rx_lock, flags);
+	hab_spin_lock(&vchan->rx_lock, irqs_disabled);
 	list_add_tail(&message->node, &vchan->rx_list);
-	spin_unlock_irqrestore(&vchan->rx_lock, flags);
+	hab_spin_unlock(&vchan->rx_lock, irqs_disabled);
 
 	wake_up(&vchan->rx_queue);
 }
