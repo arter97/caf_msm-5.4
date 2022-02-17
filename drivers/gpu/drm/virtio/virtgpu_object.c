@@ -26,6 +26,7 @@
 #include <linux/moduleparam.h>
 
 #include <drm/ttm/ttm_execbuf_util.h>
+#include <drm/drm_prime.h>
 
 #include "virtgpu_drv.h"
 
@@ -69,7 +70,7 @@ static void virtio_gpu_ttm_bo_destroy(struct ttm_buffer_object *tbo)
 	struct virtio_gpu_device *vgdev;
 
 	bo = container_of(tbo, struct virtio_gpu_object, tbo);
-	vgdev = (struct virtio_gpu_device *)bo->gem_base.dev->dev_private;
+	vgdev = (struct virtio_gpu_device *)bo->tbo.base.dev->dev_private;
 
 	if (bo->created)
 		virtio_gpu_cmd_unref_resource(vgdev, bo->hw_res_handle);
@@ -77,7 +78,7 @@ static void virtio_gpu_ttm_bo_destroy(struct ttm_buffer_object *tbo)
 		virtio_gpu_object_free_sg_table(bo);
 	if (bo->vmap)
 		virtio_gpu_object_kunmap(bo);
-	drm_gem_object_release(&bo->gem_base);
+	drm_gem_object_release(&bo->tbo.base);
 	virtio_gpu_resource_id_put(vgdev, bo->hw_res_handle);
 	kfree(bo);
 }
@@ -96,6 +97,60 @@ static void virtio_gpu_init_ttm_placement(struct virtio_gpu_object *vgbo)
 	vgbo->placement.num_placement = c;
 	vgbo->placement.num_busy_placement = c;
 
+}
+
+int virtio_gpu_object_create_private(struct virtio_gpu_device *vgdev,
+				size_t size, struct virtio_gpu_object **bo_ptr)
+{
+	struct virtio_gpu_object *bo;
+	int ret;
+
+	*bo_ptr = NULL;
+
+	bo = kzalloc(sizeof(struct virtio_gpu_object), GFP_KERNEL);
+	if (bo == NULL)
+		return -ENOMEM;
+
+	ret = virtio_gpu_resource_id_get(vgdev, &bo->hw_res_handle);
+	if (ret < 0) {
+		kfree(bo);
+		return ret;
+	}
+
+	drm_gem_private_object_init(vgdev->ddev, &bo->tbo.base, size);
+	bo->dumb = false;
+	bo->imported = true;
+
+	kref_init(&bo->tbo.kref);
+	virtio_gpu_init_ttm_placement(bo);
+
+	*bo_ptr = bo;
+
+	return 0;
+}
+
+void virtio_gpu_object_delete_private(struct kref *kref)
+{
+	struct virtio_gpu_object *bo =
+	    container_of(kref, struct virtio_gpu_object, tbo.kref);
+	struct virtio_gpu_device *vgdev;
+
+	if (!bo)
+		return;
+
+	vgdev = (struct virtio_gpu_device *)bo->tbo.base.dev->dev_private;
+
+	if (bo->created) {
+		virtio_gpu_object_detach(vgdev, bo);
+		virtio_gpu_cmd_unref_resource(vgdev, bo->hw_res_handle);
+	}
+	//if (obj->pages)
+	//	virtio_gpu_object_free_sg_table(bo);
+	drm_gem_object_release(&bo->tbo.base);
+	if (bo->tbo.base.import_attach)
+		drm_prime_gem_destroy(&bo->tbo.base, bo->pages);
+	virtio_gpu_resource_id_put(vgdev, bo->hw_res_handle);
+	kfree(bo);
 }
 
 int virtio_gpu_object_create(struct virtio_gpu_device *vgdev,
@@ -121,17 +176,18 @@ int virtio_gpu_object_create(struct virtio_gpu_device *vgdev,
 		return ret;
 	}
 	params->size = roundup(params->size, PAGE_SIZE);
-	ret = drm_gem_object_init(vgdev->ddev, &bo->gem_base, params->size);
+	ret = drm_gem_object_init(vgdev->ddev, &bo->tbo.base, params->size);
 	if (ret != 0) {
 		virtio_gpu_resource_id_put(vgdev, bo->hw_res_handle);
 		kfree(bo);
 		return ret;
 	}
 	bo->dumb = params->dumb;
+	bo->imported = false;
 
 	if (params->virgl) {
 		virtio_gpu_cmd_resource_create_3d(vgdev, bo, params, fence);
-	} else {
+	} else if (params->dumb) {
 		virtio_gpu_cmd_create_resource(vgdev, bo, params, fence);
 	}
 
@@ -156,7 +212,7 @@ int virtio_gpu_object_create(struct virtio_gpu_device *vgdev,
 		memset(&mainbuf, 0, sizeof(struct ttm_validate_buffer));
 
 		/* use a gem reference since unref list undoes them */
-		drm_gem_object_get(&bo->gem_base);
+		drm_gem_object_get(&bo->tbo.base);
 		mainbuf.bo = &bo->tbo;
 		list_add(&mainbuf.head, &validate_list);
 

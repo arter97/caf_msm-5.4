@@ -296,11 +296,17 @@ virtio_gpu_user_framebuffer_create(struct drm_device *dev,
 {
 	struct drm_gem_object *obj = NULL;
 	struct virtio_gpu_framebuffer *virtio_gpu_fb;
+	struct virtio_gpu_device *vgdev = dev->dev_private;
+	struct virtio_gpu_object *bo;
 	int ret;
 
 	/* lookup object associated with res handle */
 	obj = drm_gem_object_lookup(file_priv, mode_cmd->handles[0]);
 	if (!obj)
+		return ERR_PTR(-EINVAL);
+
+	bo = gem_to_virtio_gpu_obj(obj);
+	if (!bo)
 		return ERR_PTR(-EINVAL);
 
 	virtio_gpu_fb = kzalloc(sizeof(*virtio_gpu_fb), GFP_KERNEL);
@@ -312,6 +318,19 @@ virtio_gpu_user_framebuffer_create(struct drm_device *dev,
 		kfree(virtio_gpu_fb);
 		drm_gem_object_put_unlocked(obj);
 		return NULL;
+	}
+
+	if (bo->imported && !bo->created) {
+		struct virtio_gpu_object_params params;
+
+		params.format = virtio_gpu_translate_format(mode_cmd->pixel_format);
+		params.width = mode_cmd->width;
+		params.height = mode_cmd->height;
+		params.size = bo->tbo.base.size;
+		params.dumb = true;
+
+		virtio_gpu_cmd_create_resource(vgdev, bo, &params, NULL);
+		virtio_gpu_object_attach(vgdev, bo, NULL);
 	}
 
 	return &virtio_gpu_fb->base;
@@ -354,6 +373,7 @@ void virtio_gpu_modeset_init(struct virtio_gpu_device *vgdev)
 	vgdev->ddev->mode_config.min_height = YRES_MIN;
 	vgdev->ddev->mode_config.max_width = XRES_MAX;
 	vgdev->ddev->mode_config.max_height = YRES_MAX;
+	vgdev->ddev->mode_config.allow_fb_modifiers = true;
 
 	for (i = 0 ; i < vgdev->num_scanouts; ++i)
 		vgdev_output_init(vgdev, i);
