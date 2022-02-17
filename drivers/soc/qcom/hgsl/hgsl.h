@@ -15,6 +15,7 @@
 
 #define HGSL_TIMELINE_NAME_LEN 64
 
+#define HGSL_CONTEXT_NUM       128
 
 struct qcom_hgsl;
 struct hgsl_hsync_timeline;
@@ -43,8 +44,9 @@ struct hgsl_context {
 	bool dbq_assigned;
 	uint32_t dbq_info;
 	struct doorbell_queue *dbq;
-	struct hgsl_mem_node shadow_ts_node;
+	struct hgsl_mem_node *shadow_ts_node;
 	uint32_t shadow_ts_flags;
+	bool is_fe_shadow;
 	bool in_destroy;
 	bool destroyed;
 	struct kref kref;
