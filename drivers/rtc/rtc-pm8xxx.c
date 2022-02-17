@@ -11,6 +11,7 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/suspend.h>
+#include <linux/math64.h>
 
 /* RTC Register offsets from RTC CTRL REG */
 #define PM8XXX_ALARM_CTRL_OFFSET	0x01
@@ -25,9 +26,15 @@
 #define NUM_8_BIT_RTC_REGS		0x4
 
 #define RTC_SEC_TO_MSEC(s)	((s) * 1000ULL)
+#define RTC_SEC_TO_USEC(s)	((s) * 1000000ULL)
+#define RTC_MSTICKS_TO_US(ticks) div_u64(((ticks) * 999000), 1023)
 
 #define PM8XXX_WAKEUP_DISABLE		0
 #define PM8XXX_WAKEUP_ENABLE		1
+
+/* Values used for conversion to milli-seconds */
+#define RTC_MS_TICKS_MAX		1023
+#define RTC_MS_TIME_MAX			999
 
 /**
  * struct pm8xxx_rtc_regs - describe RTC registers per PMIC versions
@@ -351,12 +358,12 @@ rtc_rw_fail:
 	return rc;
 }
 
-static ssize_t rtc_ms_val_show(struct device *dev,
+static ssize_t rtc_us_val_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
 	int rc;
 	u8 value[NUM_8_BIT_RTC_REGS], value_ms[2];
-	unsigned long secs = 0, msecs = 0, rtc_ms_total = 0;
+	unsigned long long secs = 0, mticks = 0, usecs = 0, rtc_us_total = 0;
 	unsigned int reg;
 	struct pm8xxx_rtc *rtc_dd = dev_get_drvdata(dev->parent);
 	const struct pm8xxx_rtc_regs *regs = rtc_dd->regs;
@@ -387,7 +394,7 @@ static ssize_t rtc_ms_val_show(struct device *dev,
 	}
 
 	secs = value[0] | (value[1] << 8) | (value[2] << 16) |
-	       ((unsigned long)value[3] << 24);
+	       ((unsigned long long)value[3] << 24);
 
 	/* Read milli-second value */
 	rc = regmap_bulk_read(rtc_dd->regmap, regs->read_ms, value_ms, sizeof(value_ms));
@@ -396,14 +403,17 @@ static ssize_t rtc_ms_val_show(struct device *dev,
 		return rc;
 	}
 
-	msecs = value_ms[0] | (value_ms[1] << 8);
+	mticks = value_ms[0] | (value_ms[1] << 8);
 
-	rtc_ms_total = RTC_SEC_TO_MSEC(secs) + msecs;
+	/* Mapping 1023 ticks to 999 milli-seconds */
+	usecs = RTC_MSTICKS_TO_US(mticks);
 
-	return scnprintf(buf, PAGE_SIZE, "%d\n", rtc_ms_total);
+	rtc_us_total = RTC_SEC_TO_USEC(secs) + usecs;
+
+	return scnprintf(buf, PAGE_SIZE, "%llu\n", rtc_us_total);
 }
 
-static DEVICE_ATTR_RO(rtc_ms_val);
+static DEVICE_ATTR_RO(rtc_us_val);
 
 static ssize_t rtc_wakeup_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size)
@@ -428,7 +438,7 @@ static ssize_t rtc_wakeup_store(struct device *dev,
 static DEVICE_ATTR_WO(rtc_wakeup);
 
 static struct attribute *pm8xxx_rtc_attrs[] = {
-	&dev_attr_rtc_ms_val.attr,
+	&dev_attr_rtc_us_val.attr,
 	&dev_attr_rtc_wakeup.attr,
 	NULL,
 };

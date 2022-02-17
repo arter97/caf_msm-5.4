@@ -360,11 +360,11 @@ static int ksz8041_config_aneg(struct phy_device *phydev)
 }
 
 static int ksz8051_ksz8795_match_phy_device(struct phy_device *phydev,
-					    const u32 ksz_phy_id)
+					    const bool ksz_8051)
 {
 	int ret;
 
-	if ((phydev->phy_id & MICREL_PHY_ID_MASK) != ksz_phy_id)
+	if ((phydev->phy_id & MICREL_PHY_ID_MASK) != PHY_ID_KSZ8051)
 		return 0;
 
 	ret = phy_read(phydev, MII_BMSR);
@@ -377,7 +377,7 @@ static int ksz8051_ksz8795_match_phy_device(struct phy_device *phydev,
 	 * the switch does not.
 	 */
 	ret &= BMSR_ERCAP;
-	if (ksz_phy_id == PHY_ID_KSZ8051)
+	if (ksz_8051)
 		return ret;
 	else
 		return !ret;
@@ -385,7 +385,7 @@ static int ksz8051_ksz8795_match_phy_device(struct phy_device *phydev,
 
 static int ksz8051_match_phy_device(struct phy_device *phydev)
 {
-	return ksz8051_ksz8795_match_phy_device(phydev, PHY_ID_KSZ8051);
+	return ksz8051_ksz8795_match_phy_device(phydev, true);
 }
 
 static int ksz8081_config_init(struct phy_device *phydev)
@@ -413,7 +413,7 @@ static int ksz8061_config_init(struct phy_device *phydev)
 
 static int ksz8795_match_phy_device(struct phy_device *phydev)
 {
-	return ksz8051_ksz8795_match_phy_device(phydev, PHY_ID_KSZ87XX);
+	return ksz8051_ksz8795_match_phy_device(phydev, false);
 }
 
 static int ksz9021_load_values_from_of(struct phy_device *phydev,
@@ -523,18 +523,18 @@ static int ksz9031_ack_interrupt(struct phy_device *phydev)
 
 	rc = phy_read(phydev, MII_KSZPHY_INTCS);
 
-	reg_value = phy_read_mmd(phydev, 0x2, MII_KSZPHY_OMSO_REG);
-	if (reg_value & MII_KSZPHY_OMSO_PME_N2) {
+	reg_value = phy_read_mmd(phydev, 0x2, MII_KSZPHY_WOL_CTRL_REG);
+	if (reg_value & MII_KSZPHY_WOL_CTRL_PME_N2) {
 		/* PME output is cleared by disabling the PME trigger src */
 		reg_value = phy_read_mmd(phydev, 0x2, MII_KSZPHY_WOL_CTRL_REG);
-		reg_value &= ~MII_KSZPHY_WOL_MAGIC_PKT;
-		reg_value &= ~MII_KSZPHY_WOL_LINK_UP;
-		reg_value &= ~MII_KSZPHY_WOL_LINK_DOWN;
+		reg_value &= ~(MII_KSZPHY_WOL_MAGIC_PKT |
+				MII_KSZPHY_WOL_LINK_UP |
+				MII_KSZPHY_WOL_LINK_DOWN);
 		phy_write_mmd(phydev, 0x2, MII_KSZPHY_WOL_CTRL_REG, reg_value);
 		reg_value = phy_read_mmd(phydev, 0x2, MII_KSZPHY_WOL_CTRL_REG);
-		reg_value |= MII_KSZPHY_WOL_MAGIC_PKT;
-		reg_value |= MII_KSZPHY_WOL_LINK_UP;
-		reg_value |= MII_KSZPHY_WOL_LINK_DOWN;
+		reg_value |= (MII_KSZPHY_WOL_MAGIC_PKT |
+				MII_KSZPHY_WOL_LINK_UP |
+				MII_KSZPHY_WOL_LINK_DOWN);
 		phy_write_mmd(phydev, 0x2, MII_KSZPHY_WOL_CTRL_REG, reg_value);
 	}
 
@@ -1027,27 +1027,41 @@ static int kszphy_probe(struct phy_device *phydev)
 	return 0;
 }
 
-static void ksz9031_set_wol_settings(struct phy_device *phydev)
+static void ksz9031_set_wol_settings(struct phy_device *phydev, bool is_wol_enabled
+)
 {
 	u32 reg_value;
+	u32 reg_value1;
 
-	/* Enable both PHY and PME_N2 interrupts */
 	reg_value = phy_read_mmd(phydev, 0x2, MII_KSZPHY_WOL_CTRL_REG);
-	reg_value |= MII_KSZPHY_WOL_CTRL_PME_N2;
-	reg_value &= ~MII_KSZPHY_WOL_CTRL_INT_N;
-	reg_value |= MII_KSZPHY_WOL_MAGIC_PKT;
-	reg_value |= MII_KSZPHY_WOL_LINK_UP;
-	reg_value |= MII_KSZPHY_WOL_LINK_DOWN;
+	if (is_wol_enabled) {
+		/* Enable both PHY and PME_N2 interrupts */
+		reg_value |= MII_KSZPHY_WOL_CTRL_PME_N2;
+		reg_value &= ~MII_KSZPHY_WOL_CTRL_INT_N;
+		reg_value |= (MII_KSZPHY_WOL_MAGIC_PKT |
+				MII_KSZPHY_WOL_LINK_UP |
+				MII_KSZPHY_WOL_LINK_DOWN);
+		/* Enable PME_N2 output */
+		reg_value1 = phy_read_mmd(phydev, 0x2, MII_KSZPHY_OMSO_REG);
+		reg_value1 |= MII_KSZPHY_OMSO_PME_N2;
+		phy_write_mmd(phydev, 0x2, MII_KSZPHY_OMSO_REG, reg_value1);
+	} else {
+	/* Disable PME_N2 output and enable only PHY interrupt */
+		reg_value &= ~MII_KSZPHY_WOL_CTRL_PME_N2;
+		reg_value |= MII_KSZPHY_WOL_CTRL_INT_N;
+		reg_value &= ~(MII_KSZPHY_WOL_MAGIC_PKT |
+					   MII_KSZPHY_WOL_LINK_UP |
+					   MII_KSZPHY_WOL_LINK_DOWN);
+	}
 	phy_write_mmd(phydev, 0x2, MII_KSZPHY_WOL_CTRL_REG, reg_value);
 }
 
-static int ksz9031_set_wol(struct phy_device *phydev,
-			   struct ethtool_wolinfo *wol)
+static int ksz9031_set_wol(struct phy_device *phydev, struct ethtool_wolinfo *wol)
 {
 	struct net_device *ndev = phydev->attached_dev;
 	const u8 *mac;
 	int ret = 0;
-	u32 reg_value;
+	bool is_wol_enabled = false;
 
 	if (!ndev)
 		return -ENODEV;
@@ -1063,14 +1077,9 @@ static int ksz9031_set_wol(struct phy_device *phydev,
 		phy_write_mmd(phydev, 0x2, 0x13, mac[1] | (mac[0] << 8));
 
 		/* Enable WOL interrupt for magic pkt, link up and down */
-		ksz9031_set_wol_settings(phydev);
-
-		/* Enable PME_N2 output */
-		reg_value = phy_read_mmd(phydev, 0x2, MII_KSZPHY_OMSO_REG);
-		reg_value |= MII_KSZPHY_OMSO_PME_N2;
-		phy_write_mmd(phydev, 0x2, MII_KSZPHY_OMSO_REG, reg_value);
+		is_wol_enabled = true;
 	}
-
+	ksz9031_set_wol_settings(phydev, is_wol_enabled);
 	return ret;
 }
 
@@ -1082,8 +1091,8 @@ static void ksz9031_get_wol(struct phy_device *phydev,
 	wol->supported = WAKE_MAGIC;
 	wol->wolopts = 0;
 
-	reg_value = phy_read_mmd(phydev, 0x2, MII_KSZPHY_OMSO_REG);
-	if (reg_value & MII_KSZPHY_OMSO_PME_N2)
+	reg_value = phy_read_mmd(phydev, 0x2, MII_KSZPHY_WOL_CTRL_REG);
+	if (reg_value & MII_KSZPHY_WOL_CTRL_PME_N2)
 		wol->wolopts |= WAKE_MAGIC;
 }
 
@@ -1093,8 +1102,8 @@ static int ksz9031_suspend(struct phy_device *phydev)
 	int wol_enabled;
 	u32 reg_value;
 
-	reg_value = phy_read_mmd(phydev, 0x2, MII_KSZPHY_OMSO_REG);
-	wol_enabled = reg_value & MII_KSZPHY_OMSO_PME_N2;
+	reg_value = phy_read_mmd(phydev, 0x2, MII_KSZPHY_WOL_CTRL_REG);
+	wol_enabled = reg_value & MII_KSZPHY_WOL_CTRL_PME_N2;
 
 	value = phy_read(phydev, MII_BMCR);
 	if (wol_enabled)
@@ -1114,6 +1123,12 @@ static int ksz9031_resume(struct phy_device *phydev)
 	value = phy_read(phydev, MII_BMCR);
 	value &= ~(BMCR_PDOWN | BMCR_ISOLATE);
 	phy_write(phydev, MII_BMCR, value);
+
+	if (phy_interrupt_is_valid(phydev) || phydev->interrupts ==
+		PHY_INTERRUPT_ENABLED) {
+		if (phydev->drv->config_intr)
+			phydev->drv->config_intr(phydev);
+	}
 
 	return 0;
 }
@@ -1320,8 +1335,6 @@ static struct phy_driver ksphy_driver[] = {
 	.name		= "Micrel KSZ87XX Switch",
 	/* PHY_BASIC_FEATURES */
 	.config_init	= kszphy_config_init,
-	.config_aneg	= ksz8873mll_config_aneg,
-	.read_status	= ksz8873mll_read_status,
 	.match_phy_device = ksz8795_match_phy_device,
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,

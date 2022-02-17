@@ -94,6 +94,7 @@ struct clk_alpha_pll {
 #define SUPPORTS_DYNAMIC_UPDATE	BIT(3)
 #define SUPPORTS_FSM_LEGACY_MODE BIT(4)
 #define SUPPORTS_SLEW           BIT(4)
+#define BYPASS_LATCH		BIT(6)
 	u8 flags;
 
 	struct clk_regmap clkr;
@@ -216,5 +217,7 @@ int clk_lucid_evo_pll_configure(struct clk_alpha_pll *pll,
 				const struct alpha_pll_config *config);
 int clk_zonda_evo_pll_configure(struct clk_alpha_pll *pll,
 				struct regmap *regmap,
+				const struct alpha_pll_config *config);
+void clk_huayra_pll_configure(struct clk_alpha_pll *pll, struct regmap *regmap,
 				const struct alpha_pll_config *config);
 #endif

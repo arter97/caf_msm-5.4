@@ -8,9 +8,10 @@
 
 #include "kgsl_debugfs.h"
 #include "kgsl_device.h"
+#include "kgsl_pool.h"
 #include "kgsl_sharedmem.h"
 
-struct dentry *kgsl_debugfs_dir;
+struct dentry *kgsl_debugfs_dir, *mempools_debugfs;
 static struct dentry *proc_d_debugfs;
 
 static int _strict_set(void *data, u64 val)
@@ -108,6 +109,45 @@ static const struct file_operations global_fops = {
 	.release = globals_release,
 };
 
+static int _pool_size_get(void *data, u64 *val)
+{
+	*val = (u64) kgsl_pool_size_total();
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(_pool_size_fops, _pool_size_get, NULL, "%llu\n");
+
+DEFINE_DEBUGFS_ATTRIBUTE(_reserved_fops,
+					kgsl_pool_reserved_get, NULL, "%llu\n");
+DEFINE_DEBUGFS_ATTRIBUTE(_page_count_fops,
+					kgsl_pool_page_count_get, NULL, "%llu\n");
+
+void kgsl_pool_init_debugfs(struct dentry *pool_debugfs,
+					char *name, void *pool)
+{
+	struct dentry *dentry;
+
+	pool_debugfs = debugfs_create_dir(name, mempools_debugfs);
+
+	if (IS_ERR_OR_NULL(pool_debugfs)) {
+		WARN((pool_debugfs == NULL),
+			"Unable to create debugfs dir for %s\n", name);
+		pool_debugfs = NULL;
+		return;
+	}
+
+	dentry = debugfs_create_file("reserved", 0444,
+		pool_debugfs, pool, &_reserved_fops);
+
+	WARN((IS_ERR_OR_NULL(dentry)),
+		"Unable to create 'reserved' file for %s\n", name);
+
+	dentry = debugfs_create_file("count", 0444,
+		pool_debugfs, pool, &_page_count_fops);
+
+	WARN((IS_ERR_OR_NULL(dentry)),
+		"Unable to create 'count' file for %s\n", name);
+}
 
 void kgsl_device_debugfs_init(struct kgsl_device *device)
 {
@@ -178,6 +218,7 @@ static int print_mem_entry(void *data, void *ptr)
 	unsigned int usermem_type = kgsl_memdesc_usermem_type(m);
 	int egl_surface_count = 0, egl_image_count = 0;
 	unsigned long inode_number = 0;
+	u32 map_count = atomic_read(&entry->map_count);
 
 	flags[0] = kgsl_memdesc_is_global(m) ?  'g' : '-';
 	flags[1] = '-';
@@ -186,7 +227,7 @@ static int print_mem_entry(void *data, void *ptr)
 	flags[4] = get_cacheflag(m);
 	flags[5] = kgsl_memdesc_use_cpu_map(m) ? 'p' : '-';
 	/* Show Y if at least one vma has this entry mapped (could be multiple) */
-	flags[6] = atomic_read(&entry->map_count) ? 'Y' : 'N';
+	flags[6] = map_count ? 'Y' : 'N';
 	flags[7] = kgsl_memdesc_is_secured(m) ?  's' : '-';
 	flags[8] = '-';
 	flags[9] = '\0';
@@ -199,7 +240,7 @@ static int print_mem_entry(void *data, void *ptr)
 		inode_number = kgsl_get_dmabuf_inode_number(entry);
 	}
 
-	seq_printf(s, "%pK %pK %16llu %5d %9s %10s %16s %5d %16llu %6d %6d %10lu",
+	seq_printf(s, "%pK %pK %16llu %5d %10s %10s %16s %5d %10d %6d %6d %10lu",
 			(uint64_t *)(uintptr_t) m->gpuaddr,
 			/*
 			 * Show zero for the useraddr - we can't reliably track
@@ -207,7 +248,7 @@ static int print_mem_entry(void *data, void *ptr)
 			 */
 			0, m->size, entry->id, flags,
 			memtype_str(usermem_type),
-			usage, (m->sgt ? m->sgt->nents : 0), m->size,
+			usage, (m->sgt ? m->sgt->nents : 0), map_count,
 			egl_surface_count, egl_image_count, inode_number);
 
 	if (entry->metadata[0] != 0)
@@ -276,9 +317,9 @@ static void *process_mem_seq_next(struct seq_file *s, void *ptr,
 static int process_mem_seq_show(struct seq_file *s, void *ptr)
 {
 	if (ptr == SEQ_START_TOKEN) {
-		seq_printf(s, "%16s %16s %16s %5s %9s %10s %16s %5s %16s %6s %6s %10s\n",
+		seq_printf(s, "%16s %16s %16s %5s %10s %10s %16s %5s %10s %6s %6s %10s\n",
 			"gpuaddr", "useraddr", "size", "id", "flags", "type",
-			"usage", "sglen", "mapsize", "eglsrf", "eglimg", "inode");
+			"usage", "sglen", "mapcnt", "eglsrf", "eglimg", "inode");
 		return 0;
 	} else
 		return print_mem_entry(s, ptr);
@@ -375,7 +416,7 @@ void kgsl_process_init_debugfs(struct kgsl_process_private *private)
 
 void kgsl_core_debugfs_init(void)
 {
-	struct dentry *debug_dir;
+	struct dentry *debug_dir, *dentry;
 
 	kgsl_debugfs_dir = debugfs_create_dir("kgsl", NULL);
 	if (IS_ERR_OR_NULL(kgsl_debugfs_dir))
@@ -387,6 +428,17 @@ void kgsl_core_debugfs_init(void)
 		&_strict_fops);
 
 	proc_d_debugfs = debugfs_create_dir("proc", kgsl_debugfs_dir);
+
+	mempools_debugfs = debugfs_create_dir("mempools", kgsl_debugfs_dir);
+
+	if (IS_ERR_OR_NULL(mempools_debugfs))
+		return;
+
+	dentry = debugfs_create_file("pool_size", 0444,
+		mempools_debugfs, NULL, &_pool_size_fops);
+
+	WARN((IS_ERR_OR_NULL(dentry)),
+		"Unable to create 'pool_size' file for mempools\n");
 }
 
 void kgsl_core_debugfs_close(void)

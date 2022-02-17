@@ -2714,6 +2714,23 @@ static void sdhci_msm_registers_restore(struct sdhci_host *host)
 			msm_offset->core_pwrctl_mask));
 }
 
+static void sdhci_msm_set_timeout(struct sdhci_host *host, struct mmc_command *cmd)
+{
+	u32 count, start = 15;
+
+	__sdhci_set_timeout(host, cmd);
+	count = sdhci_readb(host, SDHCI_TIMEOUT_CONTROL);
+	/*
+	 * Update software timeout value if its value is less than hardware data
+	 * timeout value. Qcom SoC hardware data timeout value was calculated
+	 * using 4 * MCLK * 2^(count + 13). where MCLK = 1 / host->clock.
+	 */
+	if (cmd && cmd->data && host->clock > 400000 &&
+	    host->clock <= 50000000 &&
+	    ((1 << (count + start)) > (10 * host->clock)))
+		host->data_timeout = 22LL * NSEC_PER_SEC;
+}
+
 /*
  * Platform specific register write functions. This is so that, if any
  * register write needs to be followed up by platform specific actions,
@@ -3523,6 +3540,7 @@ static const struct sdhci_ops sdhci_msm_ops = {
 	.notify_load = sdhci_msm_notify_load,
 #endif
 	.hw_reset = sdhci_msm_hw_reset,
+	.set_timeout = sdhci_msm_set_timeout,
 };
 
 static const struct sdhci_pltfm_data sdhci_msm_pdata = {
@@ -4186,10 +4204,37 @@ static ssize_t dbg_state_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(dbg_state);
 
+static ssize_t crash_on_err_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct sdhci_host *host = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%c\n", (host->mmc->crash_on_err) ? 'Y' : 'N');
+}
+
+static ssize_t crash_on_err_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	struct sdhci_host *host = dev_get_drvdata(dev);
+	unsigned char input;
+
+	if (sscanf(buf, "%c", &input) != 1)
+		return -EINVAL;
+
+	if (input == 'Y')
+		host->mmc->crash_on_err = true;
+	else
+		host->mmc->crash_on_err = false;
+	return count;
+}
+static DEVICE_ATTR_RW(crash_on_err);
+
 static struct attribute *sdhci_msm_sysfs_attrs[] = {
 	&dev_attr_err_state.attr,
 	&dev_attr_err_stats.attr,
 	&dev_attr_dbg_state.attr,
+	&dev_attr_crash_on_err.attr,
 	NULL
 };
 

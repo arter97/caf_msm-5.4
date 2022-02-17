@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2016-2021, The Linux Foundation. All rights reserved. */
+/* Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
 
 #include <linux/cma.h>
 #include <linux/firmware.h>
@@ -41,7 +43,7 @@
 
 #define QCA6390_PATH_PREFIX		"qca6390/"
 #define QCA6490_PATH_PREFIX		"qca6490/"
-#define WCN7850_PATH_PREFIX		"wcn7850/"
+#define KIWI_PATH_PREFIX		"kiwi/"
 #define QCN7605_PATH_PREFIX		"qcn7605/"
 #define DEFAULT_PHY_M3_FILE_NAME	"m3.bin"
 #define DEFAULT_PHY_UCODE_FILE_NAME	"phy_ucode.bin"
@@ -77,6 +79,8 @@ static DEFINE_SPINLOCK(time_sync_lock);
 #define FORCE_WAKE_DELAY_MIN_US			4000
 #define FORCE_WAKE_DELAY_MAX_US			6000
 #define FORCE_WAKE_DELAY_TIMEOUT_US		60000
+
+#define REG_RETRY_MAX_TIMES		3
 
 #define LINK_TRAINING_RETRY_MAX_TIMES		3
 #define LINK_TRAINING_RETRY_DELAY_MS		500
@@ -134,6 +138,13 @@ static struct cnss_pci_reg qdss_csr[] = {
 	{ "QDSSCSR_PRESERVEETF", QDSS_APB_DEC_CSR_PRESERVEETF_OFFSET },
 	{ "QDSSCSR_PRESERVEETR0", QDSS_APB_DEC_CSR_PRESERVEETR0_OFFSET },
 	{ "QDSSCSR_PRESERVEETR1", QDSS_APB_DEC_CSR_PRESERVEETR1_OFFSET },
+	{ NULL },
+};
+
+static struct cnss_pci_reg pci_scratch[] = {
+	{ "PCIE_SCRATCH_0", PCIE_SCRATCH_0_SOC_PCIE_REG },
+	{ "PCIE_SCRATCH_1", PCIE_SCRATCH_1_SOC_PCIE_REG },
+	{ "PCIE_SCRATCH_2", PCIE_SCRATCH_2_SOC_PCIE_REG },
 	{ NULL },
 };
 
@@ -1097,6 +1108,36 @@ retry:
 	return ret;
 }
 
+static void cnss_pci_soc_scratch_reg_dump(struct cnss_pci_data *pci_priv)
+{
+	u32 reg_offset, val;
+	int i;
+
+	switch (pci_priv->device_id) {
+	case QCA6390_DEVICE_ID:
+	case QCA6490_DEVICE_ID:
+		break;
+	default:
+		return;
+	}
+
+	if (in_interrupt() || irqs_disabled())
+		return;
+
+	if (cnss_pci_check_link_status(pci_priv))
+		return;
+
+	cnss_pr_dbg("Start to dump SOC Scratch registers\n");
+
+	for (i = 0; pci_scratch[i].name; i++) {
+		reg_offset = pci_scratch[i].offset;
+		if (cnss_pci_reg_read(pci_priv, reg_offset, &val))
+			return;
+		cnss_pr_dbg("PCIE_SOC_REG_%s = 0x%x\n",
+			    pci_scratch[i].name, val);
+	}
+}
+
 int cnss_suspend_pci_link(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0;
@@ -1191,7 +1232,7 @@ int cnss_pci_recover_link_down(struct cnss_pci_data *pci_priv)
 	switch (pci_priv->device_id) {
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
-	case WCN7850_DEVICE_ID:
+	case KIWI_DEVICE_ID:
 		break;
 	default:
 		return -EOPNOTSUPP;
@@ -1217,6 +1258,7 @@ int cnss_pci_recover_link_down(struct cnss_pci_data *pci_priv)
 		  jiffies + msecs_to_jiffies(DEV_RDDM_TIMEOUT));
 
 	mhi_debug_reg_dump(pci_priv->mhi_ctrl);
+	cnss_pci_soc_scratch_reg_dump(pci_priv);
 
 	return 0;
 }
@@ -1339,6 +1381,11 @@ int cnss_pci_link_down(struct device *dev)
 		return -ENODEV;
 	}
 
+	if (pci_priv->pci_link_down_ind) {
+		cnss_pr_dbg("PCI link down recovery is already in progress\n");
+		return -EBUSY;
+	}
+
 	if (pci_priv->drv_connected_last &&
 	    of_property_read_bool(plat_priv->plat_dev->dev.of_node,
 				  "cnss-enable-self-recovery"))
@@ -1425,29 +1472,23 @@ EXPORT_SYMBOL(cnss_pci_unlock_reg_window);
  */
 static void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 {
-	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	u32 mem_addr, val, pbl_log_max_size, sbl_log_max_size;
-	u32 sbl_log_def_start, sbl_log_def_end;
+	u32 pbl_log_sram_start;
 	u32 pbl_stage, sbl_log_start, sbl_log_size;
 	u32 pbl_wlan_boot_cfg, pbl_bootstrap_status;
+	u32 sbl_log_def_start = SRAM_START;
+	u32 sbl_log_def_end = SRAM_END;
 	int i;
 
 	switch (pci_priv->device_id) {
 	case QCA6390_DEVICE_ID:
+		pbl_log_sram_start = QCA6390_DEBUG_PBL_LOG_SRAM_START;
 		pbl_log_max_size = QCA6390_DEBUG_PBL_LOG_SRAM_MAX_SIZE;
 		sbl_log_max_size = QCA6390_DEBUG_SBL_LOG_SRAM_MAX_SIZE;
-		sbl_log_def_start = QCA6390_V2_SBL_DATA_START;
-		sbl_log_def_end = QCA6390_V2_SBL_DATA_END;
 	case QCA6490_DEVICE_ID:
+		pbl_log_sram_start = QCA6490_DEBUG_PBL_LOG_SRAM_START;
 		pbl_log_max_size = QCA6490_DEBUG_PBL_LOG_SRAM_MAX_SIZE;
 		sbl_log_max_size = QCA6490_DEBUG_SBL_LOG_SRAM_MAX_SIZE;
-		if (plat_priv->device_version.major_version == FW_V2_NUMBER) {
-			sbl_log_def_start = QCA6490_V2_SBL_DATA_START;
-			sbl_log_def_end = QCA6490_V2_SBL_DATA_END;
-		} else {
-			sbl_log_def_start = QCA6490_V1_SBL_DATA_START;
-			sbl_log_def_end = QCA6490_V1_SBL_DATA_END;
-		}
 		break;
 	default:
 		return;
@@ -1469,7 +1510,7 @@ static void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 
 	cnss_pr_dbg("Dumping PBL log data\n");
 	for (i = 0; i < pbl_log_max_size; i += sizeof(val)) {
-		mem_addr = DEBUG_PBL_LOG_SRAM_START + i;
+		mem_addr = pbl_log_sram_start + i;
 		if (cnss_pci_reg_read(pci_priv, mem_addr, &val))
 			break;
 		cnss_pr_dbg("SRAM[0x%x] = 0x%x\n", mem_addr, val);
@@ -1512,6 +1553,7 @@ static int cnss_pci_handle_mhi_poweron_timeout(struct cnss_pci_data *pci_priv)
 	} else {
 		cnss_pr_dbg("RDDM cookie is not set\n");
 		mhi_debug_reg_dump(pci_priv->mhi_ctrl);
+		cnss_pci_soc_scratch_reg_dump(pci_priv);
 		/* Dump PBL/SBL error log if RDDM cookie is not set */
 		cnss_pci_dump_bl_sram_mem(pci_priv);
 		return -ETIMEDOUT;
@@ -1717,6 +1759,12 @@ retry:
 		break;
 	case CNSS_MHI_TRIGGER_RDDM:
 		ret = mhi_force_rddm_mode(pci_priv->mhi_ctrl);
+		if (ret) {
+			cnss_pr_err("Failed to trigger RDDM, err = %d\n", ret);
+
+			cnss_pr_dbg("Sending host reset req\n");
+			ret = mhi_force_reset(pci_priv->mhi_ctrl);
+		}
 		break;
 	case CNSS_MHI_RDDM_DONE:
 		break;
@@ -1942,6 +1990,7 @@ int cnss_pci_start_mhi(struct cnss_pci_data *pci_priv)
 	int ret = 0;
 	struct cnss_plat_data *plat_priv;
 	unsigned int timeout = 0;
+	int retry = 0;
 
 	if (!pci_priv) {
 		cnss_pr_err("pci_priv is NULL\n");
@@ -1967,16 +2016,21 @@ int cnss_pci_start_mhi(struct cnss_pci_data *pci_priv)
 	else /* For perf builds the timeout is 10 (default) * 3 seconds */
 		pci_priv->mhi_ctrl->timeout_ms *= 3;
 
+retry:
 	ret = cnss_pci_store_qrtr_node_id(pci_priv);
-	if (ret)
-		return ret;
+	if (ret) {
+		if (retry++ < REG_RETRY_MAX_TIMES)
+			goto retry;
+		else
+			return ret;
+	}
 
 	/* Start the timer to dump MHI/PBL/SBL debug data periodically */
 	mod_timer(&pci_priv->boot_debug_timer,
 		  jiffies + msecs_to_jiffies(BOOT_DEBUG_TIMEOUT_MS));
 
 	ret = cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_POWER_ON);
-	del_timer(&pci_priv->boot_debug_timer);
+	del_timer_sync(&pci_priv->boot_debug_timer);
 	if (ret == 0)
 		cnss_wlan_adsp_pc_enable(pci_priv, false);
 
@@ -2818,7 +2872,7 @@ int cnss_pci_dev_powerup(struct cnss_pci_data *pci_priv)
 	case QCA6390_DEVICE_ID:
 	case QCN7605_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
-	case WCN7850_DEVICE_ID:
+	case KIWI_DEVICE_ID:
 		ret = cnss_qca6290_powerup(pci_priv);
 		break;
 	default:
@@ -2847,7 +2901,7 @@ int cnss_pci_dev_shutdown(struct cnss_pci_data *pci_priv)
 	case QCA6390_DEVICE_ID:
 	case QCN7605_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
-	case WCN7850_DEVICE_ID:
+	case KIWI_DEVICE_ID:
 		ret = cnss_qca6290_shutdown(pci_priv);
 		break;
 	default:
@@ -2876,7 +2930,7 @@ int cnss_pci_dev_crash_shutdown(struct cnss_pci_data *pci_priv)
 	case QCA6390_DEVICE_ID:
 	case QCN7605_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
-	case WCN7850_DEVICE_ID:
+	case KIWI_DEVICE_ID:
 		cnss_qca6290_crash_shutdown(pci_priv);
 		break;
 	default:
@@ -2905,7 +2959,7 @@ int cnss_pci_dev_ramdump(struct cnss_pci_data *pci_priv)
 	case QCA6390_DEVICE_ID:
 	case QCN7605_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
-	case WCN7850_DEVICE_ID:
+	case KIWI_DEVICE_ID:
 		ret = cnss_qca6290_ramdump(pci_priv);
 		break;
 	default:
@@ -3862,7 +3916,7 @@ int cnss_pci_force_wake_request_sync(struct device *dev, int timeout_us)
 	switch (pci_priv->device_id) {
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
-	case WCN7850_DEVICE_ID:
+	case KIWI_DEVICE_ID:
 		break;
 	default:
 		return 0;
@@ -3903,7 +3957,7 @@ int cnss_pci_force_wake_request(struct device *dev)
 	switch (pci_priv->device_id) {
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
-	case WCN7850_DEVICE_ID:
+	case KIWI_DEVICE_ID:
 		break;
 	default:
 		return 0;
@@ -3938,7 +3992,7 @@ int cnss_pci_is_device_awake(struct device *dev)
 	switch (pci_priv->device_id) {
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
-	case WCN7850_DEVICE_ID:
+	case KIWI_DEVICE_ID:
 		break;
 	default:
 		return 0;
@@ -3965,7 +4019,7 @@ int cnss_pci_force_wake_release(struct device *dev)
 	switch (pci_priv->device_id) {
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
-	case WCN7850_DEVICE_ID:
+	case KIWI_DEVICE_ID:
 		break;
 	default:
 		return 0;
@@ -4908,6 +4962,7 @@ static void cnss_pci_dump_debug_reg(struct cnss_pci_data *pci_priv)
 	cnss_pr_dbg("Start to dump debug registers\n");
 
 	mhi_debug_reg_dump(pci_priv->mhi_ctrl);
+	cnss_pci_soc_scratch_reg_dump(pci_priv);
 	cnss_pci_dump_ce_reg(pci_priv, CNSS_CE_COMMON);
 	cnss_pci_dump_ce_reg(pci_priv, CNSS_CE_09);
 	cnss_pci_dump_ce_reg(pci_priv, CNSS_CE_10);
@@ -4934,6 +4989,7 @@ int cnss_pci_force_fw_assert_hdlr(struct cnss_pci_data *pci_priv)
 	if (!cnss_pci_check_link_status(pci_priv))
 		mhi_debug_reg_dump(pci_priv->mhi_ctrl);
 
+	cnss_pci_soc_scratch_reg_dump(pci_priv);
 	cnss_pci_dump_misc_reg(pci_priv);
 	cnss_pci_dump_shadow_reg(pci_priv);
 
@@ -5115,6 +5171,7 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 	}
 
 	mhi_debug_reg_dump(pci_priv->mhi_ctrl);
+	cnss_pci_soc_scratch_reg_dump(pci_priv);
 	cnss_pci_dump_misc_reg(pci_priv);
 	cnss_pci_dump_shadow_reg(pci_priv);
 	cnss_pci_dump_qdss_reg(pci_priv);
@@ -5284,9 +5341,9 @@ void cnss_pci_add_fw_prefix_name(struct cnss_pci_data *pci_priv,
 		scnprintf(prefix_name, MAX_FIRMWARE_NAME_LEN,
 			  QCA6490_PATH_PREFIX "%s", name);
 		break;
-	case WCN7850_DEVICE_ID:
+	case KIWI_DEVICE_ID:
 		scnprintf(prefix_name, MAX_FIRMWARE_NAME_LEN,
-			  WCN7850_PATH_PREFIX "%s", name);
+			  KIWI_PATH_PREFIX "%s", name);
 		break;
 	default:
 		scnprintf(prefix_name, MAX_FIRMWARE_NAME_LEN, "%s", name);
@@ -5396,6 +5453,7 @@ static void cnss_dev_rddm_timeout_hdlr(struct timer_list *t)
 		cnss_pr_err("Unable to collect ramdumps due to abrupt reset\n");
 
 	mhi_debug_reg_dump(pci_priv->mhi_ctrl);
+	cnss_pci_soc_scratch_reg_dump(pci_priv);
 
 	cnss_schedule_recovery(&pci_priv->pci_dev->dev, CNSS_REASON_TIMEOUT);
 }
@@ -5423,6 +5481,7 @@ static void cnss_boot_debug_timeout_hdlr(struct timer_list *t)
 	cnss_pr_dbg("Dump MHI/PBL/SBL debug data every %ds during MHI power on\n",
 		    BOOT_DEBUG_TIMEOUT_MS / 1000);
 	mhi_debug_reg_dump(pci_priv->mhi_ctrl);
+	cnss_pci_soc_scratch_reg_dump(pci_priv);
 	cnss_pci_dump_bl_sram_mem(pci_priv);
 
 	mod_timer(&pci_priv->boot_debug_timer,
@@ -6089,7 +6148,7 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	case QCA6390_DEVICE_ID:
 	case QCN7605_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
-	case WCN7850_DEVICE_ID:
+	case KIWI_DEVICE_ID:
 		if ((cnss_is_dual_wlan_enabled() &&
 		     plat_priv->enumerate_done) || !cnss_is_dual_wlan_enabled())
 			cnss_pci_set_wlaon_pwr_ctrl(pci_priv, false, false,
@@ -6163,7 +6222,7 @@ static void cnss_pci_remove(struct pci_dev *pci_dev)
 	case QCA6290_DEVICE_ID:
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
-	case WCN7850_DEVICE_ID:
+	case KIWI_DEVICE_ID:
 		cnss_pci_wake_gpio_deinit(pci_priv);
 		del_timer(&pci_priv->boot_debug_timer);
 		del_timer(&pci_priv->dev_rddm_timer);
@@ -6192,7 +6251,7 @@ static const struct pci_device_id cnss_pci_id_table[] = {
 	{ QCA6390_VENDOR_ID, QCA6390_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID },
 	{ QCN7605_VENDOR_ID, QCN7605_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID},
 	{ QCA6490_VENDOR_ID, QCA6490_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID },
-	{ WCN7850_VENDOR_ID, WCN7850_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID },
+	{ KIWI_VENDOR_ID, KIWI_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID },
 	{ 0 }
 };
 MODULE_DEVICE_TABLE(pci, cnss_pci_id_table);

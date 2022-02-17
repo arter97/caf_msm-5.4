@@ -1044,6 +1044,7 @@ static int qcom_glink_rx_data(struct qcom_glink *glink, size_t avail)
 			dev_err(glink->dev,
 				"no intent found for channel %s intent %d",
 				channel->name, liid);
+			ret = -ENOENT;
 			goto advance_rx;
 		}
 	}
@@ -1262,6 +1263,7 @@ static irqreturn_t qcom_glink_native_intr(int irq, void *data)
 	if (should_wake) {
 		pr_info("%s: %d triggered %s\n", __func__, irq, glink->irqname);
 		glink_resume_pkt = true;
+		should_wake = false;
 		pm_system_wakeup();
 	}
 	/* To wakeup any blocking writers */

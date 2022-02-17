@@ -17,6 +17,7 @@
 #include <asm/io.h>
 
 #include "stmmac.h"
+#include "hwif.h"
 #include "dwmac_dma.h"
 #include "dwxgmac2.h"
 
@@ -486,8 +487,14 @@ stmmac_get_pauseparam(struct net_device *netdev,
 		if (!adv_lp.pause)
 			return;
 	} else {
-		if (!priv->plat->mac2mac_en)
+		if (!priv->plat->mac2mac_en) {
 			phylink_ethtool_get_pauseparam(priv->phylink, pause);
+		} else {
+			if (priv->flow_ctrl & FLOW_RX)
+				pause->rx_pause = 1;
+			if (priv->flow_ctrl & FLOW_TX)
+				pause->tx_pause = 1;
+		}
 	}
 }
 
@@ -498,9 +505,11 @@ stmmac_set_pauseparam(struct net_device *netdev,
 	struct stmmac_priv *priv = netdev_priv(netdev);
 	struct rgmii_adv adv_lp;
 
+	u32 tx_cnt = priv->plat->tx_queues_to_use;
 	struct phy_device *phy = netdev->phydev;
+	int new_pause = FLOW_OFF;
 
-	if (!phy) {
+	if (!phy && !priv->plat->mac2mac_en) {
 		pr_err("%s: %s: PHY is not registered\n",
 		       __func__, netdev->name);
 		return -ENODEV;
@@ -512,10 +521,19 @@ stmmac_set_pauseparam(struct net_device *netdev,
 			return -EOPNOTSUPP;
 		return 0;
 	} else {
-		if (!priv->plat->mac2mac_en)
+		if (!priv->plat->mac2mac_en) {
 			return phylink_ethtool_set_pauseparam(priv->phylink, pause);
-		else
+		} else {
+			if (pause->rx_pause)
+				new_pause |= FLOW_RX;
+			if (pause->tx_pause)
+				new_pause |= FLOW_TX;
+
+			priv->flow_ctrl = new_pause;
+			stmmac_flow_ctrl(priv, priv->hw, 0, priv->flow_ctrl,
+					 priv->pause, tx_cnt);
 			return 0;
+		}
 	}
 }
 
@@ -655,10 +673,12 @@ static void stmmac_get_wol(struct net_device *dev, struct ethtool_wolinfo *wol)
 		return;
 	}
 
+	phy_ethtool_get_wol(priv->phydev, wol);
+
 	mutex_lock(&priv->lock);
 	if (device_can_wakeup(priv->device)) {
 		wol->supported = WAKE_MAGIC | WAKE_UCAST;
-		wol->wolopts = priv->wolopts;
+		wol->wolopts |= priv->wolopts;
 	}
 	mutex_unlock(&priv->lock);
 }
@@ -667,11 +687,26 @@ static int stmmac_set_wol(struct net_device *dev, struct ethtool_wolinfo *wol)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
 	u32 support = WAKE_MAGIC | WAKE_UCAST;
+	int ret = 0;
 
 	if (!priv->phydev) {
 		pr_err("%s: %s: PHY is not registered\n",
 		       __func__, dev->name);
 		return -ENODEV;
+	}
+	if (!priv->plat->pmt) {
+		wol->cmd = ETHTOOL_SWOL;
+		ret = phy_ethtool_set_wol(priv->phydev, wol);
+		if (ret)
+			return ret;
+
+		device_set_wakeup_capable(priv->device, 1);
+
+		device_set_wakeup_enable(priv->device, 1);
+
+		enable_irq_wake(priv->phy_intr_wol_irq);
+
+		return ret;
 	}
 
 	/* By default almost all GMAC devices support the WoL via

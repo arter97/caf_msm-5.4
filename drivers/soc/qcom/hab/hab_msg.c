@@ -3,10 +3,11 @@
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 #include "hab.h"
+#include "hab_grantable.h"
 
 static int hab_rx_queue_empty(struct virtual_channel *vchan)
 {
-	int ret;
+	int ret = 0;
 	int irqs_disabled = irqs_disabled();
 
 	hab_spin_lock(&vchan->rx_lock, irqs_disabled);
@@ -167,6 +168,16 @@ static int hab_receive_create_export_ack(struct physical_channel *pchan,
 		return -EINVAL;
 	}
 
+	/*
+	 * If the hab version on remote side is different with local side,
+	 * the size of the ack structure may differ. Under this circumstance,
+	 * the sizebytes is still trusted. Thus, we need to read it out and
+	 * drop the mismatched ack message from channel.
+	 * Dropping such message could avoid the [payload][header][payload]
+	 * data layout which will make the whole channel unusable.
+	 * But for security reason, we cannot perform it when sizebytes is
+	 * larger than expected.
+	 */
 	if (physical_channel_read(pchan,
 		&ack_recvd->ack,
 		sizebytes) != sizebytes) {
@@ -174,9 +185,15 @@ static int hab_receive_create_export_ack(struct physical_channel *pchan,
 		return -EIO;
 	}
 
-	hab_spin_lock(&ctx->expq_lock, irqs_disabled);
-	list_add_tail(&ack_recvd->node, &ctx->exp_rxq);
-	hab_spin_unlock(&ctx->expq_lock, irqs_disabled);
+	/* add ack_recvd node into rx queue only if the sizebytes is expected */
+	if (sizeof(ack_recvd->ack) == sizebytes) {
+		hab_spin_lock(&ctx->expq_lock, irqs_disabled);
+		list_add_tail(&ack_recvd->node, &ctx->exp_rxq);
+		hab_spin_unlock(&ctx->expq_lock, irqs_disabled);
+	} else {
+		kfree(ack_recvd);
+		return -EINVAL;
+	}
 
 	return 0;
 }
@@ -211,6 +228,8 @@ int hab_msg_recv(struct physical_channel *pchan,
 	struct export_desc *exp_desc;
 	struct timespec64 ts = {0};
 	unsigned long long rx_mpm_tv;
+	size_t exp_desc_size_expected = 0;
+	struct compressed_pfns *pfn_table = NULL;
 
 	/* get the local virtual channel if it isn't an open message */
 	if (payload_type != HAB_PAYLOAD_TYPE_INIT &&
@@ -309,11 +328,17 @@ int hab_msg_recv(struct physical_channel *pchan,
 		break;
 
 	case HAB_PAYLOAD_TYPE_EXPORT:
-		if (sizebytes > HAB_HEADER_SIZE_MASK) {
-			pr_err("%s exp size too large %zd header %zd\n",
+		exp_desc_size_expected = sizeof(struct export_desc)
+							+ sizeof(struct compressed_pfns);
+		if (sizebytes > (size_t)(HAB_HEADER_SIZE_MASK) ||
+			sizebytes < exp_desc_size_expected) {
+			pr_err("%s exp size too large/small %zu header %zu\n",
 				pchan->name, sizebytes, sizeof(*exp_desc));
 			break;
 		}
+
+		pr_debug("%s exp payload %zu bytes\n",
+				pchan->name, sizebytes);
 
 		exp_desc = kzalloc(sizebytes, GFP_ATOMIC);
 		if (!exp_desc)
@@ -336,6 +361,47 @@ int hab_msg_recv(struct physical_channel *pchan,
 		exp_desc->domid_remote = pchan->vmid_remote;
 		exp_desc->domid_local = pchan->vmid_local;
 		exp_desc->pchan = pchan;
+
+		/*
+		 * We should do all the checks here.
+		 * But in order to improve performance, we put the
+		 * checks related to exp->payload_count and pfn_table->region[i].size
+		 * into function pages_list_create. So any potential usage of such data
+		 * from the remote side after the checks here and before the checks in
+		 * pages_list_create needs to add some more checks if necessary.
+		 */
+		pfn_table = (struct compressed_pfns *)exp_desc->payload;
+		if (pfn_table->nregions <= 0 ||
+			(pfn_table->nregions > SIZE_MAX / sizeof(struct region)) ||
+			(SIZE_MAX - exp_desc_size_expected <
+			pfn_table->nregions * sizeof(struct region))) {
+			pr_err("%s nregions is too large or negative, nregions:%d!\n",
+					pchan->name, pfn_table->nregions);
+			kfree(exp_desc);
+			break;
+		}
+
+		if (pfn_table->nregions > exp_desc->payload_count) {
+			pr_err("%s nregions %d greater than payload_count %d\n",
+				pchan->name, pfn_table->nregions, exp_desc->payload_count);
+			kfree(exp_desc);
+			break;
+		}
+
+		if (exp_desc->payload_count > MAX_EXP_PAYLOAD_COUNT) {
+			pr_err("payload_count out of range: %d size overflow\n",
+				exp_desc->payload_count);
+			kfree(exp_desc);
+			break;
+		}
+
+		exp_desc_size_expected += pfn_table->nregions * sizeof(struct region);
+		if (sizebytes != exp_desc_size_expected) {
+			pr_err("%s exp size not equal %zu expect %zu\n",
+				pchan->name, sizebytes, exp_desc_size_expected);
+			kfree(exp_desc);
+			break;
+		}
 
 		hab_export_enqueue(vchan, exp_desc);
 		hab_send_export_ack(vchan, pchan, exp_desc);
@@ -362,6 +428,13 @@ int hab_msg_recv(struct physical_channel *pchan,
 
 	case HAB_PAYLOAD_TYPE_PROFILE:
 		ktime_get_ts64(&ts);
+
+		if (sizebytes < sizeof(struct habmm_xing_vm_stat)) {
+			pr_err("%s expected size greater than %zd at least %zd\n",
+				pchan->name, sizebytes, sizeof(struct habmm_xing_vm_stat));
+			break;
+		}
+
 		/* pull down the incoming data */
 		message = hab_msg_alloc(pchan, sizebytes);
 		if (!message)
@@ -378,6 +451,12 @@ int hab_msg_recv(struct physical_channel *pchan,
 
 	case HAB_PAYLOAD_TYPE_SCHE_MSG:
 	case HAB_PAYLOAD_TYPE_SCHE_MSG_ACK:
+		if (sizebytes < sizeof(unsigned long long)) {
+			pr_err("%s expected size greater than %zd at least %zd\n",
+				pchan->name, sizebytes, sizeof(unsigned long long));
+			break;
+		}
+
 		rx_mpm_tv = msm_timer_get_sclk_ticks();
 		/* pull down the incoming data */
 		message = hab_msg_alloc(pchan, sizebytes);

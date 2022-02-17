@@ -347,6 +347,19 @@ static struct clk_branch gpu_cc_gx_gmu_clk = {
 	},
 };
 
+static struct clk_branch gpu_cc_hlos1_vote_gpu_smmu_clk = {
+	.halt_reg = 0x5000,
+	.halt_check = BRANCH_HALT_VOTED,
+	.clkr = {
+		.enable_reg = 0x5000,
+		.enable_mask = BIT(0),
+		.hw.init = &(struct clk_init_data){
+			.name = "gpu_cc_hlos1_vote_gpu_smmu_clk",
+			.ops = &clk_branch2_ops,
+		},
+	},
+};
+
 static struct clk_branch gpu_cc_hub_aon_clk = {
 	.halt_reg = 0x1178,
 	.halt_check = BRANCH_HALT,
@@ -404,6 +417,7 @@ static struct clk_regmap *gpu_cc_direwolf_clocks[] = {
 	[GPU_CC_CXO_AON_CLK] = &gpu_cc_cxo_aon_clk.clkr,
 	[GPU_CC_GMU_CLK_SRC] = &gpu_cc_gmu_clk_src.clkr,
 	[GPU_CC_GX_GMU_CLK] = &gpu_cc_gx_gmu_clk.clkr,
+	[GPU_CC_HLOS1_VOTE_GPU_SMMU_CLK] = &gpu_cc_hlos1_vote_gpu_smmu_clk.clkr,
 	[GPU_CC_HUB_AHB_DIV_CLK_SRC] = &gpu_cc_hub_ahb_div_clk_src.clkr,
 	[GPU_CC_HUB_AON_CLK] = &gpu_cc_hub_aon_clk.clkr,
 	[GPU_CC_HUB_CLK_SRC] = &gpu_cc_hub_clk_src.clkr,
@@ -432,9 +446,25 @@ static struct qcom_cc_desc gpu_cc_direwolf_desc = {
 
 static const struct of_device_id gpu_cc_direwolf_match_table[] = {
 	{ .compatible = "qcom,direwolf-gpucc" },
+	{ .compatible = "qcom,direwolf-gpucc-v2" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, gpu_cc_direwolf_match_table);
+
+static int gpu_cc_direwolf_fixup(struct platform_device *pdev, struct regmap *regmap)
+{
+	const char *compat = NULL;
+	int compatlen;
+
+	compat = of_get_property(pdev->dev.of_node, "compatible", &compatlen);
+	if (!compat || compatlen <= 0)
+		return -EINVAL;
+
+	if (!strcmp(compat, "qcom,direwolf-gpucc-v2"))
+		gpu_cc_pll0.config->alpha = 0xA555;
+
+	return 0;
+}
 
 static int gpu_cc_direwolf_probe(struct platform_device *pdev)
 {
@@ -453,8 +483,12 @@ static int gpu_cc_direwolf_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	clk_lucid_5lpe_pll_configure(&gpu_cc_pll0, regmap, &gpu_cc_pll0_config);
-	clk_lucid_5lpe_pll_configure(&gpu_cc_pll1, regmap, &gpu_cc_pll1_config);
+	ret = gpu_cc_direwolf_fixup(pdev, regmap);
+	if (ret)
+		return ret;
+
+	clk_lucid_5lpe_pll_configure(&gpu_cc_pll0, regmap, gpu_cc_pll0.config);
+	clk_lucid_5lpe_pll_configure(&gpu_cc_pll1, regmap, gpu_cc_pll1.config);
 
 	/*
 	 * Keep the clocks always-ON

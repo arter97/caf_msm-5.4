@@ -19,6 +19,7 @@
 #include <linux/pmic-voter.h>
 #include <linux/suspend.h>
 #include <linux/usb/typec.h>
+#include <linux/nvmem-consumer.h>
 #include "smblite-reg.h"
 #include "smblite-lib.h"
 #include "smb5-iio.h"
@@ -42,6 +43,7 @@ static const struct smb_base_address smb_base[] = {
 		.usbin_base = 0x2900,
 		.misc_base  = 0x2c00,
 		.dcdc_base  = 0x2700,
+		.boost_base = 0x2b00,
 	},
 };
 
@@ -138,6 +140,7 @@ struct smb_dt_props {
 	int			term_current_thresh_lo_ma;
 	int			disable_suspend_on_collapse;
 	bool			remote_fg;
+	enum float_options	float_option;
 };
 
 struct smblite {
@@ -250,6 +253,7 @@ static int smblite_chg_config_init(struct smblite *chip)
 #define DEFAULT_WD_BARK_TIME		16
 #define DEFAULT_FCC_STEP_SIZE_UA	100000
 #define DEFAULT_FCC_STEP_UPDATE_DELAY_MS	1000
+#define DEFAULT_FCC_STEP_START_UA	500000
 static int smblite_parse_dt_misc(struct smblite *chip, struct device_node *node)
 {
 	int rc = 0, byte_len;
@@ -320,8 +324,30 @@ static int smblite_parse_dt_misc(struct smblite *chip, struct device_node *node)
 	if (chg->chg_param.fcc_step_size_ua <= 0)
 		chg->chg_param.fcc_step_size_ua = DEFAULT_FCC_STEP_SIZE_UA;
 
+	rc = of_property_read_u32(node, "qcom,fcc-step-start-ua",
+					&chg->chg_param.fcc_step_start_ua);
+	if (rc < 0)
+		chg->chg_param.fcc_step_start_ua = DEFAULT_FCC_STEP_START_UA;
+
 	chg->concurrent_mode_supported = of_property_read_bool(node,
 					"qcom,concurrency-mode-supported");
+
+	rc = of_property_read_u32(node, "qcom,float-option",
+						&chip->dt.float_option);
+	if (!rc && (chip->dt.float_option < 0 || chip->dt.float_option > 4)) {
+		pr_err("qcom,float-option is out of range [0, 4]\n");
+		return -EINVAL;
+	}
+
+	if (of_find_property(node, "nvmem-cells", NULL)) {
+		chg->debug_mask_nvmem = devm_nvmem_cell_get(chg->dev, "charger_debug_mask");
+		if (IS_ERR(chg->debug_mask_nvmem)) {
+			rc = PTR_ERR(chg->debug_mask_nvmem);
+			if (rc != -EPROBE_DEFER)
+				dev_err(chg->dev, "Failed to get nvmem-cells, rc=%d\n", rc);
+			return rc;
+		}
+	}
 
 	return 0;
 }
@@ -759,6 +785,9 @@ static int smblite_batt_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
 		rc = smblite_lib_set_prop_input_suspend(chg, val->intval);
 		break;
+	case POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT:
+		rc = smblite_lib_set_prop_batt_iterm(chg, val->intval);
+		break;
 	default:
 		rc = -EINVAL;
 	}
@@ -778,6 +807,7 @@ static int smblite_batt_prop_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
+	case POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT:
 		rc = 1;
 		break;
 	default:
@@ -950,8 +980,11 @@ static int smblite_configure_iterm_thresholds_adc(struct smblite *chip)
 	 */
 
 	if (chip->dt.term_current_thresh_hi_ma) {
-		raw_hi_thresh = RAW_ITERM(chip->dt.term_current_thresh_hi_ma,
-					max_limit_ma);
+		if (chg->subtype == PM5100)
+			raw_hi_thresh = PM5100_RAW_ITERM(chip->dt.term_current_thresh_hi_ma);
+		else
+			raw_hi_thresh = RAW_ITERM(chip->dt.term_current_thresh_hi_ma,
+						max_limit_ma);
 		raw_hi_thresh = sign_extend32(raw_hi_thresh, 15);
 		buf = (u8 *)&raw_hi_thresh;
 		raw_hi_thresh = buf[1] | (buf[0] << 8);
@@ -966,8 +999,11 @@ static int smblite_configure_iterm_thresholds_adc(struct smblite *chip)
 	}
 
 	if (chip->dt.term_current_thresh_lo_ma) {
-		raw_lo_thresh = RAW_ITERM(chip->dt.term_current_thresh_lo_ma,
-					max_limit_ma);
+		if (chg->subtype == PM5100)
+			raw_lo_thresh = PM5100_RAW_ITERM(chip->dt.term_current_thresh_lo_ma);
+		else
+			raw_lo_thresh = RAW_ITERM(chip->dt.term_current_thresh_lo_ma,
+						max_limit_ma);
 		raw_lo_thresh = sign_extend32(raw_lo_thresh, 15);
 		buf = (u8 *)&raw_lo_thresh;
 		raw_lo_thresh = buf[1] | (buf[0] << 8);
@@ -1058,6 +1094,41 @@ static int smblite_configure_recharging(struct smblite *chip)
 
 	return 0;
 }
+
+static int smblite_configure_float_charger(struct smblite *chip)
+{
+	int rc = 0;
+	struct smb_charger *chg = &chip->chg;
+
+	/* configure float charger options */
+	switch (chip->dt.float_option) {
+	case FLOAT_SDP:
+		chg->float_cfg = FORCE_FLOAT_SDP_CFG_BIT;
+		break;
+	case DISABLE_CHARGING:
+		chg->float_cfg = FLOAT_DIS_CHGING_CFG_BIT;
+		break;
+	case SUSPEND_INPUT:
+		chg->float_cfg = SUSPEND_FLOAT_CFG_BIT;
+		break;
+	case FLOAT_DCP:
+	default:
+		chg->float_cfg = 0;
+		break;
+	}
+
+	/* Update float charger setting and set DCD timeout 300ms */
+	rc = smblite_lib_masked_write(chg, USB_APSD_CFG_REG(chg->base),
+				FLOAT_OPTIONS_MASK, chg->float_cfg);
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't change float charger setting rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	return 0;
+}
+
 
 static int smblite_init_connector_type(struct smb_charger *chg)
 {
@@ -1248,6 +1319,10 @@ static int smblite_init_hw(struct smblite *chip)
 	if (rc < 0)
 		return rc;
 
+	rc = smblite_configure_float_charger(chip);
+	if (rc < 0)
+		return rc;
+
 	return rc;
 }
 
@@ -1391,6 +1466,10 @@ static struct smb_irq_info smblite_irqs[] = {
 	[SWITCHER_POWER_OK_IRQ] = {
 		.name		= "switcher-power-ok",
 		.handler	= smblite_switcher_power_ok_irq_handler,
+	},
+	[BOOST_MODE_ACTIVE_IRQ] = {
+		.name		= "boost-mode-sw-en",
+		.handler	= smblite_boost_mode_sw_en_irq_handler,
 	},
 	/* BATTERY IRQs */
 	[BAT_TEMP_IRQ] = {
@@ -1630,10 +1709,12 @@ static void smblite_disable_interrupts(struct smb_charger *chg)
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(smblite_irqs); i++) {
-		if (smblite_irqs[i].irq > 0) {
+		if (smblite_irqs[i].irq > 0 && smblite_irqs[i].enabled) {
 			if (smblite_irqs[i].wake)
 				disable_irq_wake(smblite_irqs[i].irq);
+			irq_set_status_flags(smblite_irqs[i].irq, IRQ_DISABLE_UNLAZY);
 			disable_irq(smblite_irqs[i].irq);
+			smblite_irqs[i].enabled = false;
 		}
 	}
 
@@ -1677,6 +1758,61 @@ static int force_usb_psy_update_write(void *data, u64 val)
 DEFINE_DEBUGFS_ATTRIBUTE(force_usb_psy_update_ops, NULL,
 			force_usb_psy_update_write, "0x%02llx\n");
 
+
+static ssize_t smblite_debug_mask_read(struct file *filp, char __user *buffer,
+		size_t count, loff_t *ppos)
+{
+	char *buf;
+	ssize_t len;
+
+	if (*ppos != 0)
+		return 0;
+
+	buf = kasprintf(GFP_KERNEL, "%d\n", __debug_mask);
+	if (!buf)
+		return -ENOMEM;
+
+	if (count < strlen(buf)) {
+		kfree(buf);
+		return -ENOSPC;
+	}
+
+	len = simple_read_from_buffer(buffer, count, ppos, buf, strlen(buf));
+	kfree(buf);
+
+	return len;
+}
+
+static ssize_t smblite_debug_mask_write(struct file *filp, const char __user *buffer,
+		size_t count, loff_t *ppos)
+{
+	struct smblite *chip = filp->private_data;
+	struct smb_charger *chg = &chip->chg;
+	int rc = 0;
+
+	rc = kstrtou8_from_user(buffer, count, 10, (u8 *)&__debug_mask);
+	if (rc < 0)
+		return rc;
+
+	if (!chg->debug_mask_nvmem)
+		return count;
+
+	rc = nvmem_cell_write(chg->debug_mask_nvmem, (u8 *)&__debug_mask, 1);
+	if (rc < 0) {
+		pr_err("Failed to write charger debug mask, rc = %d\n", rc);
+		return rc;
+	}
+
+	return count;
+}
+
+static const struct file_operations smblite_debug_mask_fops = {
+	.owner = THIS_MODULE,
+	.open = simple_open,
+	.read = smblite_debug_mask_read,
+	.write = smblite_debug_mask_write,
+};
+
 static void smblite_create_debugfs(struct smblite *chip)
 {
 	struct dentry *file;
@@ -1700,8 +1836,8 @@ static void smblite_create_debugfs(struct smblite *chip)
 		pr_err("Couldn't create force_usb_psy_update file rc=%ld\n",
 			(long)file);
 
-	file = debugfs_create_u32("debug_mask", 0600, chip->dfs_root,
-			&__debug_mask);
+	file = debugfs_create_file("debug_mask", 0600, chip->dfs_root, chip,
+			&smblite_debug_mask_fops);
 	if (IS_ERR_OR_NULL(file))
 		pr_err("Couldn't create debug_mask file rc=%ld\n", (long)file);
 }
@@ -1712,6 +1848,26 @@ static void smblite_create_debugfs(struct smblite *chip)
 {}
 
 #endif
+
+static void get_smblite_debug_mask(struct smblite *chip)
+{
+	struct smb_charger *chg = &chip->chg;
+	ssize_t len;
+	char *data;
+
+	if (!chg->debug_mask_nvmem)
+		return;
+
+	data = nvmem_cell_read(chg->debug_mask_nvmem, &len);
+	if (IS_ERR(data)) {
+		pr_err("Failed to read charger debug mask from SDAM\n");
+		return;
+	}
+
+	__debug_mask = *data & 0xff;
+
+	kfree(data);
+}
 
 static int smblite_show_charger_status(struct smblite *chip)
 {
@@ -1969,6 +2125,9 @@ static int smblite_probe(struct platform_device *pdev)
 		pr_err("Couldn't parse device tree rc=%d\n", rc);
 		return rc;
 	}
+
+	get_smblite_debug_mask(chip);
+
 	 /* set driver data before resources request it */
 	platform_set_drvdata(pdev, chip);
 

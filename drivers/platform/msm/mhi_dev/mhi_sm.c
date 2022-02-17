@@ -16,6 +16,9 @@
 #define MHI_SM_DBG(fmt, args...) \
 	mhi_log(MHI_MSG_DBG, fmt, ##args)
 
+#define MHI_SM_CONSOLE_DBG(fmt, args...) \
+	mhi_log(MHI_MSG_CRITICAL, fmt, ##args)
+
 #define MHI_SM_ERR(fmt, args...) \
 	mhi_log(MHI_MSG_ERROR, fmt, ##args)
 
@@ -517,20 +520,21 @@ static int mhi_sm_prepare_resume(void)
 				MHI_SM_ERR("IPA enable failed:%d\n", res);
 				return res;
 			}
-		}
 
-		res = ipa_mhi_resume();
-		if (res) {
-			MHI_SM_ERR("Failed resuming ipa_mhi:%d", res);
-			goto exit;
+			res = ipa_mhi_resume();
+			if (res) {
+				MHI_SM_ERR("Failed resuming ipa_mhi:%d", res);
+				goto exit;
+			}
 		}
 	}
 
-
-	res = ipa_mhi_update_mstate(IPA_MHI_STATE_M0);
-	if (res) {
-		MHI_SM_ERR("Failed updating MHI state to M0, %d", res);
-		goto exit;
+	if (mhi_sm_ctx->mhi_dev->use_ipa) {
+		res = ipa_mhi_update_mstate(IPA_MHI_STATE_M0);
+		if (res) {
+			MHI_SM_ERR("Failed updating MHI state to M0, %d", res);
+			goto exit;
+		}
 	}
 
 	if ((old_state == MHI_DEV_M3_STATE) ||
@@ -647,17 +651,19 @@ static int mhi_sm_prepare_suspend(enum mhi_dev_state new_state)
 			goto exit;
 		}
 
-		/* Notify IPA MHI of state change */
-		if (new_state == MHI_DEV_M2_STATE)
-			res = ipa_mhi_update_mstate(IPA_MHI_STATE_M2);
-		else
-			res = ipa_mhi_update_mstate(IPA_MHI_STATE_M3);
+		if (mhi_sm_ctx->mhi_dev->use_ipa) {
+			/* Notify IPA MHI of state change */
+			if (new_state == MHI_DEV_M2_STATE)
+				res = ipa_mhi_update_mstate(IPA_MHI_STATE_M2);
+			else
+				res = ipa_mhi_update_mstate(IPA_MHI_STATE_M3);
 
-		/* Suspend IPA either in M2 or M3 state */
-		res = ipa_mhi_suspend(true);
-		if (res) {
-			MHI_SM_ERR("Failed to suspend ipa_mhi:%d\n", res);
-			goto exit;
+			/* Suspend IPA either in M2 or M3 state */
+			res = ipa_mhi_suspend(true);
+			if (res) {
+				MHI_SM_ERR("Failed to suspend ipa_mhi:%d\n", res);
+				goto exit;
+			}
 		}
 
 		if (new_state == MHI_DEV_M2_STATE)
@@ -867,10 +873,10 @@ static void mhi_sm_dev_event_manager(struct work_struct *work)
 	MHI_SM_FUNC_ENTRY();
 
 	mutex_lock(&mhi_sm_ctx->mhi_state_lock);
-	MHI_SM_DBG("Start handling %s event, current states: %s & %s\n",
-		mhi_sm_dev_event_str(chg_event->event),
-		mhi_sm_mstate_str(mhi_sm_ctx->mhi_state),
-		mhi_sm_dstate_str(mhi_sm_ctx->d_state));
+	MHI_SM_CONSOLE_DBG("Handling %s event, current states: %s & %s\n",
+			mhi_sm_dev_event_str(chg_event->event),
+			mhi_sm_mstate_str(mhi_sm_ctx->mhi_state),
+			mhi_sm_dstate_str(mhi_sm_ctx->d_state));
 
 	if (mhi_sm_ctx->syserr_occurred) {
 		MHI_SM_DBG("syserr occurred, Ignoring %s\n",
@@ -952,10 +958,10 @@ static void mhi_sm_pcie_event_manager(struct work_struct *work)
 	mutex_lock(&mhi_sm_ctx->mhi_state_lock);
 	old_dstate = mhi_sm_ctx->d_state;
 
-	MHI_SM_DBG("Start handling %s event, current MHI state %s and %s\n",
-		mhi_sm_pcie_event_str(chg_event->event),
-		mhi_sm_mstate_str(mhi_sm_ctx->mhi_state),
-		mhi_sm_dstate_str(old_dstate));
+	MHI_SM_CONSOLE_DBG("Handling %s event, current states: %s and %s\n",
+			mhi_sm_pcie_event_str(chg_event->event),
+			mhi_sm_mstate_str(mhi_sm_ctx->mhi_state),
+			mhi_sm_dstate_str(old_dstate));
 
 	if (mhi_sm_ctx->syserr_occurred &&
 			pcie_event != EP_PCIE_EVENT_LINKDOWN) {
@@ -1335,6 +1341,17 @@ int mhi_dev_notify_sm_event(enum mhi_dev_event event)
 	INIT_WORK(&state_change_event->work, mhi_sm_dev_event_manager);
 	atomic_inc(&mhi_sm_ctx->pending_device_events);
 	queue_work(mhi_sm_ctx->mhi_sm_wq, &state_change_event->work);
+
+	/*
+	 * Wait until M0 processing is completely done.
+	 * This ensures CHDB won't get processed while resume is in
+	 * progress thus avoids race between M0 and CHDB processing.
+	 */
+	if (event == MHI_DEV_EVENT_M0_STATE) {
+		MHI_SM_DBG("Got M0, wait until resume is done\n");
+		flush_workqueue(mhi_sm_ctx->mhi_sm_wq);
+	}
+
 	res = 0;
 
 exit:
@@ -1407,7 +1424,18 @@ void mhi_dev_sm_pcie_handler(struct ep_pcie_notify *notify)
 		mhi_sm_ctx->stats.rst_deast_event_cnt++;
 		MHI_SM_DBG("Hold wake for perst deassert event\n");
 		pm_stay_awake(mhi->dev);
-		break;
+
+		atomic_inc(&mhi_sm_ctx->pending_pcie_events);
+		dstate_change_evt->event = event;
+		INIT_WORK(&dstate_change_evt->work, mhi_sm_pcie_event_manager);
+		/*
+		 * Link init has to be completed as quicly as possible.
+		 * Since this gets inovked from threaded IRQ context, do
+		 * all processing in the same context, so that we don't run
+		 * into any scheduling letencies.
+		 */
+		mhi_sm_pcie_event_manager(&dstate_change_evt->work);
+		goto exit;
 	case EP_PCIE_EVENT_PM_D0:
 		mhi_sm_ctx->stats.d0_event_cnt++;
 
@@ -1495,6 +1523,7 @@ int mhi_dev_sm_syserr(void)
 }
 EXPORT_SYMBOL(mhi_dev_sm_syserr);
 
+#ifdef CONFIG_DEBUG_FS
 static ssize_t mhi_sm_debugfs_read(struct file *file, char __user *ubuf,
 				size_t count, loff_t *ppos)
 {
@@ -1608,3 +1637,4 @@ static ssize_t mhi_sm_debugfs_write(struct file *file,
 
 	return count;
 }
+#endif

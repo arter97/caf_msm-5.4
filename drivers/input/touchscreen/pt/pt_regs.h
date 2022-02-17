@@ -41,12 +41,17 @@
 #define PT_PIP2_MAX_FILE_SIZE           0x18000
 #define PT_PIP2_FILE_SECTOR_SIZE        0x1000
 
+#ifndef CONFIG_DRM
+#define CONFIG_DRM
+#endif
+
 #include <linux/device.h>
+#include <linux/fb.h>
+#include <linux/notifier.h>
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
-#elif defined(CONFIG_FB)
-#include <linux/notifier.h>
-#include <linux/fb.h>
+#elif defined(CONFIG_DRM)
+#include <drm/drm_panel.h>
 #endif
 
 #include <asm/unaligned.h>
@@ -116,13 +121,29 @@
 #endif
 
 /* Power Management Macros Enablement */
-#ifndef CONFIG_PM_SLEEP
-#define CONFIG_PM_SLEEP
+
+#ifndef CONFIG_PM
+#define CONFIG_PM
 #endif
 
 #ifndef CONFIG_PM_RUNTIME
 #define CONFIG_PM_RUNTIME
 #endif
+
+#ifndef CONFIG_PM_SLEEP
+#define CONFIG_PM_SLEEP
+#endif
+
+/* Pin Control Macro Enablement */
+#ifndef PT_PINCTRL_EN
+#define PT_PINCTRL_EN
+#endif
+
+#ifndef TT7XXX_EXAMPLE
+#define TT7XXX_EXAMPLE
+#endif
+
+#define TOUCH_TO_WAKE_POWER_FEATURE_WORK_AROUND
 
 /*
  * The largest PIP message is the PIP2 FILE_WRITE which has:
@@ -156,7 +177,7 @@ enum PT_DEBUG_LEVEL {
 	DL_DEBUG	= 4,
 	DL_MAX
 };
-#define PT_INITIAL_DEBUG_LEVEL DL_WARN
+#define PT_INITIAL_DEBUG_LEVEL DL_MAX
 
 /* Startup DUT enum status bitmask */
 enum PT_STARTUP_STATUS {
@@ -1084,13 +1105,17 @@ enum pt_atten_type {
 };
 
 enum pt_sleep_state {
+	SS_SLEEP_NONE,
 	SS_SLEEP_OFF,
 	SS_SLEEP_ON,
 	SS_SLEEPING,
 	SS_WAKING,
+	SS_EASY_WAKING_ON,
+	SS_EASY_WAKING_OFF,
 };
 
 enum pt_fb_state {
+	FB_NONE,
 	FB_ON,
 	FB_OFF,
 };
@@ -1421,6 +1446,12 @@ struct pt_core_data {
 	struct list_head module_list; /* List of probed modules */
 	char core_id[20];
 	struct device *dev;
+	struct workqueue_struct *pt_workqueue;
+	struct work_struct	resume_offload_work;
+	struct work_struct	suspend_offload_work;
+	struct work_struct	suspend_work;
+	struct work_struct	resume_work;
+
 	struct list_head atten_list[PT_ATTEN_NUM_ATTEN];
 	struct list_head param_list;
 	struct mutex module_list_lock;
@@ -1489,7 +1520,7 @@ struct pt_core_data {
 	int raw_cmd_status;
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	struct early_suspend es;
-#elif defined(CONFIG_FB)
+#elif defined(CONFIG_FB) || defined(CONFIG_DRM)
 	struct notifier_block fb_notifier;
 	enum pt_fb_state fb_state;
 #endif

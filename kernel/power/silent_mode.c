@@ -120,6 +120,7 @@ int  pm_silentmode_update(int val, struct kobject *kobj, bool us)
 	pm_silentmode_kernel_set(val ^ 1);
 	pm_silentmode_hw_state_set((val ^ 1));
 	sysfs_notify(power_kobj, NULL, "pm_silentmode_kernel_state");
+	sysfs_notify(power_kobj, NULL, "pm_silentmode_hw_state");
 	pm_silent_mode_cb_chain();
 
 	return 0;
@@ -177,7 +178,7 @@ static int silent_mode_parse_boot_str(char *inputString)
 static struct kobj_attribute _name##_attr = {	\
 	.attr	= {				\
 		.name = __stringify(_name),	\
-		.mode = 0666,			\
+		.mode = 0664,			\
 	},					\
 	.show	= _name##_show,			\
 	.store	= _name##_store,		\

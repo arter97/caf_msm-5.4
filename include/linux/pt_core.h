@@ -31,6 +31,7 @@
 #define _LINUX_PT_CORE_H
 
 #include <linux/stringify.h>
+#include <drm/drm_panel.h>
 
 #define PT_I2C_NAME "pt_i2c_adapter"
 #define PT_SPI_NAME "pt_spi_adapter"
@@ -167,6 +168,12 @@ struct pt_core_platform_data {
 	u8 panel_id_support;
 
 	struct device_node *node;
+	struct pinctrl *pinctrl;
+	struct pinctrl_state *pins_active;
+	struct pinctrl_state *pins_suspend;
+	struct pinctrl_state *pins_release;
+
+	struct  drm_panel *active_panel;
 };
 
 struct touch_framework {

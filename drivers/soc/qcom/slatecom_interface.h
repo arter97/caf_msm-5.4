@@ -5,6 +5,8 @@
 #ifndef SLATECOM_INTERFACE_H
 #define SLATECOM_INTERFACE_H
 
+#include <linux/soc/qcom/slatecom_intf.h>
+
 /*
  * slate_soft_reset() - soft reset Slate
  * Return 0 on success or -Ve on error
@@ -110,6 +112,12 @@ enum WMSlateCtrlChnlOpcode {
 	 */
 	GMI_MGR_DST = 15,			/* payload struct: dst_t*/
 
+	/*
+	 * DEBUG Opcodes
+	 */
+	GMI_MGR_ENABLE_QCLI = 91,		/* Enable QCLI */
+
+	GMI_MGR_DISABLE_QCLI = 92,		/* Disable QCLI */
 };
 #endif /* SLATECOM_INTERFACE_H */
 

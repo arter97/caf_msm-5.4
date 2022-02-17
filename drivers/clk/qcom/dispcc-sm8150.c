@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/clk-provider.h>
@@ -19,11 +19,16 @@
 #include "clk-branch.h"
 #include "clk-rcg.h"
 #include "clk-regmap.h"
+#include "clk-pm.h"
 #include "common.h"
 #include "clk-regmap-divider.h"
 #include "vdd-level-sm8150.h"
 
 static DEFINE_VDD_REGULATORS(vdd_mm, VDD_MM_NUM, 1, vdd_corner);
+
+static struct clk_vdd_class *disp_cc_sm8150_regulators[] = {
+	&vdd_mm,
+};
 
 #define DISP_CC_MISC_CMD	0x8000
 
@@ -864,7 +869,7 @@ static struct clk_branch disp_cc_mdss_ahb_clk = {
 				.hw = &disp_cc_mdss_ahb_clk_src.clkr.hw,
 			},
 			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
+			.flags = CLK_SET_RATE_PARENT | CLK_DONT_HOLD_STATE,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -1513,10 +1518,18 @@ static const struct regmap_config disp_cc_sm8150_regmap_config = {
 	.fast_io = true,
 };
 
-static const struct qcom_cc_desc disp_cc_sm8150_desc = {
+static struct critical_clk_offset critical_clk_list[] = {
+	{ .offset = DISP_CC_MISC_CMD, .mask = 0x10 },
+};
+
+static struct qcom_cc_desc disp_cc_sm8150_desc = {
 	.config = &disp_cc_sm8150_regmap_config,
 	.clks = disp_cc_sm8150_clocks,
 	.num_clks = ARRAY_SIZE(disp_cc_sm8150_clocks),
+	.clk_regulators = disp_cc_sm8150_regulators,
+	.num_clk_regulators = ARRAY_SIZE(disp_cc_sm8150_regulators),
+	.critical_clk_en = critical_clk_list,
+	.num_critical_clk = ARRAY_SIZE(critical_clk_list),
 };
 
 static const struct of_device_id disp_cc_sm8150_match_table[] = {
@@ -1572,13 +1585,6 @@ static int disp_cc_sm8150_probe(struct platform_device *pdev)
 	struct regmap *regmap;
 	int ret;
 
-	vdd_mm.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_mm");
-	if (IS_ERR(vdd_mm.regulator[0])) {
-		if (PTR_ERR(vdd_mm.regulator[0]) != -EPROBE_DEFER)
-			dev_err(&pdev->dev, "Unable to get vdd_mm regulator\n");
-		return PTR_ERR(vdd_mm.regulator[0]);
-	}
-
 	pm_runtime_enable(&pdev->dev);
 	ret = pm_clk_create(&pdev->dev);
 	if (ret)
@@ -1613,6 +1619,10 @@ static int disp_cc_sm8150_probe(struct platform_device *pdev)
 		goto destroy_pm_clk;
 	}
 
+	ret = register_qcom_clks_pm(pdev, false, &disp_cc_sm8150_desc);
+	if (ret)
+		dev_err(&pdev->dev, "Failed to register for pm ops\n");
+
 	dev_info(&pdev->dev, "Registered DISP CC clocks\n");
 
 	return 0;
@@ -1626,6 +1636,11 @@ disable_pm_runtime:
 	return ret;
 }
 
+static void disp_cc_sm8150_sync_state(struct device *dev)
+{
+	qcom_cc_sync_state(dev, &disp_cc_sm8150_desc);
+}
+
 static const struct dev_pm_ops disp_cc_sm8150_pm_ops = {
 	SET_RUNTIME_PM_OPS(pm_clk_suspend, pm_clk_resume, NULL)
 };
@@ -1636,6 +1651,7 @@ static struct platform_driver disp_cc_sm8150_driver = {
 		.name = "disp_cc-sm8150",
 		.of_match_table = disp_cc_sm8150_match_table,
 		.pm = &disp_cc_sm8150_pm_ops,
+		.sync_state = disp_cc_sm8150_sync_state,
 	},
 };
 
