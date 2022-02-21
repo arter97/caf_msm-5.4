@@ -2313,12 +2313,15 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		ret = set_early_ethernet_mac(ermac);
 #endif
 
+#if IS_ENABLED(CONFIG_IPC_LOGGING)
 	ipc_emac_log_ctxt = ipc_log_context_create(IPCLOG_STATE_PAGES,
 						   "emac", 0);
 	if (!ipc_emac_log_ctxt)
 		ETHQOSERR("Error creating logging context for emac\n");
 	else
 		ETHQOSINFO("IPC logging has been enabled for emac\n");
+#endif
+
 	ret = stmmac_get_platform_resources(pdev, &stmmac_res);
 	if (ret)
 		return ret;
