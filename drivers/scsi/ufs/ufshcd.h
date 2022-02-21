@@ -1043,6 +1043,7 @@ struct ufs_hba {
 #ifdef CONFIG_SCSI_UFSHCD_QTI
 	/* distinguish between resume and restore */
 	bool restore;
+	bool abort_triggered_wlun;
 #endif
 };
 
@@ -1480,6 +1481,10 @@ static inline void ufshcd_vops_device_reset(struct ufs_hba *hba)
 	if (hba->vops && hba->vops->device_reset) {
 		hba->vops->device_reset(hba);
 		ufshcd_set_ufs_dev_active(hba);
+		if (ufshcd_is_wb_allowed(hba)) {
+			hba->wb_enabled = false;
+			hba->wb_buf_flush_enabled = false;
+		}
 		ufshcd_update_reg_hist(&hba->ufs_stats.dev_reset, 0);
 	}
 }

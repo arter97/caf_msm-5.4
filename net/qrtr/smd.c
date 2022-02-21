@@ -25,7 +25,7 @@ static int qcom_smd_qrtr_callback(struct rpmsg_device *rpdev,
 	int rc;
 
 	if (!qdev) {
-		pr_err("%s:Not ready\n", __func__);
+		pr_err_ratelimited("%s:Not ready\n", __func__);
 		return -EAGAIN;
 	}
 
@@ -88,6 +88,8 @@ static int qcom_smd_qrtr_probe(struct rpmsg_device *rpdev)
 		if (size > MAX_NON_WAKE_SVC_LEN)
 			size = MAX_NON_WAKE_SVC_LEN;
 		svc_arr = kmalloc_array(size, sizeof(u32), GFP_KERNEL);
+		if (!svc_arr)
+			return -ENOMEM;
 
 		of_property_read_u32_array(rpdev->dev.of_node, "qcom,non-wake-svc",
 					   svc_arr, size);
