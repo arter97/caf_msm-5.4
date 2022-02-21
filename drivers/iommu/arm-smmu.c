@@ -78,6 +78,8 @@
 #define ARM_SMMU_ICC_PEAK_BW_LOW	0
 #define ARM_SMMU_ICC_ACTIVE_ONLY_TAG	0x3
 
+static bool force_smmu_atomic = true;
+
 static int force_stage;
 module_param(force_stage, int, S_IRUGO);
 MODULE_PARM_DESC(force_stage,
@@ -772,7 +774,7 @@ static int arm_smmu_domain_power_on(struct iommu_domain *domain,
 	bool atomic_domain = test_bit(DOMAIN_ATTR_ATOMIC,
 				      smmu_domain->attributes);
 
-	if (atomic_domain)
+	if (atomic_domain || force_smmu_atomic)
 		return arm_smmu_power_on_atomic(smmu->pwr);
 
 	return arm_smmu_power_on(smmu->pwr);
@@ -789,7 +791,7 @@ static void arm_smmu_domain_power_off(struct iommu_domain *domain,
 	bool atomic_domain = test_bit(DOMAIN_ATTR_ATOMIC,
 				      smmu_domain->attributes);
 
-	if (atomic_domain) {
+	if (atomic_domain || force_smmu_atomic) {
 		arm_smmu_power_off_atomic(smmu, smmu->pwr);
 		return;
 	}
