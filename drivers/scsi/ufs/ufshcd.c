@@ -367,8 +367,7 @@ static void ufshcd_add_query_upiu_trace(struct ufs_hba *hba, unsigned int tag,
 static void ufshcd_add_tm_upiu_trace(struct ufs_hba *hba, unsigned int tag,
 		const char *str)
 {
-	int off = (int)tag - hba->nutrs;
-	struct utp_task_req_desc *descp = &hba->utmrdl_base_addr[off];
+	struct utp_task_req_desc *descp = &hba->utmrdl_base_addr[tag];
 
 	trace_ufshcd_upiu(dev_name(hba->dev), str, &descp->req_header,
 			&descp->input_param1);
@@ -5124,7 +5123,8 @@ ufshcd_transfer_rsp_status(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
 		break;
 	} /* end of switch */
 
-	if ((host_byte(result) != DID_OK) && !hba->silence_err_logs)
+	if ((host_byte(result) != DID_OK) &&
+	    (host_byte(result) != DID_REQUEUE) && !hba->silence_err_logs)
 		ufshcd_print_trs(hba, 1 << lrbp->task_tag, true);
 	return result;
 }
@@ -5854,7 +5854,12 @@ static inline void ufshcd_schedule_eh_work(struct ufs_hba *hba)
 
 static void ufshcd_err_handling_prepare(struct ufs_hba *hba)
 {
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+	if (!hba->abort_triggered_wlun)
+		pm_runtime_get_sync(hba->dev);
+#else
 	pm_runtime_get_sync(hba->dev);
+#endif
 	if (pm_runtime_suspended(hba->dev)) {
 		/*
 		 * Don't assume anything of pm_runtime_get_sync(), if
@@ -5886,7 +5891,13 @@ static void ufshcd_err_handling_unprepare(struct ufs_hba *hba)
 	ufshcd_release(hba);
 	if (hba->clk_scaling.is_allowed)
 		ufshcd_resume_clkscaling(hba);
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+	if (!hba->abort_triggered_wlun)
+		pm_runtime_put(hba->dev);
+	hba->abort_triggered_wlun = false;
+#else
 	pm_runtime_put(hba->dev);
+#endif
 }
 
 static inline bool ufshcd_err_handling_should_stop(struct ufs_hba *hba)
@@ -6342,9 +6353,12 @@ static irqreturn_t ufshcd_intr(int irq, void *__hba)
 		intr_status = ufshcd_readl(hba, REG_INTERRUPT_STATUS);
 	}
 
-	if (enabled_intr_status && retval == IRQ_NONE) {
-		dev_err(hba->dev, "%s: Unhandled interrupt 0x%08x\n",
-					__func__, intr_status);
+	if (enabled_intr_status && retval == IRQ_NONE &&
+				!ufshcd_eh_in_progress(hba)) {
+		dev_err(hba->dev, "%s: Unhandled interrupt 0x%08x (-, 0x%08x)\n",
+					__func__,
+					intr_status,
+					enabled_intr_status);
 		ufshcd_dump_regs(hba, 0, UFSHCI_REG_SPACE_SIZE, "host_regs: ");
 	}
 
@@ -6775,8 +6789,15 @@ static int ufshcd_abort(struct scsi_cmnd *cmd)
 	 * To avoid these unnecessary/illegal step we skip to the last error
 	 * handling stage: reset and restore.
 	 */
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+	if (lrbp->lun == UFS_UPIU_UFS_DEVICE_WLUN) {
+		hba->abort_triggered_wlun = true;
+		return ufshcd_eh_host_reset_handler(cmd);
+	}
+#else
 	if (lrbp->lun == UFS_UPIU_UFS_DEVICE_WLUN)
 		return ufshcd_eh_host_reset_handler(cmd);
+#endif
 
 	ufshcd_hold(hba, false);
 	reg = ufshcd_readl(hba, REG_UTP_TRANSFER_REQ_DOOR_BELL);
@@ -7918,6 +7939,8 @@ out:
 static void ufshcd_async_scan(void *data, async_cookie_t cookie)
 {
 	struct ufs_hba *hba = (struct ufs_hba *)data;
+	struct device *dev = hba->dev;
+	struct device_node *np = dev->of_node;
 	int ret;
 
 	/* Initialize hba, detect and initialize UFS device */
@@ -7927,6 +7950,9 @@ static void ufshcd_async_scan(void *data, async_cookie_t cookie)
 
 	/* Probe and add UFS logical units  */
 	ret = ufshcd_add_lus(hba);
+
+	if (!of_property_read_bool(np, "secondary-storage"))
+		hba->primary_boot_device_probed = true;
 out:
 	/*
 	 * If we failed to initialize the device or the device is not
@@ -8652,7 +8678,7 @@ static void ufshcd_vreg_set_lpm(struct ufs_hba *hba)
 	} else if (!ufshcd_is_ufs_dev_active(hba)) {
 		ufshcd_toggle_vreg(hba->dev, hba->vreg_info.vcc, false);
 		vcc_off = true;
-		if (!ufshcd_is_link_active(hba)) {
+		if (ufshcd_is_link_hibern8(hba) || ufshcd_is_link_off(hba)) {
 			ufshcd_config_vreg_lpm(hba, hba->vreg_info.vccq);
 			ufshcd_config_vreg_lpm(hba, hba->vreg_info.vccq2);
 		}
@@ -8674,7 +8700,7 @@ static int ufshcd_vreg_set_hpm(struct ufs_hba *hba)
 	    !hba->dev_info.is_lu_power_on_wp) {
 		ret = ufshcd_setup_vreg(hba, true);
 	} else if (!ufshcd_is_ufs_dev_active(hba)) {
-		if (!ret && !ufshcd_is_link_active(hba)) {
+		if (!ufshcd_is_link_active(hba)) {
 			ret = ufshcd_config_vreg_hpm(hba, hba->vreg_info.vccq);
 			if (ret)
 				goto vcc_disable;
@@ -8944,12 +8970,26 @@ static int ufshcd_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	/* enable the host irq as host controller would be active soon */
 	ufshcd_enable_irq(hba);
 
-#if !defined(CONFIG_SCSI_UFSHCD_QTI)
+
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+	if (hba->restore) {
+		/* Configure UTRL and UTMRL base address registers */
+		ufshcd_writel(hba, lower_32_bits(hba->utrdl_dma_addr),
+			      REG_UTP_TRANSFER_REQ_LIST_BASE_L);
+		ufshcd_writel(hba, upper_32_bits(hba->utrdl_dma_addr),
+			      REG_UTP_TRANSFER_REQ_LIST_BASE_H);
+		ufshcd_writel(hba, lower_32_bits(hba->utmrdl_dma_addr),
+			      REG_UTP_TASK_REQ_LIST_BASE_L);
+		ufshcd_writel(hba, upper_32_bits(hba->utmrdl_dma_addr),
+			      REG_UTP_TASK_REQ_LIST_BASE_H);
+		/* Commit the registers */
+		mb();
+	}
+#else
 	ret = ufshcd_vreg_set_hpm(hba);
 	if (ret)
 		goto disable_irq_and_vops_clks;
 #endif
-
 	/*
 	 * Call vendor specific resume callback. As these callbacks may access
 	 * vendor specific host controller register space call them when the
@@ -8959,6 +8999,10 @@ static int ufshcd_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	if (ret)
 #if defined(CONFIG_SCSI_UFSHCD_QTI)
 		goto disable_irq_and_vops_clks;
+
+	/* Resuming from hibernate, assume that link was OFF */
+	if (hba->restore)
+		ufshcd_set_link_off(hba);
 #else
 		goto disable_vreg;
 #endif
@@ -8988,6 +9032,22 @@ static int ufshcd_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 
 	if (!ufshcd_is_ufs_dev_active(hba)) {
 		ret = ufshcd_set_dev_pwr_mode(hba, UFS_ACTIVE_PWR_MODE);
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+		if (ret) {
+			if (ufshcd_is_ufs_dev_active(hba) &&
+					ufshcd_is_link_active(hba)) {
+				ret = 0;
+				dev_err(hba->dev, "UFS device and link are Active\n");
+			} else if ((work_pending(&hba->eh_work)) ||
+					ufshcd_eh_in_progress(hba)) {
+				flush_work(&hba->eh_work);
+				ret = 0;
+				dev_err(hba->dev, "dev pwr mode=%d, UIC link state=%d\n",
+						hba->curr_dev_pwr_mode,
+						hba->uic_link_state);
+			}
+		}
+#endif
 		if (ret)
 			goto set_old_link_state;
 	}
@@ -9050,6 +9110,12 @@ disable_vreg:
 #endif
 out:
 	hba->pm_op_in_progress = 0;
+
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+	if (hba->restore)
+		hba->restore = false;
+#endif
+
 	if (ret)
 		ufshcd_update_reg_hist(&hba->ufs_stats.resume_err, (u32)ret);
 	return ret;
@@ -9070,6 +9136,8 @@ int ufshcd_system_suspend(struct ufs_hba *hba)
 
 	if (!hba || !hba->is_powered)
 		return 0;
+
+	cancel_delayed_work_sync(&hba->rpm_dev_flush_recheck_work);
 
 	if (pm_runtime_suspended(hba->dev) &&
 	    (ufs_get_pm_lvl_to_dev_pwr_mode(hba->spm_lvl) ==
@@ -9212,6 +9280,63 @@ int ufshcd_runtime_idle(struct ufs_hba *hba)
 }
 EXPORT_SYMBOL(ufshcd_runtime_idle);
 
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+int ufshcd_system_freeze(struct ufs_hba *hba)
+{
+	int ret = 0;
+
+	/*
+	 * Run time resume the controller to make sure
+	 * the PM work queue threads do not try to resume
+	 * the child (scsi host), which leads to errors as
+	 * the controller is not yet resumed.
+	 */
+	pm_runtime_get_sync(hba->dev);
+	ret = ufshcd_system_suspend(hba);
+	pm_runtime_put_sync(hba->dev);
+
+	/*
+	 * Ensure no runtime PM operations take
+	 * place in the hibernation and restore sequence
+	 * on successful freeze operation.
+	 */
+	if (!ret)
+		pm_runtime_disable(hba->dev);
+
+	return ret;
+}
+EXPORT_SYMBOL(ufshcd_system_freeze);
+
+int ufshcd_system_restore(struct ufs_hba *hba)
+{
+	int ret = 0;
+
+	hba->restore = true;
+	ret = ufshcd_system_resume(hba);
+
+	/*
+	 * Now any runtime PM operations can be
+	 * allowed on successful restore operation
+	 */
+	if (!ret)
+		pm_runtime_enable(hba->dev);
+
+	return ret;
+}
+EXPORT_SYMBOL(ufshcd_system_restore);
+
+int ufshcd_system_thaw(struct ufs_hba *hba)
+{
+	int ret = 0;
+
+	ret = ufshcd_system_resume(hba);
+	if (!ret)
+		pm_runtime_enable(hba->dev);
+
+	return ret;
+}
+EXPORT_SYMBOL(ufshcd_system_thaw);
+#endif /* CONFIG_SCSI_UFSHCD_QTI */
 /**
  * ufshcd_shutdown - shutdown routine
  * @hba: per adapter instance

@@ -2101,17 +2101,6 @@ static int mmc_can_sleep(struct mmc_card *card)
 	return (card && card->ext_csd.rev >= 3);
 }
 
-static int mmc_can_sleepawake(struct mmc_host *host)
-{
-#if defined(CONFIG_SDC_QTI)
-	return host && (host->caps2 & MMC_CAP2_SLEEP_AWAKE) && host->card &&
-		(host->card->ext_csd.rev >= 3);
-#else
-	return host && host->card && (host->card->ext_csd.rev >= 3);
-#endif
-
-}
-
 static int mmc_sleepawake(struct mmc_host *host, bool sleep)
 {
 	struct mmc_command cmd = {};
@@ -2329,6 +2318,21 @@ static int _mmc_suspend(struct mmc_host *host, bool is_suspend)
 	if (mmc_card_suspended(host->card))
 		goto out;
 
+#if defined(CONFIG_SDC_QTI)
+	/* Enter DeepSleep : align with PBL HS50 mode */
+	if (host->deepsleep) {
+		host->clk_scaling.state = MMC_LOAD_LOW;
+		err = mmc_clk_update_freq(host, host->clk_scaling.freq_table[0],
+				host->clk_scaling.state);
+		if (err)
+			pr_err("%s: %s: clock scale to 50MHz failed with error %d\n",
+			__func__, mmc_hostname(host), err);
+		else
+			pr_debug("%s: %s: clock change to 50MHz finished successfully\n",
+			__func__, mmc_hostname(host));
+	}
+#endif
+
 	err = mmc_flush_cache(host->card);
 	if (err)
 		goto out;
@@ -2336,21 +2340,28 @@ static int _mmc_suspend(struct mmc_host *host, bool is_suspend)
 	if (mmc_can_poweroff_notify(host->card) &&
 		((host->caps2 & MMC_CAP2_FULL_PWR_CYCLE) || !is_suspend))
 		err = mmc_poweroff_notify(host->card, notify_type);
-	if (mmc_can_sleepawake(host)) {
+	if (mmc_can_sleep(host->card)) {
 #if defined(CONFIG_SDC_QTI)
 		memcpy(&host->cached_ios, &host->ios, sizeof(host->cached_ios));
 #endif
 		mmc_cache_card_ext_csd(host);
 	}
-	if (mmc_can_sleep(host->card))
+	if (mmc_can_sleep(host->card) && !host->deepsleep)
 		err = mmc_sleepawake(host, true);
 	else if (!mmc_host_is_spi(host))
 		err = mmc_deselect_cards(host);
 
 	if (!err) {
-		if (is_suspend)
+		if (is_suspend && !host->deepsleep)
 			mmc_power_off(host);
 		mmc_card_set_suspended(host->card);
+	}
+	if (host->deepsleep) {
+		if (host->cqe_enabled) {
+			host->cqe_ops->cqe_disable(host);
+			host->cqe_enabled = false;
+		}
+		host->ios.power_mode = MMC_POWER_OFF;
 	}
 out:
 	mmc_log_string(host, "Exit err: %d\n", err);
@@ -2359,6 +2370,7 @@ out:
 	if (err)
 		mmc_resume_clk_scaling(host);
 #endif
+
 	return err;
 }
 
@@ -2415,6 +2427,10 @@ static int mmc_suspend(struct mmc_host *host)
 {
 	int err;
 
+	host->deepsleep = false;
+#if defined(CONFIG_DEEPSLEEP)
+	mmc_is_deepsleep(host);
+#endif
 	err = _mmc_suspend(host, true);
 	if (!err) {
 		pm_runtime_disable(&host->card->dev);
@@ -2446,9 +2462,10 @@ static int _mmc_resume(struct mmc_host *host)
 #endif
 
 	mmc_log_string(host, "Enter\n");
+
 	mmc_power_up(host, host->card->ocr);
 
-	if (mmc_can_sleepawake(host)) {
+	if (mmc_can_sleep(host->card) && !host->deepsleep) {
 		err = mmc_sleepawake(host, false);
 		if (!err)
 			err = mmc_partial_init(host);
@@ -2474,6 +2491,7 @@ out:
 			mmc_hostname(host), __func__, err);
 out:
 #endif
+	host->deepsleep = false;
 	mmc_log_string(host, "Exit err %d\n", err);
 	return err;
 }
@@ -2604,6 +2622,78 @@ static int _mmc_hw_reset(struct mmc_host *host)
 #endif
 }
 
+static int mmc_pre_hibernate(struct mmc_host *host)
+{
+	int ret = 0;
+
+#if defined(CONFIG_SDC_QTI)
+	host->hiber_notifier = true;
+#endif
+
+	mmc_get_card(host->card, NULL);
+	host->cached_caps2 = host->caps2;
+
+	/*
+	 * Increase usage_count of card and host device till
+	 * hibernation is over. This will ensure they will not runtime suspend.
+	 */
+	pm_runtime_get_noresume(mmc_dev(host));
+	pm_runtime_get_noresume(&host->card->dev);
+
+#if defined(CONFIG_SDC_QTI)
+	if (!mmc_can_scale_clk(host))
+		goto out;
+	/*
+	 * Suspend clock scaling and mask host capability so that
+	 * we will run in max frequency during:
+	 *	1. Hibernation preparation and image creation
+	 *	2. After finding hibernation image during reboot
+	 *	3. Once hibernation image is loaded and till hibernation
+	 *	restore is complete.
+	 */
+	if (host->clk_scaling.enable)
+		mmc_suspend_clk_scaling(host);
+	host->caps2 &= ~MMC_CAP2_CLK_SCALE;
+	host->clk_scaling.state = MMC_LOAD_HIGH;
+	ret = mmc_clk_update_freq(host, host->card->clk_scaling_highest,
+				host->clk_scaling.state);
+	if (ret)
+		pr_err("%s: %s: Setting clk frequency to max failed: %d\n",
+				mmc_hostname(host), __func__, ret);
+out:
+#endif
+	mmc_put_card(host->card, NULL);
+	return ret;
+}
+
+static int mmc_post_hibernate(struct mmc_host *host)
+{
+	int ret = 0;
+
+	mmc_get_card(host->card, NULL);
+#if defined(CONFIG_SDC_QTI)
+	if (!(host->cached_caps2 & MMC_CAP2_CLK_SCALE))
+		goto enable_pm;
+	/* Enable the clock scaling and set the host capability */
+	host->caps2 |= MMC_CAP2_CLK_SCALE;
+	if (!host->clk_scaling.enable)
+		ret = mmc_resume_clk_scaling(host);
+	if (ret)
+		pr_err("%s: %s: Resuming clk scaling failed: %d\n",
+				mmc_hostname(host), __func__, ret);
+enable_pm:
+#endif
+	/*
+	 * Reduce usage count of card and host device so that they may
+	 * runtime suspend.
+	 */
+	pm_runtime_put_noidle(&host->card->dev);
+	pm_runtime_put_noidle(mmc_dev(host));
+
+	mmc_put_card(host->card, NULL);
+	return ret;
+}
+
 static const struct mmc_bus_ops mmc_ops = {
 	.remove = mmc_remove,
 	.detect = mmc_detect,
@@ -2617,7 +2707,8 @@ static const struct mmc_bus_ops mmc_ops = {
 #if defined(CONFIG_SDC_QTI)
 	.change_bus_speed = mmc_change_bus_speed,
 #endif
-
+	.pre_hibernate = mmc_pre_hibernate,
+	.post_hibernate = mmc_post_hibernate
 };
 
 /*

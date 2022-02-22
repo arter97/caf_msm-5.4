@@ -470,21 +470,35 @@ static void __qseecom_free_coherent_buf(uint32_t size,
 #define QSEECOM_SCM_EBUSY_WAIT_MS 30
 #define QSEECOM_SCM_EBUSY_MAX_RETRY 67
 
+#define QSEE_RESULT_FAIL_APP_BUSY 315
+
+#ifdef CONFIG_GHS_VMM
+struct device *qseecom_get_dev(void)
+{
+	return qseecom.dev;
+}
+EXPORT_SYMBOL(qseecom_get_dev);
+#endif /*CONFIG_GHS_VMM*/
+
 static int __qseecom_scm_call2_locked(uint32_t smc_id, struct scm_desc *desc)
 {
 	int ret = 0;
 	int retry_count = 0;
 
 	do {
+		if (!desc) {
+			pr_err("Invalid descriptor\n");
+			return -EINVAL;
+		}
 		ret = qcom_scm_qseecom_call_noretry(smc_id, desc);
-		if (ret == -EBUSY) {
+		if ((ret == -EBUSY) || (desc && (desc->ret[0] == -QSEE_RESULT_FAIL_APP_BUSY))) {
 			mutex_unlock(&app_access_lock);
 			msleep(QSEECOM_SCM_EBUSY_WAIT_MS);
 			mutex_lock(&app_access_lock);
 		}
 		if (retry_count == 33)
 			pr_warn("secure world has been busy for 1 second!\n");
-	} while (ret == -EBUSY &&
+	} while (((ret == -EBUSY) || (desc && (desc->ret[0] == -QSEE_RESULT_FAIL_APP_BUSY))) &&
 			(retry_count++ < QSEECOM_SCM_EBUSY_MAX_RETRY));
 	return ret;
 }
@@ -6154,6 +6168,7 @@ static int __qseecom_generate_and_save_key(struct qseecom_dev_handle *data,
 	if (ret)
 		return ret;
 
+	resp.result = QSEOS_RESULT_INCOMPLETE;
 	ret = qseecom_scm_call(SCM_SVC_TZSCHEDULER, 1,
 				ireq, sizeof(struct qseecom_key_generate_ireq),
 				&resp, sizeof(resp));
@@ -6214,6 +6229,7 @@ static int __qseecom_delete_saved_key(struct qseecom_dev_handle *data,
 	if (ret)
 		return ret;
 
+	resp.result = QSEOS_RESULT_INCOMPLETE;
 	ret = qseecom_scm_call(SCM_SVC_TZSCHEDULER, 1,
 				ireq, sizeof(struct qseecom_key_delete_ireq),
 				&resp, sizeof(struct qseecom_command_scm_resp));
@@ -6281,6 +6297,7 @@ static int __qseecom_set_clear_ce_key(struct qseecom_dev_handle *data,
 			return ret;
 	}
 
+	resp.result = QSEOS_RESULT_INCOMPLETE;
 	ret = qseecom_scm_call(SCM_SVC_TZSCHEDULER, 1,
 				ireq, sizeof(struct qseecom_key_select_ireq),
 				&resp, sizeof(struct qseecom_command_scm_resp));
@@ -6358,6 +6375,7 @@ static int __qseecom_update_current_key_user_info(
 	if (ret)
 		return ret;
 
+	resp.result = QSEOS_RESULT_INCOMPLETE;
 	ret = qseecom_scm_call(SCM_SVC_TZSCHEDULER, 1,
 		ireq, sizeof(struct qseecom_key_userinfo_update_ireq),
 		&resp, sizeof(struct qseecom_command_scm_resp));
@@ -8567,7 +8585,6 @@ static int qseecom_retrieve_ce_data(struct platform_device *pdev)
 	uint32_t *unit_tbl = NULL;
 	int total_units = 0;
 	struct qseecom_ce_pipe_entry *pce_entry;
-
 	qseecom.ce_info.fde = qseecom.ce_info.pfe = NULL;
 	qseecom.ce_info.num_fde = qseecom.ce_info.num_pfe = 0;
 
@@ -9602,7 +9619,6 @@ static void qseecom_deregister_shmbridge(void)
 static int qseecom_probe(struct platform_device *pdev)
 {
 	int rc;
-
 	rc = qseecom_register_shmbridge();
 	if (rc)
 		return rc;
@@ -9738,7 +9754,8 @@ static int qseecom_suspend(struct platform_device *pdev, pm_message_t state)
 
 	mutex_unlock(&clk_access_lock);
 	mutex_unlock(&qsee_bw_mutex);
-	cancel_work_sync(&qseecom.bw_inactive_req_ws);
+	if (qseecom.support_bus_scaling)
+		cancel_work_sync(&qseecom.bw_inactive_req_ws);
 
 	return 0;
 }

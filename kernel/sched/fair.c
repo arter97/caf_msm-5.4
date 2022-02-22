@@ -4991,7 +4991,7 @@ static const u64 cfs_bandwidth_slack_period = 5 * NSEC_PER_MSEC;
 static int runtime_refresh_within(struct cfs_bandwidth *cfs_b, u64 min_expire)
 {
 	struct hrtimer *refresh_timer = &cfs_b->period_timer;
-	u64 remaining;
+	s64 remaining;
 
 	/* if the call-back is running a quota refresh is already occurring */
 	if (hrtimer_callback_running(refresh_timer))
@@ -4999,7 +4999,7 @@ static int runtime_refresh_within(struct cfs_bandwidth *cfs_b, u64 min_expire)
 
 	/* is a quota refresh about to occur? */
 	remaining = ktime_to_ns(hrtimer_expires_remaining(refresh_timer));
-	if (remaining < min_expire)
+	if (remaining < (s64)min_expire)
 		return 1;
 
 	return 0;
@@ -7120,6 +7120,9 @@ int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
 	is_rtg = task_in_related_thread_group(p);
 	curr_is_rtg = task_in_related_thread_group(cpu_rq(cpu)->curr);
 
+	if (sysctl_sched_prefer_spread == 2)
+		end_index = num_sched_clusters - 1;
+
 	fbt_env.fastpath = 0;
 	fbt_env.need_idle = need_idle;
 
@@ -8239,7 +8242,7 @@ int can_migrate_task(struct task_struct *p, struct lb_env *env)
 #endif
 
 	/* Disregard pcpu kthreads; they are where they need to be. */
-	if ((p->flags & PF_KTHREAD) && kthread_is_per_cpu(p))
+	if (kthread_is_per_cpu(p))
 		return 0;
 
 	if (!cpumask_test_cpu(env->dst_cpu, p->cpus_ptr)) {
@@ -10464,9 +10467,16 @@ no_move:
 			raw_spin_unlock_irqrestore(&busiest->lock, flags);
 
 			if (active_balance) {
-				stop_one_cpu_nowait(cpu_of(busiest),
+				int ret;
+
+				ret = stop_one_cpu_nowait(cpu_of(busiest),
 					active_load_balance_cpu_stop, busiest,
 					&busiest->active_balance_work);
+				if (!ret) {
+					clear_reserved(this_cpu);
+					busiest->active_balance = 0;
+					active_balance = 0;
+				}
 				*continue_balancing = 0;
 			}
 

@@ -26,10 +26,11 @@
 #define BCL_MONITOR_EN        0x46
 #define BCL_IRQ_STATUS        0x08
 
-#define BCL_IBAT_HIGH         0x4B
-#define BCL_IBAT_TOO_HIGH     0x4C
-#define BCL_IBAT_READ         0x86
-#define BCL_IBAT_SCALING_UA   78127
+#define BCL_IBAT_HIGH             0x4B
+#define BCL_IBAT_TOO_HIGH         0x4C
+#define BCL_IBAT_READ             0x86
+#define BCL_IBAT_SCALING_UA       78127
+#define BCL_IBAT_CCM_SCALING_UA   15625
 
 #define BCL_VBAT_READ         0x76
 #define BCL_VBAT_ADC_LOW      0x48
@@ -51,6 +52,10 @@
 #define BCL_VBAT_INC_MV       25
 #define BCL_VBAT_MAX_MV       3600
 #define BCL_VBAT_THRESH_BASE  2250
+
+#define BCL_IBAT_CCM_OFFSET   800
+#define BCL_IBAT_CCM_LSB      100
+#define BCL_IBAT_CCM_MAX_VAL  14
 
 #define MAX_PERPH_COUNT       2
 #define IPC_LOGPAGES          2
@@ -106,6 +111,7 @@ struct bcl_device {
 	struct regmap			*regmap;
 	uint16_t			fg_bcl_addr;
 	void				*ipc_log;
+	bool				ibat_ccm_enabled;
 	struct bcl_peripheral_data	param[BCL_TYPE_MAX];
 };
 
@@ -177,28 +183,44 @@ static void convert_adc_to_vbat_val(int *val)
 	*val = (*val * BCL_VBAT_SCALING_UV) / 1000;
 }
 
-static void convert_ibat_to_adc_val(int *val)
+static void convert_ibat_to_adc_val(int *val, int scaling_factor)
 {
 	/*
 	 * Threshold register can be bit shifted from ADC MSB.
 	 * So the scaling factor is half in those cases.
 	 */
 	if (ibat_use_qg_adc)
-		*val = (int)div_s64(*val * 2000 * 2, BCL_IBAT_SCALING_UA);
+		*val = (int)div_s64(*val * 2000 * 2, scaling_factor);
 	else if (no_bit_shift)
-		*val = (int)div_s64(*val * 1000, BCL_IBAT_SCALING_UA);
+		*val = (int)div_s64(*val * 1000, scaling_factor);
 	else
-		*val = (int)div_s64(*val * 2000, BCL_IBAT_SCALING_UA);
+		*val = (int)div_s64(*val * 2000, scaling_factor);
 
 }
 
-static void convert_adc_to_ibat_val(int *val)
+static void convert_adc_to_ibat_val(int *val, int scaling_factor)
 {
 	/* Scaling factor will be half if ibat_use_qg_adc is true */
 	if (ibat_use_qg_adc)
-		*val = (int)div_s64(*val * BCL_IBAT_SCALING_UA, 2 * 1000);
+		*val = (int)div_s64(*val * scaling_factor, 2 * 1000);
 	else
-		*val = (int)div_s64(*val * BCL_IBAT_SCALING_UA, 1000);
+		*val = (int)div_s64(*val * scaling_factor, 1000);
+}
+
+static int8_t convert_ibat_to_ccm_val(int ibat)
+{
+	int8_t val = BCL_IBAT_CCM_MAX_VAL;
+
+	val = (int8_t)((ibat - BCL_IBAT_CCM_OFFSET) / BCL_IBAT_CCM_LSB);
+
+	if (val > BCL_IBAT_CCM_MAX_VAL) {
+		pr_err(
+		"CCM thresh:%d is invalid, use MAX supported threshold\n",
+			ibat);
+		val = BCL_IBAT_CCM_MAX_VAL;
+	}
+
+	return val;
 }
 
 static int bcl_set_ibat(void *data, int low, int high)
@@ -224,7 +246,10 @@ static int bcl_set_ibat(void *data, int low, int high)
 	}
 
 	ibat_ua = thresh_value;
-	convert_ibat_to_adc_val(&thresh_value);
+	if (bat_data->dev->ibat_ccm_enabled)
+		convert_ibat_to_adc_val(&thresh_value, BCL_IBAT_CCM_SCALING_UA);
+	else
+		convert_ibat_to_adc_val(&thresh_value, BCL_IBAT_SCALING_UA);
 	val = (int8_t)thresh_value;
 	switch (bat_data->type) {
 	case BCL_IBAT_LVL0:
@@ -234,6 +259,8 @@ static int bcl_set_ibat(void *data, int low, int high)
 		break;
 	case BCL_IBAT_LVL1:
 		addr = BCL_IBAT_TOO_HIGH;
+		if (bat_data->dev->ibat_ccm_enabled)
+			val = convert_ibat_to_ccm_val(ibat_ua);
 		pr_debug("ibat too high threshold:%d mA ADC:0x%02x\n",
 				ibat_ua, val);
 		break;
@@ -276,7 +303,10 @@ static int bcl_read_ibat(void *data, int *adc_value)
 		 */
 		*adc_value = bat_data->last_val;
 	} else {
-		convert_adc_to_ibat_val(adc_value);
+		if (bat_data->dev->ibat_ccm_enabled)
+			convert_adc_to_ibat_val(adc_value, BCL_IBAT_CCM_SCALING_UA);
+		else
+			convert_adc_to_ibat_val(adc_value, BCL_IBAT_SCALING_UA);
 		bat_data->last_val = *adc_value;
 	}
 	pr_debug("ibat:%d mA ADC:0x%02x\n", bat_data->last_val, val);
@@ -508,6 +538,8 @@ static int bcl_get_devicetree_data(struct platform_device *pdev,
 				"qcom,ibat-use-qg-adc-5a");
 	no_bit_shift =  of_property_read_bool(dev_node,
 				"qcom,pmic7-threshold");
+	bcl_perph->ibat_ccm_enabled =  of_property_read_bool(dev_node,
+						"qcom,ibat-ccm-hw-support");
 
 	return ret;
 }

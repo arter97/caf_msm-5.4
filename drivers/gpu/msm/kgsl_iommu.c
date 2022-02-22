@@ -680,13 +680,17 @@ static int kgsl_iommu_fault_handler(struct iommu_domain *domain,
 		no_page_fault_log = kgsl_mmu_log_fault_addr(mmu, ptbase, addr);
 
 	if (!no_page_fault_log && __ratelimit(&_rs)) {
+		struct kgsl_context *context = kgsl_context_get(device,
+							contextidr);
+
 		dev_crit(ctx->kgsldev->dev,
-			"GPU PAGE FAULT: addr = %lX pid= %d name=%s\n", addr,
-			ptname, comm);
+			"GPU PAGE FAULT: addr = %lX pid= %d name=%s drawctxt=%d context pid = %d\n",
+			addr, ptname, comm, contextidr, context ? context->tid : 0);
 		dev_crit(ctx->kgsldev->dev,
-			"context=%s TTBR0=0x%llx CIDR=0x%x (%s %s fault)\n",
-			ctx->name, ptbase, contextidr,
-			write ? "write" : "read", fault_type);
+			"context=%s TTBR0=0x%llx (%s %s fault)\n",
+			ctx->name, ptbase, write ? "write" : "read", fault_type);
+
+		kgsl_context_put(context);
 
 		if (gpudev->iommu_fault_block) {
 			unsigned int fsynr1;
@@ -941,7 +945,7 @@ static void setup_64bit_pagetable(struct kgsl_mmu *mmu,
 
 	if (pagetable->name != KGSL_MMU_GLOBAL_PT &&
 		pagetable->name != KGSL_MMU_SECURE_PT) {
-		if (kgsl_is_compat_task()) {
+		if (is_compat_task()) {
 			pt->svm_start = KGSL_IOMMU_SVM_BASE32(mmu);
 			pt->svm_end = mmu->secure_base;
 		} else {
@@ -1051,16 +1055,18 @@ static void _enable_gpuhtw_llc(struct kgsl_mmu *mmu,
 			"System cache no-write-alloc is disabled for GPU pagetables\n");
 }
 
-static int set_smmu_aperture(struct kgsl_device *device, int cb_num)
+int kgsl_set_smmu_aperture(struct kgsl_device *device)
 {
+	struct kgsl_iommu *iommu = _IOMMU_PRIV(&(device->mmu));
+	struct kgsl_iommu_context *ctx = &iommu->user_context;
 	int ret;
 
 	if (!test_bit(KGSL_MMU_SMMU_APERTURE, &device->mmu.features))
 		return 0;
 
-	ret = qcom_scm_kgsl_set_smmu_aperture(cb_num);
+	ret = qcom_scm_kgsl_set_smmu_aperture(ctx->cb_num);
 	if (ret == -EBUSY)
-		ret = qcom_scm_kgsl_set_smmu_aperture(cb_num);
+		ret = qcom_scm_kgsl_set_smmu_aperture(ctx->cb_num);
 
 	if (ret)
 		dev_err(device->dev, "Unable to set the SMMU aperture: %d. The aperture needs to be set to use per-process pagetables\n",
@@ -1129,7 +1135,7 @@ static int _init_global_pt(struct kgsl_mmu *mmu, struct kgsl_pagetable *pt)
 	ctx->cb_num = (int) cb_num;
 
 	if (!test_bit(KGSL_MMU_GLOBAL_PAGETABLE, &device->mmu.features)) {
-		ret = set_smmu_aperture(device, cb_num);
+		ret = kgsl_set_smmu_aperture(device);
 
 		if (ret)
 			goto done;
@@ -2283,20 +2289,20 @@ static int kgsl_iommu_svm_range(struct kgsl_pagetable *pagetable,
 }
 
 static bool kgsl_iommu_addr_in_range(struct kgsl_pagetable *pagetable,
-		uint64_t gpuaddr)
+		uint64_t gpuaddr, uint64_t size)
 {
 	struct kgsl_iommu_pt *pt = pagetable->priv;
 
 	if (gpuaddr == 0)
 		return false;
 
-	if (gpuaddr >= pt->va_start && gpuaddr < pt->va_end)
+	if (gpuaddr >= pt->va_start && (gpuaddr + size) < pt->va_end)
 		return true;
 
-	if (gpuaddr >= pt->compat_va_start && gpuaddr < pt->compat_va_end)
+	if (gpuaddr >= pt->compat_va_start && (gpuaddr + size) < pt->compat_va_end)
 		return true;
 
-	if (gpuaddr >= pt->svm_start && gpuaddr < pt->svm_end)
+	if (gpuaddr >= pt->svm_start && (gpuaddr + size) < pt->svm_end)
 		return true;
 
 	return false;
@@ -2527,9 +2533,10 @@ int kgsl_iommu_probe(struct kgsl_device *device)
 	 */
 	kgsl_iommu_map_globals(mmu, mmu->defaultpagetable);
 	kgsl_iommu_map_globals(mmu, mmu->lpac_pagetable);
-
-	device->qdss_desc = kgsl_allocate_global_fixed(device,
-		"qcom,gpu-qdss-stm", "gpu-qdss");
+	/* QDSS is supported only when QCOM_KGSL_QDSS_STM is enabled */
+	if (IS_ENABLED(CONFIG_QCOM_KGSL_QDSS_STM))
+		device->qdss_desc = kgsl_allocate_global_fixed(device,
+					"qcom,gpu-qdss-stm", "gpu-qdss");
 
 	device->qtimer_desc = kgsl_allocate_global_fixed(device,
 		"qcom,gpu-timer", "gpu-qtimer");

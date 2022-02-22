@@ -1504,6 +1504,7 @@ int tcp_mtu_to_mss(struct sock *sk, int pmtu)
 	return __tcp_mtu_to_mss(sk, pmtu) -
 	       (tcp_sk(sk)->tcp_header_len - sizeof(struct tcphdr));
 }
+EXPORT_SYMBOL(tcp_mtu_to_mss);
 
 /* Inverse of above */
 int tcp_mss_to_mtu(struct sock *sk, int mss)
@@ -2071,6 +2072,9 @@ static bool tcp_can_coalesce_send_queue_head(struct sock *sk, int len)
 	struct sk_buff *skb, *next;
 
 	skb = tcp_send_head(sk);
+	if (!skb)
+		return false;
+
 	tcp_for_write_queue_from_safe(skb, next, sk) {
 		if (len <= skb->len)
 			break;

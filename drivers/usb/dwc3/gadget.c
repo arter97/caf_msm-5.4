@@ -966,6 +966,7 @@ static int dwc3_gadget_ep_disable(struct usb_ep *ep)
 	struct dwc3			*dwc;
 	unsigned long			flags;
 	int				ret;
+	bool				call_rpm_put = false;
 
 	if (!ep) {
 		pr_debug("dwc3: invalid parameters\n");
@@ -980,13 +981,18 @@ static int dwc3_gadget_ep_disable(struct usb_ep *ep)
 					dep->name))
 		return 0;
 
-	pm_runtime_get_sync(dwc->sysdev);
+	if (atomic_read(&dwc->in_lpm)) {
+		pm_runtime_get_sync(dwc->sysdev);
+		call_rpm_put = true;
+	}
 	spin_lock_irqsave(&dwc->lock, flags);
 	ret = __dwc3_gadget_ep_disable(dep);
 	dbg_event(dep->number, "DISABLE", ret);
 	spin_unlock_irqrestore(&dwc->lock, flags);
-	pm_runtime_mark_last_busy(dwc->sysdev);
-	pm_runtime_put_sync_autosuspend(dwc->sysdev);
+	if (call_rpm_put) {
+		pm_runtime_mark_last_busy(dwc->sysdev);
+		pm_runtime_put_autosuspend(dwc->sysdev);
+	}
 
 	return ret;
 }
@@ -1044,19 +1050,19 @@ static struct dwc3_trb *dwc3_ep_prev_trb(struct dwc3_ep *dep, u8 index)
 
 static u32 dwc3_calc_trbs_left(struct dwc3_ep *dep)
 {
-	struct dwc3_trb		*tmp;
 	u8			trbs_left;
 
 	/*
-	 * If enqueue & dequeue are equal than it is either full or empty.
-	 *
-	 * One way to know for sure is if the TRB right before us has HWO bit
-	 * set or not. If it has, then we're definitely full and can't fit any
-	 * more transfers in our ring.
+	 * If the enqueue & dequeue are equal then the TRB ring is either full
+	 * or empty. It's considered full when there are DWC3_TRB_NUM-1 of TRBs
+	 * pending to be processed by the driver.
 	 */
 	if (dep->trb_enqueue == dep->trb_dequeue) {
-		tmp = dwc3_ep_prev_trb(dep, dep->trb_enqueue);
-		if (!tmp || tmp->ctrl & DWC3_TRB_CTRL_HWO)
+		/*
+		 * If there is any request remained in the started_list at
+		 * this point, that means there is no TRB available.
+		 */
+		if (!list_empty(&dep->started_list))
 			return 0;
 
 		return DWC3_TRB_NUM - 1;
@@ -1794,11 +1800,11 @@ static void dwc3_gadget_ep_skip_trbs(struct dwc3_ep *dep, struct dwc3_request *r
 static void dwc3_gadget_ep_cleanup_cancelled_requests(struct dwc3_ep *dep)
 {
 	struct dwc3_request		*req;
-	struct dwc3_request		*tmp;
 	struct dwc3			*dwc = dep->dwc;
 	int				request_count = 0;
 
-	list_for_each_entry_safe(req, tmp, &dep->cancelled_list, list) {
+	while (!list_empty(&dep->cancelled_list)) {
+		req = next_request(&dep->cancelled_list);
 		dwc3_gadget_ep_skip_trbs(dep, req);
 		dwc3_gadget_giveback(dep, req, -ECONNRESET);
 		request_count++;
@@ -1820,11 +1826,6 @@ static int dwc3_gadget_ep_dequeue(struct usb_ep *ep,
 
 	unsigned long			flags;
 	int				ret = 0;
-
-	if (atomic_read(&dwc->in_lpm)) {
-		dev_err(dwc->dev, "Unable to dequeue while in LPM\n");
-		return -EAGAIN;
-	}
 
 	trace_dwc3_ep_dequeue(req);
 	dbg_ep_dequeue(dep->number, req);
@@ -1867,8 +1868,7 @@ static int dwc3_gadget_ep_dequeue(struct usb_ep *ep,
 			/* If ep isn't started, then there's no end transfer
 			 * pending
 			 */
-			if ((dep->flags & DWC3_EP_TRANSFER_STARTED) &&
-				!(dep->flags & DWC3_EP_END_TRANSFER_PENDING))
+			if (!(dep->flags & DWC3_EP_END_TRANSFER_PENDING))
 				dwc3_gadget_ep_cleanup_cancelled_requests(dep);
 
 			goto out;
@@ -2631,8 +2631,6 @@ static void dwc3_gadget_enable_irq(struct dwc3 *dwc)
 	 */
 	if (dwc->revision < DWC3_REVISION_230A)
 		reg |= DWC3_DEVTEN_ULSTCNGEN;
-	else
-		reg |= DWC3_DEVTEN_EOPFEN;
 
 	/* On 2.30a and above this bit enables U3/L2-L1 Suspend Events */
 	if (dwc->revision >= DWC3_REVISION_230A)
@@ -3557,6 +3555,11 @@ int dwc3_stop_active_transfer(struct dwc3_ep *dep, bool force, bool interrupt)
 	u32 cmd;
 	int ret;
 
+	if (atomic_read(&dwc->in_lpm)) {
+		dev_err(dwc->dev, "cannot stop transfers while in LPM\n");
+		return -EINVAL;
+	}
+
 	if (!(dep->flags & DWC3_EP_TRANSFER_STARTED) ||
 	    (dep->flags & DWC3_EP_END_TRANSFER_PENDING))
 		return 0;
@@ -3603,11 +3606,8 @@ int dwc3_stop_active_transfer(struct dwc3_ep *dep, bool force, bool interrupt)
 	ret = dwc3_send_gadget_ep_cmd(dep, cmd, &params);
 	WARN_ON_ONCE(ret);
 	dep->resource_index = 0;
-	if (ret == -ETIMEDOUT) {
-		dbg_log_string("%s(%d): endxfer ret:%d",
-				dep->name, dep->number, ret);
-		return ret;
-	}
+
+	dbg_log_string("%s(%d): endxfer ret:%d", dep->name, dep->number, ret);
 
 	if (!interrupt)
 		dep->flags &= ~DWC3_EP_TRANSFER_STARTED;
@@ -4443,7 +4443,8 @@ int dwc3_gadget_init(struct dwc3 *dwc)
 	 * sure we're starting from a well known location.
 	 */
 
-	dwc->num_eps = DWC3_ENDPOINTS_NUM;
+	if (!dwc->num_eps)
+		dwc->num_eps = DWC3_ENDPOINTS_NUM;
 	ret = dwc3_gadget_init_endpoints(dwc, dwc->num_eps);
 	if (ret)
 		goto err3;

@@ -541,13 +541,13 @@ struct __attribute__ ((__packed__)) hdcp_force_encryption_rsp {
 	uint32_t commandid;
 };
 
-struct qseecom_handle *qseecom_handle_g = NULL;
-struct qseecom_handle *hdcpsrm_qseecom_handle_g = NULL;
-static int hdcp2_app_started = 0;
+static struct qseecom_handle *qseecom_handle_g;
+static struct qseecom_handle *hdcpsrm_qseecom_handle_g;
+static int hdcp2_app_started;
 static DEFINE_MUTEX(hdcp2_mutex_g);
 
-struct qseecom_handle *hdcp1_qseecom_handle_g = NULL;
-static int hdcp1_app_started = 0;
+static struct qseecom_handle *hdcp1_qseecom_handle_g;
+static int hdcp1_app_started;
 static DEFINE_MUTEX(hdcp1_mutex_g);
 
 struct hdcp2_handle {
@@ -1435,14 +1435,12 @@ void *hdcp2_init(u32 device_type)
 
 	handle->res_buf = kmalloc(QSEECOM_SBUFF_SIZE, GFP_KERNEL);
 	if (!handle->res_buf) {
-		pr_err("Memory allocation for res_buf failed\n");
 		kzfree(handle);
 		return NULL;
 	}
 
 	handle->req_buf = kmalloc(QSEECOM_SBUFF_SIZE, GFP_KERNEL);
 	if (!handle->req_buf) {
-		pr_err("Memory allocation for req_buf failed\n");
 		kzfree(handle->res_buf);
 		kzfree(handle);
 		return NULL;
@@ -1459,6 +1457,7 @@ EXPORT_SYMBOL(hdcp2_init);
 void hdcp2_deinit(void *ctx)
 {
 	struct hdcp2_handle *handle = ctx;
+
 	kzfree(handle->res_buf);
 	kzfree(handle->req_buf);
 	kzfree(ctx);
@@ -1816,7 +1815,7 @@ int hdcp1_start(void *data, u32 *aksv_msb, u32 *aksv_lsb)
 
 key_error:
 	hdcp1_app_unload(hdcp1_handle);
-error_load :
+error_load:
 	 mutex_unlock(&hdcp1_mutex_g);
 error:
 	return rc;

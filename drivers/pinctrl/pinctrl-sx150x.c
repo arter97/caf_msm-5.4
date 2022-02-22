@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2019, 2021, The Linux Foundation. All rights reserved.
  *
  * Copyright (c) 2016, BayLibre, SAS. All rights reserved.
  * Author: Neil Armstrong <narmstrong@baylibre.com>
@@ -15,7 +15,7 @@
 
 #include <linux/regmap.h>
 #include <linux/i2c.h>
-#include <linux/init.h>
+#include <linux/module.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/mutex.h>
@@ -1172,12 +1172,6 @@ static int sx150x_probe(struct i2c_client *client,
 		return ret;
 	}
 
-	ret = pinctrl_enable(pctl->pctldev);
-	if (ret) {
-		dev_err(dev, "Failed to enable pinctrl device\n");
-		return ret;
-	}
-
 	/* Register GPIO controller */
 	pctl->gpio.base = -1;
 	pctl->gpio.ngpio = pctl->data->npins;
@@ -1208,6 +1202,12 @@ static int sx150x_probe(struct i2c_client *client,
 	ret = devm_gpiochip_add_data(dev, &pctl->gpio, pctl);
 	if (ret)
 		return ret;
+
+	ret = pinctrl_enable(pctl->pctldev);
+	if (ret) {
+		dev_err(dev, "Failed to enable pinctrl device\n");
+		return ret;
+	}
 
 	ret = gpiochip_add_pin_range(&pctl->gpio, dev_name(dev),
 				     0, 0, pctl->data->npins);
@@ -1293,8 +1293,22 @@ static int sx150x_restore(struct device *dev)
 	return 0;
 }
 
+static int sx150x_freeze(struct device *dev)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct sx150x_pinctrl *pctl = i2c_get_clientdata(client);
+	int ret;
+
+	ret = sx150x_init_hw(pctl);
+	if (ret)
+		return ret;
+
+	return ret;
+}
+
 static const struct dev_pm_ops sx150x_pm = {
 	.restore = sx150x_restore,
+	.freeze = sx150x_freeze,
 };
 #endif
 
@@ -1321,3 +1335,5 @@ static int __init sx150x_init(void)
 	return i2c_add_driver(&sx150x_driver);
 }
 early_subsys_initcall(sx150x_init, EARLY_SUBSYS_PLATFORM, EARLY_INIT_LEVEL3);
+
+MODULE_LICENSE("GPL v2");

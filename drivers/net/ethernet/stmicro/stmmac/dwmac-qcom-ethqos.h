@@ -27,7 +27,15 @@ extern void *ipc_emac_log_ctxt;
 
 #define DRV_NAME "qcom-ethqos"
 #define ETHQOSDBG(fmt, args...) \
-	pr_debug(DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args)
+do  {\
+	pr_debug(DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args);\
+	if (ipc_emac_log_ctxt) { \
+		ipc_log_string(ipc_emac_log_ctxt, \
+		"%s: %s[%u]:[emac] debug:" fmt, __FILENAME__,\
+		__func__, __LINE__, ## args); \
+	} \
+} while (0)
+
 #define ETHQOSERR(fmt, args...) \
 do {\
 	pr_err(DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args);\
@@ -37,13 +45,24 @@ do {\
 		__func__, __LINE__, ## args); \
 	} \
 } while (0)
+
 #define ETHQOSINFO(fmt, args...) \
-	pr_info(DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args)
+do  {\
+	pr_info(DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args);\
+	if (ipc_emac_log_ctxt) { \
+		ipc_log_string(ipc_emac_log_ctxt, \
+		"%s: %s[%u]:[emac] INFO:" fmt, __FILENAME__,\
+		__func__, __LINE__, ## args); \
+	} \
+} while (0)
+
 #define RGMII_IO_MACRO_CONFIG		0x0
 #define SDCC_HC_REG_DLL_CONFIG		0x4
+#define SDCC_TEST_CTL			0x8
 #define SDCC_HC_REG_DDR_CONFIG		0xC
 #define SDCC_HC_REG_DLL_CONFIG2		0x10
 #define SDC4_STATUS			0x14
+#define SDCC_TEST_CTL			0x8
 #define SDCC_USR_CTL			0x18
 #define RGMII_IO_MACRO_CONFIG2		0x1C
 #define EMAC_HW_NONE 0
@@ -117,27 +136,54 @@ struct ethqos_emac_por {
 	unsigned int value;
 };
 
-static const struct ethqos_emac_por emac_v2_3_0_por[] = {
-	{ .offset = RGMII_IO_MACRO_CONFIG,	.value = 0x00C01343 },
-	{ .offset = SDCC_HC_REG_DLL_CONFIG,	.value = 0x2004642C },
-	{ .offset = SDCC_HC_REG_DDR_CONFIG,	.value = 0x00000000 },
-	{ .offset = SDCC_HC_REG_DLL_CONFIG2,	.value = 0x00200000 },
-	{ .offset = SDCC_USR_CTL,		.value = 0x00010800 },
-	{ .offset = RGMII_IO_MACRO_CONFIG2,	.value = 0x00002060 },
+struct ethqos_emac_driver_data {
+	struct ethqos_emac_por *por;
+	unsigned int num_por;
 };
 
-static const struct ethqos_emac_por emac_v2_3_2_por[] = {
-	{ .offset = RGMII_IO_MACRO_CONFIG,	.value = 0x00C01343 },
-	{ .offset = SDCC_HC_REG_DLL_CONFIG,	.value = 0x2004642C },
-	{ .offset = SDCC_HC_REG_DDR_CONFIG,	.value = 0x80040800 },
-	{ .offset = SDCC_HC_REG_DLL_CONFIG2,	.value = 0x00200000 },
-	{ .offset = SDCC_USR_CTL,		.value = 0x00010800 },
-	{ .offset = RGMII_IO_MACRO_CONFIG2,	.value = 0x00002060 },
+#define RGMII_TCXO_CYCLES_DLY_LINE 64
+#define RGMII_TCXO_PERIOD_NS 52
+#define RGMII_TCXO_CYCLES_CNT 4
+
+#define RGMII_PRG_RCLK_CONST \
+	(RGMII_TCXO_PERIOD_NS * RGMII_TCXO_CYCLES_CNT / 2)
+
+/* register operations for EMAC_SDCC_TEST_CTL */
+#define SDCC_TEST_CTL_RGOFFADDR_OFFSET (0x0000008)
+/* register operations for EMAC_SDCC_USR_CTL */
+#define SDCC_USR_CTL_RGOFFADDR_OFFSET (0x00000018)
+
+struct ethqos_io_macro {
+	u32 config_cdr_en;
+	u32 mclk_gating_en;
+	u32 cdr_fine_phase;
+	u32 skip_calc_traffic;
+	u32 data_divide_clk_sel;
+	u32 prg_rclk_dly;
+	u32 loopback_en;
+	u32 rx_prog_swap;
+	u32 tx_clk_phase_shift_en;
+
+	u32 dll_clock_dis;
+	u32 mclk_freq_calc;
+	u32 ddr_traffic_init_sel;
+	u32 ddr_traffic_init_sw;
+	u32 ddr_cal_en;
+
+	u32 tcx0_cycles_dly_line;
+	u32 tcx0_cycles_cnt;
+
+	u32 test_ctl;
+	u32 usr_ctl;
+
+	u32 pps_create;
+	u32 pps_remove;
 };
 
 struct qcom_ethqos {
 	struct platform_device *pdev;
 	void __iomem *rgmii_base;
+	void __iomem *ioaddr;
 
 	struct msm_bus_scale_pdata *bus_scale_vec;
 	u32 bus_hdl;
@@ -146,12 +192,17 @@ struct qcom_ethqos {
 	unsigned int speed;
 	unsigned int vote_idx;
 
+	struct iommu_domain *iommu_domain;
+	unsigned int *emac_reg_base_address;
+	unsigned int *rgmii_reg_base_address;
+	u32 emac_mem_size;
+
 	int gpio_phy_intr_redirect;
 	u32 phy_intr;
 	/* Work struct for handling phy interrupt */
 	struct work_struct emac_phy_work;
 
-	const struct ethqos_emac_por *por;
+	struct ethqos_emac_por *por;
 	unsigned int num_por;
 	unsigned int emac_ver;
 
@@ -197,6 +248,8 @@ struct qcom_ethqos {
 	bool print_kpi;
 
 	struct dentry *debugfs_dir;
+
+	struct ethqos_io_macro io_macro;
 };
 
 struct pps_cfg {
@@ -239,7 +292,7 @@ struct ip_params {
 	bool is_valid_ipv6_addr;
 };
 
-int ethqos_init_reqgulators(struct qcom_ethqos *ethqos);
+int ethqos_init_regulators(struct qcom_ethqos *ethqos);
 void ethqos_disable_regulators(struct qcom_ethqos *ethqos);
 int ethqos_init_gpio(struct qcom_ethqos *ethqos);
 void ethqos_free_gpios(struct qcom_ethqos *ethqos);

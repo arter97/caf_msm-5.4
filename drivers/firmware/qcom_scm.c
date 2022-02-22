@@ -24,6 +24,8 @@
 #define SCM_HAS_CORE_CLK	BIT(0)
 #define SCM_HAS_IFACE_CLK	BIT(1)
 #define SCM_HAS_BUS_CLK		BIT(2)
+#define SCM_LOAD_QUP_FW_ARG	0x7E7E7E7E
+#define SCM_AUTH_GSI_QUP_PROC	0x13
 
 struct qcom_scm {
 	struct device *dev;
@@ -35,6 +37,9 @@ struct qcom_scm {
 
 	u64 dload_mode_addr;
 };
+
+enum qcom_scm_custom_reset_type qcom_scm_custom_reset_type;
+EXPORT_SYMBOL(qcom_scm_custom_reset_type);
 
 static struct qcom_scm *__scm;
 
@@ -364,6 +369,27 @@ int qcom_scm_pas_shutdown(u32 peripheral)
 }
 EXPORT_SYMBOL(qcom_scm_pas_shutdown);
 
+/**
+ * qcom_scm_pas_dsentry() - put the remote proc in deep sleep
+ * @peripheral: peripheral id
+ *
+ * Returns 0 on success.
+ */
+int qcom_scm_pas_dsentry(u32 peripheral)
+{
+	int ret;
+
+	ret = qcom_scm_clk_enable();
+	if (ret)
+		return ret;
+
+	ret = __qcom_scm_pas_dsentry(__scm->dev, peripheral);
+	qcom_scm_clk_disable();
+
+	return ret;
+}
+EXPORT_SYMBOL(qcom_scm_pas_dsentry);
+
 static int qcom_scm_pas_reset_assert(struct reset_controller_dev *rcdev,
 				     unsigned long idx)
 {
@@ -475,6 +501,27 @@ void qcom_scm_deassert_ps_hold(void)
 }
 EXPORT_SYMBOL(qcom_scm_deassert_ps_hold);
 
+int qcom_scm_paravirt_smmu_attach(u64 sid, u64 asid,
+			u64 ste_pa, u64 ste_size, u64 cd_pa,
+			u64 cd_size)
+{
+	return __qcom_scm_paravirt_smmu_attach(__scm ? __scm->dev : NULL, sid, asid,
+					ste_pa, ste_size, cd_pa, cd_size);
+}
+EXPORT_SYMBOL(qcom_scm_paravirt_smmu_attach);
+
+int qcom_scm_paravirt_tlb_inv(u64 asid)
+{
+	return __qcom_scm_paravirt_tlb_inv(__scm ? __scm->dev : NULL, asid);
+}
+EXPORT_SYMBOL(qcom_scm_paravirt_tlb_inv);
+
+int qcom_scm_paravirt_smmu_detach(u64 sid)
+{
+	return __qcom_scm_paravirt_smmu_detach(__scm ? __scm->dev : NULL, sid);
+}
+EXPORT_SYMBOL(qcom_scm_paravirt_smmu_detach);
+
 void qcom_scm_mmu_sync(bool sync)
 {
 	__qcom_scm_mmu_sync(__scm ? __scm->dev : NULL, sync);
@@ -486,6 +533,15 @@ int qcom_scm_restore_sec_cfg(u32 device_id, u32 spare)
 	return __qcom_scm_restore_sec_cfg(__scm->dev, device_id, spare);
 }
 EXPORT_SYMBOL(qcom_scm_restore_sec_cfg);
+
+int qcom_scm_load_qup_fw(void)
+{
+	struct device *dev = __scm ? __scm->dev : NULL;
+
+	return __qcom_scm_restore_sec_cfg(dev, SCM_AUTH_GSI_QUP_PROC,
+						SCM_LOAD_QUP_FW_ARG);
+}
+EXPORT_SYMBOL(qcom_scm_load_qup_fw);
 
 int qcom_scm_iommu_secure_ptbl_size(u32 spare, size_t *size)
 {
@@ -1089,8 +1145,13 @@ static int qcom_scm_do_restart(struct notifier_block *this, unsigned long event,
 {
 	struct qcom_scm *scm = container_of(this, struct qcom_scm, restart_nb);
 
-	if (reboot_mode == REBOOT_WARM)
+	if (reboot_mode == REBOOT_WARM &&
+		qcom_scm_custom_reset_type == QCOM_SCM_RST_NONE)
 		__qcom_scm_reboot(scm->dev);
+
+	if (qcom_scm_custom_reset_type > QCOM_SCM_RST_NONE &&
+			qcom_scm_custom_reset_type < QCOM_SCM_RST_MAX)
+		__qcom_scm_custom_reboot(scm->dev, qcom_scm_custom_reset_type);
 
 	return NOTIFY_OK;
 }

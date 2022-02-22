@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2019, 2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/file.h>
@@ -249,27 +249,41 @@ static void kgsl_sync_timeline_value_str(struct dma_fence *fence,
 {
 	struct kgsl_sync_fence *kfence = (struct kgsl_sync_fence *)fence;
 	struct kgsl_sync_timeline *ktimeline = kfence->parent;
+	struct kgsl_context *context = NULL;
+	unsigned long flags;
+	int ret = 0;
 
-	unsigned int timestamp_retired = 0;
-	unsigned int timestamp_queued = 0;
+	unsigned int timestamp_retired;
+	unsigned int timestamp_queued;
 
 	if (!kref_get_unless_zero(&ktimeline->kref))
 		return;
+	if (!ktimeline->device)
+		goto put_timeline;
 
-	/*
-	 * ktimeline->device might be NULL here but kgsl_readtimestamp()
-	 * will handle that correctly
-	 */
-	kgsl_readtimestamp(ktimeline->device, ktimeline->context,
-		KGSL_TIMESTAMP_RETIRED, &timestamp_retired);
+	spin_lock_irqsave(&ktimeline->lock, flags);
+	ret = _kgsl_context_get(ktimeline->context);
+	context = ret ? ktimeline->context : NULL;
+	spin_unlock_irqrestore(&ktimeline->lock, flags);
 
-	kgsl_readtimestamp(ktimeline->device, ktimeline->context,
-		KGSL_TIMESTAMP_QUEUED, &timestamp_queued);
+	/* Get the last signaled timestamp if the context is not valid */
+	timestamp_queued = ktimeline->last_timestamp;
+	timestamp_retired = timestamp_queued;
+	if (context) {
+		kgsl_readtimestamp(ktimeline->device, context,
+			KGSL_TIMESTAMP_RETIRED, &timestamp_retired);
+
+		kgsl_readtimestamp(ktimeline->device, context,
+			KGSL_TIMESTAMP_QUEUED, &timestamp_queued);
+
+		kgsl_context_put(context);
+	}
 
 	snprintf(str, size, "%u queued:%u retired:%u",
 		ktimeline->last_timestamp,
 		timestamp_queued, timestamp_retired);
 
+put_timeline:
 	kgsl_sync_timeline_put(ktimeline);
 }
 
@@ -298,7 +312,7 @@ int kgsl_sync_timeline_create(struct kgsl_context *context)
 {
 	struct kgsl_sync_timeline *ktimeline;
 
-	/* Put context when timeline is released */
+	/* Put context at detach time */
 	if (!_kgsl_context_get(context))
 		return -ENOENT;
 
@@ -320,6 +334,11 @@ int kgsl_sync_timeline_create(struct kgsl_context *context)
 	INIT_LIST_HEAD(&ktimeline->child_list_head);
 	spin_lock_init(&ktimeline->lock);
 	ktimeline->device = context->device;
+
+	/*
+	 * The context pointer is valid till detach time, where we put the
+	 * refcount on the context
+	 */
 	ktimeline->context = context;
 
 	context->ktimeline = ktimeline;
@@ -352,27 +371,30 @@ static void kgsl_sync_timeline_signal(struct kgsl_sync_timeline *ktimeline,
 	kgsl_sync_timeline_put(ktimeline);
 }
 
-void kgsl_sync_timeline_destroy(struct kgsl_context *context)
+void kgsl_sync_timeline_detach(struct kgsl_sync_timeline *ktimeline)
 {
-	kfree(context->ktimeline);
+	unsigned long flags;
+	struct kgsl_context *context = ktimeline->context;
+
+	/* Set context pointer to NULL and drop our refcount on the context */
+	spin_lock_irqsave(&ktimeline->lock, flags);
+	ktimeline->context = NULL;
+	spin_unlock_irqrestore(&ktimeline->lock, flags);
+	kgsl_context_put(context);
 }
 
-static void kgsl_sync_timeline_release(struct kref *kref)
+static void kgsl_sync_timeline_destroy(struct kref *kref)
 {
 	struct kgsl_sync_timeline *ktimeline =
 		container_of(kref, struct kgsl_sync_timeline, kref);
 
-	/*
-	 * Only put the context refcount here. The context destroy function
-	 * will call kgsl_sync_timeline_destroy() to kfree it
-	 */
-	kgsl_context_put(ktimeline->context);
+	kfree(ktimeline);
 }
 
 void kgsl_sync_timeline_put(struct kgsl_sync_timeline *ktimeline)
 {
 	if (ktimeline)
-		kref_put(&ktimeline->kref, kgsl_sync_timeline_release);
+		kref_put(&ktimeline->kref, kgsl_sync_timeline_destroy);
 }
 
 static const struct dma_fence_ops kgsl_sync_fence_ops = {
@@ -614,9 +636,10 @@ static void kgsl_syncsource_cleanup(struct kgsl_process_private *private,
 				struct kgsl_syncsource *syncsource)
 {
 	struct kgsl_syncsource_fence *sfence, *next;
+	unsigned long flags;
 
 	/* Signal all fences to release any callbacks */
-	spin_lock(&syncsource->lock);
+	spin_lock_irqsave(&syncsource->lock, flags);
 
 	list_for_each_entry_safe(sfence, next, &syncsource->child_list_head,
 				child_list) {
@@ -624,7 +647,7 @@ static void kgsl_syncsource_cleanup(struct kgsl_process_private *private,
 		list_del_init(&sfence->child_list);
 	}
 
-	spin_unlock(&syncsource->lock);
+	spin_unlock_irqrestore(&syncsource->lock, flags);
 
 	/* put reference from syncsource creation */
 	kgsl_syncsource_put(syncsource);
@@ -664,6 +687,7 @@ long kgsl_ioctl_syncsource_create_fence(struct kgsl_device_private *dev_priv,
 	struct kgsl_syncsource_fence *sfence = NULL;
 	struct sync_file *sync_file = NULL;
 	int fd = -1;
+	unsigned long flags;
 
 	/*
 	 * Take a refcount that is released when the fence is released
@@ -705,9 +729,9 @@ long kgsl_ioctl_syncsource_create_fence(struct kgsl_device_private *dev_priv,
 
 	param->fence_fd = fd;
 
-	spin_lock(&syncsource->lock);
+	spin_lock_irqsave(&syncsource->lock, flags);
 	list_add_tail(&sfence->child_list, &syncsource->child_list_head);
-	spin_unlock(&syncsource->lock);
+	spin_unlock_irqrestore(&syncsource->lock, flags);
 out:
 	/*
 	 * We're transferring ownership of the fence to the sync file.
@@ -734,8 +758,9 @@ static int kgsl_syncsource_signal(struct kgsl_syncsource *syncsource,
 {
 	struct kgsl_syncsource_fence *sfence, *next;
 	int ret = -EINVAL;
+	unsigned long flags;
 
-	spin_lock(&syncsource->lock);
+	spin_lock_irqsave(&syncsource->lock, flags);
 
 	list_for_each_entry_safe(sfence, next, &syncsource->child_list_head,
 				child_list) {
@@ -748,7 +773,7 @@ static int kgsl_syncsource_signal(struct kgsl_syncsource *syncsource,
 		}
 	}
 
-	spin_unlock(&syncsource->lock);
+	spin_unlock_irqrestore(&syncsource->lock, flags);
 
 	return ret;
 }

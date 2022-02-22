@@ -32,12 +32,6 @@
 #endif
 #include <linux/fs.h>
 
-#define PWR_SRC_STATUS_SET(index, status)  do { \
-	if (index >= PWR_SRC_INIT_STATE_IDX && index < BT_POWER_SRC_SIZE) { \
-		bt_power_src_status[index] = (int) status; \
-	} \
-} while (0)
-
 #define PWR_SRC_NOT_AVAILABLE -2
 #define DEFAULT_INVALID_VALUE -1
 #define PWR_SRC_INIT_STATE_IDX 0
@@ -76,8 +70,23 @@ enum power_src_pos {
 	BT_VDD_RFA_0p8_CURRENT,
 	BT_VDD_RFACMN_CURRENT,
 	BT_VDD_IPA_2p2,
-	BT_VDD_IPA_2p2_CURRENT
+	BT_VDD_IPA_2p2_CURRENT,
+	/* The below bucks are voted for HW WAR on some platform which supports
+	 * WNC39xx.
+	 */
+	BT_VDD_SMPS,
+	BT_VDD_SMPS_CURRENT,
+	/* New entries need to be added before PWR_SRC_SIZE.
+	 * Its hold the max size of power sources states.
+	 */
+	BT_POWER_SRC_SIZE,
 };
+
+#define PWR_SRC_STATUS_SET(index, status)  do { \
+	if (index >= PWR_SRC_INIT_STATE_IDX && index < BT_POWER_SRC_SIZE) { \
+		bt_power_src_status[index] = (int) status; \
+	} \
+} while (0)
 
 // Regulator structure for QCA6174/QCA9377/QCA9379 BT SoC series
 static struct bt_power_vreg_data bt_vregs_info_qca61x4_937x[] = {
@@ -116,6 +125,8 @@ static struct bt_power_vreg_data bt_vregs_info_qca6xx0[] = {
 static struct bt_power bt_vreg_info_wcn399x = {
 	.compatible = "qcom,wcn3990",
 	.vregs = (struct bt_power_vreg_data []) {
+		{NULL, "qcom,bt-vdd-smps", 984000,  984000, 0, false, false,
+			{BT_VDD_SMPS, BT_VDD_SMPS_CURRENT}},
 		{NULL, "qcom,bt-vdd-io",   1700000, 1900000, 0, false, false,
 			{BT_VDD_IO_LDO, BT_VDD_IO_LDO_CURRENT}},
 		{NULL, "qcom,bt-vdd-core", 1304000, 1304000, 0, false, false,
@@ -125,7 +136,7 @@ static struct bt_power bt_vreg_info_wcn399x = {
 		{NULL, "qcom,bt-vdd-xtal", 1700000, 1900000, 0, false, false,
 			{BT_VDD_XTAL_LDO, BT_VDD_XTAL_LDO_CURRENT}},
 	},
-	.num_vregs = 4,
+	.num_vregs = 5,
 };
 
 static struct bt_power bt_vreg_info_qca_auto = {
@@ -145,6 +156,12 @@ static struct bt_power bt_vreg_info_qca_auto = {
 			PWR_SRC_LOG_UNSUPPORTED},
 	},
 	.num_vregs = 6,
+};
+
+// Regulator structure for QCC5100 BT SoC series
+static struct bt_power_vreg_data bt_vreg_info_qcc5xxx[] = {
+	{NULL, "qcom,bt-vdd-pa", 1700000, 1900000, 0, false, false,
+			{BT_VDD_PA_LDO, BT_VDD_PA_LDO_CURRENT}},
 };
 
 static struct bt_power bt_vreg_info_qca6174 = {
@@ -171,6 +188,12 @@ static struct bt_power bt_vreg_info_wcn6750 = {
 	.num_vregs = ARRAY_SIZE(bt_vregs_info_qca6xx0),
 };
 
+static struct bt_power bt_vreg_info_qcc5100 = {
+	.compatible = "qcom,qcc5100",
+	.vregs = bt_vreg_info_qcc5xxx,
+	.num_vregs = ARRAY_SIZE(bt_vreg_info_qcc5xxx),
+};
+
 static const struct of_device_id bt_power_match_table[] = {
 	{	.compatible = "qcom,qca6174", .data = &bt_vreg_info_qca6174},
 	{	.compatible = "qcom,wcn3990", .data = &bt_vreg_info_wcn399x},
@@ -178,6 +201,7 @@ static const struct of_device_id bt_power_match_table[] = {
 	{	.compatible = "qcom,qca6490", .data = &bt_vreg_info_qca6490},
 	{	.compatible = "qcom,wcn6750-bt", .data = &bt_vreg_info_wcn6750},
 	{	.compatible = "qcom,qca-auto-converged", .data = &bt_vreg_info_qca_auto},
+	{	.compatible = "qcom,qcc5100", .data = &bt_vreg_info_qcc5100},
 	{},
 };
 
@@ -411,6 +435,9 @@ static int bt_configure_gpios(int on)
 			return rc;
 		}
 
+		pr_info("BTON:Turn Bt OFF asserting BT_EN to low\n");
+		pr_info("bt-reset-gpio(%d) value(%d)\n", bt_reset_gpio,
+			gpio_get_value(bt_reset_gpio));
 		rc = gpio_direction_output(bt_reset_gpio, 0);
 		if (rc) {
 			pr_err("%s: Unable to set direction\n", __func__);
@@ -419,25 +446,27 @@ static int bt_configure_gpios(int on)
 		PWR_SRC_STATUS_SET(BT_RESET_GPIO,
 			gpio_get_value(bt_reset_gpio));
 		msleep(50);
-		pr_info("BTON:Turn Bt Off bt-reset-gpio(%d) value(%d)\n",
-			bt_reset_gpio, gpio_get_value(bt_reset_gpio));
+		pr_info("BTON:Turn Bt OFF post asserting BT_EN to low\n");
+		pr_info("bt-reset-gpio(%d) value(%d)\n", bt_reset_gpio,
+			gpio_get_value(bt_reset_gpio));
+
 		if (bt_sw_ctrl_gpio >= 0) {
-			pr_info("BTON:Turn Bt Off\n");
 			PWR_SRC_STATUS_SET(BT_SW_CTRL_GPIO,
 				gpio_get_value(bt_sw_ctrl_gpio));
-			pr_info("bt-sw-ctrl-gpio(%d) value(%d)\n",
+			pr_info("BTON:Turn Bt OFF bt-sw-ctrl-gpio(%d) value(%d)\n",
 				bt_sw_ctrl_gpio,
 				bt_power_src_status[BT_SW_CTRL_GPIO]);
 		}
+
 		if (wl_reset_gpio >= 0)
-			pr_info("BTON:Turn Bt On wl-reset-gpio(%d) value(%d)\n",
+			pr_info("BTON:Turn Bt ON wl-reset-gpio(%d) value(%d)\n",
 				wl_reset_gpio, gpio_get_value(wl_reset_gpio));
 
 		if ((wl_reset_gpio < 0) ||
 			((wl_reset_gpio >= 0) && gpio_get_value(wl_reset_gpio))) {
 
 			btpower_set_xo_reset_gpio_state(true);
-			pr_info("%s: BTON: Asserting BT_EN\n", __func__);
+			pr_info("BTON: WLAN ON Asserting BT_EN to high\n");
 			rc = gpio_direction_output(bt_reset_gpio, 1);
 			if (rc) {
 				pr_err("%s: Unable to set direction\n", __func__);
@@ -447,21 +476,24 @@ static int bt_configure_gpios(int on)
 				gpio_get_value(bt_reset_gpio));
 			btpower_set_xo_reset_gpio_state(false);
 		}
+
 		if ((wl_reset_gpio >= 0) && (gpio_get_value(wl_reset_gpio) == 0)) {
 			if (gpio_get_value(bt_reset_gpio)) {
-				pr_info("%s: Wlan Off and BT On too close\n", __func__);
-				pr_info("%s: reset BT_EN, enable it after delay\n", __func__);
+				pr_info("BTON: WLAN OFF and BT ON are too close\n");
+				pr_info("reset BT_EN, enable it after delay\n");
 				rc = gpio_direction_output(bt_reset_gpio, 0);
 				if (rc) {
-					pr_err("%s: Unable to set direction\n", __func__);
+					pr_err("%s: Unable to set direction\n",
+						 __func__);
 					return rc;
 				}
 				PWR_SRC_STATUS_SET(BT_RESET_GPIO,
 					gpio_get_value(bt_reset_gpio));
 			}
-			pr_info("%s:add 100ms delay for AON output to fully discharge\n",
-				 __func__);
+			pr_info("BTON: WLAN OFF waiting for 100ms delay\n");
+			pr_info("for AON output to fully discharge\n");
 			msleep(100);
+			pr_info("BTON: WLAN OFF Asserting BT_EN to high\n");
 			btpower_set_xo_reset_gpio_state(true);
 			rc = gpio_direction_output(bt_reset_gpio, 1);
 			if (rc) {
@@ -470,6 +502,24 @@ static int bt_configure_gpios(int on)
 			}
 			bt_power_src_status[BT_RESET_GPIO] =
 				gpio_get_value(bt_reset_gpio);
+			btpower_set_xo_reset_gpio_state(false);
+		}
+
+		/* Below block of code executes if WL_EN is pulled high when
+		 * BT_EN is about to pull high. so above two if conditions are
+		 * not executed.
+		 */
+		if (!gpio_get_value(bt_reset_gpio)) {
+			btpower_set_xo_reset_gpio_state(true);
+			pr_info("BTON: WLAN ON and BT ON are too close\n");
+			pr_info("Asserting BT_EN to high\n");
+			rc = gpio_direction_output(bt_reset_gpio, 1);
+			if (rc) {
+				pr_err("%s: Unable to set direction\n", __func__);
+				return rc;
+			}
+			PWR_SRC_STATUS_SET(BT_RESET_GPIO,
+				gpio_get_value(bt_reset_gpio));
 			btpower_set_xo_reset_gpio_state(false);
 		}
 
@@ -500,10 +550,9 @@ static int bt_configure_gpios(int on)
 		pr_info("BTON:Turn Bt On bt-reset-gpio(%d) value(%d)\n",
 			bt_reset_gpio, gpio_get_value(bt_reset_gpio));
 		if (bt_sw_ctrl_gpio >= 0) {
-			pr_info("BTON:Turn Bt On\n");
 			PWR_SRC_STATUS_SET(BT_SW_CTRL_GPIO,
 				gpio_get_value(bt_sw_ctrl_gpio));
-			pr_info("bt-sw-ctrl-gpio(%d) value(%d)\n",
+			pr_info("BTON: Turn BT ON bt-sw-ctrl-gpio(%d) value(%d)\n",
 				bt_sw_ctrl_gpio,
 				bt_power_src_status[BT_SW_CTRL_GPIO]);
 		}

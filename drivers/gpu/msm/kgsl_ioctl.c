@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2008-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2008-2021, The Linux Foundation. All rights reserved.
  */
 
 #include "kgsl_device.h"
@@ -98,6 +98,8 @@ static const struct kgsl_ioctl kgsl_ioctl_funcs[] = {
 			kgsl_ioctl_timeline_signal),
 	KGSL_IOCTL_FUNC(IOCTL_KGSL_TIMELINE_DESTROY,
 			kgsl_ioctl_timeline_destroy),
+	KGSL_IOCTL_FUNC(IOCTL_KGSL_DRAWCTXT_SET_SHADOW_MEM,
+			kgsl_ioctl_drawctxt_set_shadow_mem),
 };
 
 long kgsl_ioctl_copy_in(unsigned int kernel_cmd, unsigned int user_cmd,
@@ -181,8 +183,6 @@ long kgsl_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			return device->ftbl->compat_ioctl(dev_priv, cmd, arg);
 		else if (device->ftbl->ioctl != NULL)
 			return device->ftbl->ioctl(dev_priv, cmd, arg);
-
-		dev_err(device->dev, "invalid ioctl code 0x%08X\n", cmd);
 	}
 
 	return ret;

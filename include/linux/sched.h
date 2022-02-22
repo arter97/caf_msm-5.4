@@ -622,7 +622,7 @@ struct walt_task_struct {
 	u32				unfilter;
 	u64				last_wake_ts;
 	u64				last_enqueued_ts;
-	struct walt_related_thread_group __rcu	*grp;
+	struct walt_related_thread_group __rcu *grp;
 	struct list_head		grp_list;
 	u64				cpu_cycles;
 	cpumask_t			cpus_requested;
@@ -1704,7 +1704,7 @@ extern struct pid *cad_pid;
 #define tsk_used_math(p)			((p)->flags & PF_USED_MATH)
 #define used_math()				tsk_used_math(current)
 
-static inline bool is_percpu_thread(void)
+static __always_inline bool is_percpu_thread(void)
 {
 #ifdef CONFIG_SMP
 	return (current->flags & PF_NO_SETAFFINITY) &&

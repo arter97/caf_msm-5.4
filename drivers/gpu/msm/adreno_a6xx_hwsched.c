@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -214,11 +214,11 @@ err:
 
 clks_gdsc_off:
 	clk_bulk_disable_unprepare(gmu->num_clks, gmu->clks);
+	clear_bit(KGSL_PWRFLAGS_CLK_ON, &pwr->power_flags);
 
 gdsc_off:
 	/* Poll to make sure that the CX is off */
-	if (!a6xx_cx_regulator_disable_wait(gmu->cx_gdsc, device, 5000))
-		dev_err(&gmu->pdev->dev, "GMU CX gdsc off timeout\n");
+	a6xx_cx_regulator_disable_wait(gmu->cx_gdsc, device, 5000);
 
 	a6xx_rdpm_cx_freq_update(gmu, 0);
 
@@ -229,6 +229,7 @@ static int a6xx_hwsched_gmu_boot(struct adreno_device *adreno_dev)
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	struct a6xx_gmu_device *gmu = to_a6xx_gmu(adreno_dev);
+	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 	int ret = 0;
 
 	trace_kgsl_pwr_request_state(device, KGSL_STATE_AWARE);
@@ -277,11 +278,11 @@ err:
 
 clks_gdsc_off:
 	clk_bulk_disable_unprepare(gmu->num_clks, gmu->clks);
+	clear_bit(KGSL_PWRFLAGS_CLK_ON, &pwr->power_flags);
 
 gdsc_off:
 	/* Poll to make sure that the CX is off */
-	if (!a6xx_cx_regulator_disable_wait(gmu->cx_gdsc, device, 5000))
-		dev_err(&gmu->pdev->dev, "GMU CX gdsc off timeout\n");
+	a6xx_cx_regulator_disable_wait(gmu->cx_gdsc, device, 5000);
 
 	a6xx_rdpm_cx_freq_update(gmu, 0);
 
@@ -349,6 +350,7 @@ static int a6xx_hwsched_gmu_power_off(struct adreno_device *adreno_dev)
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	struct a6xx_gmu_device *gmu = to_a6xx_gmu(adreno_dev);
+	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 	int ret = 0;
 
 	if (device->gmu_fault)
@@ -381,10 +383,10 @@ static int a6xx_hwsched_gmu_power_off(struct adreno_device *adreno_dev)
 	a6xx_hwsched_hfi_stop(adreno_dev);
 
 	clk_bulk_disable_unprepare(gmu->num_clks, gmu->clks);
+	clear_bit(KGSL_PWRFLAGS_CLK_ON, &pwr->power_flags);
 
 	/* Poll to make sure that the CX is off */
-	if (!a6xx_cx_regulator_disable_wait(gmu->cx_gdsc, device, 5000))
-		dev_err(&gmu->pdev->dev, "GMU CX gdsc off timeout\n");
+	a6xx_cx_regulator_disable_wait(gmu->cx_gdsc, device, 5000);
 
 	a6xx_rdpm_cx_freq_update(gmu, 0);
 
@@ -500,6 +502,7 @@ static void a6xx_hwsched_touch_wakeup(struct adreno_device *adreno_dev)
 
 	set_bit(GMU_PRIV_GPU_STARTED, &gmu->flags);
 
+	device->pwrctrl.last_stat_updated = ktime_get();
 	device->state = KGSL_STATE_ACTIVE;
 
 	trace_kgsl_pwr_set_state(device, KGSL_STATE_ACTIVE);
@@ -528,7 +531,10 @@ static int a6xx_hwsched_boot(struct adreno_device *adreno_dev)
 
 	adreno_hwsched_start(adreno_dev);
 
-	ret = a6xx_hwsched_gmu_boot(adreno_dev);
+	if (!test_bit(GMU_PRIV_PDC_RSC_LOADED, &gmu->flags))
+		ret = a6xx_hwsched_gmu_first_boot(adreno_dev);
+	else
+		ret = a6xx_hwsched_gmu_boot(adreno_dev);
 	if (ret)
 		return ret;
 
@@ -541,6 +547,8 @@ static int a6xx_hwsched_boot(struct adreno_device *adreno_dev)
 	kgsl_pwrscale_wake(device);
 
 	set_bit(GMU_PRIV_GPU_STARTED, &gmu->flags);
+
+	device->pwrctrl.last_stat_updated = ktime_get();
 	device->state = KGSL_STATE_ACTIVE;
 
 	trace_kgsl_pwr_set_state(device, KGSL_STATE_ACTIVE);
@@ -589,6 +597,7 @@ static int a6xx_hwsched_first_boot(struct adreno_device *adreno_dev)
 	set_bit(GMU_PRIV_FIRST_BOOT_DONE, &gmu->flags);
 	set_bit(GMU_PRIV_GPU_STARTED, &gmu->flags);
 
+	device->pwrctrl.last_stat_updated = ktime_get();
 	device->state = KGSL_STATE_ACTIVE;
 
 	trace_kgsl_pwr_set_state(device, KGSL_STATE_ACTIVE);

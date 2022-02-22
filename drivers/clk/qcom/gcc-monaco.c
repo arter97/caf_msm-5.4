@@ -19,6 +19,7 @@
 #include "common.h"
 #include "reset.h"
 #include "vdd-level-monaco.h"
+#include "clk-pm.h"
 
 static DEFINE_VDD_REGULATORS(vdd_cx, VDD_NUM, 1, vdd_corner);
 static DEFINE_VDD_REGULATORS(vdd_mx, VDD_NUM, 1, vdd_corner);
@@ -105,35 +106,7 @@ static struct clk_alpha_pll_postdiv gpll0_out_even = {
 	},
 };
 
-static struct clk_alpha_pll gpll1 = {
-	.offset = 0x1000,
-	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_LUCID_EVO],
-	.clkr = {
-		.enable_reg = 0x79000,
-		.enable_mask = BIT(1),
-		.hw.init = &(struct clk_init_data){
-			.name = "gpll1",
-			.parent_data = &(const struct clk_parent_data){
-				.fw_name = "bi_tcxo",
-			},
-			.num_parents = 1,
-			.ops = &clk_alpha_pll_fixed_lucid_evo_ops,
-		},
-		.vdd_data = {
-			.vdd_class = &vdd_cx,
-			.num_rate_max = VDD_NUM,
-			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 500000000,
-				[VDD_LOWER] = 615000000,
-				[VDD_LOW] = 1066000000,
-				[VDD_LOW_L1] = 1500000000,
-				[VDD_NOMINAL] = 1750000000,
-				[VDD_HIGH] = 2000000000},
-		},
-	},
-};
-
-static const struct alpha_pll_config gpll10_config = {
+static struct alpha_pll_config gpll10_config = {
 	.l = 0x1E,
 	.cal_l = 0x44,
 	.alpha = 0x0,
@@ -149,6 +122,7 @@ static struct clk_alpha_pll gpll10 = {
 	.vco_table = lucid_evo_vco,
 	.num_vco = ARRAY_SIZE(lucid_evo_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_LUCID_EVO],
+	.config = &gpll10_config,
 	.clkr = {
 		.enable_reg = 0x79000,
 		.enable_mask = BIT(10),
@@ -330,7 +304,7 @@ static struct clk_alpha_pll gpll7 = {
 	},
 };
 
-static const struct alpha_pll_config gpll8_config = {
+static struct alpha_pll_config gpll8_config = {
 	.l = 0x14,
 	.cal_l = 0x44,
 	.alpha = 0xD555,
@@ -346,6 +320,7 @@ static struct clk_alpha_pll gpll8 = {
 	.vco_table = lucid_evo_vco,
 	.num_vco = ARRAY_SIZE(lucid_evo_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_LUCID_EVO],
+	.config = &gpll8_config,
 	.clkr = {
 		.enable_reg = 0x79000,
 		.enable_mask = BIT(8),
@@ -394,12 +369,12 @@ static struct clk_alpha_pll_postdiv gpll8_out_even = {
 	},
 };
 
-static const struct alpha_pll_config gpll9_config = {
+static struct alpha_pll_config gpll9_config = {
 	.l = 0x32,
 	.alpha = 0x0,
-	.config_ctl_val = 0x08200920,
-	.config_ctl_hi_val = 0x05008001,
-	.config_ctl_hi1_val = 0x00000000,
+	.config_ctl_val = 0x08200800,
+	.config_ctl_hi_val = 0x05028011,
+	.config_ctl_hi1_val = 0x08000000,
 	.user_ctl_val = 0x00000001,
 	.user_ctl_hi_val = 0x00000000,
 };
@@ -409,6 +384,7 @@ static struct clk_alpha_pll gpll9 = {
 	.vco_table = zonda_evo_vco,
 	.num_vco = ARRAY_SIZE(zonda_evo_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_ZONDA_EVO],
+	.config = &gpll9_config,
 	.clkr = {
 		.enable_reg = 0x79000,
 		.enable_mask = BIT(9),
@@ -916,7 +892,7 @@ static struct clk_rcg2 gcc_camss_ope_ahb_clk_src = {
 
 static const struct freq_tbl ftbl_gcc_camss_ope_clk_src[] = {
 	F(19200000, P_BI_TCXO, 1, 0, 0),
-	F(200000000, P_GPLL8_OUT_EVEN, 2, 0, 0),
+	F(200000000, P_GPLL8_OUT_EVEN, 1, 0, 0),
 	F(465000000, P_GPLL8_OUT_EVEN, 1, 0, 0),
 	F(580000000, P_GPLL8_OUT_EVEN, 1, 0, 0),
 	{ }
@@ -1473,6 +1449,7 @@ static struct clk_rcg2 gcc_qupv3_wrap0_s7_clk_src = {
 static const struct freq_tbl ftbl_gcc_sdcc1_apps_clk_src[] = {
 	F(144000, P_BI_TCXO, 16, 3, 25),
 	F(400000, P_BI_TCXO, 12, 1, 4),
+	F(19200000, P_BI_TCXO, 1, 0, 0),
 	F(20000000, P_GPLL0_OUT_EVEN, 5, 1, 3),
 	F(25000000, P_GPLL0_OUT_EVEN, 6, 1, 2),
 	F(50000000, P_GPLL0_OUT_EVEN, 6, 0, 0),
@@ -1493,7 +1470,7 @@ static struct clk_rcg2 gcc_sdcc1_apps_clk_src = {
 		.name = "gcc_sdcc1_apps_clk_src",
 		.parent_data = gcc_parent_data_1,
 		.num_parents = ARRAY_SIZE(gcc_parent_data_1),
-		.ops = &clk_rcg2_ops,
+		.ops = &clk_rcg2_floor_ops,
 	},
 	.clkr.vdd_data = {
 		.vdd_class = &vdd_cx,
@@ -1501,6 +1478,39 @@ static struct clk_rcg2 gcc_sdcc1_apps_clk_src = {
 		.rate_max = (unsigned long[VDD_NUM]) {
 			[VDD_LOWER] = 100000000,
 			[VDD_NOMINAL] = 384000000},
+	},
+};
+
+static const struct freq_tbl ftbl_gcc_sdcc1_ice_core_clk_src[] = {
+	F(75000000, P_GPLL0_OUT_EVEN, 4, 0, 0),
+	F(100000000, P_GPLL0_OUT_EVEN, 3, 0, 0),
+	F(150000000, P_GPLL0_OUT_EVEN, 2, 0, 0),
+	F(200000000, P_GPLL0_OUT_MAIN, 3, 0, 0),
+	F(300000000, P_GPLL0_OUT_EVEN, 1, 0, 0),
+	{ }
+};
+
+static struct clk_rcg2 gcc_sdcc1_ice_core_clk_src = {
+	.cmd_rcgr = 0x38018,
+	.mnd_width = 0,
+	.hid_width = 5,
+	.parent_map = gcc_parent_map_0,
+	.freq_tbl = ftbl_gcc_sdcc1_ice_core_clk_src,
+	.enable_safe_config = true,
+	.clkr.hw.init = &(struct clk_init_data){
+		.name = "gcc_sdcc1_ice_core_clk_src",
+		.parent_data = gcc_parent_data_0,
+		.num_parents = ARRAY_SIZE(gcc_parent_data_0),
+		.flags = CLK_SET_RATE_PARENT,
+		.ops = &clk_rcg2_ops,
+	},
+	.clkr.vdd_data = {
+		.vdd_class = &vdd_cx,
+		.num_rate_max = VDD_NUM,
+		.rate_max = (unsigned long[VDD_NUM]) {
+			[VDD_LOWER] = 100000000,
+			[VDD_LOW] = 150000000,
+			[VDD_NOMINAL] = 300000000},
 	},
 };
 
@@ -1525,7 +1535,7 @@ static struct clk_rcg2 gcc_sdcc2_apps_clk_src = {
 		.name = "gcc_sdcc2_apps_clk_src",
 		.parent_data = gcc_parent_data_11,
 		.num_parents = ARRAY_SIZE(gcc_parent_data_11),
-		.ops = &clk_rcg2_ops,
+		.ops = &clk_rcg2_floor_ops,
 	},
 	.clkr.vdd_data = {
 		.vdd_class = &vdd_cx,
@@ -2281,7 +2291,7 @@ static struct clk_branch gcc_gpu_gpll0_div_clk_src = {
 
 static struct clk_branch gcc_gpu_memnoc_gfx_clk = {
 	.halt_reg = 0x3600c,
-	.halt_check = BRANCH_HALT,
+	.halt_check = BRANCH_VOTED,
 	.hwcg_reg = 0x3600c,
 	.hwcg_bit = 1,
 	.clkr = {
@@ -2289,6 +2299,7 @@ static struct clk_branch gcc_gpu_memnoc_gfx_clk = {
 		.enable_mask = BIT(0),
 		.hw.init = &(struct clk_init_data){
 			.name = "gcc_gpu_memnoc_gfx_clk",
+			.flags = CLK_DONT_HOLD_STATE,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -2697,6 +2708,11 @@ static struct clk_branch gcc_sdcc1_ice_core_clk = {
 		.enable_mask = BIT(0),
 		.hw.init = &(struct clk_init_data){
 			.name = "gcc_sdcc1_ice_core_clk",
+			.parent_data = &(const struct clk_parent_data){
+				.hw = &gcc_sdcc1_ice_core_clk_src.clkr.hw,
+			},
+			.num_parents = 1,
+			.flags = CLK_SET_RATE_PARENT,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -2957,6 +2973,25 @@ static struct clk_branch gcc_video_xo_clk = {
 	},
 };
 
+/*
+ * Keep the clocks always-ON
+ * GCC_CAMERA_AHB_CLK, GCC_CAMERA_XO_CLK,
+ * GCC_DISP_AHB_CLK, GCC_DISP_XO_CLK, GCC_AHB2PHY_USB_CLK,
+ * GCC_CPUSS_GNOC_CLK, GCC_CPUSS_TRIG_CLK,GCC_GPU_CFG_AHB_CLK,
+ * GCC_GPU_IREF_CLK
+ */
+static struct critical_clk_offset critical_clk_list[] = {
+	{ .offset = 0x17008, .mask = BIT(0) },
+	{ .offset = 0x17028, .mask = BIT(0) },
+	{ .offset = 0x1700c, .mask = BIT(0) },
+	{ .offset = 0x1702c, .mask = BIT(0) },
+	{ .offset = 0x1c078, .mask = BIT(0) },
+	{ .offset = 0x2b004, .mask = BIT(0) },
+	{ .offset = 0x2b008, .mask = BIT(0) },
+	{ .offset = 0x36004, .mask = BIT(0) },
+	{ .offset = 0x36100, .mask = BIT(0) },
+};
+
 static struct clk_regmap *gcc_monaco_clocks[] = {
 	[GCC_AHB2PHY_CSI_CLK] = &gcc_ahb2phy_csi_clk.clkr,
 	[GCC_BIMC_GPU_AXI_CLK] = &gcc_bimc_gpu_axi_clk.clkr,
@@ -3053,6 +3088,7 @@ static struct clk_regmap *gcc_monaco_clocks[] = {
 	[GCC_SDCC1_APPS_CLK] = &gcc_sdcc1_apps_clk.clkr,
 	[GCC_SDCC1_APPS_CLK_SRC] = &gcc_sdcc1_apps_clk_src.clkr,
 	[GCC_SDCC1_ICE_CORE_CLK] = &gcc_sdcc1_ice_core_clk.clkr,
+	[GCC_SDCC1_ICE_CORE_CLK_SRC] = &gcc_sdcc1_ice_core_clk_src.clkr,
 	[GCC_SDCC2_AHB_CLK] = &gcc_sdcc2_ahb_clk.clkr,
 	[GCC_SDCC2_APPS_CLK] = &gcc_sdcc2_apps_clk.clkr,
 	[GCC_SDCC2_APPS_CLK_SRC] = &gcc_sdcc2_apps_clk_src.clkr,
@@ -3077,7 +3113,6 @@ static struct clk_regmap *gcc_monaco_clocks[] = {
 	[GCC_VIDEO_XO_CLK] = &gcc_video_xo_clk.clkr,
 	[GPLL0] = &gpll0.clkr,
 	[GPLL0_OUT_EVEN] = &gpll0_out_even.clkr,
-	[GPLL1] = &gpll1.clkr,
 	[GPLL10] = &gpll10.clkr,
 	[GPLL3] = &gpll3.clkr,
 	[GPLL3_OUT_EVEN] = &gpll3_out_even.clkr,
@@ -3130,7 +3165,7 @@ static const struct regmap_config gcc_monaco_regmap_config = {
 	.fast_io = true,
 };
 
-static const struct qcom_cc_desc gcc_monaco_desc = {
+static struct qcom_cc_desc gcc_monaco_desc = {
 	.config = &gcc_monaco_regmap_config,
 	.clks = gcc_monaco_clocks,
 	.num_clks = ARRAY_SIZE(gcc_monaco_clocks),
@@ -3138,6 +3173,8 @@ static const struct qcom_cc_desc gcc_monaco_desc = {
 	.num_resets = ARRAY_SIZE(gcc_monaco_resets),
 	.clk_regulators = gcc_monaco_regulators,
 	.num_clk_regulators = ARRAY_SIZE(gcc_monaco_regulators),
+	.critical_clk_en = critical_clk_list,
+	.num_critical_clk = ARRAY_SIZE(critical_clk_list),
 };
 
 static const struct of_device_id gcc_monaco_match_table[] = {
@@ -3159,28 +3196,17 @@ static int gcc_monaco_probe(struct platform_device *pdev)
 	clk_lucid_evo_pll_configure(&gpll8, regmap, &gpll8_config);
 	clk_zonda_evo_pll_configure(&gpll9, regmap, &gpll9_config);
 
-	/*
-	 * Keep the clocks always-ON
-	 * GCC_CAMERA_AHB_CLK, GCC_CAMERA_XO_CLK,
-	 * GCC_DISP_AHB_CLK, GCC_DISP_XO_CLK, GCC_AHB2PHY_USB_CLK,
-	 * GCC_CPUSS_GNOC_CLK, GCC_CPUSS_TRIG_CLK,GCC_GPU_CFG_AHB_CLK,
-	 * GCC_GPU_IREF_CLK
-	 */
-	regmap_update_bits(regmap, 0x17008, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0x17028, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0x1700c, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0x1702c, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0x1c078, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0x2b004, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0x2b008, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0x36004, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0x36100, BIT(0), BIT(0));
-
 	ret = qcom_cc_register_rcg_dfs(regmap, gcc_dfs_clocks,
 				       ARRAY_SIZE(gcc_dfs_clocks));
 	if (ret)
 		return ret;
 
+	ret = register_qcom_clks_pm(pdev, false, &gcc_monaco_desc);
+	if (ret)
+		dev_err(&pdev->dev, "Failed register gcc_pm_rt_ops clocks\n");
+
+	/* Enabling always ON clocks */
+	clk_restore_critical_clocks(&pdev->dev);
 	ret = qcom_cc_really_probe(pdev, &gcc_monaco_desc, regmap);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register GCC clocks\n");

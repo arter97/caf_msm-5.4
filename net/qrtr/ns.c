@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
  * Copyright (c) 2015, Sony Mobile Communications Inc.
- * Copyright (c) 2013, 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013, 2020-2021, The Linux Foundation. All rights reserved.
  * Copyright (c) 2020, Linaro Ltd.
  */
 
@@ -86,17 +86,36 @@ static struct qrtr_node *node_get(unsigned int node_id)
 		return node;
 
 	/* If node didn't exist, allocate and insert it to the tree */
-	node = kzalloc(sizeof(*node), GFP_KERNEL);
+	node = kzalloc(sizeof(*node), GFP_ATOMIC);
 	if (!node)
 		return NULL;
 
 	node->id = node_id;
 	xa_init(&node->servers);
 
-	xa_store(&nodes, node_id, node, GFP_KERNEL);
+	xa_store(&nodes, node_id, node, GFP_ATOMIC);
 
 	return node;
 }
+
+int qrtr_get_service_id(unsigned int node_id, unsigned int port_id)
+{
+	struct qrtr_server *srv;
+	struct qrtr_node *node;
+	unsigned long index;
+
+	node = node_get(node_id);
+	if (!node)
+		return -EINVAL;
+
+	xa_for_each(&node->servers, index, srv) {
+		if (srv->node == node_id && srv->port == port_id)
+			return srv->service;
+	}
+
+	return -EINVAL;
+}
+EXPORT_SYMBOL(qrtr_get_service_id);
 
 static int server_match(const struct qrtr_server *srv,
 			const struct qrtr_server_filter *f)

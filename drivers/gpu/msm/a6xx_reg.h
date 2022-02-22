@@ -410,6 +410,7 @@
 #define A6XX_RBBM_ISDB_CNT                       0x533
 #define A6XX_RBBM_NC_MODE_CNTL                   0X534
 #define A6XX_RBBM_SNAPSHOT_STATUS                0x535
+#define A6XX_RBBM_LPAC_GBIF_CLIENT_QOS_CNTL      0x5ff
 
 #define A6XX_RBBM_SECVID_TRUST_CNTL              0xF400
 #define A6XX_RBBM_SECVID_TSB_TRUSTED_BASE_LO     0xF800
@@ -755,6 +756,7 @@
 #define A6XX_UCHE_CMDQ_CONFIG               0xE3C
 
 /* SP registers */
+#define A6XX_SP_DBG_ECO_CNTL                0xAE00
 #define A6XX_SP_ADDR_MODE_CNTL              0xAE01
 #define A6XX_SP_NC_MODE_CNTL                0xAE02
 #define A6XX_SP_PERFCTR_SP_SEL_0            0xAE10

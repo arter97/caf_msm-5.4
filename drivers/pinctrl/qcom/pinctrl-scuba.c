@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -1584,6 +1584,55 @@ static const struct msm_pingroup scuba_groups[] = {
 	[133] = SDC_QDSD_PINGROUP(sdc2_data, 0x86000, 9, 0),
 };
 
+static const int scuba_reserved_gpios[] = {
+	2, 3, -1
+};
+
+static const struct msm_gpio_wakeirq_map scuba_mpm_map[] = {
+	{0, 84},
+	{3, 75},
+	{4, 16},
+	{6, 59},
+	{8, 63},
+	{11, 17},
+	{13, 18},
+	{14, 51},
+	{17, 20},
+	{18, 52},
+	{19, 53},
+	{24, 6},
+	{25, 71},
+	{27, 73},
+	{28, 41},
+	{31, 27},
+	{32, 54},
+	{33, 55},
+	{34, 56},
+	{35, 57},
+	{36, 58},
+	{39, 28},
+	{46, 29},
+	{62, 60},
+	{63, 61},
+	{64, 62},
+	{69, 33},
+	{70, 34},
+	{72, 72},
+	{75, 35},
+	{79, 36},
+	{80, 21},
+	{81, 38},
+	{86, 19},
+	{87, 42},
+	{88, 43},
+	{89, 45},
+	{91, 74},
+	{94, 47},
+	{95, 48},
+	{96, 49},
+	{97, 50},
+};
+
 static const struct msm_pinctrl_soc_data scuba_pinctrl = {
 	.pins = scuba_pins,
 	.npins = ARRAY_SIZE(scuba_pins),
@@ -1591,7 +1640,10 @@ static const struct msm_pinctrl_soc_data scuba_pinctrl = {
 	.nfunctions = ARRAY_SIZE(scuba_functions),
 	.groups = scuba_groups,
 	.ngroups = ARRAY_SIZE(scuba_groups),
+	.reserved_gpios = scuba_reserved_gpios,
 	.ngpios = 127,
+	.wakeirq_map = scuba_mpm_map,
+	.nwakeirq_map = ARRAY_SIZE(scuba_mpm_map),
 };
 
 static int scuba_pinctrl_probe(struct platform_device *pdev)

@@ -115,6 +115,8 @@ config ARM64
 	select GENERIC_GETTIMEOFDAY
 	select HANDLE_DOMAIN_IRQ
 	select HARDIRQS_SW_RESEND
+	select HAVE_MOVE_PUD
+	select HAVE_MOVE_PMD
 	select HAVE_PCI
 	select HAVE_ACPI_APEI if (ACPI && EFI)
 	select HAVE_ALIGNED_STRUCT_PAGE if SLUB
@@ -1807,9 +1809,13 @@ config FIX_BOOT_CPU_LOGICAL_MAPPING
 	help
 	  This option fixes the logical cpu map of
 	  of boot cpu which is otherwise considered
-	  to be logical cpu 0. High performance core
-	  for logical cpu 0 will increase idle power
-	  consumption for the system.
+	  to be logical cpu 0.
+
+          Booting on high performance core makes the
+          core as logical cpu 0. It impacts the idle
+          power consumption of the system. This can
+	  be avoided by fixing the logical cpu map
+          hardcoding of the boot cpu.
 
 menu "Power management options"
 

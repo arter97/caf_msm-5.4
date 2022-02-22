@@ -698,6 +698,11 @@ struct msm_pcie_drv_info {
 	struct completion completion;
 };
 
+struct pcie_i2c_reg_update {
+	u32 offset;
+	u32 val;
+};
+
 /* i2c control interface for a i2c client device */
 struct pcie_i2c_ctrl {
 	struct i2c_client *client;
@@ -708,6 +713,8 @@ struct pcie_i2c_ctrl {
 	u32 ep_reset_gpio_mask;
 	u32 *dump_regs;
 	u32 dump_reg_count;
+	struct pcie_i2c_reg_update *reg_update;
+	u32 reg_update_count;
 
 	/* client specific callbacks */
 	int (*client_i2c_read)(struct i2c_client *client, u32 reg_addr,
@@ -716,6 +723,7 @@ struct pcie_i2c_ctrl {
 				u32 val);
 	int (*client_i2c_reset)(struct pcie_i2c_ctrl *i2c_ctrl, bool reset);
 	void (*client_i2c_dump_regs)(struct pcie_i2c_ctrl *i2c_ctrl);
+	void (*client_i2c_de_emphasis_wa)(struct pcie_i2c_ctrl *i2c_ctrl);
 };
 
 enum i2c_client_id {
@@ -2745,6 +2753,48 @@ static void msm_pcie_debugfs_exit(void)
 }
 #endif
 
+#ifdef CONFIG_IPC_LOGGING
+static void msm_pcie_ipc_log_init(int rc_num)
+{
+	char rc_name[MAX_RC_NAME_LEN];
+
+	scnprintf(rc_name, MAX_RC_NAME_LEN, "pcie%d-short", rc_num);
+	msm_pcie_dev[rc_num].ipc_log =
+		ipc_log_context_create(PCIE_LOG_PAGES, rc_name, 0);
+	if (msm_pcie_dev[rc_num].ipc_log == NULL)
+		pr_err("%s: unable to create IPC log context for %s\n",
+			__func__, rc_name);
+	else
+		PCIE_DBG(&msm_pcie_dev[rc_num],
+			"PCIe IPC logging is enable for RC%d\n",
+			rc_num);
+	scnprintf(rc_name, MAX_RC_NAME_LEN, "pcie%d-long", rc_num);
+	msm_pcie_dev[rc_num].ipc_log_long =
+		ipc_log_context_create(PCIE_LOG_PAGES, rc_name, 0);
+	if (msm_pcie_dev[rc_num].ipc_log_long == NULL)
+		pr_err("%s: unable to create IPC log context for %s\n",
+			__func__, rc_name);
+	else
+		PCIE_DBG(&msm_pcie_dev[rc_num],
+			"PCIe IPC logging %s is enable for RC%d\n",
+			rc_name, rc_num);
+	scnprintf(rc_name, MAX_RC_NAME_LEN, "pcie%d-dump", rc_num);
+	msm_pcie_dev[rc_num].ipc_log_dump =
+		ipc_log_context_create(PCIE_LOG_PAGES, rc_name, 0);
+	if (msm_pcie_dev[rc_num].ipc_log_dump == NULL)
+		pr_err("%s: unable to create IPC log context for %s\n",
+			__func__, rc_name);
+	else
+		PCIE_DBG(&msm_pcie_dev[rc_num],
+			"PCIe IPC logging %s is enable for RC%d\n",
+			rc_name, rc_num);
+}
+#else
+static void msm_pcie_ipc_log_init(int rc_num)
+{
+}
+#endif
+
 static int msm_pcie_is_link_up(struct msm_pcie_dev_t *dev)
 {
 	return readl_relaxed(dev->dm_core +
@@ -4553,6 +4603,28 @@ static void ntn3_dump_regs(struct pcie_i2c_ctrl *i2c_ctrl)
 	}
 }
 
+static void ntn3_de_emphasis_wa(struct pcie_i2c_ctrl *i2c_ctrl)
+{
+	int i, val;
+	struct msm_pcie_dev_t *pcie_dev = container_of(i2c_ctrl,
+						       struct msm_pcie_dev_t,
+						       i2c_ctrl);
+
+	PCIE_DBG(pcie_dev, "PCIe: RC%d: NTN3 reg update\n", pcie_dev->rc_idx);
+
+	for (i = 0; i < i2c_ctrl->reg_update_count; i++) {
+		i2c_ctrl->client_i2c_write(i2c_ctrl->client, i2c_ctrl->reg_update[i].offset,
+					   i2c_ctrl->reg_update[i].val);
+		/*Read to make sure writes are completed*/
+		i2c_ctrl->client_i2c_read(i2c_ctrl->client, i2c_ctrl->reg_update[i].offset,
+					   &val);
+		PCIE_DBG(pcie_dev, "PCIe: RC%d: NTN3 reg off:0x%x wr_val:0x%x rd_val:0x%x\n",
+			pcie_dev->rc_idx, i2c_ctrl->reg_update[i].offset,
+			i2c_ctrl->reg_update[i].val, val);
+	}
+
+}
+
 static int msm_pcie_enable(struct msm_pcie_dev_t *dev)
 {
 	int ret = 0;
@@ -4665,6 +4737,9 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev)
 	usleep_range(dev->perst_delay_us_min, dev->perst_delay_us_max);
 
 	ep_up_timeout = jiffies + usecs_to_jiffies(EP_UP_TIMEOUT_US);
+
+	if (dev->i2c_ctrl.client && dev->i2c_ctrl.client_i2c_de_emphasis_wa)
+		dev->i2c_ctrl.client_i2c_de_emphasis_wa(&dev->i2c_ctrl);
 
 	msm_pcie_config_sid(dev);
 	msm_pcie_config_controller(dev);
@@ -5990,6 +6065,23 @@ static int msm_pcie_i2c_ctrl_init(struct msm_pcie_dev_t *pcie_dev)
 			i2c_ctrl->dump_reg_count = 0;
 	}
 
+	of_get_property(i2c_client_node, "reg_update", &size);
+
+	if (size) {
+		i2c_ctrl->reg_update = devm_kzalloc(dev, size, GFP_KERNEL);
+		if (!i2c_ctrl->reg_update)
+			return -ENOMEM;
+
+		i2c_ctrl->reg_update_count = size / sizeof(*i2c_ctrl->reg_update);
+
+		ret = of_property_read_u32_array(i2c_client_node,
+						"reg_update",
+						(unsigned int *)i2c_ctrl->reg_update,
+						size/sizeof(i2c_ctrl->reg_update->offset));
+		if (ret)
+			i2c_ctrl->reg_update_count = 0;
+	}
+
 	return 0;
 }
 
@@ -7107,6 +7199,7 @@ static int pcie_i2c_ctrl_probe(struct i2c_client *client,
 		i2c_ctrl->client_i2c_write = ntn3_i2c_write;
 		i2c_ctrl->client_i2c_reset = ntn3_ep_reset_ctrl;
 		i2c_ctrl->client_i2c_dump_regs = ntn3_dump_regs;
+		i2c_ctrl->client_i2c_de_emphasis_wa = ntn3_de_emphasis_wa;
 	} else {
 		dev_err(&client->dev, "invalid client id %d\n", client_id);
 	}
@@ -7126,7 +7219,6 @@ static struct i2c_driver pcie_i2c_ctrl_driver = {
 static int __init pcie_init(void)
 {
 	int ret = 0, i;
-	char rc_name[MAX_RC_NAME_LEN];
 
 	pr_alert("pcie:%s.\n", __func__);
 
@@ -7135,36 +7227,7 @@ static int __init pcie_init(void)
 	mutex_init(&pcie_drv.rpmsg_lock);
 
 	for (i = 0; i < MAX_RC_NUM; i++) {
-		scnprintf(rc_name, MAX_RC_NAME_LEN, "pcie%d-short", i);
-		msm_pcie_dev[i].ipc_log =
-			ipc_log_context_create(PCIE_LOG_PAGES, rc_name, 0);
-		if (msm_pcie_dev[i].ipc_log == NULL)
-			pr_err("%s: unable to create IPC log context for %s\n",
-				__func__, rc_name);
-		else
-			PCIE_DBG(&msm_pcie_dev[i],
-				"PCIe IPC logging is enable for RC%d\n",
-				i);
-		scnprintf(rc_name, MAX_RC_NAME_LEN, "pcie%d-long", i);
-		msm_pcie_dev[i].ipc_log_long =
-			ipc_log_context_create(PCIE_LOG_PAGES, rc_name, 0);
-		if (msm_pcie_dev[i].ipc_log_long == NULL)
-			pr_err("%s: unable to create IPC log context for %s\n",
-				__func__, rc_name);
-		else
-			PCIE_DBG(&msm_pcie_dev[i],
-				"PCIe IPC logging %s is enable for RC%d\n",
-				rc_name, i);
-		scnprintf(rc_name, MAX_RC_NAME_LEN, "pcie%d-dump", i);
-		msm_pcie_dev[i].ipc_log_dump =
-			ipc_log_context_create(PCIE_LOG_PAGES, rc_name, 0);
-		if (msm_pcie_dev[i].ipc_log_dump == NULL)
-			pr_err("%s: unable to create IPC log context for %s\n",
-				__func__, rc_name);
-		else
-			PCIE_DBG(&msm_pcie_dev[i],
-				"PCIe IPC logging %s is enable for RC%d\n",
-				rc_name, i);
+		msm_pcie_ipc_log_init(i);
 		spin_lock_init(&msm_pcie_dev[i].cfg_lock);
 		spin_lock_init(&msm_pcie_dev[i].evt_reg_list_lock);
 		msm_pcie_dev[i].cfg_access = true;
@@ -7252,9 +7315,9 @@ static int __init pcie_init_wait(void)
 }
 early_init(pcie_init_wait, EARLY_SUBSYS_5, EARLY_INIT_LEVEL3);
 
-early_subsys_initcall_sync(pcie_init, EARLY_SUBSYS_5, EARLY_INIT_LEVEL4);
+early_device_initcall(pcie_init, EARLY_SUBSYS_5, EARLY_INIT_LEVEL4);
 #else
-subsys_initcall_sync(pcie_init);
+module_init(pcie_init);
 #endif
 module_exit(pcie_exit);
 

@@ -3087,7 +3087,6 @@ static inline void multi_kswapd_stop(int nid) {}
 static inline void multi_kswapd_cpu_online(pg_data_t *pgdat,
 					const struct cpumask *mask) {}
 #endif /* CONFIG_MULTIPLE_KSWAPD */
-
 /**
  * seal_check_future_write - Check for F_SEAL_FUTURE_WRITE flag and handle it
  * @seals: the seals to check

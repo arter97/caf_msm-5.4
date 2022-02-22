@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 #include "hab.h"
 #include <linux/fdtable.h>
@@ -29,6 +29,12 @@ struct importer_context {
 	struct file *filp;
 };
 
+struct exp_platform_data {
+	void *dmabuf;
+	void *attach;
+	void *sg_table;
+};
+
 static struct dma_buf_ops dma_buf_ops;
 
 static struct pages_list *pages_list_create(
@@ -41,6 +47,7 @@ static struct pages_list *pages_list_create(
 	struct pages_list *pglist = NULL;
 	unsigned long pfn;
 	int i, j, k = 0, size;
+	unsigned long region_total_page = 0;
 
 	if (!pfn_table)
 		return ERR_PTR(-EINVAL);
@@ -54,22 +61,40 @@ static struct pages_list *pages_list_create(
 	}
 
 	size = exp->payload_count * sizeof(struct page *);
-	pages = kmalloc(size, GFP_KERNEL);
+	pages = vmalloc(size);
 	if (!pages)
 		return ERR_PTR(-ENOMEM);
 
 	pglist = kzalloc(sizeof(*pglist), GFP_KERNEL);
 	if (!pglist) {
-		kfree(pages);
+		vfree(pages);
 		return ERR_PTR(-ENOMEM);
 	}
 
 	for (i = 0; i < pfn_table->nregions; i++) {
+		if (pfn_table->region[i].size <= 0) {
+			pr_err("pfn_table->region[%d].size %d is less than 1\n",
+				i, pfn_table->region[i].size);
+			goto err_region_total_page;
+		}
+
+		region_total_page += pfn_table->region[i].size;
+		if (region_total_page > exp->payload_count) {
+			pr_err("payload_count %d but region_total_page %lu\n",
+				exp->payload_count, region_total_page);
+			goto err_region_total_page;
+		}
+
 		for (j = 0; j < pfn_table->region[i].size; j++) {
 			pages[k] = pfn_to_page(pfn+j);
 			k++;
 		}
 		pfn += pfn_table->region[i].size + pfn_table->region[i].space;
+	}
+	if (region_total_page != exp->payload_count) {
+		pr_err("payload_count %d and region_total_page %lu are not equal\n",
+			exp->payload_count, region_total_page);
+		goto err_region_total_page;
 	}
 
 	pglist->pages = pages;
@@ -82,6 +107,11 @@ static struct pages_list *pages_list_create(
 	kref_init(&pglist->refcount);
 
 	return pglist;
+
+err_region_total_page:
+	vfree(pages);
+	kfree(pglist);
+	return ERR_PTR(-EINVAL);
 }
 
 static void pages_list_add(struct pages_list *pglist)
@@ -114,7 +144,7 @@ static void pages_list_destroy(struct kref *refcount)
 	if (pglist->type == HAB_PAGE_LIST_IMPORT)
 		pages_list_remove(pglist);
 
-	kfree(pglist->pages);
+	vfree(pglist->pages);
 
 	kfree(pglist);
 }
@@ -209,7 +239,7 @@ static struct dma_buf *habmem_get_dma_buf_from_uva(unsigned long address,
 	struct pages_list *pglist = NULL;
 	DEFINE_DMA_BUF_EXPORT_INFO(exp_info);
 
-	pages = kmalloc_array(page_count, sizeof(struct page *), GFP_KERNEL);
+	pages = vmalloc((page_count * sizeof(struct page *)));
 	if (!pages) {
 		ret = -ENOMEM;
 		goto err;
@@ -256,7 +286,7 @@ static struct dma_buf *habmem_get_dma_buf_from_uva(unsigned long address,
 	return dmabuf;
 
 err:
-	kfree(pages);
+	vfree(pages);
 	kfree(pglist);
 	return ERR_PTR(ret);
 }
@@ -267,7 +297,10 @@ static int habmem_compress_pfns(
 		uint32_t *data_size)
 {
 	int ret = 0;
-	struct dma_buf *dmabuf = exp_super->platform_data;
+	struct exp_platform_data *platform_data =
+		(struct exp_platform_data *) exp_super->platform_data;
+	struct dma_buf *dmabuf =
+		(struct dma_buf *) platform_data->dmabuf;
 	int page_count = exp_super->exp.payload_count;
 	struct pages_list *pglist = NULL;
 	struct page **pages = NULL;
@@ -282,6 +315,8 @@ static int habmem_compress_pfns(
 
 	if (IS_ERR_OR_NULL(dmabuf) || !pfns || !data_size)
 		return -EINVAL;
+
+	pr_debug("page_count %d\n", page_count);
 
 	/* DMA buffer from fd */
 	if (dmabuf->ops != &dma_buf_ops) {
@@ -299,7 +334,12 @@ static int habmem_compress_pfns(
 			goto err;
 		}
 
+		/* Restore sg table and attach of dmabuf */
+		platform_data->attach = attach;
+		platform_data->sg_table = sg_table;
 		page_offset = exp_super->offset >> PAGE_SHIFT;
+
+		pr_debug("page_offset %lu\n", page_offset);
 
 		for_each_sg(sg_table->sgl, s, sg_table->nents, i) {
 			spage_size = s->length >> PAGE_SHIFT;
@@ -317,6 +357,10 @@ static int habmem_compress_pfns(
 				pfns->region[j-1].space =
 					page_to_pfn(nth_page(page, 0)) -
 					page_to_pfn(pre_page) - 1;
+				pr_debug("j %d, space %d, ppfn %lu, pfn %lu\n",
+					j, pfns->region[j-1].space,
+					page_to_pfn(pre_page),
+					page_to_pfn(nth_page(page, 0)));
 			}
 
 			pfns->region[j].size = spage_size - page_offset;
@@ -358,24 +402,16 @@ static int habmem_compress_pfns(
 	*data_size = sizeof(struct compressed_pfns) +
 		sizeof(struct region) * pfns->nregions;
 
+	pr_debug("first_pfn %lu, nregions %d, data_size %u\n",
+			pfns->first_pfn, pfns->nregions, *data_size);
+	return 0;
 err:
-	if (!IS_ERR_OR_NULL(sg_table))
-		dma_buf_unmap_attachment(attach, sg_table, DMA_TO_DEVICE);
-
-	if (!IS_ERR_OR_NULL(attach))
+	if (!IS_ERR_OR_NULL(attach)) {
+		if (!IS_ERR_OR_NULL(sg_table))
+			dma_buf_unmap_attachment(attach,
+					sg_table,
+					DMA_TO_DEVICE);
 		dma_buf_detach(dmabuf, attach);
-
-	/* TODO: This dma buffer should not be put here,
-	 * but currently display is depended on this put to do recircle,
-	 * so we just put dma buffer here to ensure there is no memleak.
-	 * we can remove this after display have a fix.
-	 */
-	if (HABMM_EXP_MEM_TYPE_DMA & exp_super->exp.readonly) {
-		if (!IS_ERR_OR_NULL(dmabuf)
-				&& dmabuf->ops != &dma_buf_ops) {
-			dma_buf_put(dmabuf);
-			exp_super->platform_data = NULL;
-		}
 	}
 
 	return ret;
@@ -392,37 +428,56 @@ static int habmem_add_export_compress(struct virtual_channel *vchan,
 	int ret = 0;
 	struct export_desc *exp = NULL;
 	struct export_desc_super *exp_super = NULL;
+	struct exp_platform_data *platform_data = NULL;
 	struct compressed_pfns *pfns = NULL;
 	uint32_t sizebytes = sizeof(*exp_super) +
 				sizeof(struct compressed_pfns) +
 				page_count * sizeof(struct region);
 
+	pr_debug("exp_desc %zu, comp_pfns %zu, region %zu, page_count %d\n",
+		sizeof(struct export_desc),
+		sizeof(struct compressed_pfns),
+		sizeof(struct region), page_count);
+
 	exp_super = habmem_add_export(vchan,
 			sizebytes,
 			flags);
-	if (!exp_super) {
-		dma_buf_put((struct dma_buf *)buf);
+	if (IS_ERR_OR_NULL(exp_super)) {
 		ret = -ENOMEM;
-		goto err;
+		goto err_add_exp;
 	}
+	platform_data = kzalloc(
+			sizeof(struct exp_platform_data),
+			GFP_KERNEL);
+	if (!platform_data) {
+		ret = -ENOMEM;
+		goto err_alloc;
+	}
+
 	exp = &exp_super->exp;
 	exp->payload_count = page_count;
-	exp_super->platform_data = buf;
+	platform_data->dmabuf = buf;
 	exp_super->offset = offset;
+	exp_super->platform_data = (void *)platform_data;
 	kref_init(&exp_super->refcount);
 
 	pfns = (struct compressed_pfns *)&exp->payload[0];
 	ret = habmem_compress_pfns(exp_super, pfns, payload_size);
 	if (ret) {
 		pr_err("hab compressed pfns failed %d\n", ret);
-		kfree(exp_super);
-		dma_buf_put((struct dma_buf *)buf);
 		*payload_size = 0;
-		goto err;
+		goto err_compress_pfns;
 	}
 
 	*export_id = exp->export_id;
-err:
+	return 0;
+
+err_compress_pfns:
+	kfree(platform_data);
+err_alloc:
+	vfree(exp_super);
+err_add_exp:
+	dma_buf_put((struct dma_buf *)buf);
 	return ret;
 }
 
@@ -497,9 +552,8 @@ int habmem_hyp_grant(struct virtual_channel *vchan,
 	} else if (HABMM_EXPIMP_FLAGS_FD & flags)
 		dmabuf = dma_buf_get(address);
 	else { /*Input is kva;*/
-		pages = kmalloc_array(page_count,
-				sizeof(struct page *),
-				GFP_KERNEL);
+		pages = vmalloc((page_count *
+				sizeof(struct page *)));
 		if (!pages) {
 			ret = -ENOMEM;
 			goto err;
@@ -550,21 +604,35 @@ int habmem_hyp_grant(struct virtual_channel *vchan,
 
 	return ret;
 err:
-	kfree(pages);
+	vfree(pages);
 	kfree(pglist);
 	return ret;
 }
 
 int habmem_exp_release(struct export_desc_super *exp_super)
 {
+	struct exp_platform_data *platform_data =
+		(struct exp_platform_data *)exp_super->platform_data;
 	struct dma_buf *dmabuf =
-			(struct dma_buf *) exp_super->platform_data;
+		(struct dma_buf *) platform_data->dmabuf;
+	struct dma_buf_attachment *attach = NULL;
+	struct sg_table *sg_table = NULL;
 
-	if (!IS_ERR_OR_NULL(dmabuf))
+	if (!IS_ERR_OR_NULL(dmabuf)) {
+		attach = (struct dma_buf_attachment *) platform_data->attach;
+		if (!IS_ERR_OR_NULL(attach)) {
+			sg_table = (struct sg_table *) platform_data->sg_table;
+			if (!IS_ERR_OR_NULL(sg_table))
+				dma_buf_unmap_attachment(attach,
+						sg_table,
+						DMA_TO_DEVICE);
+			dma_buf_detach(dmabuf, attach);
+		}
 		dma_buf_put(dmabuf);
-	else
+	} else
 		pr_debug("release failed, dmabuf is null!!!\n");
 
+	kfree(platform_data);
 	return 0;
 }
 
@@ -798,6 +866,7 @@ static void hab_mem_dma_buf_vunmap(struct dma_buf *dmabuf, void *vaddr)
 }
 
 static struct dma_buf_ops dma_buf_ops = {
+	.cache_sgt_mapping = true,
 	.map_dma_buf = hab_mem_map_dma_buf,
 	.unmap_dma_buf = hab_mem_unmap_dma_buf,
 	.mmap = hab_mem_mmap,

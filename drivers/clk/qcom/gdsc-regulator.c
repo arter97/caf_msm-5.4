@@ -22,6 +22,8 @@
 #include <linux/mailbox_client.h>
 #include <linux/mailbox_controller.h>
 #include <linux/mailbox/qmp.h>
+#include <linux/pm.h>
+#include <linux/suspend.h>
 
 #include "../../regulator/internal.h"
 #include "gdsc-debug.h"
@@ -46,7 +48,7 @@
 #define REG_OFFSET		0x0
 
 /* Timeout Delay */
-#define TIMEOUT_US		100
+#define TIMEOUT_US		500
 
 #define MBOX_TOUT_MS		100
 
@@ -80,9 +82,11 @@ struct gdsc {
 	bool			is_gdsc_hw_ctrl_mode;
 	bool			is_root_clk_voted;
 	bool			reset_aon;
+	bool			pm_ops;
 	int			clock_count;
 	int			reset_count;
 	int			root_clk_idx;
+	u32			clk_dis_wait_val;
 	u32			gds_timeout;
 	bool			skip_disable_before_enable;
 	bool			skip_disable;
@@ -251,11 +255,13 @@ static int gdsc_enable(struct regulator_dev *rdev)
 				regmap_write(sc->acd_misc_reset, REG_OFFSET, regval);
 
 			/*
-			 * BLK_ARES should be kept asserted for 1us before
-			 * being de-asserted.
+			 * BLK_ARES should be kept asserted for at least 100 us
+			 * before being de-asserted.
+			 * This is necessary as in HW there are 3 demet cells
+			 * on sleep clk to synchronize the BLK_ARES.
 			 */
 			gdsc_mb(sc);
-			udelay(1);
+			udelay(100);
 
 			regval &= ~BCR_BLK_ARES_BIT;
 			regmap_write(sc->sw_reset, REG_OFFSET, regval);
@@ -462,7 +468,7 @@ static int gdsc_disable(struct regulator_dev *rdev)
 			 * right after it was disabled does not put it in a
 			 * weird state.
 			 */
-			udelay(TIMEOUT_US);
+			udelay(100);
 		} else {
 			ret = poll_gdsc_status(sc, DISABLED);
 			if (ret) {
@@ -659,7 +665,10 @@ static struct regmap_config gdsc_regmap_config = {
 
 void gdsc_debug_print_regs(struct regulator *regulator)
 {
-	struct gdsc *sc = rdev_get_drvdata(regulator->rdev);
+	struct regulator_dev *rdev = regulator->rdev;
+	struct gdsc *sc = rdev_get_drvdata(rdev);
+	struct regulator *reg;
+	const char *supply_name;
 	uint32_t regvals[3] = {0};
 	int ret;
 
@@ -667,6 +676,23 @@ void gdsc_debug_print_regs(struct regulator *regulator)
 		pr_err("Failed to get GDSC Handle\n");
 		return;
 	}
+
+	ww_mutex_lock(&rdev->mutex, NULL);
+
+	if (rdev->open_count)
+		pr_info("%-32s EN\n", "Device-Supply");
+
+	list_for_each_entry(reg, &rdev->consumer_list, list) {
+		if (reg->supply_name)
+			supply_name = reg->supply_name;
+		else
+			supply_name = "(null)-(null)";
+
+		pr_info("%-32s %c\n", supply_name,
+			(reg->enable_count ? 'Y' : 'N'));
+	}
+
+	ww_mutex_unlock(&rdev->mutex);
 
 	ret = regmap_bulk_read(sc->regmap, REG_OFFSET, regvals,
 			gdsc_regmap_config.max_register ? 3 : 1);
@@ -813,6 +839,7 @@ static int gdsc_parse_dt_data(struct gdsc *sc, struct device *dev,
 				REGULATOR_CHANGE_MODE;
 		(*init_data)->constraints.valid_modes_mask |=
 				REGULATOR_MODE_NORMAL | REGULATOR_MODE_FAST;
+		sc->pm_ops = true;
 	}
 
 	return 0;
@@ -901,6 +928,42 @@ static int gdsc_get_resources(struct gdsc *sc, struct platform_device *pdev)
 	return 0;
 }
 
+static int restore_hw_trig_clk_dis(struct device *dev)
+{
+	struct gdsc *sc = dev_get_drvdata(dev);
+	uint32_t regval;
+
+	regmap_read(sc->regmap, REG_OFFSET, &regval);
+	if (sc->is_gdsc_hw_ctrl_mode)
+		regval |= HW_CONTROL_MASK;
+
+	if (sc->clk_dis_wait_val) {
+		regval &= ~(CLK_DIS_WAIT_MASK);
+		regval |= sc->clk_dis_wait_val;
+	}
+
+	return regmap_write(sc->regmap, REG_OFFSET, regval);
+}
+
+static int gdsc_pm_resume_early(struct device *dev)
+{
+#ifdef CONFIG_DEEPSLEEP
+	if (mem_sleep_current == PM_SUSPEND_MEM)
+		return restore_hw_trig_clk_dis(dev);
+#endif
+	return 0;
+}
+
+static int gdsc_pm_restore_early(struct device *dev)
+{
+	return restore_hw_trig_clk_dis(dev);
+}
+
+static const struct dev_pm_ops gdsc_pm_ops = {
+	.resume_early = gdsc_pm_resume_early,
+	.restore_early = gdsc_pm_restore_early,
+};
+
 static int gdsc_probe(struct platform_device *pdev)
 {
 	static atomic_t gdsc_count = ATOMIC_INIT(-1);
@@ -954,10 +1017,12 @@ static int gdsc_probe(struct platform_device *pdev)
 	if (!of_property_read_u32(pdev->dev.of_node, "qcom,clk-dis-wait-val",
 				  &clk_dis_wait_val)) {
 		clk_dis_wait_val = clk_dis_wait_val << CLK_DIS_WAIT_SHIFT;
+		sc->clk_dis_wait_val = clk_dis_wait_val;
 
 		/* Configure wait time between states. */
 		regval &= ~(CLK_DIS_WAIT_MASK);
 		regval |= clk_dis_wait_val;
+		sc->pm_ops = true;
 	}
 
 	regmap_write(sc->regmap, REG_OFFSET, regval);
@@ -987,6 +1052,9 @@ static int gdsc_probe(struct platform_device *pdev)
 			sc->rdesc.name, ret);
 		goto err;
 	}
+
+	if (sc->pm_ops)
+		pdev->dev.driver->pm = &gdsc_pm_ops;
 
 	sc->rdesc.id = atomic_inc_return(&gdsc_count);
 	sc->rdesc.ops = &gdsc_ops;

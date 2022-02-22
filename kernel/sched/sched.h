@@ -331,6 +331,8 @@ static inline int task_has_dl_policy(struct task_struct *p)
  */
 #define SCHED_FLAG_SUGOV	0x10000000
 
+#define SCHED_DL_FLAGS (SCHED_FLAG_RECLAIM | SCHED_FLAG_DL_OVERRUN | SCHED_FLAG_SUGOV)
+
 static inline bool dl_entity_is_special(struct sched_dl_entity *dl_se)
 {
 #ifdef CONFIG_CPU_FREQ_GOV_SCHEDUTIL
@@ -1488,7 +1490,7 @@ extern void sched_ttwu_pending(void);
  */
 #define for_each_domain(cpu, __sd) \
 	for (__sd = rcu_dereference_check_sched_domain(cpu_rq(cpu)->sd); \
-			__sd; __sd = __sd->parent)
+			__sd; __sd = rcu_dereference(__sd->parent))
 
 /**
  * highest_flag_domain - Return highest sched_domain containing flag.

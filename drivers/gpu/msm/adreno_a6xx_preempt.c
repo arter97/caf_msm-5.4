@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
 #include "adreno.h"
@@ -78,14 +78,16 @@ static void _power_collapse_set(struct adreno_device *adreno_dev, bool val)
 		return;
 
 	if (val) {
-		if (adreno_is_a660(adreno_dev))
+		if (adreno_is_a660(adreno_dev) ||
+				adreno_is_a690(adreno_dev))
 			gmu_core_regwrite(device,
 				 A6XX_GMU_PWR_COL_PREEMPT_KEEPALIVE, 0x1);
 		else
 			gmu_core_regrmw(device,
 				 A6XX_GMU_AO_SPARE_CNTL, 0x0, 0x2);
 	} else {
-		if (adreno_is_a660(adreno_dev))
+		if (adreno_is_a660(adreno_dev) ||
+				adreno_is_a690(adreno_dev))
 			gmu_core_regwrite(device,
 				 A6XX_GMU_PWR_COL_PREEMPT_KEEPALIVE, 0x0);
 		else
@@ -737,7 +739,7 @@ int a6xx_preemption_context_init(struct kgsl_context *context)
 	if (context->flags & KGSL_CONTEXT_SECURE)
 		flags |= KGSL_MEMFLAGS_SECURE;
 
-	if (kgsl_is_compat_task())
+	if (is_compat_task())
 		flags |= KGSL_MEMFLAGS_FORCE_32BIT;
 
 	/*

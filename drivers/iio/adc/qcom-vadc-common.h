@@ -65,6 +65,8 @@
 #define DIE_TEMP_ADC7_SCALE_FACTOR			1000
 #define DIE_TEMP_ADC7_MAX				160000
 
+#define PMIC5_GEN3_USB_IN_I_SCALE_FACTOR		9248
+
 #define ADC_VDD_REF			1875000
 
 /**
@@ -184,13 +186,13 @@ struct adc_tm_client_info {
  *	charger temperature.
  * SCALE_HW_CALIB_PM5_SMB_TEMP: Returns result in millidegrees for PMIC5
  *	SMB1390 temperature.
- * SCALE_HW_CALIB_BATT_THERM_100K: Returns battery thermistor voltage in
+ * SCALE_HW_CALIB_BATT_THERM_100K: Returns battery thermistor temperature in
  *	decidegC using 100k pullup. The hardware applies offset/slope to adc
  *	code.
- * SCALE_HW_CALIB_BATT_THERM_30K: Returns battery thermistor voltage in
+ * SCALE_HW_CALIB_BATT_THERM_30K: Returns battery thermistor temperature in
  *	decidegC using 30k pullup. The hardware applies offset/slope to adc
  *	code.
- * SCALE_HW_CALIB_BATT_THERM_400K: Returns battery thermistor voltage in
+ * SCALE_HW_CALIB_BATT_THERM_400K: Returns battery thermistor temperature in
  *	decidegC using 400k pullup. The hardware applies offset/slope to adc
  *	code.
  * SCALE_HW_CALIB_PM5_SMB1398_TEMP: Returns result in millidegrees for PMIC5
@@ -207,6 +209,12 @@ struct adc_tm_client_info {
  *	that uses raw ADC code.
  * SCALE_HW_CALIB_PM2250_S3_DIE_TEMP: Returns result in millidegrees for
  *	S3 die temperature channel on PM2250.
+ * SCALE_HW_CALIB_PM5_GEN3_BATT_THERM_100K: Returns battery thermistor
+ * temperature in decidegC using 100k pullup. The hardware applies
+ * offset/slope to adc code.
+ * SCALE_HW_CALIB_PM5_GEN3_BATT_ID_100K: Returns battery ID resistance
+ * in ohms using 100k pullup. The hardware applies offset/slope to adc code.
+ * SCALE_HW_CALIB_PM5_GEN3_USB_IN_I: Returns USB input current in microamperes.
  */
 enum vadc_scale_fn_type {
 	SCALE_DEFAULT = 0,
@@ -232,6 +240,9 @@ enum vadc_scale_fn_type {
 	SCALE_HW_CALIB_CUR_RAW,
 	SCALE_HW_CALIB_PM2250_S3_DIE_TEMP,
 	SCALE_HW_CALIB_PM5_CUR,
+	SCALE_HW_CALIB_PM5_GEN3_BATT_THERM_100K,
+	SCALE_HW_CALIB_PM5_GEN3_BATT_ID_100K,
+	SCALE_HW_CALIB_PM5_GEN3_USB_IN_I,
 	SCALE_HW_CALIB_INVALID,
 };
 
@@ -266,5 +277,7 @@ int qcom_vadc_decimation_from_dt(u32 value);
 void adc_tm_scale_therm_voltage_100k_gen3(struct adc_tm_config *param);
 
 int32_t adc_tm_absolute_rthr_gen3(struct adc_tm_config *tm_config);
+
+void qcom_vadc_gen3_set_r_comp(int r_comp_ohm);
 
 #endif /* QCOM_VADC_COMMON_H */

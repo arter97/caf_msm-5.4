@@ -20,6 +20,7 @@ enum icnss_uevent {
 	ICNSS_UEVENT_FW_CRASHED,
 	ICNSS_UEVENT_FW_DOWN,
 	ICNSS_UEVENT_HANG_DATA,
+	ICNSS_UEVENT_SMMU_FAULT,
 };
 
 struct icnss_uevent_hang_data {
@@ -165,6 +166,7 @@ extern unsigned int icnss_socinfo_get_serial_number(struct device *dev);
 extern bool icnss_is_qmi_disable(struct device *dev);
 extern bool icnss_is_fw_ready(void);
 extern bool icnss_is_fw_down(void);
+extern bool icnss_is_low_power(void);
 extern bool icnss_is_rejuvenate(void);
 extern int icnss_trigger_recovery(struct device *dev);
 extern void icnss_block_shutdown(bool status);

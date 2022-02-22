@@ -237,7 +237,7 @@ static int tmc_enable_etf_sink_perf(struct coresight_device *csdev, void *data)
 	struct perf_output_handle *handle = data;
 	struct cs_buffers *buf = etm_perf_sink_config(handle);
 
-	if(!buf)
+	if (!buf)
 		return -EINVAL;
 
 	spin_lock_irqsave(&drvdata->spinlock, flags);
