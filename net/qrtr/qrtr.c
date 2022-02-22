@@ -39,7 +39,7 @@
 #define QRTR_STATE_MULTI	-2
 #define QRTR_STATE_INIT		-1
 
-#define AID_VENDOR_QRTR	KGIDT_INIT(2906)
+#define AID_VENDOR_QRTR	KGIDT_INIT(3070)
 
 #if defined(CONFIG_RPMSG_QCOM_GLINK_NATIVE)
 extern bool glink_resume_pkt;
