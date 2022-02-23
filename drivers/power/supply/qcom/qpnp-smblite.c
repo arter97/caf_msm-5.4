@@ -1468,8 +1468,8 @@ static struct smb_irq_info smblite_irqs[] = {
 		.handler	= smblite_switcher_power_ok_irq_handler,
 	},
 	[BOOST_MODE_ACTIVE_IRQ] = {
-		.name		= "boost-mode-active",
-		.handler	= smblite_boost_mode_active_irq_handler,
+		.name		= "boost-mode-sw-en",
+		.handler	= smblite_boost_mode_sw_en_irq_handler,
 	},
 	/* BATTERY IRQs */
 	[BAT_TEMP_IRQ] = {
@@ -1709,11 +1709,12 @@ static void smblite_disable_interrupts(struct smb_charger *chg)
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(smblite_irqs); i++) {
-		if (smblite_irqs[i].irq > 0) {
+		if (smblite_irqs[i].irq > 0 && smblite_irqs[i].enabled) {
 			if (smblite_irqs[i].wake)
 				disable_irq_wake(smblite_irqs[i].irq);
 			irq_set_status_flags(smblite_irqs[i].irq, IRQ_DISABLE_UNLAZY);
 			disable_irq(smblite_irqs[i].irq);
+			smblite_irqs[i].enabled = false;
 		}
 	}
 
@@ -1793,6 +1794,9 @@ static ssize_t smblite_debug_mask_write(struct file *filp, const char __user *bu
 	if (rc < 0)
 		return rc;
 
+	if (!chg->debug_mask_nvmem)
+		return count;
+
 	rc = nvmem_cell_write(chg->debug_mask_nvmem, (u8 *)&__debug_mask, 1);
 	if (rc < 0) {
 		pr_err("Failed to write charger debug mask, rc = %d\n", rc);
@@ -1850,6 +1854,9 @@ static void get_smblite_debug_mask(struct smblite *chip)
 	struct smb_charger *chg = &chip->chg;
 	ssize_t len;
 	char *data;
+
+	if (!chg->debug_mask_nvmem)
+		return;
 
 	data = nvmem_cell_read(chg->debug_mask_nvmem, &len);
 	if (IS_ERR(data)) {
