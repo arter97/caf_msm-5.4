@@ -1401,7 +1401,10 @@ struct ipa_ioc_vlan_iface_info {
 	char name[IPA_RESOURCE_NAME_MAX];
 	uint8_t vlan_id;
 };
-
+enum peer_addr_update_stat {
+	IPA_PEER_ADDR_DISABLED	= 0,
+	IPA_PEER_ADDR_ENABLED 	= 1,
+};
 /**
  * struct ipa_ioc_l2tp_vlan_mapping_info - l2tp->vlan mapping info
  * @iptype: l2tp tunnel IP type
@@ -1414,6 +1417,12 @@ struct ipa_ioc_l2tp_vlan_mapping_info {
 	char l2tp_iface_name[IPA_RESOURCE_NAME_MAX];
 	uint8_t l2tp_session_id;
 	char vlan_iface_name[IPA_RESOURCE_NAME_MAX];
+	uint8_t is_peer_addr_updated;
+	union {
+		uint32_t peer_ipv6_addr[4];
+		uint32_t peer_ipv4_addr;
+	} addr;
+	__u16 reserved;
 };
 
 /**
