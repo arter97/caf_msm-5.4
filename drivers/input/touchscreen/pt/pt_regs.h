@@ -1585,7 +1585,6 @@ struct pt_core_data {
 	bool bridge_mode;
 	bool hw_detect_enabled;
 #endif
-	bool quick_boot;
 };
 
 struct gd_sensor {
