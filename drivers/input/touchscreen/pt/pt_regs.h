@@ -1586,7 +1586,6 @@ struct pt_core_data {
 	bool hw_detect_enabled;
 #endif
 	bool quick_boot;
-	bool drv_debug_suspend;
 };
 
 struct gd_sensor {
