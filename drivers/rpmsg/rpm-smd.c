@@ -1588,10 +1588,8 @@ static int qcom_smd_rpm_suspend(struct device *dev)
 
 static int qcom_smd_rpm_deep_suspend(void)
 {
-#ifdef CONFIG_DEEPSLEEP
-	if (mem_sleep_current == PM_SUSPEND_MEM)
+	if (pm_suspend_target_state == PM_SUSPEND_MEM)
 		system_status = DEEPSLEEP;
-#endif
 	return 0;
 }
 static int qcom_smd_rpm_resume(struct device *dev)
@@ -1659,7 +1657,7 @@ static int qcom_smd_rpm_probe(struct rpmsg_device *rpdev)
 		goto fail;
 	}
 
-	rpm = kzalloc(sizeof(*rpm), GFP_KERNEL);
+	rpm = devm_kzalloc(&rpdev->dev, sizeof(*rpm), GFP_KERNEL);
 	if (!rpm) {
 		probe_status = -ENOMEM;
 		goto fail;
