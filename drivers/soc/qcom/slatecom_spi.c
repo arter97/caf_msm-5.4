@@ -224,10 +224,12 @@ int slatecom_set_spi_state(enum slatecom_spi_state state)
 			delta = ktime_sub(ktime_get(), time_start);
 			time_elapsed = ktime_to_ms(delta);
 			WARN_ON(time_elapsed > 5 * MSEC_PER_SEC);
+			SLATECOM_INFO("Waiting to set state busy....\n");
 			msleep(100);
 		}
 	}
 	spi_state = state;
+	SLATECOM_INFO("state = %d\n", state);
 	mutex_unlock(&slate_spi->xfer_mutex);
 	return 0;
 }
@@ -327,6 +329,11 @@ static int slatecom_transfer(void *handle, uint8_t *tx_buf,
 	tx_xfer->len = txn_len;
 	SLATECOM_INFO("txn_len = %d\n", txn_len);
 	tx_xfer->speed_hz = freq;
+	if (spi_state == SLATECOM_SPI_BUSY) {
+		SLATECOM_ERR("SPI is held by TZ, skip spi_sync\n");
+		mutex_unlock(&slate_spi->xfer_mutex);
+		return -EBUSY;
+	}
 	ret = spi_sync(spi, &slate_spi->msg1);
 	mutex_unlock(&slate_spi->xfer_mutex);
 

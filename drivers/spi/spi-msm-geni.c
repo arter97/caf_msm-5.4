@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 
@@ -2072,6 +2073,9 @@ static int spi_geni_probe(struct platform_device *pdev)
 		goto spi_geni_probe_err;
 	}
 
+	if (slave_en)
+		spi->slave_abort = spi_slv_abort;
+
 	snprintf(boot_marker, sizeof(boot_marker),
 			"M - DRIVER GENI_SPI Init");
 	place_marker(boot_marker);
@@ -2106,6 +2110,9 @@ static int spi_geni_probe(struct platform_device *pdev)
 		geni_mas->is_la_vm = true;
 		dev_info(&pdev->dev, "LA-VM usecase\n");
 	}
+
+	rsc->rsc_ssr.ssr_enable = of_property_read_bool(pdev->dev.of_node,
+				"ssr-enable");
 
 	geni_mas->spi_rsc.wrapper_dev = &wrapper_pdev->dev;
 	/*
@@ -2267,14 +2274,6 @@ static int spi_geni_probe(struct platform_device *pdev)
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,master-cross-connect"))
 		geni_mas->master_cross_connect = true;
 
-	if (slave_en) {
-		spi->slave = true;
-		spi->slave_abort = spi_slv_abort;
-	}
-
-	rsc->rsc_ssr.ssr_enable = of_property_read_bool(pdev->dev.of_node,
-			"ssr-enable");
-
 	geni_mas->slave_cross_connected =
 		of_property_read_bool(pdev->dev.of_node, "slv-cross-connected");
 	spi->mode_bits = (SPI_CPOL | SPI_CPHA | SPI_LOOP | SPI_CS_HIGH);
@@ -2391,7 +2390,7 @@ static int spi_geni_runtime_suspend(struct device *dev)
 	if (geni_mas->is_le_vm)
 		return spi_geni_levm_suspend_proc(geni_mas, spi);
 
-	GENI_SE_DBG(geni_mas->ipc, false, NULL, "%s:\n", __func__);
+	GENI_SE_DBG(geni_mas->ipc, false, NULL, "%s: start\n", __func__);
 
 	if (geni_mas->gsi_mode) {
 		ret = spi_geni_gpi_suspend_resume(geni_mas, true);
@@ -2415,6 +2414,7 @@ exit_rt_suspend:
 	if (ret)
 		dev_err(geni_mas->dev, "%s: resurces_off Error ret %d\n",
 			__func__, ret);
+	GENI_SE_DBG(geni_mas->ipc, false, NULL, "%s: end\n", __func__);
 	return ret;
 }
 
