@@ -1,4 +1,5 @@
 /* Copyright (c) 2008-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -332,6 +333,12 @@ struct adreno_device {
 	const struct firmware *lm_fw;
 	uint32_t *lm_sequence;
 	uint32_t lm_size;
+
+	/*
+	 * @perfcounter: Flag to clear perfcounters across contexts and
+	 * controls perfcounter ioctl read
+	 */
+	bool perfcounter;
 };
 
 /**
