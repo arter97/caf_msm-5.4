@@ -329,6 +329,11 @@ static int slatecom_transfer(void *handle, uint8_t *tx_buf,
 	tx_xfer->len = txn_len;
 	SLATECOM_INFO("txn_len = %d\n", txn_len);
 	tx_xfer->speed_hz = freq;
+	if (spi_state == SLATECOM_SPI_BUSY) {
+		SLATECOM_ERR("SPI is held by TZ, skip spi_sync\n");
+		mutex_unlock(&slate_spi->xfer_mutex);
+		return -EBUSY;
+	}
 	ret = spi_sync(spi, &slate_spi->msg1);
 	mutex_unlock(&slate_spi->xfer_mutex);
 
@@ -688,7 +693,7 @@ static int slatecom_resume_l(void *handle)
 error:
 	mutex_unlock(&slate_resume_mutex);
 	/* SLATE failed to resume. Trigger watchdog. */
-		SLATECOM_ERR("SLATE failed to resume\n");
+		SLATECOM_ERR("SLATE failed to resume, gpio#95 value is: %d\n", gpio_get_value(95));
 		BUG();
 		return -ETIMEDOUT;
 
@@ -1400,7 +1405,14 @@ static int slatecom_pm_prepare(struct device *dev)
 	else
 		cmnd_reg |= SLATE_OK_SLP_RBSC;
 
+	(!atomic_read(&slate_is_spi_active)) ? pm_runtime_get_sync(&s_dev->dev)
+			: SLATECOM_INFO("spi is already active, skip get_sync...\n");
+
 	ret = slatecom_reg_write_cmd(&clnt_handle, SLATE_CMND_REG, 1, &cmnd_reg);
+
+	(!atomic_read(&slate_is_spi_active)) ? pm_runtime_put_sync(&s_dev->dev)
+			: SLATECOM_INFO("spi is already active, skip put_sync...\n");
+
 	sleep_time_start = ktime_get();
 
 	SLATECOM_INFO("reg write status: %d\n", ret);
