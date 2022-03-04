@@ -93,7 +93,7 @@ struct db_buffer {
 #define QHDR_STATUS_INACTIVE 0x00
 #define QHDR_STATUS_ACTIVE 0x01
 
-#define HGSL_CONTEXT_NUM                     (128)
+#define HGSL_CONTEXT_NUM                     (256)
 #define HGSL_SEND_MSG_MAX_RETRY_COUNT        (150)
 
 // Skip all commands from the bad context
@@ -1437,6 +1437,7 @@ static int hgsl_ioctl_ctxt_create(struct file *filep, unsigned long arg)
 		goto out;
 
 	if (params.ctxthandle >= HGSL_CONTEXT_NUM) {
+		LOGE("invalid ctxt id %d", params.ctxthandle);
 		ret = -EINVAL;
 		goto out;
 	}
