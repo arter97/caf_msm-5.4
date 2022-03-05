@@ -73,6 +73,7 @@
 #include "u_qc_ether.c"
 #include "f_gsi.c"
 #include "f_mass_storage.h"
+#include "f_ipcrtr.c"
 #include "f_ipc.h"
 
 USB_ETHERNET_MODULE_PARAMETERS();
@@ -3314,6 +3315,30 @@ static struct android_usb_function ipc_function = {
 	.bind_config    = ipc_function_bind_config,
 };
 
+static int ipcrtr_function_init(struct android_usb_function *f,
+                                       struct usb_composite_dev *cdev)
+{
+       return ipcrtr_init();
+}
+
+static void ipcrtr_function_cleanup(struct android_usb_function *f)
+{
+       ipcrtr_cleanup();
+}
+
+static int ipcrtr_function_bind_config(struct android_usb_function *f,
+                                        struct usb_configuration *c)
+{
+       return ipcrtr_bind_config(c);
+}
+
+static struct android_usb_function ipcrtr_function = {
+       .name           = "ipcrtr",
+       .init           = ipcrtr_function_init,
+       .cleanup        = ipcrtr_function_cleanup,
+       .bind_config    = ipcrtr_function_bind_config,
+};
+
 static struct android_usb_function *supported_functions[] = {
 	[ANDROID_FFS] = &ffs_function,
 	[ANDROID_MBIM_BAM] = &mbim_function,
@@ -3348,6 +3373,7 @@ static struct android_usb_function *supported_functions[] = {
 	[ANDROID_MBIM_GSI] = &mbim_gsi_function,
 	[ANDROID_DPL_GSI] = &dpl_gsi_function,
 	[ANDROID_IPC] = &ipc_function,
+	[ANDROID_IPCRTR] = &ipcrtr_function,
 	NULL
 };
 
@@ -3560,12 +3586,6 @@ static int android_enable_function(struct android_dev *dev,
 	struct android_usb_function *f;
 	struct android_usb_function_holder *f_holder;
 
-	pr_debug("name: %s\n", name);
-  if (*functions != NULL) {
-    pr_debug("f->name: %s\n", name, (*functions)->name);
-  } else {
-	  pr_debug("functions is null\n");
-  }
 	while ((f = *functions++)) {
 	  pr_debug("name: %s, f->name: %s\n", name, f->name);
 		if (!strcmp(name, f->name)) {
@@ -3590,7 +3610,6 @@ static int android_enable_function(struct android_dev *dev,
 			}
 		}
 	}
-	pr_debug("at %d\n", __LINE__);
 	return -EINVAL;
 }
 
@@ -3651,7 +3670,6 @@ functions_show(struct device *pdev, struct device_attribute *attr, char *buf)
 
 	mutex_lock(&dev->mutex);
 
-	pr_debug("buff: %s\n", buff);
 	list_for_each_entry(conf, &dev->configs, list_item) {
 		if (buff != buf)
 			*(buff-1) = ':';
@@ -3709,7 +3727,6 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 	b = strim(buf);
 
 
-	pr_debug("buff: %s\n", buff);
 	while (b) {
 		conf_str = strsep(&b, ":");
 		if (!conf_str)
