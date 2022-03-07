@@ -151,6 +151,7 @@ static	bool                     slate_bt_error;
 static  struct   slatecom_open_config_type   config_type;
 static DECLARE_COMPLETION(slate_modem_down_wait);
 static DECLARE_COMPLETION(slate_adsp_down_wait);
+static struct srcu_notifier_head slatecom_notifier_chain;
 
 static ssize_t slate_bt_state_sysfs_read
 			(struct class *class, struct class_attribute *attr, char *buf)
@@ -289,6 +290,12 @@ static int send_state_change_cmd(struct slate_ui_data *ui_obj_msg)
 		msg_header.opcode = GMI_MGR_ENTER_TRACKER_DS;
 		break;
 	case STATE_DS_EXIT:
+		msg_header.opcode = GMI_MGR_EXIT_TRACKER_DS;
+		break;
+	case STATE_S2D_ENTER:
+		msg_header.opcode = GMI_MGR_ENTER_TRACKER_DS;
+		break;
+	case STATE_S2D_EXIT:
 		msg_header.opcode = GMI_MGR_EXIT_TRACKER_DS;
 		break;
 	default:
@@ -446,6 +453,8 @@ static int send_time_sync(struct slate_ui_data *tui_obj_msg)
 	ret = slatecom_tx_msg(dev, write_buf, tui_obj_msg->num_of_words*4);
 	if (ret < 0)
 		pr_err("send_time_data cmd failed\n");
+	else
+		pr_info("send_time_data cmd success\n");
 return ret;
 }
 
@@ -563,6 +572,44 @@ static long slate_com_ioctl(struct file *filp,
 	return ret;
 }
 
+static ssize_t slatecom_char_write(struct file *f, const char __user *buf,
+				size_t count, loff_t *off)
+{
+	unsigned char qcli_cmnd;
+	uint32_t opcode;
+	int ret = 0;
+	struct slatedaemon_priv *dev = container_of(slatecom_intf_drv,
+					struct slatedaemon_priv,
+					lhndl);
+
+	if (copy_from_user(&qcli_cmnd, buf, sizeof(unsigned char)))
+		return -EFAULT;
+
+	pr_debug("%s: QCLI command arg = %c\n", __func__, qcli_cmnd);
+
+	switch (qcli_cmnd) {
+	case '0':
+		opcode = GMI_MGR_DISABLE_QCLI;
+		ret = slatecom_tx_msg(dev, &opcode, sizeof(opcode));
+		if (ret < 0)
+			pr_err("MSM QCLI Disable cmd failed\n");
+		break;
+	case '1':
+		opcode = GMI_MGR_ENABLE_QCLI;
+		ret = slatecom_tx_msg(dev, &opcode, sizeof(opcode));
+		if (ret < 0)
+			pr_err("MSM QCLI Enable cmd failed\n");
+		break;
+
+	default:
+		pr_err("MSM QCLI Invalid Option\n");
+		break;
+	}
+
+	*off += count;
+	return count;
+}
+
 static int slatecom_char_close(struct inode *inode, struct file *file)
 {
 	int ret;
@@ -678,6 +725,7 @@ static struct platform_driver slate_daemon_driver = {
 static const struct file_operations fops = {
 	.owner          = THIS_MODULE,
 	.open           = slatecom_char_open,
+	.write          = slatecom_char_write,
 	.release        = slatecom_char_close,
 	.unlocked_ioctl = slate_com_ioctl,
 };
@@ -698,7 +746,6 @@ static int ssr_slate_cb(struct notifier_block *this,
 	case SUBSYS_BEFORE_SHUTDOWN:
 		pr_debug("Slate before shutdown\n");
 		slatee.e_type = SLATE_BEFORE_POWER_DOWN;
-		slatecom_slatedown_handler();
 		slatecom_set_spi_state(SLATECOM_SPI_BUSY);
 		send_uevent(&slatee);
 		queue_work(dev->slatecom_wq, &dev->slatecom_down_work);
@@ -706,7 +753,10 @@ static int ssr_slate_cb(struct notifier_block *this,
 	case SUBSYS_AFTER_SHUTDOWN:
 		pr_debug("Slate after shutdown\n");
 		slatee.e_type = SLATE_AFTER_POWER_DOWN;
+		slatecom_slatedown_handler();
 		send_uevent(&slatee);
+		set_slate_bt_state(false);
+		set_slate_dsp_state(false);
 		break;
 	case SUBSYS_BEFORE_POWERUP:
 		pr_debug("Slate before powerup\n");
@@ -816,9 +866,13 @@ void set_slate_dsp_state(bool status)
 	if (!status) {
 		statee.e_type = SLATE_DSP_ERROR;
 		strlcpy(dspss_state, "error", BUF_SIZE);
+		srcu_notifier_call_chain(&slatecom_notifier_chain,
+					 DSP_ERROR, NULL);
 	} else {
 		statee.e_type = SLATE_DSP_READY;
 		strlcpy(dspss_state, "ready", BUF_SIZE);
+		srcu_notifier_call_chain(&slatecom_notifier_chain,
+					 DSP_READY, NULL);
 	}
 	send_uevent(&statee);
 }
@@ -832,13 +886,35 @@ void set_slate_bt_state(bool status)
 	if (!status) {
 		statee.e_type = SLATE_BT_ERROR;
 		strlcpy(btss_state, "error", BUF_SIZE);
+		srcu_notifier_call_chain(&slatecom_notifier_chain,
+					 BT_ERROR, NULL);
 	} else {
 		statee.e_type = SLATE_BT_READY;
 		strlcpy(btss_state, "ready", BUF_SIZE);
+		srcu_notifier_call_chain(&slatecom_notifier_chain,
+					 BT_READY, NULL);
 	}
 	send_uevent(&statee);
 }
 EXPORT_SYMBOL(set_slate_bt_state);
+
+void *slatecom_register_notifier(struct notifier_block *nb)
+{
+	int ret;
+
+	ret = srcu_notifier_chain_register(&slatecom_notifier_chain, nb);
+	if (ret < 0)
+		return ERR_PTR(ret);
+
+	return &slatecom_notifier_chain;
+}
+EXPORT_SYMBOL(slatecom_register_notifier);
+
+int slatecom_unregister_notifier(void *notify, struct notifier_block *nb)
+{
+	return srcu_notifier_chain_unregister(notify, nb);
+}
+EXPORT_SYMBOL(slatecom_unregister_notifier);
 
 static struct notifier_block ssr_modem_nb = {
 	.notifier_call = ssr_modem_cb,
@@ -951,6 +1027,8 @@ static int __init init_slate_com_dev(void)
 
 	if (platform_driver_register(&slate_daemon_driver))
 		pr_err("%s: failed to register slate-daemon register\n", __func__);
+
+	srcu_init_notifier_head(&slatecom_notifier_chain);
 
 	return 0;
 }

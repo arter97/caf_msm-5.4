@@ -272,6 +272,7 @@ EXPORT_SYMBOL_GPL(clk_alpha_pll_regs);
 #define LUCID_5LPE_PCAL_DONE		BIT(11)
 #define LUCID_5LPE_PLL_LATCH_INPUT	BIT(14)
 #define LUCID_5LPE_ALPHA_PLL_ACK_LATCH	BIT(13)
+#define LUCID_5LPE_BYPASS_LATCH		BIT(10)
 #define LUCID_EVO_PCAL_NOT_DONE		BIT(8)
 #define LUCID_EVO_PLL_L_VAL_MASK	GENMASK(15, 0)
 #define LUCID_EVO_PLL_CAL_L_VAL_MASK	GENMASK(31, 16)
@@ -950,6 +951,7 @@ void clk_huayra_pll_configure(struct clk_alpha_pll *pll, struct regmap *regmap,
 	regmap_update_bits(regmap, PLL_MODE(pll),
 			 PLL_OUTCTRL, PLL_OUTCTRL);
 }
+EXPORT_SYMBOL(clk_huayra_pll_configure);
 
 static unsigned long
 alpha_huayra_pll_calc_rate(u64 prate, u32 l, u32 a)
@@ -1100,11 +1102,16 @@ static int alpha_pll_huayra_determine_rate(struct clk_hw *hw,
 {
 	unsigned long rrate, prate;
 	u32 l, a;
+	struct clk_hw *parent_hw;
 
-	prate = clk_hw_get_rate(clk_hw_get_parent(hw));
+	parent_hw = clk_hw_get_parent(hw);
+	if (!parent_hw)
+		return -EINVAL;
+
+	prate = clk_hw_get_rate(parent_hw);
 	rrate = alpha_huayra_pll_round_rate(req->rate, prate, &l, &a);
 
-	req->best_parent_hw = clk_hw_get_parent(hw);
+	req->best_parent_hw = parent_hw;
 	req->best_parent_rate = prate;
 	req->rate = rrate;
 
@@ -1952,8 +1959,11 @@ static void clk_pll_restore_context(struct clk_hw *hw)
 
 	switch (type) {
 	case CLK_ALPHA_PLL_TYPE_DEFAULT:
-	case CLK_ALPHA_PLL_TYPE_HUAYRA:
 		clk_alpha_pll_configure(pll, pll->clkr.regmap,
+					pll->config);
+		break;
+	case CLK_ALPHA_PLL_TYPE_HUAYRA:
+		clk_huayra_pll_configure(pll, pll->clkr.regmap,
 					pll->config);
 		break;
 	case CLK_ALPHA_PLL_TYPE_FABIA:
@@ -3317,26 +3327,31 @@ static int alpha_pll_lucid_5lpe_set_rate(struct clk_hw *hw, unsigned long rate,
 	regmap_write(pll->clkr.regmap, PLL_L_VAL(pll), l);
 	regmap_write(pll->clkr.regmap, PLL_ALPHA_VAL(pll), a);
 
-	/* Latch the PLL input */
-	ret = regmap_update_bits(pll->clkr.regmap, PLL_MODE(pll),
-			LUCID_5LPE_PLL_LATCH_INPUT, LUCID_5LPE_PLL_LATCH_INPUT);
-	if (ret)
-		return ret;
+	if (pll->flags & BYPASS_LATCH) {
+		regmap_update_bits(pll->clkr.regmap, PLL_USER_CTL_U(pll),
+				   LUCID_5LPE_BYPASS_LATCH, LUCID_5LPE_BYPASS_LATCH);
+	} else {
+		/* Latch the PLL input */
+		ret = regmap_update_bits(pll->clkr.regmap, PLL_MODE(pll),
+				LUCID_5LPE_PLL_LATCH_INPUT, LUCID_5LPE_PLL_LATCH_INPUT);
+		if (ret)
+			return ret;
 
-	/* Wait for 2 reference cycles before checking the ACK bit. */
-	udelay(1);
-	regmap_read(pll->clkr.regmap, PLL_MODE(pll), &regval);
-	if (!(regval & LUCID_5LPE_ALPHA_PLL_ACK_LATCH)) {
-		WARN_CLK(&pll->clkr.hw, 1,
-				"PLL latch failed. Output may be unstable!\n");
-		return -EINVAL;
+		/* Wait for 2 reference cycles before checking the ACK bit. */
+		udelay(1);
+		regmap_read(pll->clkr.regmap, PLL_MODE(pll), &regval);
+		if (!(regval & LUCID_5LPE_ALPHA_PLL_ACK_LATCH)) {
+			WARN_CLK(&pll->clkr.hw, 1,
+					"PLL latch failed. Output may be unstable!\n");
+			return -EINVAL;
+		}
+
+		/* Return the latch input to 0 */
+		ret = regmap_update_bits(pll->clkr.regmap, PLL_MODE(pll),
+				LUCID_5LPE_PLL_LATCH_INPUT, 0);
+		if (ret)
+			return ret;
 	}
-
-	/* Return the latch input to 0 */
-	ret = regmap_update_bits(pll->clkr.regmap, PLL_MODE(pll),
-			LUCID_5LPE_PLL_LATCH_INPUT, 0);
-	if (ret)
-		return ret;
 
 	if (clk_hw_is_enabled(hw)) {
 		ret = wait_for_pll_enable_lock(pll);
@@ -4977,6 +4992,7 @@ const struct clk_ops clk_alpha_pll_slew_ops = {
 	.set_rate = clk_alpha_pll_slew_set_rate,
 	.init = clk_alpha_pll_init,
 	.debug_init = clk_common_debug_init,
+	.restore_context = clk_pll_restore_context,
 #ifdef CONFIG_COMMON_CLK_QCOM_DEBUG
 	.list_rate_vdd_level = clk_list_rate_vdd_level,
 #endif
