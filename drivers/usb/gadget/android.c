@@ -73,6 +73,7 @@
 #include "u_qc_ether.c"
 #include "f_gsi.c"
 #include "f_mass_storage.h"
+#include "f_ipcrtr.c"
 #include "f_ipc.h"
 
 USB_ETHERNET_MODULE_PARAMETERS();
@@ -3314,6 +3315,30 @@ static struct android_usb_function ipc_function = {
 	.bind_config    = ipc_function_bind_config,
 };
 
+static int ipcrtr_function_init(struct android_usb_function *f,
+                                       struct usb_composite_dev *cdev)
+{
+       return ipcrtr_init();
+}
+
+static void ipcrtr_function_cleanup(struct android_usb_function *f)
+{
+       ipcrtr_cleanup();
+}
+
+static int ipcrtr_function_bind_config(struct android_usb_function *f,
+                                        struct usb_configuration *c)
+{
+       return ipcrtr_bind_config(c);
+}
+
+static struct android_usb_function ipcrtr_function = {
+       .name           = "ipcrtr",
+       .init           = ipcrtr_function_init,
+       .cleanup        = ipcrtr_function_cleanup,
+       .bind_config    = ipcrtr_function_bind_config,
+};
+
 static struct android_usb_function *supported_functions[] = {
 	[ANDROID_FFS] = &ffs_function,
 	[ANDROID_MBIM_BAM] = &mbim_function,
@@ -3348,6 +3373,7 @@ static struct android_usb_function *supported_functions[] = {
 	[ANDROID_MBIM_GSI] = &mbim_gsi_function,
 	[ANDROID_DPL_GSI] = &dpl_gsi_function,
 	[ANDROID_IPC] = &ipc_function,
+	[ANDROID_IPCRTR] = &ipcrtr_function,
 	NULL
 };
 
@@ -3561,6 +3587,7 @@ static int android_enable_function(struct android_dev *dev,
 	struct android_usb_function_holder *f_holder;
 
 	while ((f = *functions++)) {
+	  pr_debug("name: %s, f->name: %s\n", name, f->name);
 		if (!strcmp(name, f->name)) {
 			if (f->android_dev && f->android_dev != dev)
 				pr_err("%s is enabled in other device\n",
@@ -3698,6 +3725,7 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 
 	strlcpy(buf, buff, sizeof(buf));
 	b = strim(buf);
+
 
 	while (b) {
 		conf_str = strsep(&b, ":");

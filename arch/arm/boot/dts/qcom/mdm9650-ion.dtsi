@@ -21,15 +21,6 @@
 			qcom,ion-heap-type = "SYSTEM";
 		};
 
-    /* AUDIO HEAP */
-		/*
-    qcom,ion-heap@28 {
-			reg = <28>;
-			memory-region = <&audio_mem>;
-			qcom,ion-heap-type = "DMA";
-		};
-    */
-
 		qcom,ion-heap@27 { /* QSEECOM HEAP */
 			reg = <27>;
 			memory-region = <&qseecom_mem>;

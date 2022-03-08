@@ -1,5 +1,4 @@
-/*
- * Copyright (c) 2013-2016, 2018 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -23,115 +22,84 @@
 #include <linux/skbuff.h>
 #include <linux/delay.h>
 #include <linux/sched.h>
-#include <soc/qcom/subsystem_restart.h>
+#include <linux/debugfs.h>
 
-#include <linux/usb/ipc_bridge.h>
+#include <linux/ipc_router_usb_xprt.h>
 
 static int msm_ipc_router_usb_xprt_debug_mask;
 module_param_named(debug_mask, msm_ipc_router_usb_xprt_debug_mask,
-		   int, 0664);
+		   int, S_IRUGO | S_IWUSR | S_IWGRP);
 
-#define D(x...) do { \
+#define DBG(x...) do { \
 if (msm_ipc_router_usb_xprt_debug_mask) \
 	pr_info(x); \
 } while (0)
 
-#define NUM_USB_XPRTS 1
-#define XPRT_NAME_LEN 32
+#define IPC_XPRT_NAME_LEN 32
 
 /**
  * msm_ipc_router_usb_xprt - IPC Router's USB XPRT structure
  * @list: IPC router's USB XPRTs list.
- * @ch_name: Name of the USB endpoint exported by ipc_bridge driver.
+ * @ch_name: Name of the USB endpoint exported.
  * @xprt_name: Name of the XPRT to be registered with IPC Router.
  * @driver: Platform drivers register by this XPRT.
  * @xprt: IPC Router XPRT structure to contain USB XPRT specific info.
  * @pdev: Platform device registered by IPC Bridge function driver.
  * @usb_xprt_wq: Workqueue to queue read & other XPRT related works.
- * @read_work: Read Work to perform read operation from USB's ipc_bridge.
+ * @read_work: Read Work to perform read operation from USB.
  * @in_pkt: Pointer to any partially read packet.
- * @ss_reset_lock: Lock to protect access to the ss_reset flag.
- * @ss_reset: flag used to check SSR state.
- * @sft_close_complete: Variable to indicate completion of SSR handling
- *                      by IPC Router.
+ * @xprt_lock: Lock to protect access to the xprt_avail.
+ * @xprt_avail: flag used to check XPRT is available.
+ * @sft_close_complete: Variable to indicate completion of IPC Router reset.
  * @xprt_version: IPC Router header version supported by this XPRT.
  * @xprt_option: XPRT specific options to be handled by IPC Router.
  */
 struct msm_ipc_router_usb_xprt {
 	struct list_head list;
-	char ch_name[XPRT_NAME_LEN];
-	char xprt_name[XPRT_NAME_LEN];
+	char ch_name[IPC_XPRT_NAME_LEN];
+	char xprt_name[IPC_XPRT_NAME_LEN];
 	struct platform_driver driver;
 	struct msm_ipc_router_xprt xprt;
+	struct usb_ipc_xprt_ops *ops;
 	struct platform_device *pdev;
 	struct workqueue_struct *usb_xprt_wq;
 	struct delayed_work read_work;
 	struct rr_packet *in_pkt;
-	struct mutex ss_reset_lock;
-	int ss_reset;
+	struct mutex xprt_lock;
+	int xprt_avail;
 	struct completion sft_close_complete;
-	unsigned int xprt_version;
-	unsigned int xprt_option;
+	unsigned xprt_version;
+	unsigned xprt_option;
+	unsigned int read_from_usb;
+	unsigned int send_to_usb;
+	unsigned int send_to_ipc_core;
+	unsigned int recv_from_ipc_core;
 };
 
-struct msm_ipc_router_usb_xprt_work {
-	struct msm_ipc_router_xprt *xprt;
-	struct work_struct work;
-};
+static struct msm_ipc_router_usb_xprt *usb_xprt_ctx;
+
+/* Debug FS Root node */
+static struct dentry *debugfs_root;
 
 static void usb_xprt_read_data(struct work_struct *work);
 
 /**
- * msm_ipc_router_usb_xprt_config - Config. Info. of each USB XPRT
- * @ch_name: Name of the USB endpoint exported by ipc_bridge driver.
+ * msm_ipc_router_usb_xprt_config - Config. Info. of each USB IPC XPRT
+ * @ch_name: Name of the USB endpoint.
  * @xprt_name: Name of the XPRT to be registered with IPC Router.
- * @usb_pdev_id: ID to differentiate among multiple ipc_bridge endpoints.
+ * @usb_pdev_id: ID to differentiate among multiple endpoints.
  * @link_id: Network Cluster ID to which this XPRT belongs to.
  * @xprt_version: IPC Router header version supported by this XPRT.
  */
 struct msm_ipc_router_usb_xprt_config {
-	char ch_name[XPRT_NAME_LEN];
-	char xprt_name[XPRT_NAME_LEN];
+	char ch_name[IPC_XPRT_NAME_LEN];
+	char xprt_name[IPC_XPRT_NAME_LEN];
 	int usb_pdev_id;
 	uint32_t link_id;
-	unsigned int xprt_version;
-};
-
-static struct msm_ipc_router_usb_xprt_config usb_xprt_cfg[] = {
-	{"ipc_bridge", "ipc_rtr_ipc_bridge1", 1, 2, 3},
+	unsigned xprt_version;
 };
 
 #define MODULE_NAME "ipc_router_usb_xprt"
-#define IPC_ROUTER_USB_XPRT_WAIT_TIMEOUT 3000
-static int ipc_router_usb_xprt_probe_done;
-static struct delayed_work ipc_router_usb_xprt_probe_work;
-static DEFINE_MUTEX(usb_remote_xprt_list_lock_lha1);
-static LIST_HEAD(usb_remote_xprt_list);
-
-/**
- * find_usb_xprt_list() - Find xprt item specific to an USB endpoint
- * @name: Name of the platform device to find in list
- *
- * @return: pointer to msm_ipc_router_usb_xprt if matching endpoint is found,
- *		else NULL.
- *
- * This function is used to find specific xprt item from the global xprt list
- */
-static struct msm_ipc_router_usb_xprt *
-		find_usb_xprt_list(const char *name)
-{
-	struct msm_ipc_router_usb_xprt *usb_xprtp;
-
-	mutex_lock(&usb_remote_xprt_list_lock_lha1);
-	list_for_each_entry(usb_xprtp, &usb_remote_xprt_list, list) {
-		if (!strcmp(name, usb_xprtp->ch_name)) {
-			mutex_unlock(&usb_remote_xprt_list_lock_lha1);
-			return usb_xprtp;
-		}
-	}
-	mutex_unlock(&usb_remote_xprt_list_lock_lha1);
-	return NULL;
-}
 
 /**
  * ipc_router_usb_set_xprt_version() - Set IPC Router header version
@@ -140,13 +108,16 @@ static struct msm_ipc_router_usb_xprt *
  * @version: The version to be set in transport.
  */
 static void ipc_router_usb_set_xprt_version(
-	struct msm_ipc_router_xprt *xprt, unsigned int version)
+	struct msm_ipc_router_xprt *xprt, unsigned version)
 {
 	struct msm_ipc_router_usb_xprt *usb_xprtp;
 
 	if (!xprt)
 		return;
 	usb_xprtp = container_of(xprt, struct msm_ipc_router_usb_xprt, xprt);
+
+	if (!usb_xprtp)
+		return;
 	usb_xprtp->xprt_version = version;
 }
 
@@ -161,10 +132,12 @@ static int msm_ipc_router_usb_get_xprt_version(
 	struct msm_ipc_router_xprt *xprt)
 {
 	struct msm_ipc_router_usb_xprt *usb_xprtp;
-
 	if (!xprt)
 		return -EINVAL;
 	usb_xprtp = container_of(xprt, struct msm_ipc_router_usb_xprt, xprt);
+
+	if (!usb_xprtp)
+		return -EINVAL;
 
 	return (int)usb_xprtp->xprt_version;
 }
@@ -179,10 +152,12 @@ static int msm_ipc_router_usb_get_xprt_option(
 	struct msm_ipc_router_xprt *xprt)
 {
 	struct msm_ipc_router_usb_xprt *usb_xprtp;
-
 	if (!xprt)
 		return -EINVAL;
 	usb_xprtp = container_of(xprt, struct msm_ipc_router_usb_xprt, xprt);
+
+	if (!usb_xprtp)
+		return -EINVAL;
 
 	return (int)usb_xprtp->xprt_option;
 }
@@ -196,24 +171,22 @@ static int msm_ipc_router_usb_get_xprt_option(
 static int msm_ipc_router_usb_remote_write_avail(
 	struct msm_ipc_router_xprt *xprt)
 {
-	struct ipc_bridge_platform_data *pdata;
-	int write_avail;
+	int write_avail = 0;
 	struct msm_ipc_router_usb_xprt *usb_xprtp =
 		container_of(xprt, struct msm_ipc_router_usb_xprt, xprt);
 
-	mutex_lock(&usb_xprtp->ss_reset_lock);
-	if (usb_xprtp->ss_reset || !usb_xprtp->pdev) {
-		write_avail = 0;
-	} else {
-		pdata = usb_xprtp->pdev->dev.platform_data;
-		write_avail = pdata->max_write_size;
-	}
-	mutex_unlock(&usb_xprtp->ss_reset_lock);
+	if (!usb_xprtp)
+		return -EINVAL;
+
+	mutex_lock(&usb_xprtp->xprt_lock);
+	if (usb_xprtp->ops && usb_xprtp->xprt_avail)
+		write_avail = usb_xprtp->ops->max_write_size;
+	mutex_unlock(&usb_xprtp->xprt_lock);
 	return write_avail;
 }
 
 /**
- * msm_ipc_router_usb_remote_write() - Write to XPRT
+ * msm_ipc_router_usb_remote_write() - Write to USB XPRT layer
  * @data: Data to be written to the XPRT.
  * @len: Length of the data to be written.
  * @xprt: XPRT to which the data has to be written.
@@ -225,7 +198,6 @@ static int msm_ipc_router_usb_remote_write(void *data,
 {
 	struct rr_packet *pkt = (struct rr_packet *)data;
 	struct sk_buff *skb;
-	struct ipc_bridge_platform_data *pdata;
 	struct msm_ipc_router_usb_xprt *usb_xprtp;
 	int ret;
 	uint32_t bytes_written = 0;
@@ -238,49 +210,48 @@ static int msm_ipc_router_usb_remote_write(void *data,
 	}
 
 	usb_xprtp = container_of(xprt, struct msm_ipc_router_usb_xprt, xprt);
-	mutex_lock(&usb_xprtp->ss_reset_lock);
-	if (usb_xprtp->ss_reset) {
+	if (!usb_xprtp)
+		return -EINVAL;
+
+	mutex_lock(&usb_xprtp->xprt_lock);
+	if (!usb_xprtp->xprt_avail) {
 		IPC_RTR_ERR("%s: Trying to write on a reset link\n", __func__);
-		mutex_unlock(&usb_xprtp->ss_reset_lock);
+		mutex_unlock(&usb_xprtp->xprt_lock);
 		return -ENETRESET;
 	}
 
 	if (!usb_xprtp->pdev) {
 		IPC_RTR_ERR("%s: Trying to write on a closed link\n", __func__);
-		mutex_unlock(&usb_xprtp->ss_reset_lock);
+		mutex_unlock(&usb_xprtp->xprt_lock);
 		return -ENODEV;
 	}
 
-	pdata = usb_xprtp->pdev->dev.platform_data;
-	if (!pdata || !pdata->write) {
+	if (!usb_xprtp->ops || !usb_xprtp->ops->write) {
 		IPC_RTR_ERR("%s on a uninitialized link\n", __func__);
-		mutex_unlock(&usb_xprtp->ss_reset_lock);
+		mutex_unlock(&usb_xprtp->xprt_lock);
 		return -EFAULT;
 	}
+	usb_xprtp->recv_from_ipc_core++;
 
 	skb = skb_peek(pkt->pkt_fragment_q);
 	if (!skb) {
 		IPC_RTR_ERR("%s SKB is NULL\n", __func__);
-		mutex_unlock(&usb_xprtp->ss_reset_lock);
+		mutex_unlock(&usb_xprtp->xprt_lock);
 		return -EINVAL;
 	}
-
-	if (len > pdata->max_write_size)
-		pr_warn("%s: Data size exceeds max write size %d\n",
-					__func__, pdata->max_write_size);
-
-	D("%s: About to write %d bytes\n", __func__, len);
+	DBG("%s: About to write %d bytes\n", __func__, len);
 
 	while (bytes_written < len) {
 		bytes_to_write = min_t(uint32_t, (skb->len - bytes_written),
-				       pdata->max_write_size);
+				       usb_xprtp->ops->max_write_size);
 		tx_data = skb->data + bytes_written;
-		ret = pdata->write(usb_xprtp->pdev, tx_data, bytes_to_write);
+		ret = usb_xprtp->ops->write(tx_data, bytes_to_write);
 		if (ret < 0) {
 			IPC_RTR_ERR("%s: Error writing data %d\n",
 				    __func__, ret);
 			break;
 		}
+		usb_xprtp->send_to_usb++;
 		if (ret != bytes_to_write)
 			IPC_RTR_ERR("%s: Partial write %d < %d, retrying...\n",
 				    __func__, ret, bytes_to_write);
@@ -293,8 +264,8 @@ static int msm_ipc_router_usb_remote_write(void *data,
 			    __func__, bytes_written, len);
 		ret = -EFAULT;
 	}
-	D("%s: Finished writing %d bytes\n", __func__, len);
-	mutex_unlock(&usb_xprtp->ss_reset_lock);
+	mutex_unlock(&usb_xprtp->xprt_lock);
+	DBG("%s: Finished writing %d bytes\n", __func__, len);
 	return ret;
 }
 
@@ -308,21 +279,27 @@ static int msm_ipc_router_usb_remote_close(
 	struct msm_ipc_router_xprt *xprt)
 {
 	struct msm_ipc_router_usb_xprt *usb_xprtp;
-	struct ipc_bridge_platform_data *pdata;
 
+	DBG("%s \n",__func__);
 	if (!xprt)
 		return -EINVAL;
 	usb_xprtp = container_of(xprt, struct msm_ipc_router_usb_xprt, xprt);
+	if (!usb_xprtp)
+		return -EINVAL;
 
-	mutex_lock(&usb_xprtp->ss_reset_lock);
-	usb_xprtp->ss_reset = 1;
-	mutex_unlock(&usb_xprtp->ss_reset_lock);
+	if (!usb_xprtp->xprt_avail) {
+		IPC_RTR_ERR("%s: xprt is not available\n", __func__);
+		return -EINVAL;
+	}
+
+	mutex_lock(&usb_xprtp->xprt_lock);
+	usb_xprtp->xprt_avail = 0;
+	mutex_unlock(&usb_xprtp->xprt_lock);
 	flush_workqueue(usb_xprtp->usb_xprt_wq);
 	destroy_workqueue(usb_xprtp->usb_xprt_wq);
-	pdata = usb_xprtp->pdev->dev.platform_data;
-	if (pdata && pdata->close)
-		pdata->close(usb_xprtp->pdev);
-	usb_xprtp->pdev = NULL;
+	usb_xprtp->usb_xprt_wq = NULL;
+	if (usb_xprtp->ops && usb_xprtp->ops->close)
+		usb_xprtp->ops->close();
 	return 0;
 }
 
@@ -332,7 +309,7 @@ static int msm_ipc_router_usb_remote_close(
  *
  * This function is a read work item queued on a XPRT specific workqueue.
  * The work parameter contains information regarding the XPRT on which this
- * read work has to be performed. The work item keeps reading from the USB
+ * read work has to be performed. The work item keeps reading from the HSIC
  * endpoint, until the endpoint returns an error.
  */
 static void usb_xprt_read_data(struct work_struct *work)
@@ -341,31 +318,29 @@ static void usb_xprt_read_data(struct work_struct *work)
 	int bytes_read;
 	int skb_size;
 	struct sk_buff *skb = NULL;
-	struct ipc_bridge_platform_data *pdata;
 	struct delayed_work *rwork = to_delayed_work(work);
 	struct msm_ipc_router_usb_xprt *usb_xprtp =
 		container_of(rwork, struct msm_ipc_router_usb_xprt, read_work);
 
+	if (unlikely(!usb_xprtp)) {
+		IPC_RTR_ERR("%s: USB Xprt NULL pointer\n", __func__);
+		return;
+	}
+
 	while (1) {
-		mutex_lock(&usb_xprtp->ss_reset_lock);
-		if (usb_xprtp->ss_reset) {
-			mutex_unlock(&usb_xprtp->ss_reset_lock);
-			break;
-		}
-		pdata = usb_xprtp->pdev->dev.platform_data;
-		mutex_unlock(&usb_xprtp->ss_reset_lock);
 		while (!usb_xprtp->in_pkt) {
 			usb_xprtp->in_pkt = create_pkt(NULL);
 			if (usb_xprtp->in_pkt)
 				break;
 			IPC_RTR_ERR("%s: packet allocation failure\n",
 								__func__);
+			/* Retry after 100ms */
 			msleep(100);
 		}
-		D("%s: Allocated rr_packet\n", __func__);
+		DBG("%s: Allocated rr_packet\n", __func__);
 
 		bytes_to_read = 0;
-		skb_size = pdata->max_read_size;
+		skb_size = usb_xprtp->ops->max_read_size;
 		do {
 			do {
 				skb = alloc_skb(skb_size, GFP_KERNEL);
@@ -373,16 +348,32 @@ static void usb_xprt_read_data(struct work_struct *work)
 					break;
 				IPC_RTR_ERR("%s: Couldn't alloc SKB\n",
 					    __func__);
+				/* Retry after 100ms */
 				msleep(100);
 			} while (!skb);
-			bytes_read = pdata->read(usb_xprtp->pdev, skb->data,
-						 pdata->max_read_size);
-			if (bytes_read < 0) {
-				IPC_RTR_ERR("%s: Error %d @ read operation\n",
-					    __func__, bytes_read);
+			mutex_lock(&usb_xprtp->xprt_lock);
+			if (!usb_xprtp->xprt_avail) {
+				mutex_unlock(&usb_xprtp->xprt_lock);
+				IPC_RTR_ERR("%s: Trying to read on "
+						"a reseted link\n", __func__);
 				kfree_skb(skb);
 				goto out_read_data;
 			}
+			mutex_unlock(&usb_xprtp->xprt_lock);
+			bytes_read = usb_xprtp->ops->read(skb->data,
+						usb_xprtp->ops->max_read_size);
+			if (bytes_read < 0) {
+				if (bytes_read == -ESHUTDOWN)
+					IPC_RTR_ERR("%s:USB Cable disconnected",
+								__func__);
+				else
+					IPC_RTR_ERR("%s: Error %d @"
+							" read operation\n",
+							__func__, bytes_read);
+				kfree_skb(skb);
+				goto out_read_data;
+			}
+			usb_xprtp->read_from_usb++;
 			if (!bytes_to_read) {
 				bytes_to_read = ipc_router_peek_pkt_size(
 						skb->data);
@@ -397,14 +388,16 @@ static void usb_xprt_read_data(struct work_struct *work)
 			skb_put(skb, bytes_read);
 			skb_queue_tail(usb_xprtp->in_pkt->pkt_fragment_q, skb);
 			usb_xprtp->in_pkt->length += bytes_read;
-			skb_size = min_t(uint32_t, pdata->max_read_size,
-					 (uint32_t)bytes_to_read);
+			skb_size = min_t(uint32_t,
+					usb_xprtp->ops->max_read_size,
+					(uint32_t)bytes_to_read);
 		} while (bytes_to_read > 0);
 
-		D("%s: Packet size read %d\n",
-		  __func__, usb_xprtp->in_pkt->length);
+		DBG("%s: Packet read of size %d\n",__func__,
+					usb_xprtp->in_pkt->length);
 		msm_ipc_router_xprt_notify(&usb_xprtp->xprt,
 			IPC_ROUTER_XPRT_EVENT_DATA, (void *)usb_xprtp->in_pkt);
+		usb_xprtp->send_to_ipc_core++;
 		release_pkt(usb_xprtp->in_pkt);
 		usb_xprtp->in_pkt = NULL;
 	}
@@ -417,7 +410,7 @@ out_read_data:
  * usb_xprt_sft_close_done() - Completion of XPRT reset
  * @xprt: XPRT on which the reset operation is complete.
  *
- * This function is used by IPC Router to signal this USB XPRT Abstraction
+ * This function is used by IPC Router to signal this USB IPC XPRT Abstraction
  * Layer(XAL) that the reset of XPRT is completely handled by IPC Router.
  */
 static void usb_xprt_sft_close_done(struct msm_ipc_router_xprt *xprt)
@@ -425,100 +418,125 @@ static void usb_xprt_sft_close_done(struct msm_ipc_router_xprt *xprt)
 	struct msm_ipc_router_usb_xprt *usb_xprtp =
 		container_of(xprt, struct msm_ipc_router_usb_xprt, xprt);
 
+	if (unlikely(!usb_xprtp)) {
+		IPC_RTR_ERR("%s: USB Xprt NULL pointer ",__func__);
+		return;
+	}
+
 	complete_all(&usb_xprtp->sft_close_complete);
 }
 
 /**
- * msm_ipc_router_usb_remote_remove() - Remove an USB endpoint
- * @pdev: Platform device corresponding to USB endpoint.
+ * msm_ipc_router_usb_ipc_xprt_unregister() - Unregister USB IPC XPRT
+ *
+ * @xprt_ops: USB related operations to send/receive actual messages.
  *
  * @return: 0 on success, standard Linux error codes on error.
  *
- * This function is called when the underlying ipc_bridge driver unregisters
- * a platform device, mapped to an USB endpoint, during SSR.
+ * This function should be called when USB IPC endpoint deregisters and is
+ * not needed, i.e. Cable disconnect or composition change, etc.
  */
-static int msm_ipc_router_usb_remote_remove(struct platform_device *pdev)
+int msm_ipc_router_usb_ipc_xprt_unregister(struct usb_ipc_xprt_ops *xprt_ops)
 {
-	struct ipc_bridge_platform_data *pdata;
-	struct msm_ipc_router_usb_xprt *usb_xprtp;
+	struct msm_ipc_router_usb_xprt *usb_xprtp = usb_xprt_ctx;
 
-	usb_xprtp = find_usb_xprt_list(pdev->name);
-	if (!usb_xprtp) {
-		IPC_RTR_ERR("%s No device with name %s\n",
-					__func__, pdev->name);
-		return -ENODEV;
+	DBG("%s \n",__func__);
+	if (unlikely(!usb_xprtp)) {
+		IPC_RTR_ERR("%s: USB Xprt NULL pointer ",__func__);
+		return -EINVAL;
 	}
 
-	mutex_lock(&usb_xprtp->ss_reset_lock);
-	usb_xprtp->ss_reset = 1;
-	mutex_unlock(&usb_xprtp->ss_reset_lock);
+	if (xprt_ops != usb_xprtp->ops) {
+		IPC_RTR_ERR("%s: USB Xprt Unregister called in incorrect order"
+				"or from incorrect module usb_xprtp->ops %p"
+				"xprt_ops %p",__func__,
+					usb_xprtp->ops, xprt_ops);
+		return -EINVAL;
+	}
+
+	if (!usb_xprtp->xprt_avail) {
+		IPC_RTR_ERR("%s: USB Xprt not available\n", __func__);
+		return -EINVAL;
+	}
+
+	mutex_lock(&usb_xprtp->xprt_lock);
+	usb_xprtp->xprt_avail = 0;
+	mutex_unlock(&usb_xprtp->xprt_lock);
 	flush_workqueue(usb_xprtp->usb_xprt_wq);
 	destroy_workqueue(usb_xprtp->usb_xprt_wq);
+	usb_xprtp->usb_xprt_wq = NULL;
 	init_completion(&usb_xprtp->sft_close_complete);
 	msm_ipc_router_xprt_notify(&usb_xprtp->xprt,
 				   IPC_ROUTER_XPRT_EVENT_CLOSE, NULL);
-	D("%s: Notified IPC Router of %s CLOSE\n",
+	DBG("%s: Notified IPC Router of %s CLOSE\n",
 	  __func__, usb_xprtp->xprt.name);
 	wait_for_completion(&usb_xprtp->sft_close_complete);
-	usb_xprtp->pdev = NULL;
-	pdata = pdev->dev.platform_data;
-	if (pdata && pdata->close)
-		pdata->close(pdev);
+	DBG("%s: IPC Router Core Close Completed \n",__func__);
+	if (usb_xprtp->ops && usb_xprtp->ops->close) {
+		usb_xprtp->ops->close();
+	}
 	return 0;
 }
 
 /**
- * msm_ipc_router_usb_remote_probe() - Probe an USB endpoint
- * @pdev: Platform device corresponding to USB endpoint.
+ * msm_ipc_router_usb_ipc_xprt_register() - Register USB IPC XPRT
+ *
+ * @xprt_ops: USB related operations to send/receive actual messages.
  *
  * @return: 0 on success, standard Linux error codes on error.
  *
- * This function is called when the underlying ipc_bridge driver registers
- * a platform device, mapped to an USB endpoint.
+ * Should be called from USB layer when corresponding IPC Router
+ * endpoint is detected and registered.
  */
-static int msm_ipc_router_usb_remote_probe(struct platform_device *pdev)
+int msm_ipc_router_usb_ipc_xprt_register(struct usb_ipc_xprt_ops *xprt_ops)
 {
 	int rc;
-	struct ipc_bridge_platform_data *pdata;
-	struct msm_ipc_router_usb_xprt *usb_xprtp;
+	struct msm_ipc_router_usb_xprt *usb_xprtp = usb_xprt_ctx;
 
-	pdata = pdev->dev.platform_data;
-	if (!pdata || !pdata->open || !pdata->read ||
-	    !pdata->write || !pdata->close) {
-		IPC_RTR_ERR("%s: pdata or pdata->operations is NULL\n",
+	DBG("%s \n",__func__);
+
+	if (unlikely(!usb_xprtp)) {
+		IPC_RTR_ERR("%s: USB Xprt NULL pointer ",__func__);
+		return -EINVAL;
+	}
+
+	if (!xprt_ops || !xprt_ops->open || !xprt_ops->read ||
+	    !xprt_ops->write || !xprt_ops->close) {
+		IPC_RTR_ERR("%s: xprt_ops or xprt_ops->operations is NULL\n",
 								__func__);
 		return -EINVAL;
 	}
 
-	usb_xprtp = find_usb_xprt_list(pdev->name);
-	if (!usb_xprtp) {
-		IPC_RTR_ERR("%s No device with name %s\n",
-						__func__, pdev->name);
-		return -ENODEV;
-	}
+	usb_xprtp->ops = xprt_ops;
 
 	usb_xprtp->usb_xprt_wq =
-		create_singlethread_workqueue(pdev->name);
+		create_singlethread_workqueue(MODULE_NAME);
 	if (!usb_xprtp->usb_xprt_wq) {
 		IPC_RTR_ERR("%s: WQ creation failed for %s\n",
-			__func__, pdev->name);
+		__func__, MODULE_NAME);
 		return -EFAULT;
 	}
 
-	rc = pdata->open(pdev);
+	mutex_lock(&usb_xprtp->xprt_lock);
+	usb_xprtp->xprt_avail = 1;
+	mutex_unlock(&usb_xprtp->xprt_lock);
+
+	rc = xprt_ops->open();
 	if (rc < 0) {
-		IPC_RTR_ERR("%s: Channel open failed for %s.%d\n",
-			__func__, pdev->name, pdev->id);
+		IPC_RTR_ERR("%s: Channel open failed for %s xprt\n",
+			__func__, MODULE_NAME);
 		destroy_workqueue(usb_xprtp->usb_xprt_wq);
+		usb_xprtp->usb_xprt_wq = NULL;
+		mutex_lock(&usb_xprtp->xprt_lock);
+		usb_xprtp->xprt_avail = 0;
+		mutex_unlock(&usb_xprtp->xprt_lock);
 		return rc;
 	}
-	usb_xprtp->pdev = pdev;
-	mutex_lock(&usb_xprtp->ss_reset_lock);
-	usb_xprtp->ss_reset = 0;
-	mutex_unlock(&usb_xprtp->ss_reset_lock);
+
 	msm_ipc_router_xprt_notify(&usb_xprtp->xprt,
 				   IPC_ROUTER_XPRT_EVENT_OPEN, NULL);
-	D("%s: Notified IPC Router of %s OPEN\n",
+	IPC_RTR_ERR("%s:%d \n", __func__,__LINE__);
+	DBG("%s: Notified IPC Router of %s OPEN\n",
 	  __func__, usb_xprtp->xprt.name);
 	queue_delayed_work(usb_xprtp->usb_xprt_wq,
 			   &usb_xprtp->read_work, 0);
@@ -526,62 +544,26 @@ static int msm_ipc_router_usb_remote_probe(struct platform_device *pdev)
 }
 
 /**
- * msm_ipc_router_usb_driver_register() - register USB XPRT drivers
+ * msm_ipc_router_usb_config_init() - init USB IPC xprt configs
  *
- * @usb_xprtp: pointer to IPC router usb xprt structure.
- *
- * @return: 0 on success, standard Linux error codes on error.
- *
- * This function is called when a new XPRT is added to register platform
- * drivers for new XPRT.
- */
-static int msm_ipc_router_usb_driver_register(
-			struct msm_ipc_router_usb_xprt *usb_xprtp)
-{
-	int ret;
-	struct msm_ipc_router_usb_xprt *usb_xprtp_item;
-
-	usb_xprtp_item = find_usb_xprt_list(usb_xprtp->ch_name);
-
-	mutex_lock(&usb_remote_xprt_list_lock_lha1);
-	list_add(&usb_xprtp->list, &usb_remote_xprt_list);
-	mutex_unlock(&usb_remote_xprt_list_lock_lha1);
-
-	if (!usb_xprtp_item) {
-		usb_xprtp->driver.driver.name = usb_xprtp->ch_name;
-		usb_xprtp->driver.driver.owner = THIS_MODULE;
-		usb_xprtp->driver.probe = msm_ipc_router_usb_remote_probe;
-		usb_xprtp->driver.remove = msm_ipc_router_usb_remote_remove;
-
-		ret = platform_driver_register(&usb_xprtp->driver);
-		if (ret) {
-			IPC_RTR_ERR(
-			"%s: Failed to register platform driver[%s]\n",
-					__func__, usb_xprtp->ch_name);
-			return ret;
-		}
-	} else {
-		IPC_RTR_ERR("%s Already driver registered %s\n",
-					__func__, usb_xprtp->ch_name);
-	}
-
-	return 0;
-}
-
-/**
- * msm_ipc_router_usb_config_init() - init USB xprt configs
- *
- * @usb_xprt_config: pointer to USB xprt configurations.
+ * @usb_xprt_config: pointer to USB IPC xprt configurations.
  *
  * @return: 0 on success, standard Linux error codes on error.
  *
- * This function is called to initialize the USB XPRT pointer with
- * the USB XPRT configurations either from device tree or static arrays.
+ * This function is called to initialize the USB IPC XPRT pointer with
+ * the USB IPC XPRT configurations either from device tree or static arrays.
  */
 static int msm_ipc_router_usb_config_init(
-		struct msm_ipc_router_usb_xprt_config *usb_xprt_config)
+		struct msm_ipc_router_usb_xprt_config *usb_xprt_config,
+		struct platform_device *pdev)
 {
 	struct msm_ipc_router_usb_xprt *usb_xprtp;
+
+	DBG("%s: \n", __func__);
+	if (unlikely(usb_xprt_ctx)) {
+		IPC_RTR_ERR("%s: Already Inited \n", __func__);
+		return -1;
+	}
 
 	usb_xprtp = kzalloc(sizeof(struct msm_ipc_router_usb_xprt),
 							GFP_KERNEL);
@@ -591,14 +573,16 @@ static int msm_ipc_router_usb_config_init(
 		return -ENOMEM;
 	}
 
+	usb_xprt_ctx = usb_xprtp;
+
 	usb_xprtp->xprt.link_id = usb_xprt_config->link_id;
 	usb_xprtp->xprt_version = usb_xprt_config->xprt_version;
 
 	strlcpy(usb_xprtp->ch_name, usb_xprt_config->ch_name,
-					XPRT_NAME_LEN);
+					IPC_XPRT_NAME_LEN);
 
 	strlcpy(usb_xprtp->xprt_name, usb_xprt_config->xprt_name,
-						XPRT_NAME_LEN);
+						IPC_XPRT_NAME_LEN);
 	usb_xprtp->xprt.name = usb_xprtp->xprt_name;
 
 	usb_xprtp->xprt.set_version =
@@ -614,15 +598,18 @@ static int msm_ipc_router_usb_config_init(
 	usb_xprtp->xprt.write = msm_ipc_router_usb_remote_write;
 	usb_xprtp->xprt.close = msm_ipc_router_usb_remote_close;
 	usb_xprtp->xprt.sft_close_done = usb_xprt_sft_close_done;
+	/* We don't use the priv data member to store our context since
+	   its been used by ipc_router_core internally. */
 	usb_xprtp->xprt.priv = NULL;
 
 	usb_xprtp->in_pkt = NULL;
 	INIT_DELAYED_WORK(&usb_xprtp->read_work, usb_xprt_read_data);
-	mutex_init(&usb_xprtp->ss_reset_lock);
-	usb_xprtp->ss_reset = 0;
+	mutex_init(&usb_xprtp->xprt_lock);
+	usb_xprtp->xprt_avail = 0;
 	usb_xprtp->xprt_option = 0;
 
-	msm_ipc_router_usb_driver_register(usb_xprtp);
+	usb_xprtp->pdev = pdev;
+
 	return 0;
 
 }
@@ -631,7 +618,7 @@ static int msm_ipc_router_usb_config_init(
  * parse_devicetree() - parse device tree binding
  *
  * @node: pointer to device tree node
- * @usb_xprt_config: pointer to USB XPRT configurations
+ * @usb_xprt_config: pointer to USB IPC XPRT configurations
  *
  * @return: 0 on success, -ENODEV on failure.
  */
@@ -649,26 +636,30 @@ static int parse_devicetree(struct device_node *node,
 	ch_name = of_get_property(node, key, NULL);
 	if (!ch_name)
 		goto error;
-	strlcpy(usb_xprt_config->ch_name, ch_name, XPRT_NAME_LEN);
+	strlcpy(usb_xprt_config->ch_name, ch_name, IPC_XPRT_NAME_LEN);
 
 	key = "qcom,xprt-remote";
 	remote_ss = of_get_property(node, key, NULL);
 	if (!remote_ss)
 		goto error;
 
+	IPC_RTR_ERR("%s: %s=%s \n", __func__,key,remote_ss);
+
 	key = "qcom,xprt-linkid";
 	ret = of_property_read_u32(node, key, &link_id);
 	if (ret)
 		goto error;
 	usb_xprt_config->link_id = link_id;
+	IPC_RTR_ERR("%s: %s=%d \n", __func__,key,link_id);
 
 	key = "qcom,xprt-version";
 	ret = of_property_read_u32(node, key, &version);
 	if (ret)
 		goto error;
 	usb_xprt_config->xprt_version = version;
+	IPC_RTR_ERR("%s: %s=%d \n", __func__,key,version);
 
-	scnprintf(usb_xprt_config->xprt_name, XPRT_NAME_LEN, "%s_%s",
+	scnprintf(usb_xprt_config->xprt_name, IPC_XPRT_NAME_LEN, "%s_%s",
 			remote_ss, usb_xprt_config->ch_name);
 
 	return 0;
@@ -679,13 +670,13 @@ error:
 }
 
 /**
- * msm_ipc_router_usb_xprt_probe() - Probe an USB xprt
- * @pdev: Platform device corresponding to USB xprt.
+ * msm_ipc_router_usb_xprt_probe() - Probe an USB IPC xprt
+ * @pdev: Platform device corresponding to USB IPC xprt.
  *
  * @return: 0 on success, standard Linux error codes on error.
  *
  * This function is called when the underlying device tree driver registers
- * a platform device, mapped to an USB transport.
+ * a platform device, mapped to an USB IPC transport.
  */
 static int msm_ipc_router_usb_xprt_probe(
 				struct platform_device *pdev)
@@ -693,11 +684,8 @@ static int msm_ipc_router_usb_xprt_probe(
 	int ret;
 	struct msm_ipc_router_usb_xprt_config usb_xprt_config;
 
+	IPC_RTR_ERR("%s: \n", __func__);
 	if (pdev && pdev->dev.of_node) {
-		mutex_lock(&usb_remote_xprt_list_lock_lha1);
-		ipc_router_usb_xprt_probe_done = 1;
-		mutex_unlock(&usb_remote_xprt_list_lock_lha1);
-
 		ret = parse_devicetree(pdev->dev.of_node,
 						&usb_xprt_config);
 		if (ret) {
@@ -707,48 +695,100 @@ static int msm_ipc_router_usb_xprt_probe(
 		}
 
 		ret = msm_ipc_router_usb_config_init(
-						&usb_xprt_config);
+						&usb_xprt_config, pdev);
 		if (ret) {
 			IPC_RTR_ERR(" %s init failed\n", __func__);
 			return ret;
 		}
 	}
+	return ret;
+}
+
+static ssize_t usb_ipc_xprt_debugfs_read(struct file *file,
+		char __user *user_buf, size_t count, loff_t *ppos)
+{
+	char *buf;
+	unsigned int len = 0, buf_len = 4096;
+	struct msm_ipc_router_usb_xprt *usb_xprtp =
+			(struct msm_ipc_router_usb_xprt *)file->private_data;
+	ssize_t ret_cnt;
+
+	if (unlikely(!usb_xprtp)) {
+		IPC_RTR_ERR("%s: USB Xprt NULL pointer ",__func__);
+		return -EINVAL;
+	}
+
+	buf = kzalloc(buf_len, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	len += scnprintf(buf + len, buf_len - len, "%25s\n",
+			"USB IPC Router XPRT Status");
+
+	len += scnprintf(buf + len, buf_len - len, "%55s\n",
+		"==================================================");
+	len += scnprintf(buf + len, buf_len - len,
+		"%25s %10s\n", "XPRT - Name : ", usb_xprtp->xprt_name);
+	len += scnprintf(buf + len, buf_len - len,
+		"%25s %10s\n", "XPRT - CH Name : ", usb_xprtp->ch_name);
+	len += scnprintf(buf + len, buf_len - len,
+		"%25s %10u\n", "XPRT - Link ID : ", usb_xprtp->xprt.link_id);
+	len += scnprintf(buf + len, buf_len - len,
+		"%25s %10u\n", "XPRT - Version : ", usb_xprtp->xprt_version);
+	len += scnprintf(buf + len, buf_len - len,
+		"%25s %10u\n", "Read from USB: ", usb_xprtp->read_from_usb);
+	len += scnprintf(buf + len, buf_len - len,
+		"%25s %10u\n", "Writen to IPC Core: ",
+					usb_xprtp->send_to_ipc_core);
+	len += scnprintf(buf + len, buf_len - len,
+		"%25s %10u\n", "Submitted to USB: ", usb_xprtp->send_to_usb);
+	len += scnprintf(buf + len, buf_len - len,
+		"%25s %10u\n", "Read from IPC Core: ",
+					usb_xprtp->recv_from_ipc_core);
+	len += scnprintf(buf + len, buf_len - len,
+		"%25s %10d\n", "USB XPRT Avail : ", usb_xprtp->xprt_avail);
+	len += scnprintf(buf + len, buf_len - len, "%55s\n",
+		"==================================================");
+
+	if (len > buf_len)
+		len = buf_len;
+
+	ret_cnt = simple_read_from_buffer(user_buf, count, ppos, buf, len);
+	kfree(buf);
+
+	return ret_cnt;
+}
+
+static const struct file_operations fops_usb_ipc_xprt = {
+	.read = usb_ipc_xprt_debugfs_read,
+	.open = simple_open,
+	.owner = THIS_MODULE,
+	.llseek = default_llseek,
+};
+
+static int msm_ipc_usb_xprt_debugfs_init(void)
+{
+	debugfs_root = debugfs_create_dir("usb_ipc_xprt", 0);
+	if (IS_ERR(debugfs_root)) {
+		IPC_RTR_ERR("%s: Cannot create debugfs %p ", __func__,
+				debugfs_root);
+		return -ENOMEM;
+	}
+
+	debugfs_create_file("stats", S_IRUSR | S_IRGRP | S_IROTH, debugfs_root,
+				usb_xprt_ctx, &fops_usb_ipc_xprt);
+	DBG("%s: debugfs created %p \n",__func__, debugfs_root);
 
 	return 0;
 }
 
-/**
- * ipc_router_usb_xprt_probe_worker() - probe worker for non DT configurations
- *
- * @work: work item to process
- *
- * This function is called by schedule_delay_work after 3sec and check if
- * device tree probe is done or not. If device tree probe fails the default
- * configurations read from static array.
- */
-static void ipc_router_usb_xprt_probe_worker(struct work_struct *work)
+static void msm_ipc_usb_xprt_debugfs_exit(void)
 {
-	int i, ret;
-
-	if (WARN_ON(ARRAY_SIZE(usb_xprt_cfg) != NUM_USB_XPRTS))
-		return;
-
-	mutex_lock(&usb_remote_xprt_list_lock_lha1);
-	if (!ipc_router_usb_xprt_probe_done) {
-		mutex_unlock(&usb_remote_xprt_list_lock_lha1);
-		for (i = 0; i < ARRAY_SIZE(usb_xprt_cfg); i++) {
-			ret = msm_ipc_router_usb_config_init(
-							&usb_xprt_cfg[i]);
-			if (ret)
-				IPC_RTR_ERR(" %s init failed config idx %d\n",
-								__func__, i);
-		}
-		mutex_lock(&usb_remote_xprt_list_lock_lha1);
-	}
-	mutex_unlock(&usb_remote_xprt_list_lock_lha1);
+	debugfs_remove_recursive(debugfs_root);
+	DBG("%s: debugfs destroyed \n",__func__);
 }
 
-static const struct of_device_id msm_ipc_router_usb_xprt_match_table[] = {
+static struct of_device_id msm_ipc_router_usb_xprt_match_table[] = {
 	{ .compatible = "qcom,ipc-router-usb-xprt" },
 	{},
 };
@@ -759,13 +799,14 @@ static struct platform_driver msm_ipc_router_usb_xprt_driver = {
 		.name = MODULE_NAME,
 		.owner = THIS_MODULE,
 		.of_match_table = msm_ipc_router_usb_xprt_match_table,
-	 },
+	},
 };
 
 static int __init msm_ipc_router_usb_xprt_init(void)
 {
 	int rc;
 
+	IPC_RTR_ERR("%s: \n", __func__);
 	rc = platform_driver_register(&msm_ipc_router_usb_xprt_driver);
 	if (rc) {
 		IPC_RTR_ERR(
@@ -774,24 +815,15 @@ static int __init msm_ipc_router_usb_xprt_init(void)
 		return rc;
 	}
 
-	INIT_DELAYED_WORK(&ipc_router_usb_xprt_probe_work,
-					ipc_router_usb_xprt_probe_worker);
-	schedule_delayed_work(&ipc_router_usb_xprt_probe_work,
-			msecs_to_jiffies(IPC_ROUTER_USB_XPRT_WAIT_TIMEOUT));
+	rc = msm_ipc_usb_xprt_debugfs_init();
+	if (rc)
+		IPC_RTR_ERR("%s: debugfs not inited \n", __func__);
 	return 0;
 }
 
 static void __exit msm_ipc_router_usb_xprt_exit(void)
 {
-	struct msm_ipc_router_usb_xprt *usb_xprtp;
-	struct msm_ipc_router_usb_xprt *temp_usb_xprtp;
-
-	list_for_each_entry_safe(usb_xprtp, temp_usb_xprtp,
-					&usb_remote_xprt_list, list) {
-		kfree(usb_xprtp);
-	}
-
-	platform_driver_unregister(&msm_ipc_router_usb_xprt_driver);
+	msm_ipc_usb_xprt_debugfs_exit();
 }
 
 module_init(msm_ipc_router_usb_xprt_init);
