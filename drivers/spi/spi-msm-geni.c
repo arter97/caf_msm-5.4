@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 
@@ -21,6 +22,7 @@
 #include <linux/spi/spi-msm-geni.h>
 #include <linux/pinctrl/consumer.h>
 #include <soc/qcom/boot_stats.h>
+#include <linux/suspend.h>
 
 #define SPI_NUM_CHIPSELECT	(4)
 #define SPI_XFER_TIMEOUT_MS	(250)
@@ -168,6 +170,7 @@ struct spi_geni_master {
 	int num_tx_eot;
 	int num_rx_eot;
 	int num_xfers;
+	bool is_xfer_in_progress;
 	void *ipc;
 	bool gsi_mode; /* GSI Mode */
 	bool shared_ee; /* Dual EE use case */
@@ -186,6 +189,7 @@ struct spi_geni_master {
 	bool use_fixed_timeout;
 	struct spi_geni_ssr spi_ssr;
 	bool master_cross_connect;
+	bool is_deep_sleep; /* For deep sleep restore the config similar to the probe. */
 };
 
 static void spi_slv_setup(struct spi_geni_master *mas);
@@ -1075,6 +1079,26 @@ static int spi_geni_prepare_message(struct spi_master *spi,
 		}
 	}
 
+	if (pm_runtime_status_suspended(mas->dev) && !mas->is_le_vm) {
+		if (!pm_runtime_enabled(mas->dev)) {
+			GENI_SE_ERR(mas->ipc, false, NULL,
+				"%s: System suspended\n", __func__);
+			ret = -EACCES;
+			goto exit_prepare_message;
+		}
+
+		ret = pm_runtime_get_sync(mas->dev);
+		if (ret < 0) {
+			dev_err(mas->dev,
+			"%s:pm_runtime_get_sync failed %d\n", __func__, ret);
+			WARN_ON_ONCE(1);
+			pm_runtime_put_noidle(mas->dev);
+			/* Set device in suspended since resume failed */
+			pm_runtime_set_suspended(mas->dev);
+			goto exit_prepare_message;
+		}
+	}
+
 	mas->cur_xfer_mode = select_xfer_mode(spi, spi_msg);
 
 	if (mas->cur_xfer_mode < 0) {
@@ -1361,6 +1385,7 @@ static int spi_geni_prepare_transfer_hardware(struct spi_master *spi)
 
 	/* Adjust the IB based on the max speed of the slave in kHz.*/
 	rsc->ib = (max_speed * DEFAULT_BUS_WIDTH) / 1000;
+	mas->is_xfer_in_progress = true;
 
 	/*
 	 * Not required for LE as below intializations are specific
@@ -1375,6 +1400,7 @@ static int spi_geni_prepare_transfer_hardware(struct spi_master *spi)
 	if (!pm_runtime_enabled(mas->dev)) {
 		GENI_SE_ERR(mas->ipc, false, NULL,
 			"%s: System suspended\n", __func__);
+		mas->is_xfer_in_progress = false;
 		mutex_unlock(&mas->spi_ssr.ssr_lock);
 		return -EACCES;
 	}
@@ -1401,6 +1427,7 @@ static int spi_geni_prepare_transfer_hardware(struct spi_master *spi)
 			pm_runtime_put_noidle(mas->dev);
 			/* Set device in suspended since resume failed */
 			pm_runtime_set_suspended(mas->dev);
+			mas->is_xfer_in_progress = false;
 			goto exit_prepare_transfer_hardware;
 		}
 
@@ -1409,6 +1436,7 @@ static int spi_geni_prepare_transfer_hardware(struct spi_master *spi)
 			if (ret) {
 				GENI_SE_ERR(mas->ipc, true, NULL,
 				"%s mas_setup failed: %d\n", __func__, ret);
+				mas->is_xfer_in_progress = false;
 				mutex_unlock(&mas->spi_ssr.ssr_lock);
 				return ret;
 			}
@@ -1442,12 +1470,16 @@ static int spi_geni_unprepare_transfer_hardware(struct spi_master *spi)
 	}
 	mutex_unlock(&mas->spi_ssr.ssr_lock);
 
-	if (mas->shared_ee || mas->is_le_vm)
+	if (mas->shared_ee || mas->is_le_vm) {
+		mas->is_xfer_in_progress = false;
 		return 0;
+	}
 
-	if (mas->is_la_vm)
+	if (mas->is_la_vm) {
 		/* Client on LA VM to controls resources, hence return */
+		mas->is_xfer_in_progress = false;
 		return 0;
+	}
 
 	if (mas->gsi_mode) {
 		struct se_geni_rsc *rsc;
@@ -1472,6 +1504,8 @@ static int spi_geni_unprepare_transfer_hardware(struct spi_master *spi)
 		pm_runtime_mark_last_busy(mas->dev);
 		pm_runtime_put_autosuspend(mas->dev);
 	}
+
+	mas->is_xfer_in_progress = false;
 	return 0;
 }
 
@@ -2031,12 +2065,18 @@ static int spi_geni_probe(struct platform_device *pdev)
 	bool rt_pri, slave_en;
 	char boot_marker[40];
 
-	spi = spi_alloc_master(&pdev->dev, sizeof(struct spi_geni_master));
+	slave_en  = of_property_read_bool(pdev->dev.of_node,
+			 "qcom,slv-ctrl");
+
+	spi = __spi_alloc_controller(&pdev->dev, sizeof(struct spi_geni_master), slave_en);
 	if (!spi) {
 		ret = -ENOMEM;
 		dev_err(&pdev->dev, "Failed to alloc spi struct\n");
 		goto spi_geni_probe_err;
 	}
+
+	if (slave_en)
+		spi->slave_abort = spi_slv_abort;
 
 	snprintf(boot_marker, sizeof(boot_marker),
 			"M - DRIVER GENI_SPI Init");
@@ -2072,6 +2112,9 @@ static int spi_geni_probe(struct platform_device *pdev)
 		geni_mas->is_la_vm = true;
 		dev_info(&pdev->dev, "LA-VM usecase\n");
 	}
+
+	rsc->rsc_ssr.ssr_enable = of_property_read_bool(pdev->dev.of_node,
+				"ssr-enable");
 
 	geni_mas->spi_rsc.wrapper_dev = &wrapper_pdev->dev;
 	/*
@@ -2233,16 +2276,7 @@ static int spi_geni_probe(struct platform_device *pdev)
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,master-cross-connect"))
 		geni_mas->master_cross_connect = true;
 
-	slave_en  = of_property_read_bool(pdev->dev.of_node,
-			 "qcom,slv-ctrl");
-	if (slave_en) {
-		spi->slave = true;
-		spi->slave_abort = spi_slv_abort;
-	}
-
-	rsc->rsc_ssr.ssr_enable = of_property_read_bool(pdev->dev.of_node,
-			"ssr-enable");
-
+	geni_mas->is_deep_sleep = false;
 	geni_mas->slave_cross_connected =
 		of_property_read_bool(pdev->dev.of_node, "slv-cross-connected");
 	spi->mode_bits = (SPI_CPOL | SPI_CPHA | SPI_LOOP | SPI_CS_HIGH);
@@ -2280,6 +2314,7 @@ static int spi_geni_probe(struct platform_device *pdev)
 			"M - DRIVER GENI_SPI_%d Ready", spi->bus_num);
 	place_marker(boot_marker);
 	dev_info(&pdev->dev, "%s: completed\n", __func__);
+	geni_mas->is_xfer_in_progress = false;
 	return ret;
 spi_geni_probe_unmap:
 	devm_iounmap(&pdev->dev, geni_mas->base);
@@ -2306,23 +2341,37 @@ static int spi_geni_remove(struct platform_device *pdev)
 	return ret;
 }
 
-static int spi_geni_gpi_suspend_resume(struct spi_geni_master *geni_mas, bool flag)
+static int spi_geni_gpi_suspend_resume(struct spi_geni_master *geni_mas, bool is_suspend)
 {
-	int tx_ret = 0, rx_ret = 0;
+	int tx_ret = 0;
 
-	if ((geni_mas->tx != NULL) && (geni_mas->rx != NULL)) {
-		if (flag) {
+	/* Do dma operations only for tx channel here, as it takes care of rx channel
+	 * also internally from the GPI driver functions. if we call for both channels,
+	 * will see channels in wrong state due to double operations.
+	 */
+	if (geni_mas->tx != NULL) {
+		if (is_suspend) {
 			tx_ret = dmaengine_pause(geni_mas->tx);
-			rx_ret = dmaengine_pause(geni_mas->rx);
 		} else {
+			/* For deep sleep need to restore the config similar to the probe,
+			 * hence using MSM_GPI_DEEP_SLEEP_INIT flag, in gpi_resume it wil
+			 * do similar to the probe. After this we should set this flag to
+			 * MSM_GPI_DEFAULT, means gpi probe state is restored.
+			 */
+			if (geni_mas->is_deep_sleep)
+				geni_mas->tx_event.cmd = MSM_GPI_DEEP_SLEEP_INIT;
+
 			tx_ret = dmaengine_resume(geni_mas->tx);
-			rx_ret = dmaengine_resume(geni_mas->rx);
+			if (geni_mas->is_deep_sleep) {
+				geni_mas->tx_event.cmd = MSM_GPI_DEFAULT;
+				geni_mas->is_deep_sleep = false;
+			}
 		}
 
-		if (tx_ret || rx_ret) {
+		if (tx_ret) {
 			GENI_SE_ERR(geni_mas->ipc, true, geni_mas->dev,
-			"%s failed: tx:%d rx:%d flag:%d\n",
-			__func__, tx_ret, rx_ret, flag);
+				"%s failed: tx:%d status:%d\n",
+				__func__, tx_ret, is_suspend);
 			return -EINVAL;
 		}
 	}
@@ -2358,7 +2407,7 @@ static int spi_geni_runtime_suspend(struct device *dev)
 	if (geni_mas->is_le_vm)
 		return spi_geni_levm_suspend_proc(geni_mas, spi);
 
-	GENI_SE_DBG(geni_mas->ipc, false, NULL, "%s:\n", __func__);
+	GENI_SE_DBG(geni_mas->ipc, false, NULL, "%s: start\n", __func__);
 
 	if (geni_mas->gsi_mode) {
 		ret = spi_geni_gpi_suspend_resume(geni_mas, true);
@@ -2382,6 +2431,7 @@ exit_rt_suspend:
 	if (ret)
 		dev_err(geni_mas->dev, "%s: resurces_off Error ret %d\n",
 			__func__, ret);
+	GENI_SE_DBG(geni_mas->ipc, false, NULL, "%s: end\n", __func__);
 	return ret;
 }
 
@@ -2389,20 +2439,29 @@ static int spi_geni_levm_resume_proc(struct spi_geni_master *geni_mas, struct sp
 {
 	int ret = 0;
 
-	if (!geni_mas->setup) {
-		ret = spi_geni_mas_setup(spi);
-		if (ret) {
-			GENI_SE_ERR(geni_mas->ipc, true, geni_mas->dev,
-			"%s mas_setup failed: %d\n", __func__, ret);
-			return ret;
-		}
-	}
-
 	if (geni_mas->gsi_mode) {
+		/* Required after spi_geni_mas_setup for each LE VM suspend/resume.
+		 * Very first time not required when master setup is not completed
+		 * as basic HW initialization is pending. This flag is set by the
+		 * spi_geni_mas_setup() function only.
+		 */
 		ret = spi_geni_gpi_suspend_resume(geni_mas, false);
 		if (ret) {
 			GENI_SE_ERR(geni_mas->ipc, false, geni_mas->dev,
 				    "%s:\n", __func__);
+			return ret;
+		}
+	}
+
+	if (!geni_mas->setup) {
+		/* It will take care of all GPI /DMA initialization and generic SW/HW
+		 * initializations required for a spi transfer. Gets called once per
+		 * Bootup session.
+		 */
+		ret = spi_geni_mas_setup(spi);
+		if (ret) {
+			GENI_SE_ERR(geni_mas->ipc, true, geni_mas->dev,
+			"%s mas_setup failed: %d\n", __func__, ret);
 			return ret;
 		}
 	}
@@ -2466,6 +2525,18 @@ static int spi_geni_resume(struct device *dev)
 static int spi_geni_suspend(struct device *dev)
 {
 	int ret = 0;
+	struct spi_master *spi = get_spi_master(dev);
+	struct spi_geni_master *geni_mas = spi_master_get_devdata(spi);
+
+	if (geni_mas->is_xfer_in_progress) {
+		if (!pm_runtime_status_suspended(dev)) {
+			GENI_SE_ERR(geni_mas->ipc, true, dev,
+				":%s: runtime PM is active\n", __func__);
+			ret = -EBUSY;
+			return ret;
+		}
+		return ret;
+	}
 
 	if (!pm_runtime_status_suspended(dev)) {
 		struct spi_master *spi = get_spi_master(dev);
@@ -2487,6 +2558,14 @@ static int spi_geni_suspend(struct device *dev)
 			ret = -EBUSY;
 		}
 	}
+
+#ifdef CONFIG_DEEPSLEEP
+	if (mem_sleep_current == PM_SUSPEND_MEM) {
+		GENI_SE_ERR(geni_mas->ipc, true, dev,
+				"%s:DEEP SLEEP EXIT", __func__);
+		geni_mas->is_deep_sleep = true;
+	}
+#endif
 	return ret;
 }
 #else

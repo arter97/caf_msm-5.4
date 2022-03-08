@@ -177,7 +177,7 @@ enum PT_DEBUG_LEVEL {
 	DL_DEBUG	= 4,
 	DL_MAX
 };
-#define PT_INITIAL_DEBUG_LEVEL DL_MAX
+#define PT_INITIAL_DEBUG_LEVEL DL_WARN
 
 /* Startup DUT enum status bitmask */
 enum PT_STARTUP_STATUS {
@@ -1585,6 +1585,8 @@ struct pt_core_data {
 	bool bridge_mode;
 	bool hw_detect_enabled;
 #endif
+	bool quick_boot;
+	bool drv_debug_suspend;
 };
 
 struct gd_sensor {
