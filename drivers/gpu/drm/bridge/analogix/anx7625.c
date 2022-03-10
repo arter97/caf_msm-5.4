@@ -1484,7 +1484,7 @@ static struct i2c_driver anx7625_driver = {
 	.id_table = anx7625_id,
 };
 
-module_i2c_driver(anx7625_driver);
+early_module_i2c_driver(anx7625_driver, EARLY_SUBSYS_2, EARLY_INIT_LEVEL2);
 
 MODULE_DESCRIPTION("MIPI2DP anx7625 driver");
 MODULE_AUTHOR("Xin Ji <xji@analogixsemi.com>");
