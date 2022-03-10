@@ -73,6 +73,9 @@
 
 #define RPC_CLIENT_NAME_SIZE (64)
 
+struct hgsl_context;
+struct hgsl_priv;
+
 /* RPC opcodes */
 enum gsl_rpc_func_t {
 	RPC_LIBRARY_OPEN = 0,
@@ -387,6 +390,13 @@ struct notify_cleanup_params_t {
 	uint32_t            timeout;
 };
 
+struct context_create_params_v1_t {
+	uint32_t                          size;
+	struct context_create_params_t    ctxt_create_param;
+	struct memory_map_ext_fd_params_t shadow_map_param;
+	uint32_t                          dbq_off;
+};
+
 #pragma pack(pop)
 
 struct hgsl_hab_channel_t {
@@ -511,4 +521,10 @@ int hgsl_hyp_get_dbq_info(struct hgsl_hyp_priv_t *priv, uint32_t dbq_idx,
 
 int hgsl_hyp_notify_cleanup(struct hgsl_hab_channel_t *hab_channel, uint32_t timeout);
 
+int hgsl_hyp_ctxt_create_v1(struct device *dev,
+			struct hgsl_priv *priv,
+			struct hgsl_hab_channel_t *hab_channel,
+			struct hgsl_context *ctxt,
+			struct hgsl_ioctl_ctxt_create_params *hgsl_params,
+			int dbq_off, uint32_t *dbq_info);
 #endif

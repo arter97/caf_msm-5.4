@@ -28,6 +28,7 @@
 #include <linux/uaccess.h>
 #include <uapi/linux/hgsl.h>
 #include <linux/delay.h>
+#include <linux/fdtable.h>
 #include "hgsl.h"
 #include "hgsl_tcsr.h"
 #include "hgsl_memory.h"
@@ -93,7 +94,6 @@ struct db_buffer {
 #define QHDR_STATUS_INACTIVE 0x00
 #define QHDR_STATUS_ACTIVE 0x01
 
-#define HGSL_CONTEXT_NUM                     (128)
 #define HGSL_SEND_MSG_MAX_RETRY_COUNT        (150)
 
 // Skip all commands from the bad context
@@ -151,6 +151,8 @@ static void db_set_busy_state(void *dbq_base, int in_busy);
 static struct hgsl_context *hgsl_get_context(struct qcom_hgsl *hgsl,
 				uint32_t context_id);
 static void hgsl_put_context(struct hgsl_context *ctxt);
+static int hgsl_ctxt_setup_dbq(struct hgsl_priv *priv,
+	struct hgsl_context *ctxt, uint32_t dbq_info);
 
 static uint32_t hgsl_dbq_get_state_info(uint32_t *va_base, uint32_t command,
 				uint32_t ctxt_id, uint32_t offset)
@@ -1048,10 +1050,35 @@ err:
 static inline void _unmap_shadow(struct hgsl_context *ctxt)
 {
 	if (ctxt->shadow_ts) {
-		dma_buf_vunmap(ctxt->shadow_ts_node.dma_buf, ctxt->shadow_ts);
-		dma_buf_end_cpu_access(ctxt->shadow_ts_node.dma_buf, DMA_FROM_DEVICE);
+		dma_buf_vunmap(ctxt->shadow_ts_node->dma_buf, ctxt->shadow_ts);
+		dma_buf_end_cpu_access(ctxt->shadow_ts_node->dma_buf, DMA_FROM_DEVICE);
 		ctxt->shadow_ts = NULL;
 	}
+}
+
+static void _cleanup_shadow(struct hgsl_hab_channel_t *hab_channel,
+				struct hgsl_context *ctxt)
+{
+	struct hgsl_mem_node *mem_node = ctxt->shadow_ts_node;
+
+	if (!mem_node)
+		return;
+
+	_unmap_shadow(ctxt);
+
+	if (ctxt->is_fe_shadow) {
+		if (mem_node->fd != -1)
+			__close_fd(current->files, mem_node->fd);
+		hgsl_hyp_mem_unmap_smmu(hab_channel, mem_node);
+		hgsl_sharedmem_free(mem_node);
+	} else {
+		hgsl_hyp_put_shadowts_mem(hab_channel, mem_node);
+		kfree(mem_node);
+	}
+
+	ctxt->shadow_ts_flags = 0;
+	ctxt->is_fe_shadow = false;
+	ctxt->shadow_ts_node = NULL;
 }
 
 static inline void _destroy_context(struct kref *kref)
@@ -1073,7 +1100,6 @@ static inline void _destroy_context(struct kref *kref)
 					HGSL_DBQ_CONTEXT_DESTROY_OFFSET_IN_DWORD,
 					1);
 	}
-	_unmap_shadow(ctxt);
 	ctxt->destroyed = true;
 	/* ensure update is done before return */
 	wmb();
@@ -1199,12 +1225,21 @@ static void hgsl_get_shadowts_mem(struct hgsl_hab_channel_t *hab_channel,
 	void *vbase = NULL;
 	int ret = 0;
 
+	if (ctxt->shadow_ts_node)
+		return;
+
+	ctxt->shadow_ts_node = hgsl_zalloc(sizeof(*ctxt->shadow_ts_node));
+	if (ctxt->shadow_ts_node == NULL) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
 	ret = hgsl_hyp_get_shadowts_mem(hab_channel, ctxt->context_id,
-				&ctxt->shadow_ts_flags, &ctxt->shadow_ts_node);
+				&ctxt->shadow_ts_flags, ctxt->shadow_ts_node);
 	if (ret)
 		goto out;
 
-	dma_buf = ctxt->shadow_ts_node.dma_buf;
+	dma_buf = ctxt->shadow_ts_node->dma_buf;
 	if (dma_buf) {
 		dma_buf_begin_cpu_access(dma_buf, DMA_FROM_DEVICE);
 		vbase = dma_buf_vmap(dma_buf);
@@ -1220,9 +1255,7 @@ out:
 	if (ret) {
 		if (dma_buf)
 			dma_buf_end_cpu_access(dma_buf, DMA_FROM_DEVICE);
-		hgsl_hyp_put_shadowts_mem(hab_channel, &ctxt->shadow_ts_node);
-		ctxt->shadow_ts_flags = 0;
-		memset(&ctxt->shadow_ts_node, 0, sizeof(ctxt->shadow_ts_node));
+		_cleanup_shadow(hab_channel, ctxt);
 	}
 }
 
@@ -1246,12 +1279,17 @@ static int hgsl_ioctl_get_shadowts_mem(struct file *filep, unsigned long arg)
 		goto out;
 	}
 
+	if (!ctxt->shadow_ts_node) {
+		ret = -ENODEV;
+		goto out;
+	}
+
 	params.flags = ctxt->shadow_ts_flags;
-	params.size = ctxt->shadow_ts_node.memdesc.size64;
+	params.size = ctxt->shadow_ts_node->memdesc.size64;
 	params.fd = -1;
 
-	dma_buf = ctxt->shadow_ts_node.dma_buf;
-	if (dma_buf) {
+	dma_buf = ctxt->shadow_ts_node->dma_buf;
+	if (dma_buf && (ctxt->shadow_ts_node->fd == -1)) {
 		params.fd = dma_buf_fd(dma_buf, O_CLOEXEC);
 		if (params.fd < 0) {
 			LOGE("dma buf to fd failed\n");
@@ -1259,11 +1297,14 @@ static int hgsl_ioctl_get_shadowts_mem(struct file *filep, unsigned long arg)
 			goto out;
 		}
 		get_dma_buf(dma_buf);
+	} else {
+		params.fd = ctxt->shadow_ts_node->fd;
+		/* set fd to -1, then kernel don't cleanup shadow fd */
+		ctxt->shadow_ts_node->fd = -1;
 	}
 
 	if (copy_to_user(USRPTR(arg), &params, sizeof(params))) {
-		dma_buf_put(dma_buf);
-		put_unused_fd(params.fd);
+		__close_fd(current->files, params.fd);
 		ret = -EFAULT;
 	}
 
@@ -1295,10 +1336,7 @@ static int hgsl_ctxt_create_dbq(struct hgsl_priv *priv,
 	struct hgsl_hab_channel_t *hab_channel,
 	struct hgsl_context *ctxt)
 {
-	struct qcom_hgsl *hgsl = priv->dev;
 	uint32_t dbq_info;
-	uint32_t dbq_idx;
-	uint32_t db_signal;
 	int ret;
 
 	ret = hgsl_hyp_dbq_create(hab_channel,
@@ -1306,9 +1344,17 @@ static int hgsl_ctxt_create_dbq(struct hgsl_priv *priv,
 	if (ret)
 		return ret;
 
-	dbq_idx = dbq_info >> 16;
-	db_signal = dbq_info & 0xFFFF;
-	ret = hgsl_dbq_init(hgsl, dbq_idx, db_signal);
+	return hgsl_ctxt_setup_dbq(priv, ctxt, dbq_info);
+}
+
+static int hgsl_ctxt_setup_dbq(struct hgsl_priv *priv,
+	struct hgsl_context *ctxt, uint32_t dbq_info)
+{
+	struct qcom_hgsl *hgsl = priv->dev;
+	uint32_t dbq_idx = dbq_info >> 16;
+	uint32_t db_signal = dbq_info & 0xFFFF;
+	int ret = hgsl_dbq_init(hgsl, dbq_idx, db_signal);
+
 	if (ret)
 		return ret;
 
@@ -1356,7 +1402,7 @@ static int hgsl_ctxt_destroy(struct hgsl_priv *priv,
 	while (!ctxt->destroyed)
 		cpu_relax();
 
-	hgsl_hyp_put_shadowts_mem(hab_channel, &ctxt->shadow_ts_node);
+	_cleanup_shadow(hab_channel, ctxt);
 
 	ret = hgsl_hyp_ctxt_destroy(hab_channel,
 		ctxt->devhandle, ctxt->context_id, rval);
@@ -1392,6 +1438,8 @@ static int hgsl_ioctl_ctxt_create(struct file *filep, unsigned long arg)
 	int ret = 0;
 	struct hgsl_hab_channel_t *hab_channel = NULL;
 	bool ctxt_created = false;
+	bool dbq_off = (!hgsl->global_hyp_inited || hgsl->db_off);
+	uint32_t dbq_info = -1;
 
 	if (copy_from_user(&params, USRPTR(arg), sizeof(params))) {
 		LOGE("failed to copy params from user");
@@ -1419,23 +1467,31 @@ static int hgsl_ioctl_ctxt_create(struct file *filep, unsigned long arg)
 		params.flags |= GSL_CONTEXT_FLAG_USER_GENERATED_TS;
 	}
 
-	ret = hgsl_hyp_ctxt_create(hab_channel, &params);
-	if (ret)
-		goto out;
+	ret = hgsl_hyp_ctxt_create_v1(hgsl->dev, priv, hab_channel,
+			ctxt, &params, dbq_off, &dbq_info);
+	if (!ret && (dbq_info != -1))
+		hgsl_ctxt_setup_dbq(priv, ctxt, dbq_info);
 
-	if (params.ctxthandle >= HGSL_CONTEXT_NUM) {
-		ret = -EINVAL;
-		goto out;
+	if (ret) {
+		/* fallback to legacy mode */
+		ret = hgsl_hyp_ctxt_create(hab_channel, &params);
+		if (ret)
+			goto out;
+
+		if (params.ctxthandle >= HGSL_CONTEXT_NUM) {
+			ret = -EINVAL;
+			goto out;
+		}
+
+		ctxt->context_id = params.ctxthandle;
+		ctxt->devhandle = params.devhandle;
+		ctxt->pid = priv->pid;
+		ctxt->priv = priv;
+		ctxt->flags = params.flags;
+		hgsl_get_shadowts_mem(hab_channel, ctxt);
+		if (!dbq_off)
+			hgsl_ctxt_create_dbq(priv, hab_channel, ctxt);
 	}
-
-	ctxt->context_id = params.ctxthandle;
-	ctxt->devhandle = params.devhandle;
-	ctxt->pid = priv->pid;
-	ctxt->priv = priv;
-	ctxt->flags = params.flags;
-	hgsl_get_shadowts_mem(hab_channel, ctxt);
-	if (hgsl->global_hyp_inited && !hgsl->db_off)
-		hgsl_ctxt_create_dbq(priv, hab_channel, ctxt);
 
 	kref_init(&ctxt->kref);
 	init_waitqueue_head(&ctxt->wait_q);
@@ -1475,8 +1531,7 @@ out:
 		if (ctxt_created)
 			hgsl_ctxt_destroy(priv, hab_channel, params.ctxthandle, NULL);
 		else if (ctxt && (params.ctxthandle < HGSL_CONTEXT_NUM)) {
-			_unmap_shadow(ctxt);
-			hgsl_hyp_put_shadowts_mem(hab_channel, &ctxt->shadow_ts_node);
+			_cleanup_shadow(hab_channel, ctxt);
 			hgsl_hyp_ctxt_destroy(hab_channel, ctxt->devhandle, ctxt->context_id, NULL);
 			kfree(ctxt);
 		}
@@ -1738,10 +1793,8 @@ static int hgsl_ioctl_mem_alloc(struct file *filep, unsigned long arg)
 
 out:
 	if (ret && mem_node) {
-		if (mem_node->fd >= 0) {
-			dma_buf_put(mem_node->dma_buf);
-			put_unused_fd(mem_node->fd);
-		}
+		if (mem_node->fd >= 0)
+			__close_fd(current->files, mem_node->fd);
 		hgsl_hyp_mem_unmap_smmu(hab_channel, mem_node);
 		hgsl_sharedmem_free(mem_node);
 	}
