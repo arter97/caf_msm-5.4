@@ -11,6 +11,39 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted (subject to the limitations in the
+ * disclaimer below) provided that the following conditions are met:
+ *
+ *      * Redistributions of source code must retain the above copyright
+ *        notice, this list of conditions and the following disclaimer.
+ *
+ *      * Redistributions in binary form must reproduce the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer in the documentation and/or other materials provided
+ *        with the distribution.
+ *
+ *      * Neither the name of Qualcomm Innovation Center, Inc. nor the
+ *        names of its contributors may be used to endorse or promote
+ *        products derived from this software without specific prior
+ *        written permission.
+ *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
+ * GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
+ * HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include <linux/fs.h>
 #include <linux/mutex.h>
@@ -92,6 +125,7 @@ static int q6asm_memory_map_regions(struct audio_client *ac, int dir,
 				bool is_contiguous);
 static int q6asm_memory_unmap_regions(struct audio_client *ac, int dir);
 static void q6asm_reset_buf_state(struct audio_client *ac);
+static void q6asm_reset_buf_state_nowait(struct audio_client *ac);
 
 static int q6asm_map_channels(u8 *channel_mapping, uint32_t channels,
 				bool use_back_flavor);
@@ -7991,6 +8025,9 @@ static int __q6asm_cmd_nowait(struct audio_client *ac, int cmd,
 				__func__, hdr.opcode, rc);
 		goto fail_cmd;
 	}
+	if (cmd == CMD_FLUSH)
+		q6asm_reset_buf_state_nowait(ac);
+
 	return 0;
 fail_cmd:
 	return -EINVAL;
@@ -8106,6 +8143,30 @@ static void q6asm_reset_buf_state(struct audio_client *ac)
 			}
 		}
 		mutex_unlock(&ac->cmd_lock);
+	}
+}
+
+static void q6asm_reset_buf_state_nowait(struct audio_client *ac)
+{
+	int cnt = 0;
+	int loopcnt = 0;
+	int used;
+	struct audio_port_data *port = NULL;
+
+	if (ac->io_mode & SYNC_IO_MODE) {
+		used = (ac->io_mode & TUN_WRITE_IO_MODE ? 1 : 0);
+		for (loopcnt = 0; loopcnt <= OUT; loopcnt++) {
+			port = &ac->port[loopcnt];
+			cnt = port->max_buf_cnt - 1;
+			port->dsp_buf = 0;
+			port->cpu_buf = 0;
+			while (cnt >= 0) {
+				if (!port->buf)
+					continue;
+				port->buf[cnt].used = used;
+				cnt--;
+			}
+		}
 	}
 }
 
