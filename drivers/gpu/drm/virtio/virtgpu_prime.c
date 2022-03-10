@@ -23,7 +23,7 @@
  */
 
 #include <drm/drm_prime.h>
-
+#include <linux/dma-buf.h>
 #include "virtgpu_drv.h"
 
 /* Empty Implementations as there should not be any other driver for a virtual
@@ -46,7 +46,21 @@ struct drm_gem_object *virtgpu_gem_prime_import_sg_table(
 	struct drm_device *dev, struct dma_buf_attachment *attach,
 	struct sg_table *table)
 {
-	return ERR_PTR(-ENODEV);
+	struct virtio_gpu_device *vgdev = dev->dev_private;
+	struct dma_buf *dma_buf = attach->dmabuf;
+	struct drm_gem_object *obj = NULL;
+	struct virtio_gpu_object *bo;
+	int ret;
+
+	ret = virtio_gpu_object_create_private(vgdev, dma_buf->size, &bo);
+	if (ret)
+		return NULL;
+
+	bo->pages = table;
+
+	obj = &bo->tbo.base;
+
+	return obj;
 }
 
 void *virtgpu_gem_prime_vmap(struct drm_gem_object *obj)
