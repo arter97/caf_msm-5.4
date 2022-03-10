@@ -6,6 +6,7 @@
  */
 
 #include <linux/fs.h>
+#include <linux/pagemap.h>
 #include <linux/export.h>
 #include <linux/seq_file.h>
 #include <linux/vmalloc.h>
@@ -35,6 +36,8 @@ static void seq_set_overflow(struct seq_file *m)
 static void *seq_buf_alloc(unsigned long size)
 {
 	void *buf;
+        if (unlikely(size > MAX_RW_COUNT))
+		return NULL;
 
 	buf = kmalloc(size, GFP_KERNEL | __GFP_NOWARN);
 	if (!buf && size > PAGE_SIZE)
