@@ -1851,14 +1851,14 @@ static int dcc_probe(struct platform_device *pdev)
 		return -EINVAL;
 
 	drvdata->ll_state_cnt = of_property_count_elems_of_size(dev->of_node,
-								"ll-reg-offsets", sizeof(u32)); /* optional */
+					"ll-reg-offsets", sizeof(u32)); /* optional */
 	if (drvdata->ll_state_cnt <= 0) {
 		dev_info(dev, "ll-reg-offsets property doesn't exist\n");
 		drvdata->ll_state_cnt = 0;
 	} else {
 		ret = of_property_read_u32(pdev->dev.of_node, "per-ll-reg-cnt",
 					&drvdata->per_ll_reg_cnt);
-		if (!ret)
+		if (ret)
 			return -EINVAL;
 	}
 
@@ -1963,13 +1963,13 @@ static int dcc_state_store(struct device *dev)
 		return -EINVAL;
 	}
 
-	if(!drvdata->ll_state_cnt) {
+	if (!drvdata->ll_state_cnt) {
 		dev_dbg(dev, "reg-offsets property doesn't exist\n");
 		return 0;
 	}
 
 	n = drvdata->ll_state_cnt;
-	ll_reg_offsets = kzalloc(n * sizeof(u32), GFP_KERNEL);
+	ll_reg_offsets = kcalloc(n, sizeof(u32), GFP_KERNEL);
 	if (!ll_reg_offsets) {
 		dev_err(dev, "Failed to alloc memory for reg_offsets\n");
 		return -ENOMEM;
@@ -1984,14 +1984,12 @@ static int dcc_state_store(struct device *dev)
 
 	drvdata->ll_state = kzalloc(n * sizeof(struct reg_state), GFP_KERNEL);
 	if (!drvdata->ll_state) {
-		dev_err(dev, "Failed to alloc memory for ll_state\n");
 		ret = -ENOMEM;
 		goto out;
 	}
 
 	drvdata->sram_state = kzalloc(drvdata->ram_size, GFP_KERNEL);
 	if (!drvdata->sram_state) {
-		dev_err(dev, "Failed to alloc memory for sram_state\n");
 		ret = -ENOMEM;
 		goto sram_alloc_err;
 	}
@@ -2005,7 +2003,7 @@ static int dcc_state_store(struct device *dev)
 
 	mutex_lock(&drvdata->mutex);
 
-	for(i = 0; i < n; i++) {
+	for (i = 0; i < n; i++) {
 		drvdata->ll_state[i].offset = ll_reg_offsets[i];
 		drvdata->ll_state[i].val    = dcc_readl(drvdata, ll_reg_offsets[i]);
 	}
@@ -2033,12 +2031,17 @@ static int dcc_state_restore(struct device *dev)
 	struct dcc_drvdata *drvdata = dev_get_drvdata(dev);
 
 	if (!drvdata || !drvdata->ll_state || !drvdata->sram_state) {
-		dev_err(dev, "Err: dcc_state_restore Invalid argument\n");
+		dev_err(dev, "Err: %s Invalid argument\n", __func__);
 		return -EINVAL;
 	}
 
-	n = drvdata->ll_state_cnt;
+	if (!drvdata->ll_state_cnt) {
+		dev_dbg(dev, "reg-offsets property doesn't exist\n");
+		return 0;
+	}
+
 	sram_state = drvdata->sram_state;
+	n = drvdata->ll_state_cnt;
 
 	for (i = 0; i < drvdata->ram_size / 4; i++)
 		dcc_sram_writel(drvdata, sram_state[i], i * 4);
@@ -2054,7 +2057,7 @@ static int dcc_state_restore(struct device *dev)
 			continue;
 		}
 
-		for(j = 0; j < drvdata->per_ll_reg_cnt; i++, j++)
+		for (j = 0; j < drvdata->per_ll_reg_cnt; i++, j++)
 			dcc_writel(drvdata, drvdata->ll_state[i].val, drvdata->ll_state[i].offset);
 	}
 
@@ -2070,7 +2073,7 @@ static int dcc_state_restore(struct device *dev)
 
 static int dcc_v2_suspend(struct device *dev)
 {
-	if (PM_SUSPEND_MEM == mem_sleep_current)
+	if (mem_sleep_current == PM_SUSPEND_MEM)
 		return dcc_state_store(dev);
 
 	return 0;
@@ -2078,7 +2081,7 @@ static int dcc_v2_suspend(struct device *dev)
 
 static int dcc_v2_resume(struct device *dev)
 {
-	if (PM_SUSPEND_MEM == mem_sleep_current)
+	if (mem_sleep_current == PM_SUSPEND_MEM)
 		return dcc_state_restore(dev);
 
 	return 0;
@@ -2099,7 +2102,7 @@ static int dcc_v2_thaw(struct device *dev)
 	struct dcc_drvdata *drvdata = dev_get_drvdata(dev);
 
 	if (!drvdata || !drvdata->ll_state || !drvdata->sram_state) {
-		dev_err(dev, "Err: dcc_v2_thaw Invalid argument\n");
+		dev_err(dev, "Err: %s Invalid argument\n", __func__);
 		return -EINVAL;
 	}
 
