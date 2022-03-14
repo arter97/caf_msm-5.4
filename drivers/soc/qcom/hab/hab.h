@@ -249,7 +249,7 @@ struct hab_device {
 	uint32_t id;
 	struct list_head pchannels;
 	int pchan_cnt;
-	spinlock_t pchan_lock;
+	rwlock_t pchan_lock;
 	struct list_head openq_list; /* received */
 	spinlock_t openlock;
 	wait_queue_head_t openq;
