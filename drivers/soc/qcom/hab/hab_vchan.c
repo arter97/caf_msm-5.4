@@ -231,19 +231,18 @@ static int hab_vchans_empty(int vmid)
 	for (i = 0; i < hab_driver.ndevices; i++) {
 		hab_dev = &hab_driver.devp[i];
 
-		spin_lock_bh(&hab_dev->pchan_lock);
+		read_lock_bh(&hab_dev->pchan_lock);
 		list_for_each_entry(pchan, &hab_dev->pchannels, node) {
 			if (pchan->vmid_remote == vmid) {
 				if (!hab_vchans_per_pchan_empty(pchan)) {
 					empty = 0;
-					spin_unlock_bh(&hab_dev->pchan_lock);
 					pr_info("vmid %d %s's vchans are not closed\n",
 							vmid, pchan->name);
 					break;
 				}
 			}
 		}
-		spin_unlock_bh(&hab_dev->pchan_lock);
+		read_unlock_bh(&hab_dev->pchan_lock);
 	}
 
 	return empty;
