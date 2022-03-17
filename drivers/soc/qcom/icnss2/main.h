@@ -142,6 +142,7 @@ struct icnss_vreg_cfg {
 	u32 need_unvote;
 	bool required;
 	bool is_supported;
+	u32 no_vote_on_wifi_active;
 };
 
 struct icnss_vreg_info {
@@ -472,6 +473,7 @@ struct icnss_priv {
 	u8 is_slate_rfa;
 	struct completion slate_boot_complete;
 	u8 low_power_support;
+	unsigned long device_config;
 };
 
 struct icnss_reg_info {
