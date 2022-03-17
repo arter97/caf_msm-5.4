@@ -304,7 +304,25 @@ static int in_sched_bug;
 	}						\
 })
 
-static void fixup_walt_sched_stats_common(struct rq *rq, struct task_struct *p,
+void inc_rq_walt_stats(struct rq *rq, struct task_struct *p)
+{
+	inc_nr_big_task(&rq->wrq.walt_stats, p);
+	walt_inc_cumulative_runnable_avg(rq, p);
+
+	p->wts.rtg_high_prio = task_rtg_high_prio(p);
+	if (p->wts.rtg_high_prio)
+		rq->wrq.walt_stats.nr_rtg_high_prio_tasks++;
+}
+
+void dec_rq_walt_stats(struct rq *rq, struct task_struct *p)
+{
+	dec_nr_big_task(&rq->wrq.walt_stats, p);
+	walt_dec_cumulative_runnable_avg(rq, p);
+	if (p->wts.rtg_high_prio)
+		rq->wrq.walt_stats.nr_rtg_high_prio_tasks--;
+}
+
+void fixup_walt_sched_stats_common(struct rq *rq, struct task_struct *p,
 				   u16 updated_demand_scaled,
 				   u16 updated_pred_demand_scaled)
 {
@@ -1267,8 +1285,9 @@ static void update_task_pred_demand(struct rq *rq, struct task_struct *p, int ev
 
 	new_scaled = scale_demand(new);
 	if (task_on_rq_queued(p) && (!task_has_dl_policy(p) ||
-				!p->dl.dl_throttled))
-		fixup_walt_sched_stats_common(rq, p,
+				!p->dl.dl_throttled) &&
+				p->sched_class->fixup_walt_sched_stats)
+		p->sched_class->fixup_walt_sched_stats(rq, p,
 				p->wts.demand_scaled,
 				new_scaled);
 
@@ -1895,8 +1914,9 @@ static void update_history(struct rq *rq, struct task_struct *p,
 	 * demand.
 	 */
 	if (!task_has_dl_policy(p) || !p->dl.dl_throttled) {
-		if (task_on_rq_queued(p))
-			fixup_walt_sched_stats_common(rq, p,
+		if (task_on_rq_queued(p) &&
+			p->sched_class->fixup_walt_sched_stats)
+			p->sched_class->fixup_walt_sched_stats(rq, p,
 					demand_scaled, pred_demand_scaled);
 		else if (rq->curr == p)
 			walt_fixup_cum_window_demand(rq, demand_scaled);

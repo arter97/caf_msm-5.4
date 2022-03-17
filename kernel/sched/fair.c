@@ -4136,7 +4136,7 @@ static inline void check_schedstat_required(void)
 #endif
 }
 
-static inline bool cfs_bandwidth_used(void);
+bool cfs_bandwidth_used(void);
 
 /*
  * MIGRATION
@@ -4531,7 +4531,7 @@ entity_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr, int queued)
 #ifdef CONFIG_JUMP_LABEL
 static struct static_key __cfs_bandwidth_used;
 
-static inline bool cfs_bandwidth_used(void)
+bool cfs_bandwidth_used(void)
 {
 	return static_key_false(&__cfs_bandwidth_used);
 }
@@ -4546,7 +4546,7 @@ void cfs_bandwidth_usage_dec(void)
 	static_key_slow_dec_cpuslocked(&__cfs_bandwidth_used);
 }
 #else /* CONFIG_JUMP_LABEL */
-static bool cfs_bandwidth_used(void)
+bool cfs_bandwidth_used(void)
 {
 	return true;
 }
@@ -4763,13 +4763,16 @@ static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
 			dequeue_entity(qcfs_rq, se, DEQUEUE_SLEEP);
 		qcfs_rq->h_nr_running -= task_delta;
 		qcfs_rq->idle_h_nr_running -= idle_task_delta;
+		walt_dec_throttled_cfs_rq_stats(&qcfs_rq->walt_stats, cfs_rq);
 
 		if (qcfs_rq->load.weight)
 			dequeue = 0;
 	}
 
-	if (!se)
+	if (!se) {
 		sub_nr_running(rq, task_delta);
+		walt_dec_throttled_cfs_rq_stats(&rq->wrq.walt_stats, cfs_rq);
+	}
 
 	/*
 	 * Note: distribution will already see us throttled via the
@@ -4786,6 +4789,7 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 	struct cfs_bandwidth *cfs_b = tg_cfs_bandwidth(cfs_rq->tg);
 	struct sched_entity *se;
 	long task_delta, idle_task_delta;
+	struct cfs_rq *tcfs_rq __maybe_unused = cfs_rq;
 
 	se = cfs_rq->tg->se[cpu_of(rq)];
 
@@ -4814,6 +4818,7 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 
 		cfs_rq->h_nr_running += task_delta;
 		cfs_rq->idle_h_nr_running += idle_task_delta;
+		walt_inc_throttled_cfs_rq_stats(&cfs_rq->walt_stats, tcfs_rq);
 
 		/* end evaluation on encountering a throttled cfs_rq */
 		if (cfs_rq_throttled(cfs_rq))
@@ -4841,6 +4846,7 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 
 	/* At this point se is NULL and we are at root level*/
 	add_nr_running(rq, task_delta);
+	walt_inc_throttled_cfs_rq_stats(&rq->wrq.walt_stats, tcfs_rq);
 
 unthrottle_throttle:
 	/*
@@ -5245,6 +5251,7 @@ static void init_cfs_rq_runtime(struct cfs_rq *cfs_rq)
 {
 	cfs_rq->runtime_enabled = 0;
 	INIT_LIST_HEAD(&cfs_rq->throttled_list);
+	walt_init_cfs_rq_stats(cfs_rq);
 }
 
 void start_cfs_bandwidth(struct cfs_bandwidth *cfs_b)
@@ -5328,7 +5335,7 @@ static void __maybe_unused unthrottle_offline_cfs_rqs(struct rq *rq)
 
 #else /* CONFIG_CFS_BANDWIDTH */
 
-static inline bool cfs_bandwidth_used(void)
+bool cfs_bandwidth_used(void)
 {
 	return false;
 }
@@ -5496,6 +5503,9 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	 * estimated utilization, before we update schedutil.
 	 */
 	util_est_enqueue(&rq->cfs, p);
+#ifdef CONFIG_SCHED_WALT
+	p->wts.misfit = !task_fits_max(p, rq->cpu);
+#endif
 
 	/*
 	 * If in_iowait is set, the code below may not trigger any cpufreq
@@ -5513,6 +5523,7 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 
 		cfs_rq->h_nr_running++;
 		cfs_rq->idle_h_nr_running += idle_h_nr_running;
+		walt_inc_cfs_rq_stats(cfs_rq, p);
 
 		/* end evaluation on encountering a throttled cfs_rq */
 		if (cfs_rq_throttled(cfs_rq))
@@ -5529,6 +5540,7 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 
 		cfs_rq->h_nr_running++;
 		cfs_rq->idle_h_nr_running += idle_h_nr_running;
+		walt_inc_cfs_rq_stats(cfs_rq, p);
 
 		/* end evaluation on encountering a throttled cfs_rq */
 		if (cfs_rq_throttled(cfs_rq))
@@ -5545,9 +5557,6 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 enqueue_throttle:
 	if (!se) {
 		add_nr_running(rq, 1);
-#ifdef CONFIG_SCHED_WALT
-		p->wts.misfit = !task_fits_max(p, rq->cpu);
-#endif
 		inc_rq_walt_stats(rq, p);
 		/*
 		 * Since new tasks are assigned an initial util_avg equal to
@@ -5608,6 +5617,7 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 
 		cfs_rq->h_nr_running--;
 		cfs_rq->idle_h_nr_running -= idle_h_nr_running;
+		walt_dec_cfs_rq_stats(cfs_rq, p);
 
 		/* end evaluation on encountering a throttled cfs_rq */
 		if (cfs_rq_throttled(cfs_rq))
@@ -5636,6 +5646,7 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 
 		cfs_rq->h_nr_running--;
 		cfs_rq->idle_h_nr_running -= idle_h_nr_running;
+		walt_dec_cfs_rq_stats(cfs_rq, p);
 
 		/* end evaluation on encountering a throttled cfs_rq */
 		if (cfs_rq_throttled(cfs_rq))
@@ -11703,7 +11714,7 @@ static void task_tick_fair(struct rq *rq, struct task_struct *curr, int queued)
 	misfit = rq->misfit_task_load;
 
 	if (old_misfit != misfit) {
-		walt_adjust_nr_big_tasks(rq, 1, misfit);
+		walt_fixup_nr_big_tasks(rq, curr, 1, misfit);
 		curr->wts.misfit = misfit;
 	}
 #endif
@@ -12228,6 +12239,9 @@ const struct sched_class fair_sched_class = {
 
 #ifdef CONFIG_UCLAMP_TASK
 	.uclamp_enabled		= 1,
+#endif
+#ifdef CONFIG_SCHED_WALT
+	.fixup_walt_sched_stats	= walt_fixup_sched_stats_fair,
 #endif
 };
 

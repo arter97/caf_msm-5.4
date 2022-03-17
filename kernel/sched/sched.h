@@ -709,6 +709,8 @@ struct cfs_rq {
 #endif /* CONFIG_FAIR_GROUP_SCHED */
 };
 
+extern bool cfs_bandwidth_used(void);
+
 static inline int rt_bandwidth_enabled(void)
 {
 	return sysctl_sched_rt_runtime >= 0;
@@ -1933,6 +1935,11 @@ struct sched_class {
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	void (*task_change_group)(struct task_struct *p, int type);
+#endif
+#ifdef CONFIG_SCHED_WALT
+	void (*fixup_walt_sched_stats)(struct rq *rq, struct task_struct *p,
+					u16 updated_demand_scaled,
+					u16 updated_pred_demand_scaled);
 #endif
 };
 
