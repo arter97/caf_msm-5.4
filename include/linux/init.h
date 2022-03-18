@@ -223,8 +223,9 @@ extern bool initcall_debug;
   #define ___early_lto_initcall(c, l, fn, subsys, level) \
 	static initcall_t \
 	__early##subsys##_initcall_##c##_##l##_##fn##level __used \
-	__attribute__((__section__(".early" #subsys ".initcall" #level ".init"\
-	))) = fn
+	__attribute__((__section__(".early" #subsys \
+		".initcall" #level \
+		__stringify(.init..##c##_##l##_##fn)))) = fn;
   #define __early_lto_initcall(c, l, fn, subsys, level) \
 	___early_lto_initcall(c, l, fn, subsys, level)
 
