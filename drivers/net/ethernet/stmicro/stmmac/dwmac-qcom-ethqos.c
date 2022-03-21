@@ -1778,6 +1778,23 @@ static void read_rgmii_io_macro_node_setting(struct device_node *np_hw, struct q
 		ETHQOSDBG("default pps_remove\n");
 		ethqos->io_macro.pps_remove = 0;
 	}
+
+	ret = of_property_read_u32(np_hw,
+				   "l3-master-dev",
+				   &ethqos->io_macro.l3_master_dev);
+	if (ret) {
+		ETHQOSDBG("default l3_master_dev\n");
+		ethqos->io_macro.l3_master_dev = 0;
+	}
+
+	ret = of_property_read_u32(np_hw,
+				   "ipv6-wq",
+				   &ethqos->io_macro.ipv6_wq);
+	if (ret) {
+		ETHQOSDBG("default ipv6_wq\n");
+		ethqos->io_macro.ipv6_wq = 0;
+	}
+
 }
 
 static void qcom_ethqos_bringup_iface(struct work_struct *work)
@@ -1928,7 +1945,7 @@ static void ethqos_set_early_eth_param(struct stmmac_priv *priv,
 	if (pparams.is_valid_ipv6_addr) {
 		INIT_DELAYED_WORK(&ethqos->ipv6_addr_assign_wq,
 				  ethqos_is_ipv6_NW_stack_ready);
-		if (ethqos->emac_ver == EMAC_HW_v2_3_1) {
+		if (ethqos->io_macro.ipv6_wq) {
 			schedule_delayed_work(&ethqos->ipv6_addr_assign_wq,
 					      msecs_to_jiffies(1000));
 		} else {
@@ -2250,12 +2267,15 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	place_marker("M - Ethernet probe start");
 #endif
 
+#if IS_ENABLED(CONFIG_IPC_LOGGING)
 	ipc_emac_log_ctxt = ipc_log_context_create(IPCLOG_STATE_PAGES,
 						   "emac", 0);
 	if (!ipc_emac_log_ctxt)
 		ETHQOSERR("Error creating logging context for emac\n");
 	else
 		ETHQOSINFO("IPC logging has been enabled for emac\n");
+#endif
+
 	ret = stmmac_get_platform_resources(pdev, &stmmac_res);
 	if (ret)
 		return ret;
@@ -2451,8 +2471,7 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 
 #ifdef CONFIG_NET_L3_MASTER_DEV
 	if (ethqos->early_eth_enabled &&
-	    (ethqos->emac_ver == EMAC_HW_v2_1_2 || ethqos->emac_ver == EMAC_HW_v2_1_1 ||
-	    ethqos->emac_ver == EMAC_HW_v2_3_1)) {
+	    ethqos->io_macro.l3_master_dev) {
 		ETHQOSINFO("l3mdev_op1 set\n");
 		ndev->priv_flags = IFF_L3MDEV_MASTER;
 		ndev->l3mdev_ops = &l3mdev_op1;
