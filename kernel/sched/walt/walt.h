@@ -226,10 +226,10 @@ extern int cpu_boost_init(void);
 static inline int cpu_boost_init(void) { }
 #endif
 
-extern bool walt_try_pull_rt_task(struct rq *this_rq);
 extern void walt_fixup_nr_big_tasks(struct rq *rq, struct task_struct *p,
 					int delta, bool inc);
 
+extern bool walt_try_pull_rt_task(struct rq *this_rq);
 #else /* CONFIG_SCHED_WALT */
 
 static inline void walt_sched_init_rq(struct rq *rq) { }
