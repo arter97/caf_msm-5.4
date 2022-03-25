@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"QBG_K: %s: " fmt, __func__
@@ -110,6 +111,10 @@
 #define MILLI_TO_10NANO				100000
 #define MICRO_TO_10NANO				100
 #define MILLI_TO_MICRO				1000
+
+enum qbg_esr_fcc_reduction {
+	REDUCE_TO_150MA = 0x6,
+};
 
 static int qbg_debug_mask;
 
@@ -841,6 +846,19 @@ static int qbg_init_sdam(struct qti_qbg *chip)
 	return rc;
 }
 
+static int qbg_init_esr(struct qti_qbg *chip)
+{
+	int rc = 0;
+	u8 val = REDUCE_TO_150MA;
+
+	rc = qbg_sdam_write(chip,
+		QBG_SDAM_BASE(chip, SDAM_CTRL0) + QBG_ESR_PULSE_FCC_REDUCE_OFFSET, &val, 1);
+	if (rc < 0)
+		pr_err("Failed to write QBG ESR pulse FCC reduction offset, rc=%d\n", rc);
+
+	return rc;
+}
+
 static int qbg_force_fast_char(struct qti_qbg *chip, bool force)
 {
 	int rc = 0;
@@ -858,6 +876,33 @@ static int qbg_handle_fast_char(struct qti_qbg *chip)
 {
 	int rc = 0;
 	ktime_t now;
+	u8 *data;
+	ssize_t len = 0;
+
+	if (chip->skip_esr_state) {
+		data = nvmem_cell_read(chip->skip_esr_state, &len);
+		if (IS_ERR(data)) {
+			pr_err("Failed to read skip_esr_state from SDAM\n");
+			return PTR_ERR(data);
+		}
+
+		if (*data) {
+			qbg_dbg(chip, QBG_DEBUG_STATUS, "skip_esr=1 in_fast_char=%d\n",
+				chip->in_fast_char);
+
+			if (chip->in_fast_char) {
+				rc = qbg_force_fast_char(chip, false);
+				if (rc < 0) {
+					pr_err("Failed to get out of fast char mode, rc=%d\n",
+						rc);
+					return rc;
+				}
+				chip->in_fast_char = false;
+			}
+
+			return 0;
+		}
+	}
 
 	if (chip->in_fast_char) {
 		rc = qbg_force_fast_char(chip, false);
@@ -2438,8 +2483,20 @@ static int qbg_parse_dt(struct qti_qbg *chip)
 				dev_err(chip->dev, "Failed to get nvmem-cells, rc=%d\n", rc);
 			return rc;
 		}
+
+		chip->skip_esr_state = devm_nvmem_cell_get(chip->dev, "skip_esr_state");
+		if (IS_ERR(chip->skip_esr_state)) {
+			rc = PTR_ERR(chip->skip_esr_state);
+			if (rc != -EPROBE_DEFER) {
+				dev_dbg(chip->dev, "Failed to get skip_esr_state, rc=%d\n", rc);
+				chip->skip_esr_state = NULL;
+				goto exit;
+			}
+			return rc;
+		}
 	}
 
+exit:
 	return 0;
 }
 
@@ -2550,6 +2607,12 @@ static int qti_qbg_probe(struct platform_device *pdev)
 	rc = qbg_init_sdam(chip);
 	if (rc < 0) {
 		dev_err(&pdev->dev, "Failed to initialize QBG sdam, rc=%d\n", rc);
+		return rc;
+	}
+
+	rc = qbg_init_esr(chip);
+	if (rc < 0) {
+		dev_err(&pdev->dev, "Failed to initialize QBG ESR, rc=%d\n", rc);
 		return rc;
 	}
 
