@@ -2340,28 +2340,21 @@ static int _mmc_suspend(struct mmc_host *host, bool is_suspend)
 	if (mmc_can_poweroff_notify(host->card) &&
 		((host->caps2 & MMC_CAP2_FULL_PWR_CYCLE) || !is_suspend))
 		err = mmc_poweroff_notify(host->card, notify_type);
-	if (mmc_can_sleep(host->card)) {
+	if (mmc_can_sleep(host->card) && !host->deepsleep) {
 #if defined(CONFIG_SDC_QTI)
 		memcpy(&host->cached_ios, &host->ios, sizeof(host->cached_ios));
 #endif
 		mmc_cache_card_ext_csd(host);
 	}
-	if (mmc_can_sleep(host->card) && !host->deepsleep)
+	if (mmc_can_sleep(host->card))
 		err = mmc_sleepawake(host, true);
 	else if (!mmc_host_is_spi(host))
 		err = mmc_deselect_cards(host);
 
 	if (!err) {
-		if (is_suspend && !host->deepsleep)
+		if (is_suspend)
 			mmc_power_off(host);
 		mmc_card_set_suspended(host->card);
-	}
-	if (host->deepsleep) {
-		if (host->cqe_enabled) {
-			host->cqe_ops->cqe_disable(host);
-			host->cqe_enabled = false;
-		}
-		host->ios.power_mode = MMC_POWER_OFF;
 	}
 out:
 	mmc_log_string(host, "Exit err: %d\n", err);
@@ -2474,7 +2467,7 @@ static int _mmc_resume(struct mmc_host *host)
 				mmc_hostname(host), __func__, err);
 	}
 
-	if (err)
+	if (err || host->deepsleep)
 		err = mmc_init_card(host, host->card->ocr, host->card);
 
 	mmc_card_clr_suspended(host->card);
@@ -2491,7 +2484,6 @@ out:
 			mmc_hostname(host), __func__, err);
 out:
 #endif
-	host->deepsleep = false;
 	mmc_log_string(host, "Exit err %d\n", err);
 	return err;
 }
