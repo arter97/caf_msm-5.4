@@ -628,7 +628,16 @@ static ssize_t slatecom_char_write(struct file *f, const char __user *buf,
 		if (ret < 0)
 			pr_err("MSM QCLI Enable cmd failed\n");
 		break;
-
+	case '2':
+		ret = subsystem_start_notify(ssr_domains[0]);
+		if (ret < 0)
+			pr_err("subsystem start notify cmd failed\n");
+		break;
+	case '3':
+		ret = subsystem_stop_notify(ssr_domains[0]);
+		if (ret < 0)
+			pr_err("subsystem stop notify cmd failed\n");
+		break;
 	default:
 		pr_err("MSM QCLI Invalid Option\n");
 		break;
@@ -863,6 +872,11 @@ static int ssr_adsp_cb(struct notifier_block *this,
 		ret = slatecom_tx_msg(dev, &(msg_header.opcode), sizeof(msg_header.opcode));
 		if (ret < 0)
 			pr_err("failed to send adsp down event to slate\n");
+
+		msg_header.opcode = 250;
+		ret = slatecom_tx_msg(dev, &(msg_header.opcode), sizeof(msg_header.opcode));
+		if (ret < 0)
+			pr_err("failed to send adsp down dummy opcode to slate\n");
 		break;
 	case SUBSYS_BEFORE_SHUTDOWN:
 		adspe.e_type = ADSP_BEFORE_POWER_DOWN;
@@ -874,6 +888,11 @@ static int ssr_adsp_cb(struct notifier_block *this,
 			pr_err("failed to send adsp up event to slate\n");
 		break;
 	case SUBSYS_AFTER_DS_EXIT:
+		msg_header.opcode = 251;
+		ret = slatecom_tx_msg(dev, &(msg_header.opcode), sizeof(msg_header.opcode));
+		if (ret < 0)
+			pr_err("failed to send adsp up dummy opcode to slate\n");
+
 		msg_header.opcode = GMI_MGR_SSR_ADSP_UP_INDICATION;
 		ret = slatecom_tx_msg(dev, &(msg_header.opcode), sizeof(msg_header.opcode));
 		if (ret < 0)
