@@ -1067,7 +1067,7 @@ static void process_tzcb_req(void *buf, size_t buf_len, struct file **arr_filp)
 	struct smcinvoke_server_info *srvr_info = NULL;
 
 	if (buf_len < sizeof(struct smcinvoke_tzcb_req)) {
-		pr_err("smaller buffer length : %u\n", buf_len);
+		pr_debug("smaller buffer length : %u\n", buf_len);
 		return;
 	}
 
@@ -1079,7 +1079,7 @@ static void process_tzcb_req(void *buf, size_t buf_len, struct file **arr_filp)
 	} else if (TZHANDLE_IS_MEM_OBJ(cb_req->hdr.tzhandle)) {
 		return process_mem_obj(buf, buf_len);
 	} else if (!TZHANDLE_IS_CB_OBJ(cb_req->hdr.tzhandle)) {
-		pr_err("Request object is not a callback object\n");
+		pr_debug("Request object is not a callback object\n");
 		cb_req->result = OBJECT_ERROR_INVALID;
 		return;
 	}
@@ -1125,9 +1125,9 @@ static void process_tzcb_req(void *buf, size_t buf_len, struct file **arr_filp)
 	if (!srvr_info || srvr_info->state == SMCINVOKE_SERVER_STATE_DEFUNCT) {
 		/* ret equals Object_ERROR_DEFUNCT, at this point go to out */
 		if (!srvr_info)
-			pr_err("server is invalid\n");
+			pr_debug("server is invalid\n");
 		else {
-			pr_err("server is defunct, state= %d tzhandle = %d\n",
+			pr_debug("server is defunct, state= %d tzhandle = %d\n",
 				srvr_info->state, cb_req->hdr.tzhandle);
 		}
 		mutex_unlock(&g_smcinvoke_lock);
@@ -1156,9 +1156,9 @@ static void process_tzcb_req(void *buf, size_t buf_len, struct file **arr_filp)
 			timeout_jiff);
 
 		if (ret == 0) {
-			pr_err("CBobj timed out cb-tzhandle:%d, retry:%d, op:%d counts :%d\n",
+			pr_debug("CBobj timed out cb-tzhandle:%d, retry:%d, op:%d counts :%d\n",
 			cb_req->hdr.tzhandle, cbobj_retries, cb_req->hdr.op, cb_req->hdr.counts);
-			pr_err("CBobj %d timedout pid %x,tid %x, srvr state=%d, srvr id:%u\n",
+			pr_debug("CBobj %d timedout pid %x,tid %x, srvr state=%d, srvr id:%u\n",
 			cb_req->hdr.tzhandle, current->pid, current->tgid, srvr_info->state,
 			srvr_info->server_id);
 		} else {
@@ -1176,10 +1176,10 @@ out:
 	mutex_lock(&g_smcinvoke_lock);
 	hash_del(&cb_txn->hash);
 	if (ret == 0) {
-		pr_err("CBObj timed out! No more retries\n");
+		pr_debug("CBObj timed out! No more retries\n");
 		cb_req->result = Object_ERROR_TIMEOUT;
 	} else if (ret == -ERESTARTSYS) {
-		pr_err("wait event interruped, ret: %d\n", ret);
+		pr_debug("wait event interruped, ret: %d\n", ret);
 		cb_req->result = OBJECT_ERROR_ABORT;
 	} else {
 		if (cb_txn->state == SMCINVOKE_REQ_PROCESSED) {
@@ -1190,9 +1190,9 @@ out:
 		} else if (!srvr_info ||
 			srvr_info->state == SMCINVOKE_SERVER_STATE_DEFUNCT) {
 			cb_req->result = OBJECT_ERROR_DEFUNCT;
-			pr_err("server invalid, res: %d\n", cb_req->result);
+			pr_debug("server invalid, res: %d\n", cb_req->result);
 		} else {
-			pr_err("%s: unexpected event happened, ret:%d\n", __func__, ret);
+			pr_debug("%s: unexpected event happened, ret:%d\n", __func__, ret);
 			cb_req->result = OBJECT_ERROR_ABORT;
 		}
 	}
@@ -1321,7 +1321,7 @@ static int prepare_send_scm_msg(const uint8_t *in_buf, phys_addr_t in_paddr,
 				&data, in_shm, out_shm);
 
 			if (ret == -EBUSY) {
-				pr_err("Secure side is busy,will retry after 30 ms\n");
+				pr_debug("Secure side is busy,will retry after 30 ms\n");
 				mutex_unlock(&g_smcinvoke_lock);
 				msleep(SMCINVOKE_SCM_EBUSY_WAIT_MS);
 				mutex_lock(&g_smcinvoke_lock);
