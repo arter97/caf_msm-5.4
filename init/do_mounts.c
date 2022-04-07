@@ -623,8 +623,6 @@ static int prefetch_thread(void *unused)
 	cpumask_set_cpu((thread_num%4)+4, &cpumask);
 	if (sched_setaffinity(0, &cpumask))
 		printk("sched_setaffinity fails\n");
-	if (set_task_ioprio(current, IOPRIO_PRIO_VALUE(IOPRIO_CLASS_IDLE, 0)))
-		printk("set_task_ioprio fails\n");
 
 	buf = kzalloc(PREFETCH_BUF_LEN, GFP_KERNEL);
 	printk("prefetchs%d %d\n", thread_num, smp_processor_id());
