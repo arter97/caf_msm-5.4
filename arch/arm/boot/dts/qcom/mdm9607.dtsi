@@ -21,7 +21,7 @@
 	model = "Qualcomm Technologies, Inc. MDM 9607";
 	compatible = "qcom,mdm9607";
 	qcom,msm-id = <290 0x10000>, <296 0x10000>, <297 0x10000>,
-		      <298 0x10000>, <299 0x10000>;
+		      <298 0x10000>, <299 0x10000>, <572 0x10000>;
 	interrupt-parent = <&intc>;
 
 	aliases {
