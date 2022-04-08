@@ -263,15 +263,16 @@ static int __init dm_parse_devices(struct list_head *devices, char *str)
 /**
  * dm_init_init - parse "dm-mod.create=" argument and configure drivers
  */
-int __init dm_init_init(void)
+int __init dm_init_init(char *blkname)
 {
 	struct dm_device *dev;
 	LIST_HEAD(devices);
 	char *str;
 	int r;
 
-	if (!create)
-		return 0;
+	if (!create || !blkname || !strstr(create, blkname))
+		return -ENODEV;
+	DMINFO("creating mapped device on %s", blkname);
 
 	if (strlen(create) >= DM_MAX_STR_SIZE) {
 		DMERR("Argument is too big. Limit is %d", DM_MAX_STR_SIZE);

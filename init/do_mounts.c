@@ -734,17 +734,17 @@ out:
 	first_time = 0;
 }
 
-extern int __init dm_init_init(void);
+extern int __init dm_init_init(char *blkname);
 
 void __init early_prepare_namespace(char *name)
 {
 
 	if (strstr(saved_root_name, name))
 		prepare_namespace();
-	else if (strstr(saved_root_name, "dm-0") &&
-		(strstr("vda", name) || strstr("system", name))) {
-		dm_init_init();
-		prepare_namespace();
+	else if (strstr(saved_root_name, "dm-0")) {
+		/* call prepare_namespace depends on rootfs blkname. */
+		if (!dm_init_init(name))
+			prepare_namespace();
 	}
 }
 
