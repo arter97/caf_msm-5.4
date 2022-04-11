@@ -130,7 +130,7 @@ static int rpmb_virtio_cmd_seq(struct device *dev, u8 target,
 	vio_cmd->result = 0;
 	vio_cmd->target = target;
 	sg_init_one(&vio_ioc, vio_cmd, sizeof(*vio_cmd));
-	sgs[num_out + num_in++] = &vio_ioc;
+	sgs[num_out++ + num_in] = &vio_ioc;
 #ifdef DEBUG
 	pr_debug("RPMB vio_cmd (size = %zu):\n", sizeof(*vio_cmd));
 	virtio_rpmb_hexdump(vio_cmd, sizeof(*vio_cmd), 0u);
@@ -144,7 +144,7 @@ static int rpmb_virtio_cmd_seq(struct device *dev, u8 target,
 		seq_cmd->cmds[i].frames_ptr = i;
 	}
 	sg_init_one(&vio_seq, seq_cmd, seq_cmd_sz);
-	sgs[num_out + num_in++] = &vio_seq;
+	sgs[num_out++ + num_in] = &vio_seq;
 #ifdef DEBUG
 	pr_debug("RPMB seq_cmd (size = %zu):\n", seq_cmd_sz);
 	virtio_rpmb_hexdump(seq_cmd, seq_cmd_sz, 0u);
@@ -153,7 +153,7 @@ static int rpmb_virtio_cmd_seq(struct device *dev, u8 target,
 	for (i = 0; i < ncmds; i++) {
 		sz = sizeof(struct rpmb_frame_jdec) * (cmds[i].nframes ?: 1);
 		sg_init_one(&frame[i], cmds[i].frames, sz);
-		sgs[num_out + num_in++] = &frame[i];
+
 #ifdef DEBUG
 		rpmb_frame_jdec = cmds[i].frames;
 		req_type = be16_to_cpu(rpmb_frame_jdec->req_resp);
@@ -161,6 +161,11 @@ static int rpmb_virtio_cmd_seq(struct device *dev, u8 target,
 		pr_debug("RPMB frame %u (size = %zu):\n", i, sz);
 		virtio_rpmb_hexdump(cmds[i].frames, sz, 0u);
 #endif
+
+		if (cmds[i].flags & RPMB_F_WRITE)
+			sgs[num_out++ + num_in] = &frame[i];
+		else
+			sgs[num_out + num_in++] = &frame[i];
 	}
 
 	virtqueue_add_sgs(vi->vq, sgs, num_out, num_in, vi, GFP_KERNEL);
