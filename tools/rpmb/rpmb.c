@@ -717,6 +717,7 @@ static int op_rpmb_read_blocks(int nargs, char **argv)
 		if (ret < 0)
 			goto out;
 	}
+	ret = 0;
 
 out:
 	free(frame_in);
