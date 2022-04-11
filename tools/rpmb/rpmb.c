@@ -292,7 +292,7 @@ static int rpmb_calc_hmac_sha256(struct rpmb_frame_jdec *frames,
 	if (ret == 0)
 		goto out;
 	for (i = 0; i < blocks_cnt; i++)
-		HMAC_Update(&ctx, frames[i].data, hmac_data_len);
+		HMAC_Update(&ctx, frames[i].data, rpmb_jdec_hmac_data_len);
 
 	ret = HMAC_Final(&ctx, mac, &mac_size);
 	if (ret == 0)

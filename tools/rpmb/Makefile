@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: GPL-2.0
 include ../scripts/Makefile.include
 
-CC ?= $(CROSS_COMPILE)gcc
-LD ?= $(CROSS_COMPILE)ld
+CC = $(CROSS_COMPILE)gcc
+LD = $(CROSS_COMPILE)ld
+ifneq (,$(wildcard $(CROSS_COMPILE)pkg-config))
 PKG_CONFIG = $(CROSS_COMPILE)pkg-config
+endif
 
 ifeq ($(srctree),)
 srctree := $(patsubst %/,%,$(dir $(shell pwd)))
@@ -25,7 +27,15 @@ CFLAGS +=  -pthread -static
 PKG_STATIC = --static
 endif
 CFLAGS += -I$(srctree)/include/uapi -I$(srctree)/include
+ifneq ($(SYSROOT),)
+CFLAGS += --sysroot=$(SYSROOT)
+LDLIBS += --sysroot=$(SYSROOT)
+endif
+ifneq ($(PKG_CONFIG),)
 LDLIBS += $(shell $(PKG_CONFIG) --libs $(PKG_STATIC) libcrypto)
+else
+LDLIBS += -lcrypto
+endif
 
 prog := rpmb
 
