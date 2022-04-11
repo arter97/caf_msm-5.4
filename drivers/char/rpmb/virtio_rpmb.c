@@ -16,12 +16,26 @@
 #include <linux/uaccess.h>
 #include <linux/rpmb.h>
 
+/*
+ * Set to get an OASIS virtio draft spec compliant virtio RPMB driver.
+ * The macro may be removed later and treated as always been set.
+ */
+#define VIRTIO_RPMB_DRAFT_SPEC
+
 static const char id[] = "RPMB:VIRTIO";
 #ifndef VIRTIO_ID_RPMB
 #define	VIRTIO_ID_RPMB		28
 #endif
 
 #define RPMB_SEQ_CMD_MAX 3  /* support up to 3 cmds */
+
+#ifdef VIRTIO_RPMB_DRAFT_SPEC
+struct virtio_rpmb_config {
+	u8 capacity;
+	u8 max_wr_cnt;
+	u8 max_rd_cnt;
+};
+#endif
 
 struct virtio_rpmb_info {
 	struct virtqueue *vq;
@@ -241,7 +255,16 @@ out:
 
 static int rpmb_virtio_get_capacity(struct device *dev, u8 target)
 {
+#ifdef VIRTIO_RPMB_DRAFT_SPEC
+	struct virtio_device *vdev = dev_to_virtio(dev);
+	u8 capacity;
+
+	virtio_cread(vdev, struct virtio_rpmb_config, capacity, &capacity);
+	pr_debug("Config capacity = %u [128K units]\n", capacity);
+	return capacity;
+#else
 	return 0;
+#endif
 }
 
 static struct rpmb_ops rpmb_virtio_ops = {
