@@ -37,6 +37,44 @@ struct virtio_rpmb_ioc {
 	u8 reserved[3];
 };
 
+#ifdef DEBUG
+static void virtio_rpmb_hexdump(const void *data, size_t length, size_t base)
+{
+	const unsigned int max_bytes_per_line = 16u;
+	const char *cdata = data;
+	char *bp;
+	size_t offset = 0u;
+	unsigned int per_line = max_bytes_per_line;
+	unsigned int col;
+	int c;
+	char buf[32u + 4u * max_bytes_per_line];
+
+	do {
+		bp = &buf[0];
+		bp += scnprintf(bp, PAGE_SIZE, "%zX", base + offset);
+		if (length > 0u) {
+			if (per_line > length)
+				per_line = (unsigned int)length;
+			for (col = 0u; col < per_line; col++) {
+				c = cdata[offset + col] & 0xff;
+				bp += scnprintf(bp, PAGE_SIZE, " %02X", c);
+			}
+			bp += scnprintf(bp, PAGE_SIZE, "");
+			for (col = 0u; col < per_line; col++) {
+				c = cdata[offset + col] & 0xff;
+				if (c < 32 || c >=  127)
+					c = '.';
+				bp += scnprintf(bp, PAGE_SIZE, "%c", c);
+			}
+
+			offset += per_line;
+			length -= per_line;
+		}
+		pr_debug("%s\n", buf);
+	} while (length > 0u);
+}
+#endif
+
 static void virtio_rpmb_recv_done(struct virtqueue *vq)
 {
 	struct virtio_rpmb_info *vi;
@@ -66,6 +104,10 @@ static int rpmb_virtio_cmd_seq(struct device *dev, u8 target,
 	size_t sz;
 	int ret;
 	unsigned int len;
+#ifdef DEBUG
+	struct rpmb_frame_jdec *rpmb_frame_jdec;
+	u16 req_type;
+#endif
 
 	if (ncmds > RPMB_SEQ_CMD_MAX)
 		return -EINVAL;
@@ -89,7 +131,12 @@ static int rpmb_virtio_cmd_seq(struct device *dev, u8 target,
 	vio_cmd->target = target;
 	sg_init_one(&vio_ioc, vio_cmd, sizeof(*vio_cmd));
 	sgs[num_out + num_in++] = &vio_ioc;
+#ifdef DEBUG
+	pr_debug("RPMB vio_cmd (size = %zu):\n", sizeof(*vio_cmd));
+	virtio_rpmb_hexdump(vio_cmd, sizeof(*vio_cmd), 0u);
+#endif
 
+	pr_debug("ncmds = %u\n", ncmds);
 	seq_cmd->num_of_cmds = ncmds;
 	for (i = 0; i < ncmds; i++) {
 		seq_cmd->cmds[i].flags   = cmds[i].flags;
@@ -98,11 +145,22 @@ static int rpmb_virtio_cmd_seq(struct device *dev, u8 target,
 	}
 	sg_init_one(&vio_seq, seq_cmd, seq_cmd_sz);
 	sgs[num_out + num_in++] = &vio_seq;
+#ifdef DEBUG
+	pr_debug("RPMB seq_cmd (size = %zu):\n", seq_cmd_sz);
+	virtio_rpmb_hexdump(seq_cmd, seq_cmd_sz, 0u);
+#endif
 
 	for (i = 0; i < ncmds; i++) {
 		sz = sizeof(struct rpmb_frame_jdec) * (cmds[i].nframes ?: 1);
 		sg_init_one(&frame[i], cmds[i].frames, sz);
 		sgs[num_out + num_in++] = &frame[i];
+#ifdef DEBUG
+		rpmb_frame_jdec = cmds[i].frames;
+		req_type = be16_to_cpu(rpmb_frame_jdec->req_resp);
+		pr_debug("req_type frame[%u] = 0x%04X\n", i, req_type);
+		pr_debug("RPMB frame %u (size = %zu):\n", i, sz);
+		virtio_rpmb_hexdump(cmds[i].frames, sz, 0u);
+#endif
 	}
 
 	virtqueue_add_sgs(vi->vq, sgs, num_out, num_in, vi, GFP_KERNEL);
@@ -124,6 +182,7 @@ out:
 	return ret;
 }
 
+#if 0 /* This function is *never* used, compiler complains */
 static int rpmb_virtio_cmd_cap(struct device *dev, u8 target)
 {
 	struct virtio_device *vdev = dev_to_virtio(dev);
@@ -173,6 +232,7 @@ out:
 	mutex_unlock(&vi->lock);
 	return ret;
 }
+#endif /* #if 0 */
 
 static int rpmb_virtio_get_capacity(struct device *dev, u8 target)
 {
