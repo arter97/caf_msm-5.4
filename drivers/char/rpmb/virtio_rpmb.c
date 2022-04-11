@@ -18,7 +18,7 @@
 
 static const char id[] = "RPMB:VIRTIO";
 #ifndef VIRTIO_ID_RPMB
-#define	VIRTIO_ID_RPMB		0xFFFF
+#define	VIRTIO_ID_RPMB		28
 #endif
 
 #define RPMB_SEQ_CMD_MAX 3  /* support up to 3 cmds */
