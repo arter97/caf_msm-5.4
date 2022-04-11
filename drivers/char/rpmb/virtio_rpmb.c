@@ -109,11 +109,16 @@ static int rpmb_virtio_cmd_seq(struct device *dev, u8 target,
 	struct virtio_device *vdev = dev_to_virtio(dev);
 	struct virtio_rpmb_info *vi = vdev->priv;
 	unsigned int i;
+#ifndef VIRTIO_RPMB_DRAFT_SPEC
 	struct virtio_rpmb_ioc *vio_cmd = NULL;
 	struct rpmb_ioc_seq_cmd *seq_cmd = NULL;
 	size_t seq_cmd_sz;
 	struct scatterlist vio_ioc, vio_seq, frame[3];
 	struct scatterlist *sgs[5];
+#else
+	struct scatterlist frame[3];
+	struct scatterlist *sgs[3];
+#endif
 	unsigned int num_out = 0, num_in = 0;
 	size_t sz;
 	int ret;
@@ -129,9 +134,10 @@ static int rpmb_virtio_cmd_seq(struct device *dev, u8 target,
 	mutex_lock(&vi->lock);
 	if (IS_ERR(vi->vq)) {
 		ret = PTR_ERR(vi->vq);
-		goto out;
+		goto unlock_and_out;
 	}
 
+#ifndef VIRTIO_RPMB_DRAFT_SPEC
 	vio_cmd = kzalloc(sizeof(*vio_cmd), GFP_KERNEL);
 	seq_cmd_sz = sizeof(*seq_cmd) + sizeof(struct rpmb_ioc_cmd) * ncmds;
 	seq_cmd = kzalloc(seq_cmd_sz, GFP_KERNEL);
@@ -163,6 +169,7 @@ static int rpmb_virtio_cmd_seq(struct device *dev, u8 target,
 	pr_debug("RPMB seq_cmd (size = %zu):\n", seq_cmd_sz);
 	virtio_rpmb_hexdump(seq_cmd, seq_cmd_sz, 0u);
 #endif
+#endif /* #ifndef VIRTIO_RPMB_DRAFT_SPEC */
 
 	for (i = 0; i < ncmds; i++) {
 		sz = sizeof(struct rpmb_frame_jdec) * (cmds[i].nframes ?: 1);
@@ -189,6 +196,7 @@ static int rpmb_virtio_cmd_seq(struct device *dev, u8 target,
 
 	ret = 0;
 
+#ifndef VIRTIO_RPMB_DRAFT_SPEC
 	if (vio_cmd->result != 0) {
 		dev_err(dev, "Error: command error = %d.\n", vio_cmd->result);
 		ret = -EIO;
@@ -197,6 +205,8 @@ static int rpmb_virtio_cmd_seq(struct device *dev, u8 target,
 out:
 	kfree(vio_cmd);
 	kfree(seq_cmd);
+#endif
+unlock_and_out:
 	mutex_unlock(&vi->lock);
 	return ret;
 }
