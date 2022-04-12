@@ -43,9 +43,10 @@
 #define HED_EVENT_DATA_STRT_LEN (0x05)
 #define CMA_BFFR_POOL_SIZE (128*1024)
 
-#define SLATE_OK_SLP_RBSC      BIT(30)
-#define SLATE_OK_SLP_S2R       BIT(31)
-#define SLATE_OK_SLP_S2D      (BIT(31) | BIT(30))
+#define SLATE_OK_SLP_RBSC      BIT(24)
+#define SLATE_OK_SLP_S2R       BIT(25)
+#define SLATE_OK_SLP_S2D      (BIT(25) | BIT(24))
+#define SLATE_OK_SLP_SIF       BIT(26)
 
 #define WR_PROTOCOL_OVERHEAD              (5)
 #define WR_PROTOCOL_OVERHEAD_IN_WORDS     (2)
@@ -135,6 +136,7 @@ struct event_list {
 };
 static void *slate_com_drv;
 static uint32_t g_slav_status_reg;
+static bool is_hibernate;
 
 /* SLATECOM client callbacks set-up */
 static void send_input_events(struct work_struct *work);
@@ -676,14 +678,18 @@ static int slatecom_resume_l(void *handle)
 		goto unlock;
 	}
 	if (!is_slate_resume(handle)) {
-		if (atomic_read(&ok_to_sleep)) {
+		if (atomic_read(&ok_to_sleep) == 1) {
 			reinit_completion(&slate_resume_wait);
 			ret = wait_for_completion_timeout(
 				&slate_resume_wait, msecs_to_jiffies(
 					SLATE_RESUME_IRQ_TIMEOUT));
 			if (!ret) {
-				SLATECOM_ERR("Time out on Slate Resume\n");
-				goto error;
+				if (atomic_read(&ok_to_sleep) == 1) {
+					SLATECOM_ERR("Time out on Slate Resume\n");
+					goto error;
+				} else {
+					SLATECOM_INFO("Received interrupt\n");
+				}
 			}
 		}
 	}
@@ -1294,6 +1300,33 @@ static void slate_spi_init(struct slate_spi_priv *slate_spi)
 
 }
 
+static int slatecom_pm_notifier(struct notifier_block *nb, unsigned long event, void *unused)
+{
+	switch (event) {
+#ifdef CONFIG_HIBERNATION
+
+	case PM_HIBERNATION_PREPARE:
+		pr_err("Hibernate entry\n");
+		is_hibernate = true;
+		break;
+
+	case PM_POST_HIBERNATION:
+		pr_err("Hibernate exit\n");
+		is_hibernate = false;
+		break;
+#endif
+
+	default:
+		WARN_ONCE(1, "Default case: PM Notifier\n");
+		break;
+	}
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block slatecom_pm_nb = {
+		.notifier_call = slatecom_pm_notifier,
+};
+
 static int slate_spi_probe(struct spi_device *spi)
 {
 	struct slate_spi_priv *slate_spi;
@@ -1334,7 +1367,7 @@ static int slate_spi_probe(struct spi_device *spi)
 
 	slate_irq = gpio_to_irq(irq_gpio);
 	ret = request_threaded_irq(slate_irq, NULL, slate_irq_tasklet_hndlr,
-		IRQF_TRIGGER_HIGH | IRQF_ONESHOT, "qcom-slate_spi", slate_spi);
+		IRQF_TRIGGER_HIGH | IRQF_ONESHOT | IRQF_NO_SUSPEND, "qcom-slate_spi", slate_spi);
 
 	if (ret)
 		goto err_ret;
@@ -1352,6 +1385,12 @@ static int slate_spi_probe(struct spi_device *spi)
 	pm_runtime_enable(&spi->dev);
 	pm_runtime_set_autosuspend_delay(&spi->dev, SLATE_SPI_AUTOSUSPEND_TIMEOUT);
 	pm_runtime_use_autosuspend(&spi->dev);
+
+	ret = register_pm_notifier(&slatecom_pm_nb);
+	if (ret) {
+		pr_err("slatecom notif error %d\n", ret);
+		goto err_ret;
+	}
 
 	pr_info("%s success\n", __func__);
 	pr_info("Slatecom Probed successfully\n");
@@ -1376,6 +1415,7 @@ static int slate_spi_remove(struct spi_device *spi)
 		kfree(fxd_mem_buffer);
 	mutex_destroy(&cma_buffer_lock);
 	mutex_destroy(&slate_task_mutex);
+	unregister_pm_notifier(&slatecom_pm_nb);
 	return 0;
 }
 
@@ -1400,7 +1440,10 @@ static int slatecom_pm_prepare(struct device *dev)
 		return 0;
 	}
 
-	if (mem_sleep_current == PM_SUSPEND_MEM)
+	if (is_hibernate)
+		cmnd_reg |= SLATE_OK_SLP_S2D;
+
+	else if (mem_sleep_current == PM_SUSPEND_MEM)
 		cmnd_reg |= SLATE_OK_SLP_S2R;
 	else
 		cmnd_reg |= SLATE_OK_SLP_RBSC;
@@ -1426,6 +1469,10 @@ static void slatecom_pm_complete(struct device *dev)
 
 static int slatecom_pm_suspend(struct device *dev)
 {
+	struct spi_device *s_dev = to_spi_device(dev);
+	struct slate_spi_priv *slate_spi = spi_get_drvdata(s_dev);
+	int ret = 0;
+
 	if (atomic_read(&state) == SLATECOM_STATE_SUSPEND)
 		return 0;
 
@@ -1439,6 +1486,10 @@ static int slatecom_pm_suspend(struct device *dev)
 	atomic_set(&slate_is_runtime_suspend, 0);
 	atomic_set(&ok_to_sleep, 1);
 
+	free_irq(slate_irq, slate_spi);
+	ret = request_threaded_irq(slate_irq, NULL, slate_irq_tasklet_hndlr,
+		IRQF_TRIGGER_RISING | IRQF_ONESHOT, "qcom-slate_spi", slate_spi);
+
 	SLATECOM_INFO("suspended\n");
 	return 0;
 }
@@ -1449,6 +1500,10 @@ static int slatecom_pm_resume(struct device *dev)
 	int ret;
 	struct slate_spi_priv *spi =
 		container_of(slate_com_drv, struct slate_spi_priv, lhandle);
+
+	free_irq(slate_irq, spi);
+	ret = request_threaded_irq(slate_irq, NULL, slate_irq_tasklet_hndlr,
+		IRQF_TRIGGER_HIGH | IRQF_ONESHOT, "qcom-slate_spi", spi);
 
 	if (atomic_read(&spi->irq_lock) == 1) {
 		atomic_set(&slate_is_spi_active, 1);
@@ -1495,7 +1550,7 @@ static int slatecom_pm_runtime_suspend(struct device *dev)
 	if (mem_sleep_current == PM_SUSPEND_MEM)
 		cmnd_reg |= SLATE_OK_SLP_S2R;
 	else
-		cmnd_reg |= SLATE_OK_SLP_RBSC;
+		cmnd_reg |= SLATE_OK_SLP_SIF;
 
 	ret = slatecom_reg_write_cmd(&clnt_handle, SLATE_CMND_REG,
 					1, &cmnd_reg);
@@ -1539,39 +1594,25 @@ static int slatecom_pm_runtime_resume(struct device *dev)
 static int slatecom_pm_freeze(struct device *dev)
 {
 	struct slate_context clnt_handle;
-	uint32_t cmnd_reg = 0;
 	struct spi_device *s_dev = to_spi_device(dev);
 	struct slate_spi_priv *slate_spi = spi_get_drvdata(s_dev);
-	int ret = 0;
 
 	clnt_handle.slate_spi = slate_spi;
 	if (atomic_read(&state) == SLATECOM_STATE_HIBERNATE)
 		return 0;
-
-	if (atomic_read(&state) == SLATECOM_STATE_RUNTIME_SUSPEND) {
-		atomic_set(&state, SLATECOM_STATE_HIBERNATE);
-		atomic_set(&slate_is_spi_active, 0);
-		atomic_set(&slate_is_runtime_suspend, 0);
-		SLATECOM_INFO("suspended\n");
-		return 0;
-	}
 
 	if (!(g_slav_status_reg & BIT(31))) {
 		SLATECOM_ERR("Slate boot is not complete, skip SPI suspend\n");
 		return 0;
 	}
 
-	cmnd_reg |= SLATE_OK_SLP_S2D;
+	atomic_set(&state, SLATECOM_STATE_HIBERNATE);
+	atomic_set(&slate_is_spi_active, 0);
+	atomic_set(&slate_is_runtime_suspend, 0);
+	atomic_set(&ok_to_sleep, 1);
 
-	ret = slatecom_reg_write_cmd(&clnt_handle, SLATE_CMND_REG, 1, &cmnd_reg);
-	if (ret == 0) {
-		atomic_set(&state, SLATECOM_STATE_HIBERNATE);
-		atomic_set(&slate_is_spi_active, 0);
-		atomic_set(&slate_is_runtime_suspend, 0);
-		atomic_set(&ok_to_sleep, 1);
-	}
-	SLATECOM_INFO("freezed with : %d\n", ret);
-	return ret;
+	SLATECOM_INFO("Slatecom freezed\n");
+	return 0;
 }
 
 static int slatecom_pm_restore(struct device *dev)
@@ -1591,6 +1632,7 @@ static int slatecom_pm_restore(struct device *dev)
 		clnt_handle.slate_spi = spi;
 		atomic_set(&slate_is_spi_active, 1);
 		atomic_set(&slate_is_runtime_suspend, 0);
+		is_hibernate = false;
 		ret = slatecom_resume_l(&clnt_handle);
 		SLATECOM_INFO("Slatecom restore with : %d\n", ret);
 	}
