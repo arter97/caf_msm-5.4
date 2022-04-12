@@ -248,6 +248,9 @@ struct qcom_ethqos {
 	struct dentry *debugfs_dir;
 
 	struct ethqos_io_macro io_macro;
+	struct pinctrl *pinctrl;
+	struct pinctrl_state *rgmii_txc_suspend_state;
+	struct pinctrl_state *rgmii_txc_resume_state;
 };
 
 struct pps_cfg {
