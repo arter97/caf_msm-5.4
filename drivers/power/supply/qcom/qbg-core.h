@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __QBG_CORE_H__
@@ -83,6 +84,7 @@ enum QBG_ACCUM_INTERVAL_TYPE {
  * @indio_dev:		Pointer to QBG IIO device
  * @iio_chan:		Pointer to QBG IIO channels
  * @sdam:		Pointer to multiple QBG SDAMs
+ * @skip_esr_state:	Pointer to nvmem_cell
  * @fifo:		QBG FIFO data
  * @essential_params:	QBG essential params
  * @status_change_work:	Power supply status change work
@@ -111,6 +113,8 @@ enum QBG_ACCUM_INTERVAL_TYPE {
  * @essential_param_revid:	QBG essential parameters revision ID
  * @sample_time_us:	Array of accumulator sample time in each QBG HW state
  * @debug_mask:		Debug mask to enable/disable debug prints
+ * @adc_cmn_wb_base:	Base address of ADC_CMN_WB module
+ * @adc_cmn_base:	Base address of ADC_CMN module
  * @pon_ocv:		Power-on OCV of QBG device
  * @pon_ibat:		Power-on current of QBG device
  * @pon_soc:		Power-on SOC of QBG device
@@ -138,11 +142,13 @@ enum QBG_ACCUM_INTERVAL_TYPE {
  * @rconn_mohm:	Battery connector resistance
  * @previous_ep_time:	Previous timestamp when essential params stored
  * @current_time:	Current time stamp
+ * @rated_capacity	rated capacity of battery
  * @context_count:	Size of the last QBG context dump stored
  * @profile_loaded:	Flag to indicated battery profile is loaded
  * @battery_missing:	Flag to indicate battery is missing
  * @data_ready:		Flag to indicate QBG data is ready
  * @in_fast_char:	Flag to indicate QBG is in fast char mode
+ * @enable_fifo_depth_half	Flag to indicate QBG fifo reduce half
  */
 struct qti_qbg {
 	struct device		*dev;
@@ -159,6 +165,9 @@ struct qti_qbg {
 	struct iio_dev		*indio_dev;
 	struct iio_chan_spec	*iio_chan;
 	struct nvmem_device	**sdam;
+	struct nvmem_cell       *debug_mask_nvmem_low;
+	struct nvmem_cell       *debug_mask_nvmem_high;
+	struct nvmem_cell	*skip_esr_state;
 	struct fifo_data	fifo[MAX_FIFO_COUNT];
 	struct qbg_essential_params	essential_params;
 	struct work_struct	status_change_work;
@@ -175,6 +184,7 @@ struct qti_qbg {
 	struct iio_channel	*batt_temp_chan;
 	struct iio_channel	**ext_iio_chans;
 	struct rtc_device	*rtc;
+	struct wakeup_source    *qbg_ws;
 	ktime_t			last_fast_char_time;
 	wait_queue_head_t	qbg_wait_q;
 	const char		*irq_name;
@@ -190,6 +200,8 @@ struct qti_qbg {
 	u32			essential_param_revid;
 	u32			sample_time_us[QBG_STATE_MAX];
 	u32			*debug_mask;
+	u32			adc_cmn_wb_base;
+	u32			adc_cmn_base;
 	int			pon_ocv;
 	int			pon_ibat;
 	int			pon_tbat;
@@ -228,9 +240,12 @@ struct qti_qbg {
 	unsigned long		previous_ep_time;
 	unsigned long		current_time;
 	int			context_count;
+	int			rated_capacity;
 	bool			profile_loaded;
 	bool			battery_missing;
+	bool			battery_unknown;
 	bool			data_ready;
 	bool			in_fast_char;
+	bool			enable_fifo_depth_half;
 };
 #endif /* __QBG_CORE_H__ */
