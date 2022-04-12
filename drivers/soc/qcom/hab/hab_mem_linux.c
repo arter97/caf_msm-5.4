@@ -392,7 +392,6 @@ static int habmem_compress_pfns(
 
 	pr_debug("first_pfn %lu, nregions %d, data_size %u\n",
 			pfns->first_pfn, pfns->nregions, *data_size);
-	return 0;
 err:
 	if (!IS_ERR_OR_NULL(sg_table))
 		dma_buf_unmap_attachment(attach, sg_table, DMA_TO_DEVICE);
