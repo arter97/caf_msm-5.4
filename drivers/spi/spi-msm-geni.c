@@ -218,6 +218,15 @@ static ssize_t spi_slave_state_store(struct device *dev,
 			struct device_attribute *attr,
 			const char *buf, size_t count)
 {
+	struct platform_device *pdev = container_of(dev, struct
+						platform_device, dev);
+	struct spi_master *spi = platform_get_drvdata(pdev);
+	struct spi_geni_master *geni_mas;
+
+	geni_mas = spi_master_get_devdata(spi);
+	if (geni_mas)
+		GENI_SE_DBG(geni_mas->ipc, false, geni_mas->dev,
+			"%s: slave_state:%d\n", __func__, geni_mas->slave_state);
 	return 1;
 }
 
@@ -1756,16 +1765,22 @@ static int spi_geni_transfer_one(struct spi_master *spi,
 			goto err_fifo_geni_transfer_one;
 		}
 
-		if (spi->slave)
+		if (spi->slave) {
 			mas->slave_state = true;
+			GENI_SE_DBG(mas->ipc, false, mas->dev,
+				"%s: slave_state true:%d\n", __func__, mas->slave_state);
+		}
 		mutex_unlock(&mas->spi_ssr.ssr_lock);
 		timeout = wait_for_completion_timeout(&mas->xfer_done,
 					xfer_timeout);
 		mutex_lock(&mas->spi_ssr.ssr_lock);
 		if (mas->spi_ssr.is_ssr_down)
 			goto err_ssr_transfer_one;
-		if (spi->slave)
+		if (spi->slave) {
 			mas->slave_state = false;
+			GENI_SE_DBG(mas->ipc, false, mas->dev,
+				"%s: slave_state false:%d\n", __func__, mas->slave_state);
+		}
 
 		if (!timeout) {
 			GENI_SE_ERR(mas->ipc, true, mas->dev,
