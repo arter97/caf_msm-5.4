@@ -294,6 +294,9 @@ static void __cqhci_enable(struct cqhci_host *cq_host)
 
 	cqhci_writel(cq_host, cqcfg, CQHCI_CFG);
 
+	if (cqhci_readl(cq_host, CQHCI_CTL) & CQHCI_HALT)
+		cqhci_writel(cq_host, 0, CQHCI_CTL);
+
 	mmc->cqe_on = true;
 
 	if (cq_host->ops->enable)
@@ -305,6 +308,14 @@ static void __cqhci_enable(struct cqhci_host *cq_host)
 	cqhci_set_irqs(cq_host, CQHCI_IS_MASK);
 
 	cq_host->activated = true;
+
+#if defined(CONFIG_SDC_QTI)
+	if (mmc->hiber_notifier) {
+		if (cqhci_host_is_crypto_supported(cq_host))
+			cq_host->crypto_vops->restore_from_hibernation(cq_host);
+		mmc->hiber_notifier = false;
+	}
+#endif
 	mmc_log_string(mmc, "CQ enabled\n");
 }
 

@@ -36,6 +36,8 @@
 #include <asm/traps.h>
 #include <linux/firmware.h>
 #include <linux/of_gpio.h>
+#include <linux/err.h>
+#include <linux/of_device.h>
 
 #if defined(CONFIG_FB)
 #include <linux/notifier.h>
@@ -55,9 +57,14 @@ struct raydium_slot_status {
 struct raydium_slot_status gst_slot[MAX_TOUCH_NUM * 2];
 struct raydium_slot_status gst_slot_init = {0xFF, 0, 0};
 
+static int raydium_enable_regulator(struct raydium_ts_data *cd, bool en);
 #if (defined(CONFIG_RM_SYSFS_DEBUG))
 const struct attribute_group raydium_attr_group;
 #endif /*end of CONFIG_RM_SYSFS_DEBUG*/
+
+#if defined(CONFIG_DRM)
+	static struct drm_panel *active_panel;
+#endif
 
 unsigned char g_u8_addr;
 unsigned char g_u8_raydium_flag;
@@ -149,6 +156,14 @@ static int raydium_gpio_configure(bool on)
 			if (i32_err) {
 				LOGD(LOG_ERR,  "[touch]rst gpio request failed");
 				goto err_irq_gpio_req;
+			}
+
+			i32_err = gpio_direction_output(g_raydium_ts->rst_gpio, 0);
+			msleep(RAYDIUM_RESET_INTERVAL_10MSEC);
+			if (i32_err) {
+				LOGD(LOG_ERR,
+				     "[touch]set_direction for rst gpio failed\n");
+				goto err_rst_gpio_dir;
 			}
 
 			i32_err = gpio_direction_output(g_raydium_ts->rst_gpio, 1);
@@ -678,14 +693,13 @@ void raydium_irq_control(bool enable)
 		}
 
 		/* Clear interrupts first */
-		if (g_raydium_ts->blank != FB_BLANK_POWERDOWN) {
+		if (g_raydium_ts->blank != DRM_PANEL_BLANK_POWERDOWN) {
 			if (g_u8_i2c_mode == PDA2_MODE) {
 				mutex_lock(&g_raydium_ts->lock);
 				if (raydium_i2c_pda2_set_page(g_raydium_ts->client,
-							      g_raydium_ts->is_suspend,
-							      RAYDIUM_PDA2_PAGE_0) < 0)
-					LOGD(LOG_ERR, "[touch]set page fail%s\n",
-					     __func__);
+								g_raydium_ts->is_suspend,
+								RAYDIUM_PDA2_PAGE_0) < 0)
+					LOGD(LOG_ERR, "[touch]set page fail%s\n", __func__);
 				mutex_unlock(&g_raydium_ts->lock);
 				usleep_range(500, 1500);
 			}
@@ -861,7 +875,7 @@ static int raydium_create_sysfs(struct i2c_client *client)
 		sysfs_remove_group(&client->dev.kobj, &raydium_attr_group);
 		ret = -EIO;
 	} else {
-		LOGD(LOG_INFO, "[touch]create raydium sysfs attr_group successful\n");
+		LOGD(LOG_DEBUG, "[touch]create raydium sysfs attr_group successful\n");
 	}
 	return ret;
 }
@@ -961,7 +975,7 @@ static int raydium_touch_report(unsigned char *p_u8_buf,
 					gst_slot[u8_j].pt_id = u8_pt_id;
 					gst_slot[u8_j].need_update = 1;
 					gst_slot[u8_j].pt_report_offset = u8_i;
-					LOGD(LOG_INFO, "[touch]x:%d,y:%d\n",
+					LOGD(LOG_DEBUG, "[touch]x:%d,y:%d\n",
 					     p_u8_buf[POS_X_L + u8_offset] |
 					     p_u8_buf[POS_X_H + u8_offset] << 8,
 					     p_u8_buf[POS_Y_L + u8_offset] |
@@ -1063,7 +1077,6 @@ int raydium_read_touchdata(unsigned char *p_u8_tp_status,  unsigned char *p_u8_b
 	unsigned char u8_retry;
 	unsigned char u8_read_size;
 	unsigned char u8_read_buf[MAX_REPORT_PACKET_SIZE];
-
 	u8_retry = 3;
 
 	mutex_lock(&g_raydium_ts->lock);
@@ -1123,7 +1136,7 @@ int raydium_read_touchdata(unsigned char *p_u8_tp_status,  unsigned char *p_u8_b
 			LOGD(LOG_ERR, "[touch]%s: write data failed: %d\n", __func__, i32_ret);
 			goto exit_error;
 		}
-		LOGD(LOG_WARNING, "[touch]%s -> report not updated.\n", __func__);
+		LOGD(LOG_DEBUG, "[touch]%s -> report not updated.\n", __func__);
 		goto exit_error;
 	}
 	u8_seq_no = p_u8_tp_status[POS_SEQ];
@@ -1173,6 +1186,10 @@ static void raydium_work_handler(struct work_struct *work)
 
 #ifdef GESTURE_EN
 	unsigned char u8_i;
+	LOGD(LOG_DEBUG, "[touch]ts->blank:%x, g_u8_i2c_mode:%x\n",
+			g_raydium_ts->blank, g_u8_i2c_mode);
+	LOGD(LOG_DEBUG, "[touch]u8_tp_status:%x, g_raydium_ts->is_palm:%x\n",
+			u8_tp_status[POS_GES_STATUS], g_raydium_ts->is_palm);
 
 	if (g_u8_i2c_mode == PDA2_MODE) {
 		i32_ret = raydium_read_touchdata(u8_tp_status, u8_buf);
@@ -1183,7 +1200,7 @@ static void raydium_work_handler(struct work_struct *work)
 		}
 	}
 	/*when display on can use palm to suspend*/
-	if (g_raydium_ts->blank == FB_BLANK_UNBLANK) {
+	if (g_raydium_ts->blank == DRM_PANEL_BLANK_UNBLANK) {
 		if (u8_tp_status[POS_GES_STATUS] == RAD_PALM_ENABLE) {
 			if (g_raydium_ts->is_palm == 0) {
 				/* release all touches*/
@@ -1221,11 +1238,13 @@ static void raydium_work_handler(struct work_struct *work)
 			g_raydium_ts->is_palm = 0;
 			/*goto exit;*/
 		}
-	} else if (g_raydium_ts->blank == FB_BLANK_VSYNC_SUSPEND ||
-		   g_raydium_ts->blank == FB_BLANK_POWERDOWN) {
+	} else if (g_raydium_ts->blank == DRM_PANEL_BLANK_LP ||
+		g_raydium_ts->blank == DRM_PANEL_BLANK_POWERDOWN) {
+		LOGD(LOG_INFO, "[touch] elseif u8_tp_status:%x\n", u8_tp_status[POS_GES_STATUS]);
 		/*need check small area*/
-		if (u8_tp_status[POS_GES_STATUS] == RAD_WAKE_UP
-		    && g_u8_wakeup_flag == false) {
+		/*if (u8_tp_status[POS_GES_STATUS] == RAD_WAKE_UP*/
+		/*&& g_u8_wakeup_flag == false) {*/
+		if (u8_tp_status[POS_GES_STATUS] == 0)	{
 			input_report_key(g_raydium_ts->input_dev, KEY_POWER, true);
 			usleep_range(9500, 10500);
 			input_sync(g_raydium_ts->input_dev);
@@ -1284,7 +1303,7 @@ static irqreturn_t raydium_ts_interrupt(int irq, void *dev_id)
 			}
 			mutex_unlock(&g_raydium_ts->lock);
 
-			LOGD(LOG_WARNING, "[touch]work_pending\n");
+			LOGD(LOG_DEBUG, "[touch]work_pending\n");
 		}
 	}
 	return IRQ_HANDLED;
@@ -1321,7 +1340,7 @@ static int raydium_check_i2c_ready(unsigned short *u16_i2c_data)
 
 	*u16_i2c_data = u8_buf[3] << 8 | u8_buf[2];
 
-	LOGD(LOG_INFO, "[touch]RAD check I2C : 0x%02X%02X\n", u8_buf[3], u8_buf[2]);
+	LOGD(LOG_DEBUG, "[touch]RAD check I2C : 0x%02X%02X\n", u8_buf[3], u8_buf[2]);
 
 exit_error:
 	mutex_unlock(&g_raydium_ts->lock);
@@ -1332,6 +1351,7 @@ exit_error:
 static void raydium_ts_do_suspend(void)
 {
 	unsigned char u8_i = 0;
+	int rc = 0;
 
 	if (g_u8_raw_data_type == 0)
 		g_u8_resetflag = false;
@@ -1340,6 +1360,13 @@ static void raydium_ts_do_suspend(void)
 		return;
 	}
 
+	rc = raydium_enable_regulator(g_raydium_ts, false);
+	if (rc < 0) {
+		LOGD(LOG_ERR, "[touch]%s:Failed to disable regulators:rc=%d\n",
+			__func__, rc);
+	}
+	LOGD(LOG_INFO, "[touch]%s:voltage regulators disabled:rc=%d\n",
+		__func__, rc);
 	/*#ifndef GESTURE_EN*/
 	raydium_irq_control(DISABLE);
 	/*#endif*/
@@ -1381,6 +1408,7 @@ static void raydium_ts_do_resume(void)
 	int i32_ret = 0;
 	unsigned char u8_retry = 0;
 #endif
+	int rc = 0;
 
 
 	LOGD(LOG_INFO, "[touch]%s, %d.\n", __func__, g_raydium_ts->is_suspend);
@@ -1420,6 +1448,14 @@ static void raydium_ts_do_resume(void)
 		g_u8_checkflag = false;
 	}
 #endif
+
+	rc = raydium_enable_regulator(g_raydium_ts, true);
+	if (rc < 0) {
+		LOGD(LOG_ERR, "[touch]%s: failed to enable regulators: rc=%d\n",
+			__func__, rc);
+	}
+	LOGD(LOG_INFO, "[touch]%s: voltage regulators enabled: rc=%d\n",
+		__func__, rc);
 	raydium_irq_control(ENABLE);
 #ifdef GESTURE_EN
 	if (device_may_wakeup(&g_raydium_ts->client->dev)) {
@@ -1459,9 +1495,9 @@ static int raydium_ts_open(struct input_dev *input_dev)
 {
 	//int i32_ret = 0;
 
-	LOGD(LOG_INFO, "[touch]%s()+\n", __func__);
+	LOGD(LOG_DEBUG, "[touch]%s()+\n", __func__);
 
-	LOGD(LOG_INFO, "[touch]ts->blank:%x\n", g_raydium_ts->blank);
+	LOGD(LOG_DEBUG, "[touch]ts->blank:%x\n", g_raydium_ts->blank);
 
 	if (g_raydium_ts->is_sleep == 1) {
 		mutex_lock(&g_raydium_ts->lock);
@@ -1546,6 +1582,122 @@ static int raydium_ts_resume(struct device *dev)
 }
 #endif /*end of CONFIG_FB*/
 
+
+#if defined(CONFIG_DRM)
+/*******************************************************************************
+ * FUNCTION: drm_notifier_callback
+ *
+ * SUMMARY: Call back function for DRM notifier to allow to call
+ * resume/suspend attention list.
+ *
+ * RETURN:
+ *   0 = success
+ *
+ * PARAMETERS:
+ * self   - pointer to notifier_block structure
+ * event  - event type of fb notifier
+ * data   - pointer to fb_event structure
+ ******************************************************************************/
+static int drm_notifier_callback(struct notifier_block *self,
+			unsigned long event, void *data)
+{
+	struct raydium_ts_data *g_raydium_ts =
+		container_of(self, struct raydium_ts_data, fb_notif);
+	struct drm_panel_notifier *evdata = data;
+	int *blank;
+
+	LOGD(LOG_INFO, "%s: DRM notifier called!\n", __func__);
+
+	if (!evdata)
+		goto exit;
+
+	if (!(event == DRM_PANEL_EARLY_EVENT_BLANK ||
+			event == DRM_PANEL_EVENT_BLANK)) {
+		LOGD(LOG_INFO, "%s: Event(%lu) do not need process\n",
+			__func__, event);
+		goto exit;
+	}
+
+	blank = evdata->data;
+	g_raydium_ts->blank = (*blank);
+	LOGD(LOG_INFO, "%s: DRM event:%lu,blank:%d fb_state %d ",
+		__func__, event, *blank, g_raydium_ts->fb_state);
+	LOGD(LOG_INFO, "%s: DRM Power - %s - FB state %d ",
+		__func__, (*blank == DRM_PANEL_BLANK_UNBLANK)?"UP":"DOWN", g_raydium_ts->fb_state);
+
+	if (*blank == DRM_PANEL_BLANK_UNBLANK) {
+		LOGD(LOG_INFO, "%s: UNBLANK!\n", __func__);
+
+		if (event == DRM_PANEL_EARLY_EVENT_BLANK) {
+			LOGD(LOG_INFO, "%s: resume: event = %lu, not care\n",
+				__func__, event);
+		} else if (event == DRM_PANEL_EVENT_BLANK) {
+			if (g_raydium_ts->fb_state != FB_ON) {
+				LOGD(LOG_INFO, "%s: Resume notifier called!\n",
+					__func__);
+
+#if defined(CONFIG_PM)
+				raydium_ts_resume(&g_raydium_ts->client->dev);
+#endif
+				g_raydium_ts->fb_state = FB_ON;
+				LOGD(LOG_INFO, "%s: Resume notified!\n", __func__);
+			}
+		}
+	} else if (*blank == DRM_PANEL_BLANK_LP || *blank == DRM_PANEL_BLANK_POWERDOWN) {
+		LOGD(LOG_INFO, "%s: LOWPOWER!\n", __func__);
+		if (event == DRM_PANEL_EARLY_EVENT_BLANK) {
+			if (g_raydium_ts->fb_state != FB_OFF) {
+				LOGD(LOG_INFO, "%s: Suspend notifier called!\n",
+					__func__);
+#if defined(CONFIG_PM)
+				raydium_ts_suspend(&g_raydium_ts->client->dev);
+#endif
+				g_raydium_ts->fb_state = FB_OFF;
+				LOGD(LOG_INFO, "%s: Suspend notified!\n", __func__);
+			}
+		} else if (event == DRM_PANEL_EVENT_BLANK) {
+			LOGD(LOG_INFO, "%s: suspend: event = %lu, not care\n",
+				__func__, event);
+		}
+	} else {
+		LOGD(LOG_INFO, "%s: DRM BLANK(%d) do not need process\n",
+			__func__, *blank);
+	}
+exit:
+	return 0;
+}
+
+/*******************************************************************************
+ * FUNCTION: raydium_setup_drm_notifier
+ *
+ * SUMMARY: Set up call back function into drm notifier.
+ *
+ * PARAMETERS:
+ * g_raydium_ts   - pointer to core data
+ *******************************************************************************/
+static void raydium_setup_drm_notifier(struct raydium_ts_data *g_raydium_ts)
+{
+	g_raydium_ts->fb_state = FB_ON;
+	g_raydium_ts->fb_notif.notifier_call = drm_notifier_callback;
+	LOGD(LOG_INFO, "[touch]%s: Setting up drm notifier\n", __func__);
+
+	if (!active_panel)
+		LOGD(LOG_ERR, "[touch]%s: Active panel not registered!\n", __func__);
+
+	if (active_panel && drm_panel_notifier_register(active_panel,
+		&g_raydium_ts->fb_notif) < 0)
+		LOGD(LOG_ERR, "[touch]%s: Register notifier failed!\n", __func__);
+}
+#endif /*end of CONFIG_DRM*/
+
+/*******************************************************************************
+ * FUNCTION: raydium_setup_drm_notifier
+ *
+ * SUMMARY: Set up call back function into fb notifier.
+ *
+ * PARAMETERS:
+ * g_raydium_ts   - pointer to core data
+ *******************************************************************************/
 #if defined(CONFIG_FB)
 static int fb_notifier_callback(struct notifier_block *self,
 				unsigned long event,
@@ -1674,10 +1826,56 @@ static int raydium_get_dt_coords(struct device *dev, char *name,
 	return 0;
 }
 
+/*******************************************************************************
+ * FUNCTION: raydium_check_dsi_panel_dt
+ *
+ * SUMMARY: Get the DSI active panel information from dtsi
+ *
+ * RETURN:
+ *   0 = success
+ *   !0 = fail
+ *
+ * PARAMETERS:
+ * np            -  pointer to device_node structure
+ * active_panel  -  name of active DSI panel
+ ******************************************************************************/
+
+static int raydium_check_dsi_panel_dt(struct device_node *np, struct drm_panel **active_panel)
+{
+	int i = 0;
+	int count = 0;
+	struct device_node *node = NULL;
+	struct drm_panel *panel;
+
+	count = of_count_phandle_with_args(np, "panel", NULL);
+	LOGD(LOG_ERR, "[touch]%s: Active panel count: %d\n", __func__, count);
+	if (count <= 0)
+		return 0;
+
+	for (i = 0; i < count; i++) {
+		node = of_parse_phandle(np, "panel", i);
+
+		if (node != NULL)
+			LOGD(LOG_ERR, "[touch]%s: Node handle successfully parsed !\n", __func__);
+		panel = of_drm_find_panel(node);
+		of_node_put(node);
+
+		if (!IS_ERR(panel)) {
+			LOGD(LOG_ERR, "[touch]%s: Active panel selected !\n", __func__);
+			*active_panel = panel;
+			return 0;
+		}
+	}
+	LOGD(LOG_ERR, "[touch]%s: Active panel NOT selected !\n", __func__);
+
+	return PTR_ERR(panel);
+}
+
 static int raydium_parse_dt(struct device *dev,
 			    struct raydium_ts_platform_data *pdata)
 {
 	struct device_node *np = dev->of_node;
+	struct drm_panel *active_panel = NULL;
 	int rc = 0;
 	u32 temp_val = 0;
 
@@ -1706,6 +1904,17 @@ static int raydium_parse_dt(struct device *dev,
 	if ((s32)(pdata->irq_gpio) < 0)
 		return pdata->irq_gpio;
 
+	rc = raydium_check_dsi_panel_dt(np, &active_panel);
+	LOGD(LOG_ERR, "[touch]%s: Panel not selected, rc=%d\n", __func__, rc);
+	if (rc) {
+		LOGD(LOG_ERR, "[touch]%s: Panel not selected, rc=%d\n", __func__, rc);
+		if (rc == -EPROBE_DEFER) {
+			LOGD(LOG_ERR, "[touch]%s: Probe defer selected, rc=%d\n", __func__, rc);
+			return rc;
+		}
+	}
+	pdata->active_panel = active_panel;
+	LOGD(LOG_ERR, "[touch]%s: Successful insert of active panel in core data\n", __func__);
 
 	rc = of_property_read_u32(np,
 				  "raydium,hard-reset-delay-ms", &temp_val);
@@ -1807,7 +2016,7 @@ static int raydium_set_resolution(void)
 	u32_x = u8_buf[3] << 8 | u8_buf[2];
 	u32_y = u8_buf[1] << 8 | u8_buf[0];
 
-	LOGD(LOG_INFO, "[touch]RAD display info x:%d, y:%d\n", u32_x, u32_y);
+	LOGD(LOG_DEBUG, "[touch]RAD display info x:%d, y:%d\n", u32_x, u32_y);
 
 	if (u32_x > 100 && u32_y > 100 &&
 	    u32_x < 600 && u32_y < 600) {
@@ -1819,9 +2028,129 @@ exit_error:
 	mutex_unlock(&g_raydium_ts->lock);
 	return i32_ret;
 }
+static int raydium_get_regulator(struct raydium_ts_data *cd, bool get)
+{
+	int rc;
 
+	if (!get) {
+		rc = 0;
+		goto regulator_put;
+	}
+#ifdef VDD_ANALOG_ENABLE
+	cd->vdd = regulator_get(&cd->client->dev, "vdd");
+	if (IS_ERR(cd->vdd)) {
+		rc = PTR_ERR(cd->vdd);
+		dev_err(&cd->client->dev,
+			"Regulator get failed vdd rc=%d\n", rc);
+		goto regulator_put;
+	}
+#endif
+
+	cd->vcc_i2c = regulator_get(&cd->client->dev, "vcc_i2c");
+	if (IS_ERR(cd->vcc_i2c)) {
+		rc = PTR_ERR(cd->vcc_i2c);
+		dev_err(&cd->client->dev,
+			"Regulator get failed vcc_i2c rc=%d\n", rc);
+		goto regulator_put;
+	}
+
+	return 0;
+
+regulator_put:
+#ifdef VDD_ANALOG_ENABLE
+	if (!IS_ERR(cd->vdd)) {
+		dev_err(&cd->client->dev, "Regulator put vdd\n");
+		regulator_put(cd->vdd);
+		cd->vdd = NULL;
+	}
+#endif
+
+	if (!IS_ERR(cd->vcc_i2c)) {
+		dev_err(&cd->client->dev, "Regulator put vcc_i2c\n");
+		regulator_put(cd->vcc_i2c);
+		cd->vcc_i2c = NULL;
+	}
+
+	return rc;
+}
+
+static int raydium_enable_regulator(struct raydium_ts_data *cd, bool en)
+{
+	int rc;
+
+	if (!en) {
+		rc = 0;
+		goto disable_vcc_i2c_reg;
+	}
+#ifdef VDD_ANALOG_ENABLE
+	if (cd->vdd) {
+		if (regulator_count_voltages(cd->vdd) > 0) {
+			rc = regulator_set_voltage(cd->vdd, VTG_MIN_UV,
+						VTG_MAX_UV);
+			if (rc) {
+				dev_err(&cd->client->dev,
+					"Regulator set_vtg failed vdd rc=%d\n", rc);
+				goto exit;
+			}
+		}
+
+		rc = regulator_enable(cd->vdd);
+		if (rc) {
+			dev_err(&cd->client->dev,
+				"Regulator vdd enable failed rc=%d\n", rc);
+			goto exit;
+		}
+	}
+#endif
+
+	if (cd->vcc_i2c) {
+		if (regulator_count_voltages(cd->vcc_i2c) > 0) {
+			rc = regulator_set_voltage(cd->vcc_i2c, I2C_VTG_MIN_UV,
+							I2C_VTG_MAX_UV);
+			if (rc) {
+				dev_err(&cd->client->dev,
+					"Regulator set_vtg failed vcc_i2c rc=%d\n", rc);
+				goto disable_vdd_reg;
+			}
+		}
+
+		rc = regulator_enable(cd->vcc_i2c);
+		if (rc) {
+			dev_err(&cd->client->dev,
+				"Regulator vcc_i2c enable failed rc=%d\n", rc);
+			goto disable_vdd_reg;
+		}
+	}
+
+	return 0;
+
+disable_vcc_i2c_reg:
+	if (cd->vcc_i2c) {
+		if (regulator_count_voltages(cd->vcc_i2c) > 0)
+			regulator_set_voltage(cd->vcc_i2c, I2C_VTG_MIN_UV,
+						I2C_VTG_MAX_UV);
+
+		regulator_disable(cd->vcc_i2c);
+	}
+
+disable_vdd_reg:
+#ifdef VDD_ANALOG_ENABLE
+	if (cd->vdd) {
+		if (regulator_count_voltages(cd->vdd) > 0)
+			regulator_set_voltage(cd->vdd, VTG_MIN_UV,
+						VTG_MAX_UV);
+
+		regulator_disable(cd->vdd);
+	}
+#endif
+
+#ifdef VDD_ANALOG_ENABLE
+exit:
+#endif
+	return rc;
+}
 static int raydium_ts_probe(struct i2c_client *client,
-			    const struct i2c_device_id *id)
+		const struct i2c_device_id *id)
 {
 	struct raydium_ts_platform_data *pdata =
 		(struct raydium_ts_platform_data *)client->dev.platform_data;
@@ -1900,6 +2229,17 @@ static int raydium_ts_probe(struct i2c_client *client,
 	}
 #endif /*end of MSM_NEW_VER*/
 
+	ret = raydium_get_regulator(g_raydium_ts, true);
+	if (ret) {
+		dev_err(&client->dev, "Failed to get voltage regulators\n");
+		goto error_alloc_data;
+	}
+
+	ret = raydium_enable_regulator(g_raydium_ts, true);
+	if (ret) {
+		dev_err(&client->dev, "Failed to enable regulators: rc=%d\n", ret);
+		goto error_get_regulator;
+	}
 	ret = raydium_gpio_configure(true);
 	if (ret < 0) {
 		LOGD(LOG_ERR, "[touch]failed to configure the gpios\n");
@@ -1915,12 +2255,22 @@ static int raydium_ts_probe(struct i2c_client *client,
 
 	/*print touch i2c ready*/
 	ret = raydium_check_i2c_ready(&u16_i2c_data);
-	if (ret < 0) {
+	if (ret < 0 || (u16_i2c_data == 0)) {
 		LOGD(LOG_ERR, "[touch]Check I2C failed\n");
-		ret = -ENODEV;
+		ret = -EPROBE_DEFER;
 		goto exit_check_i2c;
 	}
 
+	if (!pdata->active_panel) {
+//		LOGD(LOG_ERR, "[touch]active_panel null, check again!\n");
+		raydium_check_dsi_panel_dt(client->dev.of_node,
+					&pdata->active_panel);
+	}
+
+#ifdef CONFIG_DRM
+	/* Setup active dsi panel */
+	active_panel = pdata->active_panel;
+#endif
 	/*input device initialization*/
 	input_dev = input_allocate_device();
 	if (!input_dev) {
@@ -1965,9 +2315,14 @@ static int raydium_ts_probe(struct i2c_client *client,
 
 	g_raydium_ts->workqueue = create_singlethread_workqueue("raydium_ts");
 	/*irq_gpio = 13 irqflags = 108*/
-	LOGD(LOG_INFO, "[touch]pdata irq : %d\n", g_raydium_ts->irq_gpio);
-	LOGD(LOG_INFO, "[touch]client irq : %d, pdata flags : %d\n",
+	LOGD(LOG_DEBUG, "[touch]pdata irq : %d\n", g_raydium_ts->irq_gpio);
+	LOGD(LOG_DEBUG, "[touch]client irq : %d, pdata flags : %d\n",
 	     client->irq, pdata->irqflags);
+
+#if defined(CONFIG_DRM)
+	LOGD(LOG_DEBUG, "%s: Probe: Setup drm notifier\n", __func__);
+	raydium_setup_drm_notifier(g_raydium_ts);
+#endif/*end of CONFIG_DRM*/
 
 	g_raydium_ts->irq = gpio_to_irq(pdata->irq_gpio);
 	ret = request_threaded_irq(g_raydium_ts->irq, NULL, raydium_ts_interrupt,
@@ -1986,15 +2341,17 @@ static int raydium_ts_probe(struct i2c_client *client,
 
 	/*raydium_irq_control(ts, ENABLE);*/
 
-	LOGD(LOG_INFO, "[touch]RAD Touch driver ver :0x%X\n", g_u32_driver_version);
+	LOGD(LOG_DEBUG, "[touch]RAD Touch driver ver :0x%X\n", g_u32_driver_version);
 
 	/*fw update check*/
-	ret = raydium_fw_update_check(u16_i2c_data);
+	ret = raydium_fw_update_init(u16_i2c_data);
 	if (ret < 0) {
-		LOGD(LOG_ERR, "[touch]FW update check failed\n");
+		LOGD(LOG_ERR, "[touch]FW update init failed\n");
 		ret = -ENODEV;
 		goto exit_irq_request_failed;
 	}
+
+	LOGD(LOG_INFO, "[touch] probe: done\n");
 	return 0;
 
 exit_irq_request_failed:
@@ -2010,6 +2367,20 @@ exit_input_register_device_failed:
 
 exit_input_dev_alloc_failed:
 exit_check_i2c:
+#ifdef MSM_NEW_VER
+	if (g_raydium_ts->ts_pinctrl) {
+		if (IS_ERR_OR_NULL(g_raydium_ts->pinctrl_state_release)) {
+			devm_pinctrl_put(g_raydium_ts->ts_pinctrl);
+			g_raydium_ts->ts_pinctrl = NULL;
+		} else {
+			if (pinctrl_select_state(g_raydium_ts->ts_pinctrl,
+					g_raydium_ts->pinctrl_state_release))
+				LOGD(LOG_ERR,
+				    "[touch]pinctrl_select_state failed\n");
+		}
+	}
+#endif/*end of MSM_NEW_VER*/
+
 	if (gpio_is_valid(pdata->reset_gpio))
 		gpio_free(pdata->reset_gpio);
 
@@ -2017,20 +2388,11 @@ exit_check_i2c:
 		gpio_free(pdata->irq_gpio);
 
 err_gpio_req:
-#ifdef MSM_NEW_VER
-	if (g_raydium_ts->ts_pinctrl) {
-		if (IS_ERR_OR_NULL(g_raydium_ts->pinctrl_state_release)) {
-			devm_pinctrl_put(g_raydium_ts->ts_pinctrl);
-			g_raydium_ts->ts_pinctrl = NULL;
-		} else {
-			ret = pinctrl_select_state(g_raydium_ts->ts_pinctrl,
-						   g_raydium_ts->pinctrl_state_release);
-			if (ret)
-				LOGD(LOG_ERR, "[touch]pinctrl_select_state failed\n");
-		}
-	}
-#endif/*end of MSM_NEW_VER*/
+	raydium_enable_regulator(g_raydium_ts, false);
 
+error_get_regulator:
+	raydium_get_regulator(g_raydium_ts, false);
+error_alloc_data:
 parse_dt_failed:
 exit_check_functionality_failed:
 	return ret;
@@ -2044,6 +2406,9 @@ static int raydium_ts_remove(struct i2c_client *client)
 	raydium_unregister_notifier();
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 	unregister_early_suspend(&g_raydium_ts->early_suspend);
+#elif defined(CONFIG_DRM)
+	if (active_panel)
+		drm_panel_notifier_unregister(active_panel, &g_raydium_ts->fb_notifier);
 #endif/*end of CONFIG_FB*/
 	input_unregister_device(g_raydium_ts->input_dev);
 	input_free_device(g_raydium_ts->input_dev);
@@ -2064,8 +2429,8 @@ static int raydium_ts_remove(struct i2c_client *client)
 	cancel_work_sync(&g_raydium_ts->work);
 	destroy_workqueue(g_raydium_ts->workqueue);
 
-
-	//kfree(g_raydium_ts);
+	raydium_enable_regulator(g_raydium_ts, false);
+	raydium_get_regulator(g_raydium_ts, false);
 
 	i2c_set_clientdata(client, NULL);
 	return 0;

@@ -49,6 +49,7 @@
 #include "debug.h"
 #include "power.h"
 #include "genl.h"
+#include "../slatecom_interface.h"
 
 #define MAX_PROP_SIZE			32
 #define NUM_LOG_PAGES			10
@@ -399,6 +400,17 @@ bool icnss_is_fw_down(void)
 }
 EXPORT_SYMBOL(icnss_is_fw_down);
 
+unsigned long icnss_get_device_config(void)
+{
+	struct icnss_priv *priv = icnss_get_plat_priv();
+
+	if (!priv)
+		return 0;
+
+	return priv->device_config;
+}
+EXPORT_SYMBOL(icnss_get_device_config);
+
 bool icnss_is_rejuvenate(void)
 {
 	if (!penv)
@@ -416,6 +428,15 @@ bool icnss_is_pdr(void)
 		return test_bit(ICNSS_PDR, &penv->state);
 }
 EXPORT_SYMBOL(icnss_is_pdr);
+
+bool icnss_is_low_power(void)
+{
+	if (!penv)
+		return false;
+	else
+		return test_bit(ICNSS_LOW_POWER, &penv->state);
+}
+EXPORT_SYMBOL(icnss_is_low_power);
 
 static irqreturn_t fw_error_fatal_handler(int irq, void *ctx)
 {
@@ -586,11 +607,24 @@ qmi_send:
 	return ret;
 }
 
+static enum wlfw_wlan_rf_subtype_v01 icnss_rf_subtype_value_to_type(u32 val)
+{
+	switch (val) {
+	case WLAN_RF_SLATE:
+		return WLFW_WLAN_RF_SLATE_V01;
+	case WLAN_RF_APACHE:
+		return WLFW_WLAN_RF_APACHE_V01;
+	default:
+		return WLFW_WLAN_RF_SUBTYPE_MAX_VAL_V01;
+	}
+}
+
 static int icnss_driver_event_server_arrive(struct icnss_priv *priv,
 						 void *data)
 {
 	int ret = 0;
 	bool ignore_assert = false;
+	enum wlfw_wlan_rf_subtype_v01 rf_subtype;
 
 	if (!priv)
 		return -ENODEV;
@@ -612,11 +646,16 @@ static int icnss_driver_event_server_arrive(struct icnss_priv *priv,
 
 	set_bit(ICNSS_WLFW_CONNECTED, &priv->state);
 
-	if (priv->is_slate_rfa && !test_bit(ICNSS_SLATE_UP, &priv->state)) {
-		reinit_completion(&priv->slate_boot_complete);
-		icnss_pr_dbg("Waiting for slate boot up notification, 0x%lx\n",
-			     priv->state);
-		wait_for_completion(&priv->slate_boot_complete);
+	if (priv->is_slate_rfa) {
+		if (!test_bit(ICNSS_SLATE_UP, &priv->state)) {
+			reinit_completion(&priv->slate_boot_complete);
+			icnss_pr_dbg("Waiting for slate boot up notification, 0x%lx\n",
+				     priv->state);
+			wait_for_completion(&priv->slate_boot_complete);
+		}
+
+		send_wlan_state(GMI_MGR_WLAN_BOOT_INIT);
+		icnss_pr_info("sent wlan boot init command\n");
 	}
 
 	ret = wlfw_ind_register_send_sync_msg(priv);
@@ -627,6 +666,19 @@ static int icnss_driver_event_server_arrive(struct icnss_priv *priv,
 		}
 		ignore_assert = true;
 		goto fail;
+	}
+
+	if (priv->is_rf_subtype_valid) {
+		rf_subtype = icnss_rf_subtype_value_to_type(priv->rf_subtype);
+		if (rf_subtype != WLFW_WLAN_RF_SUBTYPE_MAX_VAL_V01) {
+			ret = wlfw_wlan_hw_init_cfg_msg(priv, rf_subtype);
+			if (ret < 0)
+				icnss_pr_dbg("Sending rf_subtype failed ret %d\n",
+					     ret);
+		} else {
+			icnss_pr_dbg("Invalid rf subtype %d in DT\n",
+				     priv->rf_subtype);
+		}
 	}
 
 	if (priv->device_id == WCN6750_DEVICE_ID) {
@@ -660,6 +712,16 @@ static int icnss_driver_event_server_arrive(struct icnss_priv *priv,
 		ignore_assert = true;
 		goto fail;
 	}
+
+	/*
+	 * If no_vote_on_wifi_active parameter is set for any regulator then
+	 * it will not be enabled from icnss_hw_power_on().
+	 *
+	 * Enable all regulators whose no_vote_on_wifi_active parameter is set.
+	 * For those regulators which have not set this parameter are enabled
+	 * from icnss_hw_power_on().
+	 */
+	icnss_enable_regulator(priv);
 
 	ret = icnss_hw_power_on(priv);
 	if (ret)
@@ -811,6 +873,7 @@ static int icnss_pd_restart_complete(struct icnss_priv *priv)
 	clear_bit(ICNSS_PDR, &priv->state);
 	clear_bit(ICNSS_REJUVENATE, &priv->state);
 	clear_bit(ICNSS_PD_RESTART, &priv->state);
+	clear_bit(ICNSS_LOW_POWER, &priv->state);
 	priv->early_crash_ind = false;
 	priv->is_ssr = false;
 
@@ -879,6 +942,11 @@ static int icnss_driver_event_fw_ready_ind(struct icnss_priv *priv, void *data)
 		icnss_pr_err("Device is not ready\n");
 		ret = -ENODEV;
 		goto out;
+	}
+
+	if (priv->is_slate_rfa && test_bit(ICNSS_SLATE_UP, &priv->state)) {
+		send_wlan_state(GMI_MGR_WLAN_BOOT_COMPLETE);
+		icnss_pr_info("sent wlan boot complete command\n");
 	}
 
 	if (test_bit(ICNSS_PD_RESTART, &priv->state)) {
@@ -1716,6 +1784,18 @@ static char *icnss_subsys_notify_state_to_str(enum subsys_notif_type code)
 		return "SOC_RESET";
 	case SUBSYS_NOTIF_TYPE_COUNT:
 		return "NOTIF_TYPE_COUNT";
+	case SUBSYS_BEFORE_DS_ENTRY:
+		return "BEFORE_DS_ENTRY";
+	case SUBSYS_AFTER_DS_ENTRY:
+		return "AFTER_DS_ENTRY";
+	case SUBSYS_DS_ENTRY_FAIL:
+		return "DS_ENTRY_FAIL";
+	case SUBSYS_BEFORE_DS_EXIT:
+		return "BEFORE_DS_EXIT";
+	case SUBSYS_AFTER_DS_EXIT:
+		return "AFTER_DS_EXIT";
+	case SUBSYS_DS_EXIT_FAIL:
+		return "DS_EXIT_FAIL";
 	default:
 		return "UNKNOWN";
 	}
@@ -1792,14 +1872,44 @@ static int icnss_modem_notifier_nb(struct notifier_block *nb,
 	icnss_pr_vdbg("Modem-Notify: event %s(%lu)\n",
 		      icnss_subsys_notify_state_to_str(code), code);
 
-	if (code == SUBSYS_AFTER_SHUTDOWN) {
-		icnss_pr_info("Collecting msa0 segment dump\n");
-		icnss_msa0_ramdump(priv);
+	switch (code) {
+	case SUBSYS_BEFORE_SHUTDOWN:
+		if (!notif->crashed &&
+		    priv->low_power_support) { /* Hibernate */
+			if (test_bit(ICNSS_MODE_ON, &priv->state))
+				icnss_driver_event_post(
+					priv, ICNSS_DRIVER_EVENT_IDLE_SHUTDOWN,
+					ICNSS_EVENT_SYNC_UNINTERRUPTIBLE, NULL);
+			set_bit(ICNSS_LOW_POWER, &priv->state);
+		}
+		break;
+	case SUBSYS_AFTER_SHUTDOWN:
+		/* Collect ramdump only when there was a crash. */
+		if (notif->crashed) {
+			icnss_pr_info("Collecting msa0 segment dump\n");
+			icnss_msa0_ramdump(priv);
+		}
+
+		if (test_bit(ICNSS_LOW_POWER, &priv->state) &&
+			     priv->low_power_support)
+			clear_bit(ICNSS_LOW_POWER, &priv->state);
+		goto out;
+	case SUBSYS_BEFORE_DS_ENTRY:
+		if (test_bit(ICNSS_MODE_ON, &priv->state))
+			icnss_driver_event_post(
+					priv, ICNSS_DRIVER_EVENT_IDLE_SHUTDOWN,
+					ICNSS_EVENT_SYNC_UNINTERRUPTIBLE, NULL);
+		set_bit(ICNSS_LOW_POWER, &priv->state);
+		break;
+	case SUBSYS_AFTER_DS_ENTRY:
+	case SUBSYS_DS_ENTRY_FAIL:
+	case SUBSYS_BEFORE_DS_EXIT:
+		goto out;
+	case SUBSYS_AFTER_DS_EXIT:
+		clear_bit(ICNSS_LOW_POWER, &priv->state);
+	default:
 		goto out;
 	}
-
-	if (code != SUBSYS_BEFORE_SHUTDOWN)
-		goto out;
 
 	priv->is_ssr = true;
 
@@ -3678,6 +3788,19 @@ static int icnss_resource_parse(struct icnss_priv *priv)
 			priv->is_slate_rfa = true;
 			icnss_pr_err("SLATE rfa is enabled\n");
 		}
+
+		if (of_property_read_bool(pdev->dev.of_node,
+					  "qcom,is_low_power")) {
+			priv->low_power_support = true;
+			icnss_pr_dbg("Deep Sleep/Hibernate mode supported\n");
+		}
+
+		if (of_property_read_u32(pdev->dev.of_node, "qcom,rf_subtype",
+					 &priv->rf_subtype) == 0) {
+			priv->is_rf_subtype_valid = true;
+			icnss_pr_dbg("RF subtype 0x%x\n", priv->rf_subtype);
+		}
+
 	} else if (priv->device_id == WCN6750_DEVICE_ID) {
 		res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
 						   "msi_addr");
@@ -3965,6 +4088,14 @@ static void icnss_init_control_params(struct icnss_priv *priv)
 	}
 }
 
+static void icnss_read_device_configs(struct icnss_priv *priv)
+{
+	if (of_property_read_bool(priv->pdev->dev.of_node,
+				  "wlan-ipa-disabled")) {
+		set_bit(ICNSS_IPA_DISABLED, &priv->device_config);
+	}
+}
+
 static inline void  icnss_get_smp2p_info(struct icnss_priv *priv)
 {
 
@@ -4066,6 +4197,8 @@ static int icnss_probe(struct platform_device *pdev)
 	icnss_allow_recursive_recovery(dev);
 
 	icnss_init_control_params(priv);
+
+	icnss_read_device_configs(priv);
 
 	ret = icnss_resource_parse(priv);
 	if (ret)

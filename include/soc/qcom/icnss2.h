@@ -23,6 +23,10 @@ enum icnss_uevent {
 	ICNSS_UEVENT_SMMU_FAULT,
 };
 
+enum icnss_device_config {
+	ICNSS_IPA_DISABLED,
+};
+
 struct icnss_uevent_hang_data {
 	void *hang_event_data;
 	uint16_t hang_event_data_len;
@@ -166,6 +170,7 @@ extern unsigned int icnss_socinfo_get_serial_number(struct device *dev);
 extern bool icnss_is_qmi_disable(struct device *dev);
 extern bool icnss_is_fw_ready(void);
 extern bool icnss_is_fw_down(void);
+extern bool icnss_is_low_power(void);
 extern bool icnss_is_rejuvenate(void);
 extern int icnss_trigger_recovery(struct device *dev);
 extern void icnss_block_shutdown(bool status);
@@ -196,4 +201,5 @@ extern int icnss_prevent_l1(struct device *dev);
 extern void icnss_allow_l1(struct device *dev);
 extern int icnss_get_mhi_state(struct device *dev);
 extern int icnss_is_pci_ep_awake(struct device *dev);
+extern unsigned long icnss_get_device_config(void);
 #endif /* _ICNSS_WLAN_H_ */

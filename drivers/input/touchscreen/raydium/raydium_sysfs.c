@@ -536,6 +536,7 @@ static ssize_t raydium_mem_store(struct device *dev,
 				 struct device_attribute *attr,
 				 const char *p_i8_buf, size_t count)
 {
+#if !ENABLE_FW_LOADER
 	int i32_ret = 0;
 	unsigned char u8_type = 0;
 	unsigned int u32_image_version;
@@ -567,18 +568,18 @@ static ssize_t raydium_mem_store(struct device *dev,
 		kfree(g_rad_fw_image);
 		g_rad_fw_image = NULL;
 	}
-	if (g_rad_para_image) {
-		ree(g_rad_para_image);
-		g_rad_para_image = NULL;
-	}
+
+	kfree(g_rad_para_image);
+	g_rad_para_image = NULL;
+
 	if (g_rad_testfw_image) {
 		kfree(g_rad_testfw_image);
 		g_rad_testfw_image = NULL;
 	}
-	if (g_rad_testpara_image) {
-		free(g_rad_testpara_image);
-		g_rad_testpara_image = NULL;
-	}
+
+	kfree(g_rad_testpara_image);
+	g_rad_testpara_image = NULL;
+
 	if (!raydium_id_init(u8_type)) {
 		LOGD(LOG_ERR, "[touch]Set Raydium id failed!\n");
 		return count;
@@ -598,7 +599,7 @@ static ssize_t raydium_mem_store(struct device *dev,
 		kfree(g_rad_para_image);
 		g_rad_para_image = NULL;
 	}
-
+#endif
 	return count;
 }
 

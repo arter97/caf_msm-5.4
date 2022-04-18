@@ -447,7 +447,11 @@ int qcom_llcc_probe(struct platform_device *pdev,
 		goto err;
 	}
 
-	drv_data->ecc_irq = platform_get_irq(pdev, 0);
+	if (of_find_property(pdev->dev.of_node, "interrupts", NULL))
+		drv_data->ecc_irq = platform_get_irq(pdev, 0);
+	else
+		drv_data->ecc_irq = -ENXIO;
+
 	llcc_edac = platform_device_register_data(&pdev->dev,
 					"qcom_llcc_edac", -1, drv_data,
 					sizeof(*drv_data));

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2002,2007-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/component.h>
 #include <linux/delay.h>
@@ -17,6 +18,7 @@
 #include <linux/soc/qcom/llcc-qcom.h>
 #include <soc/qcom/subsystem_restart.h>
 #include <soc/qcom/boot_stats.h>
+#include <linux/suspend.h>
 
 #include "adreno.h"
 #include "adreno_a3xx.h"
@@ -1560,6 +1562,8 @@ int adreno_device_probe(struct platform_device *pdev,
 	adreno_debugfs_init(adreno_dev);
 	adreno_profile_init(adreno_dev);
 
+	adreno_dev->perfcounter = false;
+
 	adreno_sysfs_init(adreno_dev);
 
 	kgsl_pwrscale_init(device, pdev, CONFIG_QCOM_ADRENO_DEFAULT_GOVERNOR);
@@ -1719,6 +1723,15 @@ static int adreno_pm_resume(struct device *dev)
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	const struct adreno_power_ops *ops = ADRENO_POWER_OPS(adreno_dev);
 
+#ifdef CONFIG_DEEPSLEEP
+	if (mem_sleep_current == PM_SUSPEND_MEM) {
+		int status = kgsl_set_smmu_aperture(device);
+
+		if (status)
+			return status;
+	}
+#endif
+
 	mutex_lock(&device->mutex);
 	ops->pm_resume(adreno_dev);
 	mutex_unlock(&device->mutex);
@@ -1746,6 +1759,12 @@ static int adreno_pm_suspend(struct device *dev)
 
 	mutex_lock(&device->mutex);
 	status = ops->pm_suspend(adreno_dev);
+
+#ifdef CONFIG_DEEPSLEEP
+	if (!status && mem_sleep_current == PM_SUSPEND_MEM)
+		adreno_zap_shader_unload(adreno_dev);
+#endif
+
 	mutex_unlock(&device->mutex);
 
 	return status;
@@ -3275,6 +3294,13 @@ void adreno_isense_regread(struct adreno_device *adreno_dev,
 	 * i.e. act like normal readl()
 	 */
 	rmb();
+}
+
+bool adreno_gx_is_on(struct adreno_device *adreno_dev)
+{
+	const struct adreno_gpudev *gpudev  = ADRENO_GPU_DEVICE(adreno_dev);
+
+	return gpudev->gx_is_on(adreno_dev);
 }
 
 void adreno_cx_misc_regwrite(struct adreno_device *adreno_dev,
