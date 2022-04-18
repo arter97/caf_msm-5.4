@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #define pr_fmt(msg) "slatecom_dev:" msg
 
@@ -422,6 +423,33 @@ int slate_soft_reset(void)
 }
 EXPORT_SYMBOL(slate_soft_reset);
 
+int send_wlan_state(enum WMSlateCtrlChnlOpcode type)
+{
+	int ret = 0;
+	struct msg_header_t msg_header = {0, 0};
+	struct slatedaemon_priv *dev = container_of(slatecom_intf_drv,
+					struct slatedaemon_priv,
+					lhndl);
+
+	switch (type) {
+	case GMI_MGR_WLAN_BOOT_INIT:
+		msg_header.opcode = GMI_MGR_WLAN_BOOT_INIT;
+		break;
+	case GMI_MGR_WLAN_BOOT_COMPLETE:
+		msg_header.opcode = GMI_MGR_WLAN_BOOT_COMPLETE;
+		break;
+	default:
+		pr_err("Invalid WLAN State transtion cmd = %d\n", type);
+		break;
+	}
+
+	ret = slatecom_tx_msg(dev, &msg_header.opcode, sizeof(msg_header.opcode));
+	if (ret < 0)
+		pr_err("WLAN State transtion event cmd failed with = %d\n", ret);
+	return ret;
+}
+EXPORT_SYMBOL(send_wlan_state);
+
 static int modem_down2_slate(void)
 {
 	complete(&slate_modem_down_wait);
@@ -599,6 +627,28 @@ static ssize_t slatecom_char_write(struct file *f, const char __user *buf,
 		ret = slatecom_tx_msg(dev, &opcode, sizeof(opcode));
 		if (ret < 0)
 			pr_err("MSM QCLI Enable cmd failed\n");
+		break;
+	case '2':
+		ret = subsystem_start_notify(ssr_domains[0]);
+		if (ret < 0)
+			pr_err("subsystem start notify cmd failed\n");
+		break;
+	case '3':
+		ret = subsystem_stop_notify(ssr_domains[0]);
+		if (ret < 0)
+			pr_err("subsystem stop notify cmd failed\n");
+		break;
+	case '4':
+		opcode = GMI_WEAR_MGR_PMIC_RTC_ENABLE;
+		ret = slatecom_tx_msg(dev, &opcode, sizeof(opcode));
+		if (ret < 0)
+			pr_err("MSM RTC Enable cmd failed\n");
+		break;
+	case '5':
+		opcode = GMI_WEAR_MGR_PMIC_RTC_DISABLE;
+		ret = slatecom_tx_msg(dev, &opcode, sizeof(opcode));
+		if (ret < 0)
+			pr_err("MSM RTC Disable cmd failed\n");
 		break;
 
 	default:
@@ -789,6 +839,12 @@ static int ssr_modem_cb(struct notifier_block *this,
 	int ret;
 
 	switch (opcode) {
+	case SUBSYS_AFTER_DS_ENTRY:
+		msg_header.opcode = GMI_MGR_SSR_MPSS_DOWN_NOTIFICATION;
+		ret = slatecom_tx_msg(dev, &(msg_header.opcode), sizeof(msg_header.opcode));
+		if (ret < 0)
+			pr_err("failed to send mdsp down event to slate\n");
+		break;
 	case SUBSYS_BEFORE_SHUTDOWN:
 		modeme.e_type = MODEM_BEFORE_POWER_DOWN;
 		reinit_completion(&slate_modem_down_wait);
@@ -797,6 +853,12 @@ static int ssr_modem_cb(struct notifier_block *this,
 		ret = slatecom_tx_msg(dev, &(msg_header.opcode), sizeof(msg_header.opcode));
 		if (ret < 0)
 			pr_err("failed to send mdsp down event to slate\n");
+		break;
+	case SUBSYS_AFTER_DS_EXIT:
+		msg_header.opcode = GMI_MGR_SSR_MPSS_UP_NOTIFICATION;
+		ret = slatecom_tx_msg(dev, &(msg_header.opcode), sizeof(msg_header.opcode));
+		if (ret < 0)
+			pr_err("failed to send mdsp up event to slate\n");
 		break;
 	case SUBSYS_AFTER_POWERUP:
 		modeme.e_type = MODEM_AFTER_POWER_UP;
@@ -818,11 +880,33 @@ static int ssr_adsp_cb(struct notifier_block *this,
 	int ret;
 
 	switch (opcode) {
+	case SUBSYS_AFTER_DS_ENTRY:
+		msg_header.opcode = GMI_MGR_SSR_ADSP_DOWN_INDICATION;
+		ret = slatecom_tx_msg(dev, &(msg_header.opcode), sizeof(msg_header.opcode));
+		if (ret < 0)
+			pr_err("failed to send adsp down event to slate\n");
+
+		msg_header.opcode = 250;
+		ret = slatecom_tx_msg(dev, &(msg_header.opcode), sizeof(msg_header.opcode));
+		if (ret < 0)
+			pr_err("failed to send adsp down dummy opcode to slate\n");
+		break;
 	case SUBSYS_BEFORE_SHUTDOWN:
 		adspe.e_type = ADSP_BEFORE_POWER_DOWN;
 		reinit_completion(&slate_adsp_down_wait);
 		send_uevent(&adspe);
 		msg_header.opcode = GMI_MGR_SSR_ADSP_DOWN_INDICATION;
+		ret = slatecom_tx_msg(dev, &(msg_header.opcode), sizeof(msg_header.opcode));
+		if (ret < 0)
+			pr_err("failed to send adsp up event to slate\n");
+		break;
+	case SUBSYS_AFTER_DS_EXIT:
+		msg_header.opcode = 251;
+		ret = slatecom_tx_msg(dev, &(msg_header.opcode), sizeof(msg_header.opcode));
+		if (ret < 0)
+			pr_err("failed to send adsp up dummy opcode to slate\n");
+
+		msg_header.opcode = GMI_MGR_SSR_ADSP_UP_INDICATION;
 		ret = slatecom_tx_msg(dev, &(msg_header.opcode), sizeof(msg_header.opcode));
 		if (ret < 0)
 			pr_err("failed to send adsp up event to slate\n");

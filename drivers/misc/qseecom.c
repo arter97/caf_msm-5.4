@@ -3,6 +3,7 @@
  * QTI Secure Execution Environment Communicator (QSEECOM) driver
  *
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "QSEECOM: %s: " fmt, __func__
@@ -112,6 +113,9 @@
 
 #define FDE_FLAG_POS    4
 #define ENABLE_KEY_WRAP_IN_KS    (1 << FDE_FLAG_POS)
+
+#define DS_ENTERED 0x1
+#define DS_EXITED  0x0
 
 enum qseecom_clk_definitions {
 	CLK_DFAB = 0,
@@ -339,6 +343,7 @@ struct qseecom_control {
 	struct task_struct *unload_app_kthread_task;
 	wait_queue_head_t unload_app_kthread_wq;
 	atomic_t unload_app_kthread_state;
+	uint32_t qseecom_ds_state;
 };
 
 struct qseecom_unload_app_pending_list {
@@ -454,6 +459,7 @@ static int qseecom_query_ce_info(struct qseecom_dev_handle *data,
 						void __user *argp);
 static int __qseecom_unload_app(struct qseecom_dev_handle *data,
 				uint32_t app_id);
+static int qseecom_set_ds_state(uint32_t state);
 
 static int __maybe_unused get_qseecom_keymaster_status(char *str)
 {
@@ -3130,7 +3136,8 @@ static int qseecom_unload_app(struct qseecom_dev_handle *data,
 	pr_debug("unload app %d(%s), app_crash flag %d\n", data->client.app_id,
 			data->client.app_name, app_crash);
 
-	if (!memcmp(data->client.app_name, "keymaste", strlen("keymaste"))) {
+	if (!memcmp(data->client.app_name, "keymaste", strlen("keymaste"))
+		&& !(qseecom.qseecom_ds_state == DS_ENTERED)) {
 		pr_debug("Do not unload keymaster app from tz\n");
 		goto unload_exit;
 	}
@@ -3164,7 +3171,7 @@ static int qseecom_unload_app(struct qseecom_dev_handle *data,
 		goto unload_exit;
 	}
 
-	if (!ptr_app->ref_cnt) {
+	if (!ptr_app->ref_cnt || (qseecom.qseecom_ds_state == DS_ENTERED)) {
 		ret = __qseecom_unload_app(data, data->client.app_id);
 		if (ret == -EBUSY) {
 			/*
@@ -7647,6 +7654,7 @@ long qseecom_ioctl(struct file *file,
 	struct qseecom_dev_handle *data = file->private_data;
 	void __user *argp = (void __user *) arg;
 	bool perf_enabled = false;
+	uint32_t ds_state = 0;
 
 	if (!data) {
 		pr_err("Invalid/uninitialized device handle\n");
@@ -8360,6 +8368,21 @@ long qseecom_ioctl(struct file *file,
 		pfk_fbe_clear_key((const unsigned char *) key_data.key,
 				key_data.key_len, (const unsigned char *)
 				key_data.salt, key_data.salt_len);
+		break;
+	}
+	case QSEECOM_IOCTL_DEEP_SLEEP_STATE: {
+		mutex_lock(&app_access_lock);
+		atomic_inc(&data->ioctl_count);
+		ret = copy_from_user(&ds_state, argp, sizeof(ds_state));
+		if (ret) {
+			pr_err("copy from user failed\n");
+			return -EFAULT;
+		}
+		ret = qseecom_set_ds_state(ds_state);
+		atomic_dec(&data->ioctl_count);
+		mutex_unlock(&app_access_lock);
+		if (ret)
+			pr_err("failed to set deep sleep state %d\n", ret);
 		break;
 	}
 	default:
@@ -9203,6 +9226,20 @@ out:
 	return ret;
 }
 
+static int qseecom_set_ds_state(uint32_t state)
+{
+	int ret = 0;
+
+	if (state == DS_ENTERED || state == DS_EXITED) {
+		qseecom.qseecom_ds_state = state;
+	} else {
+		qseecom.qseecom_ds_state = -EINVAL;
+		pr_err("Invalid deep sleep state = %d\n", state);
+		ret = -EINVAL;
+	}
+	return ret;
+}
+
 /*
  * Check whitelist feature, and if TZ feature version is < 1.0.0,
  * then whitelist feature is not supported.
@@ -9760,7 +9797,7 @@ static int qseecom_remove(struct platform_device *pdev)
 	return ret;
 }
 
-static int qseecom_suspend(struct platform_device *pdev, pm_message_t state)
+static int qseecom_suspend(struct device *dev)
 {
 	int ret = 0;
 	struct qseecom_clk *qclk;
@@ -9802,7 +9839,7 @@ static int qseecom_suspend(struct platform_device *pdev, pm_message_t state)
 	return 0;
 }
 
-static int qseecom_resume(struct platform_device *pdev)
+static int qseecom_resume(struct device *dev)
 {
 	int mode = 0;
 	int ret = 0;
@@ -9889,13 +9926,17 @@ static const struct of_device_id qseecom_match[] = {
 	{}
 };
 
+static const struct dev_pm_ops qseecom_pm_ops = {
+	.suspend_late = qseecom_suspend,
+	.resume_early = qseecom_resume,
+};
+
 static struct platform_driver qseecom_plat_driver = {
 	.probe = qseecom_probe,
 	.remove = qseecom_remove,
-	.suspend = qseecom_suspend,
-	.resume = qseecom_resume,
 	.driver = {
 		.name = "qseecom",
+		.pm = &qseecom_pm_ops,
 		.of_match_table = qseecom_match,
 	},
 };
