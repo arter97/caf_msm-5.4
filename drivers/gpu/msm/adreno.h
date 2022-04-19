@@ -434,6 +434,9 @@ struct adreno_device {
 
 	struct list_head active_list;
 	spinlock_t active_list_lock;
+
+	/** @perfcounter: Flag to control perfcounter ioctl reads */
+	bool perfcounter;
 };
 
 /**
