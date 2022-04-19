@@ -21,11 +21,6 @@
 #include "bcm-voter.h"
 #include "qnoc-qos.h"
 
-static LIST_HEAD(qnoc_probe_list);
-static DEFINE_MUTEX(probe_list_lock);
-
-static int probe_count;
-
 static struct qcom_icc_node qhm_a1noc_cfg = {
 	.name = "qhm_a1noc_cfg",
 	.id = MASTER_A1NOC_CFG,
@@ -1689,6 +1684,7 @@ static struct qcom_icc_bcm bcm_cn1 = {
 static struct qcom_icc_bcm bcm_ip0 = {
 	.name = "IP0",
 	.voter_idx = 0,
+	.qos_proxy = true,
 	.num_nodes = 1,
 	.nodes = { &ipa_core_slave },
 };
@@ -1736,6 +1732,7 @@ static struct qcom_icc_bcm bcm_mm3 = {
 static struct qcom_icc_bcm bcm_qup0 = {
 	.name = "QUP0",
 	.voter_idx = 0,
+	.keepalive = true,
 	.vote_scale = 1,
 	.num_nodes = 2,
 	.nodes = { &qhm_qup0, &qhm_qup1 },
@@ -1890,12 +1887,19 @@ static struct qcom_icc_bcm bcm_sh0_disp = {
 	.nodes = { &qns_llcc_disp },
 };
 
+static const struct regmap_config icc_regmap_config = {
+	.reg_bits       = 32,
+	.reg_stride     = 4,
+	.val_bits       = 32,
+};
+
 static struct qcom_icc_bcm *aggre1_noc_bcms[] = {
 	&bcm_ce0,
 	&bcm_cn1,
 	&bcm_qup0,
 	&bcm_sn3,
 	&bcm_sn14,
+	&bcm_ip0,
 };
 
 static struct qcom_icc_node *aggre1_noc_nodes[] = {
@@ -1926,6 +1930,7 @@ static char *aggre1_noc_voters[] = {
 };
 
 static struct qcom_icc_desc sm6150_aggre1_noc = {
+	.config = &icc_regmap_config,
 	.nodes = aggre1_noc_nodes,
 	.num_nodes = ARRAY_SIZE(aggre1_noc_nodes),
 	.bcms = aggre1_noc_bcms,
@@ -1950,6 +1955,7 @@ static char *camnoc_virt_voters[] = {
 };
 
 static struct qcom_icc_desc sm6150_camnoc_virt = {
+	.config = &icc_regmap_config,
 	.nodes = camnoc_virt_nodes,
 	.num_nodes = ARRAY_SIZE(camnoc_virt_nodes),
 	.bcms = camnoc_virt_bcms,
@@ -2014,6 +2020,7 @@ static char *config_noc_voters[] = {
 };
 
 static struct qcom_icc_desc sm6150_config_noc = {
+	.config = &icc_regmap_config,
 	.nodes = config_noc_nodes,
 	.num_nodes = ARRAY_SIZE(config_noc_nodes),
 	.bcms = config_noc_bcms,
@@ -2036,6 +2043,7 @@ static char *dc_noc_voters[] = {
 };
 
 static struct qcom_icc_desc sm6150_dc_noc = {
+	.config = &icc_regmap_config,
 	.nodes = dc_noc_nodes,
 	.num_nodes = ARRAY_SIZE(dc_noc_nodes),
 	.bcms = dc_noc_bcms,
@@ -2049,6 +2057,7 @@ static struct qcom_icc_bcm *gem_noc_bcms[] = {
 	&bcm_sh2,
 	&bcm_sh3,
 	&bcm_sh0_disp,
+	&bcm_mm1,
 };
 
 static struct qcom_icc_node *gem_noc_nodes[] = {
@@ -2077,6 +2086,7 @@ static char *gem_noc_voters[] = {
 };
 
 static struct qcom_icc_desc sm6150_gem_noc = {
+	.config = &icc_regmap_config,
 	.nodes = gem_noc_nodes,
 	.num_nodes = ARRAY_SIZE(gem_noc_nodes),
 	.bcms = gem_noc_bcms,
@@ -2099,6 +2109,7 @@ static char *ipa_virt_voters[] = {
 };
 
 static struct qcom_icc_desc sm6150_ipa_virt = {
+	.config = &icc_regmap_config,
 	.nodes = ipa_virt_nodes,
 	.num_nodes = ARRAY_SIZE(ipa_virt_nodes),
 	.bcms = ipa_virt_bcms,
@@ -2127,6 +2138,7 @@ static char *mc_virt_voters[] = {
 };
 
 static struct qcom_icc_desc sm6150_mc_virt = {
+	.config = &icc_regmap_config,
 	.nodes = mc_virt_nodes,
 	.num_nodes = ARRAY_SIZE(mc_virt_nodes),
 	.bcms = mc_virt_bcms,
@@ -2169,6 +2181,7 @@ static char *mmss_noc_voters[] = {
 };
 
 static struct qcom_icc_desc sm6150_mmss_noc = {
+	.config = &icc_regmap_config,
 	.nodes = mmss_noc_nodes,
 	.num_nodes = ARRAY_SIZE(mmss_noc_nodes),
 	.bcms = mmss_noc_bcms,
@@ -2217,6 +2230,7 @@ static char *system_noc_voters[] = {
 };
 
 static struct qcom_icc_desc sm6150_system_noc = {
+	.config = &icc_regmap_config,
 	.nodes = system_noc_nodes,
 	.num_nodes = ARRAY_SIZE(system_noc_nodes),
 	.bcms = system_noc_bcms,
@@ -2260,44 +2274,9 @@ static const struct of_device_id qnoc_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, qnoc_of_match);
 
-static void qnoc_sync_state(struct device *dev)
-{
-	struct platform_device *pdev = to_platform_device(dev);
-	struct qcom_icc_provider *qp = platform_get_drvdata(pdev);
-	struct qcom_icc_bcm *bcm;
-	struct bcm_voter *voter;
-
-	mutex_lock(&probe_list_lock);
-	probe_count++;
-
-	if (probe_count < ARRAY_SIZE(qnoc_of_match) - 1) {
-		mutex_unlock(&probe_list_lock);
-		return;
-	}
-
-	list_for_each_entry(qp, &qnoc_probe_list, probe_list) {
-		int i;
-
-		for (i = 0; i < qp->num_voters; i++)
-			qcom_icc_bcm_voter_clear_init(qp->voters[i]);
-
-		for (i = 0; i < qp->num_bcms; i++) {
-			bcm = qp->bcms[i];
-			if (!bcm->keepalive)
-				continue;
-
-			voter = qp->voters[bcm->voter_idx];
-			qcom_icc_bcm_voter_add(voter, bcm);
-			qcom_icc_bcm_voter_commit(voter);
-		}
-	}
-
-	mutex_unlock(&probe_list_lock);
-}
-
 static struct platform_driver qnoc_driver = {
-	.probe = qnoc_probe,
-	.remove = qnoc_remove,
+	.probe = qcom_icc_rpmh_probe,
+	.remove = qcom_icc_rpmh_remove,
 	.driver = {
 		.name = "qnoc-sm6150",
 		.of_match_table = qnoc_of_match,
