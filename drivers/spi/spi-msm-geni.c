@@ -27,6 +27,7 @@
 #define SPI_NUM_CHIPSELECT	(4)
 #define SPI_XFER_TIMEOUT_MS	(250)
 #define SPI_AUTO_SUSPEND_DELAY	(250)
+#define SPI_XFER_TIMEOUT_OFFSET	(50)
 /* SPI SE specific registers */
 #define SE_SPI_CPHA		(0x224)
 #define SE_SPI_LOOPBACK		(0x22C)
@@ -1700,10 +1701,11 @@ static int spi_geni_transfer_one(struct spi_master *spi,
 
 	if (mas->use_fixed_timeout)
 		xfer_timeout = msecs_to_jiffies(SPI_XFER_TIMEOUT_MS);
-	else
-		xfer_timeout =
-			100 * msecs_to_jiffies(DIV_ROUND_UP(xfer->len * 8,
-			DIV_ROUND_UP(xfer->speed_hz, MSEC_PER_SEC)));
+	else {
+		xfer_timeout = (1000 * xfer->len * BITS_PER_BYTE) / xfer->speed_hz;
+		xfer_timeout += SPI_XFER_TIMEOUT_OFFSET;
+		xfer_timeout = msecs_to_jiffies(xfer_timeout);
+	}
 	GENI_SE_DBG(mas->ipc, false, mas->dev,
 			"current xfer_timeout:%lu ms.\n", xfer_timeout);
 
