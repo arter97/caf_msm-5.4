@@ -1954,7 +1954,7 @@ static int diag_process_dci_pkt_rsp(unsigned char *buf, int len)
 
 	/* Check if it is a dedicated Apps command */
 	ret = diag_dci_process_apps_pkt(header, req_buf, req_len,
-					req_tag, header_len);
+					req_tag);
 	if ((ret == DIAG_DCI_NO_ERROR && !common_cmd) || ret < 0)
 		return ret;
 
