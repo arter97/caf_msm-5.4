@@ -562,6 +562,8 @@ void adreno_drawctxt_destroy(struct kgsl_context *context)
 	drawctxt = ADRENO_CONTEXT(context);
 	entry = drawctxt->shadow_timestamp_mem;
 	if (entry) {
+		/* invalidate current_context so that user knows the shadow memory can be freed now */
+		kgsl_sharedmem_writel(&entry->memdesc, DRAWCTXT_SHADOW_OFFSET(current_context), 0);
 		kgsl_memdesc_unmap(&entry->memdesc);
 		kgsl_mem_entry_put(entry);
 		drawctxt->shadow_timestamp_mem = NULL;
@@ -676,6 +678,7 @@ int adreno_drawctxt_set_shadow_mem(struct kgsl_device_private *dev_priv,
 
 unlock:
 	spin_unlock(&drawctxt->lock);
+	kgsl_sharedmem_writel(&entry->memdesc, DRAWCTXT_SHADOW_OFFSET(current_context), context->id);
 done:
 	if (ret) {
 		if (entry) {
