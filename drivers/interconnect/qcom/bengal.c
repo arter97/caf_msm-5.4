@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  */
 
@@ -131,7 +132,7 @@ static struct qcom_icc_qosbox qnm_gpu_qos = {
 	.offsets = { 0xC300 },
 	.config = &(struct qos_config) {
 		.prio = 0,
-		.bke_enable = 0,
+		.bke_enable = 1,
 	 },
 };
 
@@ -154,7 +155,7 @@ static struct qcom_icc_qosbox tcu_0_qos = {
 	.offsets = { 0x18300 },
 	.config = &(struct qos_config) {
 		.prio = 6,
-		.bke_enable = 0,
+		.bke_enable = 1,
 	 },
 };
 
@@ -197,8 +198,8 @@ static struct qcom_icc_node crypto_c0 = {
 	.id = MASTER_CRYPTO_CORE0,
 	.channels = 1,
 	.buswidth = 8,
-    .noc_ops = &qcom_qnoc4_ops,
-    .qosbox = &crypto_c0_qos,
+	.noc_ops = &qcom_qnoc4_ops,
+	.qosbox = &crypto_c0_qos,
 	.mas_rpm_id = ICBID_MASTER_CRYPTO_CORE0,
 	.slv_rpm_id = -1,
 	.num_links = 1,
@@ -476,13 +477,13 @@ static struct qcom_icc_node qxm_pimem = {
 };
 
 static struct qcom_icc_qosbox qdss_bam_qos = {
-    .regs = icc_qnoc_qos_regs[ICC_QNOC_QOSGEN_TYPE_RPMH],
-    .num_ports = 1,
-    .offsets = { 0x17000, },
-    .config = &(struct qos_config) {
-        .prio = 2,
-        .urg_fwd = 0,
-    },
+	.regs = icc_qnoc_qos_regs[ICC_QNOC_QOSGEN_TYPE_RPMH],
+	.num_ports = 1,
+	.offsets = { 0x17000, },
+	.config = &(struct qos_config) {
+		.prio = 2,
+		.urg_fwd = 0,
+	},
 };
 
 static struct qcom_icc_node qhm_qdss_bam = {
