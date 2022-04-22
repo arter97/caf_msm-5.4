@@ -82,7 +82,7 @@ static struct page **fastrpc_alloc_buffer(struct fastrpc_buf *buf, gfp_t gfp)
 
 	if (!(buf->dma_attr & DMA_ATTR_NO_KERNEL_MAPPING)) {
 		buf->va = vmap(pages, count, VM_USERMAP,
-				pgprot_noncached(PAGE_KERNEL));
+				PAGE_KERNEL);
 		if (!buf->va)
 			goto out_free_sg;
 	}
