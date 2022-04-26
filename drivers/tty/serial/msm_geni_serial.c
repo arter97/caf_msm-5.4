@@ -3877,7 +3877,7 @@ static int msm_geni_serial_get_irq_pinctrl(struct platform_device *pdev,
 	struct uart_port *uport = &dev_port->uport;
 
 	/* Optional to use the Rx pin as wakeup irq */
-	dev_port->wakeup_irq = platform_get_irq(pdev, 1);
+	dev_port->wakeup_irq = platform_get_irq_optional(pdev, 1);
 	if ((dev_port->wakeup_irq < 0 && !dev_port->is_console))
 		dev_info(&pdev->dev, "No wakeup IRQ configured\n");
 
