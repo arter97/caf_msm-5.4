@@ -33,6 +33,8 @@
 
 #include "smem_private.h"
 
+#include "qc_version.h"
+
 #define MODEM_SBL_VERSION_INDEX 7
 #define SMEM_VERSION_INFO_SIZE (32 * 4)
 #define SMEM_VERSION 0x000B
@@ -1600,6 +1602,10 @@ void image_version(void)
 {
 	char *smem_image_addr;
 	smem_image_addr = get_image_version_base_address();
+	if(smem_image_addr == NULL)
+	{
+		LOG_ERR("%s: Unable to read smem image version base address\n", __func__);
+	}
 	smem_image_addr += SMEM_IMAGE_VERSION_PARTITION_APPS * SMEM_IMAGE_VERSION_SINGLE_BLOCK_SIZE;
     snprintf(smem_image_addr, SMEM_IMAGE_VERSION_NAME_SIZE, "%-.75s", qc_version);
 }
