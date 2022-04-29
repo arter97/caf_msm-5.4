@@ -19,6 +19,11 @@
 
 #define SMD_HEAP_SIZE 512
 
+#define SMEM_IMAGE_VERSION_PARTITION_APPS 10
+#define SMEM_IMAGE_VERSION_SINGLE_BLOCK_SIZE 128
+#define SMEM_IMAGE_VERSION_NAME_SIZE 75
+#define SMEM_IMAGE_VERSION_SIZE 4096
+
 struct smem_heap_info {
 	unsigned initialized;
 	unsigned free_offset;
@@ -101,4 +106,18 @@ unsigned smem_get_free_space(unsigned to_proc);
  * @returns: smem version number if success otherwise zero.
  */
 unsigned smem_get_version(unsigned idx);
+
+/**
+ * get_image_version_base_address() - Get the smem image version table base address
+ *
+ * @returns: smem image version table base address.
+ */
+char *get_image_version_base_address(void);
+
+/**
+ * image_version() - Store the APPS Image version in SMEM
+ *
+ */ 
+void image_version(void);
+
 #endif /* _ARCH_ARM_MACH_MSM_SMEM_PRIVATE_H_ */
