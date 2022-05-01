@@ -283,7 +283,7 @@ static int rpc_handshake(struct hgsl_hyp_priv_t *priv,
 	int rval = GSL_SUCCESS;
 	struct gsl_hab_payload *send_buf = NULL;
 	struct gsl_hab_payload *recv_buf = NULL;
-	struct handshake_params_t params = { 0 };
+	struct handshake_params_v2_t params = { 0 };
 	int tmp = 0;
 	enum gsl_rpc_server_type_t server_type = GSL_RPC_SERVER_TYPE_LAST;
 	enum gsl_rpc_server_mode_t server_mode = GSL_RPC_SERVER_MODE_LAST;
@@ -303,9 +303,9 @@ static int rpc_handshake(struct hgsl_hyp_priv_t *priv,
 	params.client_version = g_client_version;
 	params.pid = priv->client_pid;
 	params.size = sizeof(params);
-	/* send the current process name to the server */
 	strlcpy(params.name, priv->client_name, sizeof(params.name));
-	LOGD("client process name is (%s)", params.name);
+	params.uid = from_kuid(current_user_ns(), current_uid());
+	LOGD("client process name is (%s), uid is %u", params.name, params.uid);
 
 	ret = gsl_rpc_write(send_buf, &params, sizeof(params));
 	if (ret) {
@@ -313,7 +313,7 @@ static int rpc_handshake(struct hgsl_hyp_priv_t *priv,
 		goto out;
 	}
 
-	ret = gsl_rpc_transact_ext(RPC_HANDSHAKE, 1, hab_channel, 0);
+	ret = gsl_rpc_transact_ext(RPC_HANDSHAKE, 2, hab_channel, 0);
 	if (ret) {
 		LOGE("gsl_rpc_transact_ext failed %d", ret);
 		goto out;
