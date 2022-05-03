@@ -26,7 +26,12 @@ struct shadow_ts {
 	unsigned int unused1;
 	unsigned int eop;
 	unsigned int unused2;
-	unsigned int reserved[6];
+	unsigned int preempted;
+	unsigned int unused3;
+	unsigned int ref_wait_ts;
+	unsigned int unused4;
+	unsigned int current_context;
+	unsigned int unused5;
 };
 #pragma pack(pop)
 

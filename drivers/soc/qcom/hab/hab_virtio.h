@@ -69,6 +69,8 @@ struct virtio_hab {
 
 	spinlock_t mlock; /* master lock for all the pchans */
 	bool ready; /* overall device ready flag */
+
+	struct list_head node; /* list of all probed virtio hab */
 };
 
 /*
