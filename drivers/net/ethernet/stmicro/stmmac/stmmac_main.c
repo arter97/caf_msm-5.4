@@ -47,6 +47,7 @@
 
 #define	STMMAC_ALIGN(x)		ALIGN(ALIGN(x, SMP_CACHE_BYTES), 16)
 #define	TSO_MAX_BUFF_SIZE	(SZ_16K - 1)
+#define KSZ9131RNX_LBR		0x11
 
 /* Module parameters */
 #define TX_TIMEO	5000
@@ -918,6 +919,7 @@ static void stmmac_mac_config(struct phylink_config *config, unsigned int mode,
 {
 	struct stmmac_priv *priv = netdev_priv(to_net_dev(config->dev));
 	u32 ctrl;
+	int phy_data = 0;
 
 	ctrl = readl(priv->ioaddr + MAC_CTRL_REG);
 	ctrl &= ~priv->hw->link.speed_mask;
@@ -956,6 +958,14 @@ static void stmmac_mac_config(struct phylink_config *config, unsigned int mode,
 	}
 
 	priv->speed = state->speed;
+
+	if (priv->speed == SPEED_10 &&
+	    state->duplex &&
+	   ((priv->phydev->phy_id & priv->phydev->drv->phy_id_mask) == PHY_ID_KSZ9131)) {
+		phy_data = priv->mii->read(priv->mii, priv->plat->phy_addr, KSZ9131RNX_LBR);
+		phy_data = phy_data | (1 << 2);
+		priv->mii->write(priv->mii, priv->plat->phy_addr, KSZ9131RNX_LBR, phy_data);
+	}
 
 	if (priv->plat->fix_mac_speed)
 		priv->plat->fix_mac_speed(priv->plat->bsp_priv, state->speed);
@@ -4787,6 +4797,8 @@ int stmmac_dvr_probe(struct device *device,
 	ndev->vlan_features |= ndev->hw_features;
 	/* Both mac100 and gmac support receive VLAN tag detection */
 	ndev->features |= NETIF_F_HW_VLAN_CTAG_RX | NETIF_F_HW_VLAN_STAG_RX;
+	priv->dma_cap.vlhash = 0;
+	priv->dma_cap.vlins = 0;
 	if (priv->dma_cap.vlhash) {
 		ndev->features |= NETIF_F_HW_VLAN_CTAG_FILTER;
 		ndev->features |= NETIF_F_HW_VLAN_STAG_FILTER;
