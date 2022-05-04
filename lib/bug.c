@@ -47,6 +47,7 @@
 #include <linux/bug.h>
 #include <linux/sched.h>
 #include <linux/rculist.h>
+#include <soc/qcom/boot_stats.h>
 
 extern struct bug_entry __start___bug_table[], __stop___bug_table[];
 
@@ -140,6 +141,9 @@ struct bug_entry *find_bug(unsigned long bugaddr)
 	return module_find_bug(bugaddr);
 }
 
+extern notrace u64 arch_counter_get_cntpct(void);
+extern notrace u64 arch_counter_get_cntvct(void);
+
 enum bug_trap_type report_bug(unsigned long bugaddr, struct pt_regs *regs)
 {
 	struct bug_entry *bug;
@@ -194,8 +198,11 @@ enum bug_trap_type report_bug(unsigned long bugaddr, struct pt_regs *regs)
 		return BUG_TRAP_TYPE_WARN;
 	}
 
-	if (file)
+	if (file) {
+		printk(KERN_ERR "KKK:: from %s VQTimer(cntvct) is %lld, MPM timer is %lld\n",
+				__func__, arch_counter_get_cntvct(), msm_timer_get_sclk_ticks());
 		pr_crit("kernel BUG at %s:%u!\n", file, line);
+	}
 	else
 		pr_crit("Kernel BUG at %pB [verbose debug info unavailable]\n",
 			(void *)bugaddr);

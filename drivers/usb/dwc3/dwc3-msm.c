@@ -4665,6 +4665,10 @@ int dwc3_msm_release_ss_lane(struct device *dev, bool usb_dp_concurrent_mode)
 }
 EXPORT_SYMBOL(dwc3_msm_release_ss_lane);
 
+extern notrace u64 arch_counter_get_cntpct(void);
+extern notrace u64 arch_counter_get_cntvct(void);
+
+
 static int dwc3_msm_probe(struct platform_device *pdev)
 {
 	struct device_node *node = pdev->dev.of_node, *dwc3_node;
@@ -4675,6 +4679,8 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	int ret = 0, size = 0, i;
 	u32 val;
 
+	printk(KERN_ERR "KKK:: from %s VQtimer(cntvct) is %lld, MPM timer is %lld\n",
+			__func__, arch_counter_get_cntvct(), msm_timer_get_sclk_ticks());
 	mdwc = devm_kzalloc(&pdev->dev, sizeof(*mdwc), GFP_KERNEL);
 	if (!mdwc)
 		return -ENOMEM;
