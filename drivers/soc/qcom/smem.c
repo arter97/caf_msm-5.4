@@ -1607,13 +1607,12 @@ void image_version(void)
 		LOG_ERR("%s: Unable to read smem image version base address\n", __func__);
 	}
 	smem_image_addr += SMEM_IMAGE_VERSION_PARTITION_APPS * SMEM_IMAGE_VERSION_SINGLE_BLOCK_SIZE;
-    snprintf(smem_image_addr, SMEM_IMAGE_VERSION_NAME_SIZE, "%-.75s", qc_version);
+    	snprintf(smem_image_addr, SMEM_IMAGE_VERSION_NAME_SIZE, "%-.75s", qc_version);
 }
 
 char *get_image_version_base_address(void)
 {
-	return smem_find(SMEM_IMAGE_VERSION_TABLE,
-				SMEM_IMAGE_VERSION_SIZE, 0, SMEM_ANY_HOST_FLAG);
+	return smem_find(SMEM_IMAGE_VERSION_TABLE, SMEM_IMAGE_VERSION_SIZE, 0, SMEM_ANY_HOST_FLAG);
 }
 
 arch_initcall(msm_smem_init);
