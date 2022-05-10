@@ -188,7 +188,7 @@ static void __init register_insn_emulation(struct insn_emulation_ops *ops)
 		insn->max = INSN_HW;
 		break;
 	case INSN_OBSOLETE:
-		insn->current_mode = INSN_UNDEF;
+		insn->current_mode = INSN_EMULATE;
 		insn->max = INSN_EMULATE;
 		break;
 	}
