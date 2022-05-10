@@ -678,6 +678,7 @@ static void mem_buf_alloc_req_work(struct work_struct *work)
 		ret = PTR_ERR(xfer_mem);
 		pr_err("%s: failed to process rmt memory alloc request: %d\n",
 		       __func__, ret);
+		xfer_mem = NULL;
 	} else {
 		resp_msg->hdl = xfer_mem->hdl;
 	}
@@ -695,10 +696,12 @@ static void mem_buf_alloc_req_work(struct work_struct *work)
 	if (ret < 0) {
 		pr_err("%s: failed to send memory allocation response rc: %d\n",
 		       __func__, ret);
-		mutex_lock(&mem_buf_xfer_mem_list_lock);
-		list_del(&xfer_mem->entry);
-		mutex_unlock(&mem_buf_xfer_mem_list_lock);
-		mem_buf_cleanup_alloc_req(xfer_mem);
+		if (xfer_mem) {
+			mutex_lock(&mem_buf_xfer_mem_list_lock);
+			list_del(&xfer_mem->entry);
+			mutex_unlock(&mem_buf_xfer_mem_list_lock);
+			mem_buf_cleanup_alloc_req(xfer_mem);
+		}
 	} else {
 		pr_debug("%s: Allocation response sent\n", __func__);
 	}
