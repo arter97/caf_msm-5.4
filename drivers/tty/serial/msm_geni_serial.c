@@ -4059,7 +4059,6 @@ static int msm_geni_serial_get_ver_info(struct uart_port *uport)
 	msm_port->ver_info.hw_ver = geni_se_qupv3_get_hw_version(msm_port->wrapper_dev);
 	dev_err(uport->dev, "%s:HW version %d\n", __func__, msm_port->ver_info.hw_ver);
 
-	msm_geni_serial_enable_interrupts(uport);
 exit_ver_info:
 	if (!msm_port->is_console)
 		se_geni_clks_off(&msm_port->serial_rsc);
@@ -4418,6 +4417,9 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 
 	/* Initialize the GSI mode */
 	msm_geni_serial_init_gsi(uport);
+	msm_geni_serial_enable_interrupts(uport);
+	if (!dev_port->is_console)
+		se_geni_clks_off(&dev_port->serial_rsc);
 
 	/*
 	 * In abrupt kill scenarios, previous state of the uart causing runtime
