@@ -233,8 +233,10 @@ static int ion_pages_cache_ops(struct ion_client *client,
 			unsigned int cmd)
 {
 	struct sg_table *table = NULL;
+	struct ion_buffer *buffer;
 
-	table = ion_sg_table(client, handle);
+	buffer = get_buffer(handle);
+	table = buffer->sg_table;
 	if (IS_ERR_OR_NULL(table))
 		return PTR_ERR(table);
 
