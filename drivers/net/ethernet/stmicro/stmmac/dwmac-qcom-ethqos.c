@@ -1317,9 +1317,9 @@ static void ethqos_handle_phy_interrupt(struct qcom_ethqos *ethqos)
 
 		if (!priv->plat->mac2mac_en) {
 			if (phy_intr_status & LINK_UP_STATE)
-				phylink_mac_change(priv->phylink, LINK_UP);
+				phy_mac_interrupt(priv->phydev);
 			else if (phy_intr_status & LINK_DOWN_STATE)
-				phylink_mac_change(priv->phylink, LINK_DOWN);
+				phy_mac_interrupt(priv->phydev);
 		}
 	}
 }
@@ -2303,6 +2303,20 @@ static int _qcom_ethqos_probe(void *arg)
 		ethqos->is_gpio_phy_reset = true;
 		ETHQOSDBG("qcom,phy-reset present\n");
 	}
+
+	if (of_property_read_u32(np, "qcom,phyvoltage_min",
+				 &ethqos->phyvoltage_min))
+		ethqos->phyvoltage_min = 3075000;
+	else
+		ETHQOSINFO("qcom,phyvoltage_min = %d\n",
+			   ethqos->phyvoltage_min);
+
+	if (of_property_read_u32(np, "qcom,phyvoltage_max",
+				 &ethqos->phyvoltage_max))
+		ethqos->phyvoltage_max = 3200000;
+	else
+		ETHQOSINFO("qcom,phyvoltage_max = %d\n",
+			   ethqos->phyvoltage_max);
 
 	ethqos_init_regulators(ethqos);
 	ethqos_init_gpio(ethqos);
