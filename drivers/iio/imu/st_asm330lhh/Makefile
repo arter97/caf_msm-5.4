@@ -1,5 +1,6 @@
-st_asm330lhh-y := st_asm330lhh_core.o st_asm330lhh_buffer.o
-
-obj-$(CONFIG_IIO_ST_ASM330LHH) += st_asm330lhh.o
+#
+# Makefile for ST ASM330 device.
+#
+obj-$(CONFIG_IIO_ST_ASM330LHH) += st_asm330lhh_core.o st_asm330lhh_buffer.o
 obj-$(CONFIG_IIO_ST_ASM330LHH_I2C) += st_asm330lhh_i2c.o
 obj-$(CONFIG_IIO_ST_ASM330LHH_SPI) += st_asm330lhh_spi.o
