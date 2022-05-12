@@ -26,6 +26,23 @@
 
 &i2c_1 {
 	status = "ok";
+	smi130_gyro@69{
+		compatible = "smi130_gyro";
+		reg = <0x69>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&sensor_int2_default>;
+		interrupt-parent = <&tlmm_pinmux>;
+		interrupts = <1 IRQ_TYPE_EDGE_RISING>;
+		smi130_gyro,gpio_irq = <&tlmm_pinmux 1 IRQ_TYPE_EDGE_RISING>;
+	};
+	smi130_acc@19{
+		compatible = "smi130_acc";
+		reg = <0x19>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&sensor_int1_default>;
+		interrupt-parent = <&tlmm_pinmux>;
+		interrupts = <0 IRQ_TYPE_EDGE_RISING>;
+	};
 	bmi160@68{
 		compatible = "bosch-sensortec,bmi160";
 		reg = <0x68>;
@@ -53,6 +70,14 @@
 		inven,secondary_type = "none";
 		inven,aux_type = "none";
 		inven,read_only_slave_type = "none";
+	};
+	asm330@6b{
+		compatible = "st,asm330lhh";
+		reg = <0x6b>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&sensor_int1_default &sensor_int2_default>;
+		interrupt-parent = <&tlmm_pinmux>;
+		interrupts = <0 IRQ_TYPE_EDGE_RISING>;
 	};
 };
 
