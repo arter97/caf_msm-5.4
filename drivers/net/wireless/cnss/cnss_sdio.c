@@ -21,8 +21,6 @@
 #include <linux/slab.h>
 #include <linux/mmc/sdio_func.h>
 #include <linux/mmc/sdio_ids.h>
-#include <linux/mmc/card.h>
-#include <linux/mmc/host.h>
 #include <linux/io.h>
 #include <soc/qcom/subsystem_restart.h>
 #include <soc/qcom/subsystem_notif.h>
@@ -67,11 +65,7 @@ struct cnss_sdio_regulator {
 struct cnss_sdio_info {
 	struct cnss_sdio_wlan_driver *wdrv;
 	struct sdio_func *func;
-	struct mmc_card *card;
-	struct mmc_host *host;
-	struct device *dev;
 	const struct sdio_device_id *id;
-	bool skip_wlan_en_toggle;
 };
 
 struct cnss_ssr_info {
@@ -266,80 +260,6 @@ int cnss_wlan_get_dfs_nol(void *info, u16 info_len)
 	return len;
 }
 EXPORT_SYMBOL(cnss_wlan_get_dfs_nol);
-
-static int cnss_put_hw_resources(struct device *dev)
-{
-	int ret = -EINVAL;
-	struct cnss_sdio_info *info;
-	struct mmc_host *host;
-
-	if (!cnss_pdata)
-		return ret;
-
-	info = &cnss_pdata->cnss_sdio_info;
-
-	if (info->skip_wlan_en_toggle) {
-		pr_debug("%s: HW doesn't support wlan toggling\n", __func__);
-		return 0;
-	}
-
-	host = info->host;
-
-	if (!host) {
-		pr_err("%s: MMC host is invalid\n", __func__);
-		return 0;
-	}
-
-	ret = mmc_power_save_host(host);
-	if (ret) {
-		pr_err("%s: Failed to Power Save Host err:%d\n", __func__,
-		       ret);
-		return ret;
-	}
-
-	if (!cnss_pdata->regulator.wlan_vreg) {
-		pr_debug("%s: wlan_vreg regulator is invalid\n", __func__);
-		return ret;
-	}
-
-	regulator_disable(cnss_pdata->regulator.wlan_vreg);
-
-	return ret;
-}
-
-static int cnss_get_hw_resources(struct device *dev)
-{
-	int ret = -EINVAL;
-	struct mmc_host *host;
-	struct cnss_sdio_info *info;
-
-	if (!cnss_pdata)
-		return ret;
-
-	info = &cnss_pdata->cnss_sdio_info;
-
-	if (info->skip_wlan_en_toggle) {
-		pr_debug("%s: HW doesn't support wlan toggling\n", __func__);
-		return 0;
-	}
-
-	host = info->host;
-
-	ret = regulator_enable(cnss_pdata->regulator.wlan_vreg);
-	if (ret) {
-		pr_err("%s: Failed to enable wlan vreg\n", __func__);
-		return ret;
-	}
-
-	ret = mmc_power_restore_host(host);
-	if (ret) {
-		pr_err("%s: Failed to restore host power ret:%d\n", __func__,
-		       ret);
-		regulator_disable(cnss_pdata->regulator.wlan_vreg);
-	}
-
-	return ret;
-}
 
 static int cnss_sdio_shutdown(const struct subsys_desc *subsys, bool force_stop)
 {
@@ -699,60 +619,41 @@ int cnss_get_restart_level(void)
 }
 EXPORT_SYMBOL(cnss_get_restart_level);
 
-static int cnss_sdio_wlan_inserted(struct sdio_func *func,
-				   const struct sdio_device_id *id)
+static int cnss_sdio_wlan_inserted(
+				struct sdio_func *func,
+				const struct sdio_device_id *id)
 {
-	struct cnss_sdio_info *info;
-
 	if (!cnss_pdata)
 		return -ENODEV;
 
-	info = &cnss_pdata->cnss_sdio_info;
-
-	info->func = func;
-	info->card = func->card;
-	info->host = func->card->host;
-	info->id = id;
-	info->dev = &func->dev;
-
-	cnss_put_hw_resources(cnss_pdata->cnss_sdio_info.dev);
-
-	pr_info("%s: SDIO Device is Probed\n", __func__);
+	cnss_pdata->cnss_sdio_info.func = func;
+	cnss_pdata->cnss_sdio_info.id = id;
 	return 0;
 }
 
 static void cnss_sdio_wlan_removed(struct sdio_func *func)
 {
-	struct cnss_sdio_info *info;
-
 	if (!cnss_pdata)
 		return;
 
-	info = &cnss_pdata->cnss_sdio_info;
-
-	info->host = NULL;
-	info->card = NULL;
-	info->func = NULL;
-	info->id = NULL;
+	cnss_pdata->cnss_sdio_info.func = NULL;
+	cnss_pdata->cnss_sdio_info.id = NULL;
 }
 
 #if defined(CONFIG_PM)
 static int cnss_sdio_wlan_suspend(struct device *dev)
 {
 	struct cnss_sdio_wlan_driver *wdrv;
-	struct sdio_func *func;
 	int error = 0;
 
 	if (!cnss_pdata)
 		return -ENODEV;
 
-	func = cnss_pdata->cnss_sdio_info.func;
 	wdrv = cnss_pdata->cnss_sdio_info.wdrv;
 	if (!wdrv) {
 		/* This can happen when no wlan driver loaded (no register to
 		 * platform driver).
 		 */
-		sdio_set_host_pm_flags(func, MMC_PM_KEEP_POWER);
 		pr_debug("wlan driver not registered\n");
 		return 0;
 	}
@@ -821,39 +722,23 @@ static struct sdio_driver cnss_ar6k_driver = {
 int cnss_sdio_wlan_register_driver(struct cnss_sdio_wlan_driver *driver)
 {
 	struct cnss_sdio_info *cnss_info;
-	struct device *dev;
-	int error = -EINVAL;
+	int error = 0;
 
 	if (!cnss_pdata)
 		return -ENODEV;
 
 	cnss_info = &cnss_pdata->cnss_sdio_info;
-	dev = cnss_info->dev;
-
 	if (cnss_info->wdrv)
 		pr_debug("%s:wdrv already exists wdrv(%p)\n", __func__,
 			 cnss_info->wdrv);
 
 	cnss_info->wdrv = driver;
-	if (!driver)
-		return error;
-
-	error = cnss_get_hw_resources(dev);
-	if (error) {
-		pr_err("%s: Failed to restore power err:%d\n", __func__, error);
-		return error;
+	if (driver->probe) {
+		error = driver->probe(cnss_info->func, cnss_info->id);
+		if (error)
+			pr_err("%s: wlan probe failed error=%d\n", __func__,
+			       error);
 	}
-
-	error = driver->probe ? driver->probe(cnss_info->func,
-					      cnss_info->id) : error;
-	if (error) {
-		pr_err("%s: wlan probe failed error=%d\n", __func__, error);
-		goto put_hw;
-	}
-
-	return error;
-put_hw:
-	cnss_put_hw_resources(dev);
 	return error;
 }
 EXPORT_SYMBOL(cnss_sdio_wlan_register_driver);
@@ -878,16 +763,9 @@ cnss_sdio_wlan_unregister_driver(struct cnss_sdio_wlan_driver *driver)
 		pr_err("%s: driver not registered\n", __func__);
 		return;
 	}
-
-	if (!driver)
-		return;
-
-	if (!driver->remove)
-		return;
-
-	driver->remove(cnss_info->func);
+	if (cnss_info->wdrv->remove)
+		cnss_info->wdrv->remove(cnss_info->func);
 	cnss_info->wdrv = NULL;
-	cnss_put_hw_resources(cnss_info->dev);
 }
 EXPORT_SYMBOL(cnss_sdio_wlan_unregister_driver);
 
@@ -1105,8 +983,6 @@ static void cnss_sdio_release_resource(void)
 static int cnss_sdio_probe(struct platform_device *pdev)
 {
 	int error;
-	struct device *dev = &pdev->dev;
-	struct cnss_sdio_info *info;
 
 	if (pdev->dev.of_node) {
 		cnss_pdata = devm_kzalloc(
@@ -1121,8 +997,6 @@ static int cnss_sdio_probe(struct platform_device *pdev)
 		return -EINVAL;
 
 	cnss_pdata->pdev = pdev;
-	info = &cnss_pdata->cnss_sdio_info;
-
 	error = cnss_sdio_configure_regulator();
 	if (error) {
 		dev_err(&pdev->dev, "Failed to configure voltage regulator error=%d\n",
@@ -1152,9 +1026,6 @@ static int cnss_sdio_probe(struct platform_device *pdev)
 			goto err_wlan_dsrc_enable_regulator;
 		}
 	}
-
-	info->skip_wlan_en_toggle = of_property_read_bool(dev->of_node,
-							  "qcom,skip-wlan-en-toggle");
 
 	error = cnss_sdio_wlan_init();
 	if (error) {
@@ -1194,12 +1065,9 @@ err_wlan_enable_regulator:
 static int cnss_sdio_remove(struct platform_device *pdev)
 {
 	struct cnss_dfs_nol_info *dfs_info;
-	struct cnss_sdio_info *info;
 
 	if (!cnss_pdata)
 		return -ENODEV;
-
-	info = &cnss_pdata->cnss_sdio_info;
 
 	cnss_sdio_wlan_exit();
 
@@ -1207,9 +1075,7 @@ static int cnss_sdio_remove(struct platform_device *pdev)
 	kfree(dfs_info->dfs_nol_info);
 	cnss_subsys_exit();
 	cnss_ramdump_cleanup();
-	cnss_put_hw_resources(info->dev);
 	cnss_sdio_release_resource();
-	cnss_pdata = NULL;
 	return 0;
 }
 

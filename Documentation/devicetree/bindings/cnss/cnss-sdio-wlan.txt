@@ -16,8 +16,7 @@ Required properties:
   - vdd-wlan-dsrc-supply: phandle to the WLAN dsrc vdd regulator device tree node.
   - vdd-wlan-io-supply: phandle to the WLAN IO regulator device tree node.
   - vdd-wlan-xtal-supply: phandle to the WLAM XTAL regulator device tree node.
-  - qcom,skip-wlan-en-toggle: Boolean property to be enabled for platforms where
-                           wlan_en toggling is not supported.
+
 Example:
 	qcom,cnss-sdio {
 		compatible = "qcom,cnss_sdio";
