@@ -345,25 +345,15 @@ static int cnss_sdio_shutdown(const struct subsys_desc *subsys, bool force_stop)
 {
 	struct cnss_sdio_info *cnss_info;
 	struct cnss_sdio_wlan_driver *wdrv;
-	int ret = 0;
 
 	if (!cnss_pdata)
 		return -ENODEV;
 
 	cnss_info = &cnss_pdata->cnss_sdio_info;
 	wdrv = cnss_info->wdrv;
-	if (!wdrv)
-		return 0;
-	if (!wdrv->shutdown)
-		return 0;
-
-	wdrv->shutdown(cnss_info->func);
-	ret = cnss_put_hw_resources(cnss_info->dev);
-
-	if (ret)
-		pr_err("%s: Failed to put hw resources\n", __func__);
-
-	return ret;
+	if (wdrv && wdrv->shutdown)
+		wdrv->shutdown(cnss_info->func);
+	return 0;
 }
 
 static int cnss_sdio_powerup(const struct subsys_desc *subsys)
@@ -377,23 +367,11 @@ static int cnss_sdio_powerup(const struct subsys_desc *subsys)
 
 	cnss_info = &cnss_pdata->cnss_sdio_info;
 	wdrv = cnss_info->wdrv;
-
-	if (!wdrv)
-		return 0;
-
-	if (!wdrv->reinit)
-		return 0;
-
-	ret = cnss_get_hw_resources(cnss_info->dev);
-	if (ret) {
-		pr_err("%s: Failed to power up HW\n", __func__);
-		return ret;
+	if (wdrv && wdrv->reinit) {
+		ret = wdrv->reinit(cnss_info->func, cnss_info->id);
+		if (ret)
+			pr_err("%s: wlan reinit error=%d\n", __func__, ret);
 	}
-
-	ret = wdrv->reinit(cnss_info->func, cnss_info->id);
-	if (ret)
-		pr_err("%s: wlan reinit error=%d\n", __func__, ret);
-
 	return ret;
 }
 
