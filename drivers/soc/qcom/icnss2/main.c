@@ -2202,10 +2202,10 @@ event_post:
 	clear_bit(ICNSS_HOST_TRIGGERED_PDR, &priv->state);
 	icnss_driver_event_post(priv, ICNSS_DRIVER_EVENT_PD_SERVICE_DOWN,
 				ICNSS_EVENT_SYNC, event_data);
-done:
+
 	mod_timer(&priv->recovery_timer,
 		  jiffies + msecs_to_jiffies(ICNSS_RECOVERY_TIMEOUT));
-
+done:
 	if (notification == SERVREG_NOTIF_SERVICE_STATE_UP_V01)
 		clear_bit(ICNSS_FW_DOWN, &priv->state);
 	return NOTIFY_OK;
@@ -4332,6 +4332,9 @@ static int icnss_probe(struct platform_device *pdev)
 #ifdef CONFIG_ICNSS2_RESTART_LEVEL_NOTIF
 		register_trace_pil_restart_level(pil_restart_level_notifier, NULL);
 #endif
+	} else {
+		timer_setup(&priv->recovery_timer,
+			    icnss_recovery_timeout_hdlr, 0);
 	}
 
 	INIT_LIST_HEAD(&priv->icnss_tcdev_list);
@@ -4391,8 +4394,6 @@ static int icnss_remove(struct platform_device *pdev)
 	} else {
 		icnss_modem_ssr_unregister_notifier(priv);
 		icnss_pdr_unregister_notifier(priv);
-		timer_setup(&priv->recovery_timer,
-			    icnss_recovery_timeout_hdlr, 0);
 	}
 
 	icnss_unregister_fw_service(priv);
