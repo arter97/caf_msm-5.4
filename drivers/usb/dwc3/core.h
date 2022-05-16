@@ -1180,6 +1180,7 @@ struct dwc3_scratchpad_array {
  * @force_gen1: use to force gen1 speed on gen2 controller
  * @active_highbw_isoc: if true, high bandwidth isochronous endpoint is active.
  * @ignore_statusirq: if true, ignore irq triggered for status stage.
+ * @num_gsi_eps: number of GSI based hardware accelerated endpoints
  */
 struct dwc3 {
 	struct work_struct	drd_work;
@@ -1441,6 +1442,7 @@ struct dwc3 {
 	struct work_struct	remote_wakeup_work;
 	bool			active_highbw_isoc;
 	bool			ignore_statusirq;
+	u32			num_gsi_eps;
 };
 
 #define INCRX_BURST_MODE 0
