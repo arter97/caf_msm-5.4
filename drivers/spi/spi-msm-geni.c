@@ -2111,7 +2111,6 @@ static irqreturn_t geni_spi_irq(int irq, void *data)
 {
 	struct spi_geni_master *mas = data;
 	u32 m_irq = 0;
-	u32 ret = 0;
 
 	if (pm_runtime_status_suspended(mas->dev)) {
 		GENI_SE_DBG(mas->ipc, false, mas->dev,
