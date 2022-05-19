@@ -1683,9 +1683,6 @@ static void handle_fifo_timeout(struct spi_master *spi,
 	}
 dma_unprep:
 	geni_spi_dma_unprepare(spi, xfer);
-	if (spi->slave && !mas->dis_autosuspend)
-		pm_runtime_put_sync_suspend(mas->dev);
-
 }
 
 static int spi_geni_transfer_one(struct spi_master *spi,
@@ -2022,29 +2019,25 @@ static void geni_spi_dma_unprepare(struct spi_master *spi,
 	}
 }
 
-static bool handle_dma_xfer(u32 dma_tx_status, u32 dma_rx_status, struct spi_geni_master *data)
+static void handle_dma_xfer(u32 dma_tx_status, u32 dma_rx_status, struct spi_geni_master *data)
 {
 	struct spi_geni_master *mas = data;
-	bool ret = false;
 
 	if (dma_tx_status) {
 		geni_write_reg(dma_tx_status, mas->base, SE_DMA_TX_IRQ_CLR);
 		if (dma_tx_status & DMA_TX_ERROR_STATUS) {
 			geni_spi_dma_err(mas, dma_tx_status, 0);
-			ret = true;
 			mas->is_dma_err = true;
 			goto exit;
 		} else if (dma_tx_status & TX_RESET_DONE) {
 			GENI_SE_DBG(mas->ipc, false, mas->dev,
 				"%s: Tx Reset done. DMA_TX_IRQ_STAT:0x%x\n",
 				__func__, dma_tx_status);
-			ret = true;
 			goto exit;
 		} else if (dma_tx_status & TX_DMA_DONE) {
 			GENI_SE_DBG(mas->ipc, false, mas->dev,
 				"%s: DMA done.\n", __func__);
 			mas->tx_rem_bytes = 0;
-			ret = true;
 		}
 	}
 
@@ -2055,14 +2048,12 @@ static bool handle_dma_xfer(u32 dma_tx_status, u32 dma_rx_status, struct spi_gen
 		geni_write_reg(dma_rx_status, mas->base, SE_DMA_RX_IRQ_CLR);
 		if (dma_rx_status & DMA_RX_ERROR_STATUS) {
 			geni_spi_dma_err(mas, dma_rx_status, 1);
-			ret = true;
 			mas->is_dma_err = true;
 			goto exit;
 		} else if (dma_rx_status & RX_RESET_DONE) {
 			GENI_SE_DBG(mas->ipc, false, mas->dev,
 				"%s: Rx Reset done. DMA_RX_IRQ_STAT:0x%x\n",
 				__func__, dma_rx_status);
-			ret = true;
 			goto exit;
 		} else if (dma_rx_status & RX_DMA_DONE) {
 			GENI_SE_DBG(mas->ipc, false, mas->dev,
@@ -2077,20 +2068,18 @@ static bool handle_dma_xfer(u32 dma_tx_status, u32 dma_rx_status, struct spi_gen
 			} else {
 				mas->rx_rem_bytes = 0;
 			}
-			ret = true;
 		}
 	}
 	if (!mas->tx_rem_bytes && !mas->rx_rem_bytes)
-		ret = true;
+		return;
 exit:
-	return ret;
+	return;
 }
 
 static irqreturn_t geni_spi_irq(int irq, void *data)
 {
 	struct spi_geni_master *mas = data;
 	u32 m_irq = 0;
-	u32 ret = 0;
 
 	if (pm_runtime_status_suspended(mas->dev)) {
 		GENI_SE_DBG(mas->ipc, false, mas->dev,
@@ -2146,10 +2135,8 @@ static irqreturn_t geni_spi_irq(int irq, void *data)
 
 		GENI_SE_DBG(mas->ipc, false, mas->dev,
 			"dma_txirq:0x%x dma_rxirq:0x%x\n", dma_tx_status, dma_rx_status);
-
-		ret = handle_dma_xfer(dma_tx_status, dma_rx_status, mas);
-		if (ret)
-			mas->cmd_done = true;
+		handle_dma_xfer(dma_tx_status, dma_rx_status, mas);
+		mas->cmd_done = true;
 
 		if ((m_irq & M_CMD_CANCEL_EN) || (m_irq & M_CMD_ABORT_EN))
 			mas->cmd_done = true;
