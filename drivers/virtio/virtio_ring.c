@@ -2230,8 +2230,6 @@ void vring_transport_features(struct virtio_device *vdev)
 			break;
 		case VIRTIO_F_IOMMU_PLATFORM:
 			break;
-		case VIRTIO_F_RING_PACKED:
-			break;
 		case VIRTIO_F_ORDER_PLATFORM:
 			break;
 		default:
