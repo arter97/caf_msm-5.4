@@ -102,6 +102,7 @@ do_xor_speed(struct xor_block_template *tmpl, void *b1, void *b2)
 static int __init
 calibrate_xor_blocks(void)
 {
+#ifdef DEBUG
 	void *b1, *b2;
 	struct xor_block_template *f, *fastest;
 
@@ -143,6 +144,14 @@ calibrate_xor_blocks(void)
 	free_pages((unsigned long)b1, 2);
 out:
 	active_template = fastest;
+#else
+	template_list = &xor_block_32regs_p;
+	xor_block_32regs_p.next = &xor_block_32regs;
+	xor_block_32regs.next = &xor_block_8regs_p;
+	xor_block_8regs_p.next = &xor_block_8regs;
+	xor_block_8regs.next = NULL;
+	active_template = &xor_block_8regs;
+#endif
 	return 0;
 }
 
