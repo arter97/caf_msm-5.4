@@ -10,7 +10,6 @@
  * Includes
  * -------------------------------------------------------------------------
  */
-//#include <asm/dma-iommu.h>
 #include <linux/cdev.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
@@ -22,7 +21,9 @@
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/mailbox/qmp.h>
-//#include <linux/msm-bus.h>
+#ifdef CONFIG_MSM_BUS_SCALING
+#include <linux/msm-bus.h>
+#endif
 #include <linux/mailbox_controller.h>
 #include <linux/reset.h>
 
@@ -226,6 +227,20 @@ struct npu_io_data {
 #define MAX_PATHS	2
 #define DBL_BUF	2
 #define MBYTE (1ULL << 20)
+
+struct npu_bwctrl {
+#ifdef CONFIG_MSM_BUS_SCALING
+	struct msm_bus_vectors vectors[MAX_PATHS * DBL_BUF];
+	struct msm_bus_paths bw_levels[DBL_BUF];
+	struct msm_bus_scale_pdata bw_data;
+#endif
+	uint32_t bus_client;
+	int cur_ab;
+	int cur_ib;
+	int cur_idx;
+	uint32_t num_paths;
+};
+
 struct mbox_bridge_data {
 	struct mbox_controller mbox;
 	struct mbox_chan *chans;
@@ -272,6 +287,7 @@ struct npu_device {
 	struct thermal_cooling_device *tcdev;
 	struct npu_pwrctrl pwrctrl;
 	struct npu_thermalctrl thermalctrl;
+	struct npu_bwctrl bwctrl;
 
 	struct llcc_slice_desc *sys_cache;
 	uint32_t execute_v2_flag;
@@ -281,18 +297,9 @@ struct npu_device {
 	uint32_t hw_version;
 };
 
-struct npu_kevent {
-	struct list_head list;
-	struct msm_npu_event evt;
-	uint64_t reserved[4];
-};
-
 struct npu_client {
 	struct npu_device *npu_dev;
-	wait_queue_head_t wait;
-
 	struct mutex list_lock;
-	struct list_head evt_list;
 	struct list_head mapped_buffer_list;
 };
 
@@ -329,7 +336,7 @@ int enable_fw(struct npu_device *npu_dev);
 void disable_fw(struct npu_device *npu_dev);
 int load_fw(struct npu_device *npu_dev);
 int unload_fw(struct npu_device *npu_dev);
-int npu_process_kevent(struct npu_client *client, struct npu_kevent *kevt);
+int npu_set_bw(struct npu_device *npu_dev, int new_ib, int new_ab);
 int npu_notify_cdsprm_cxlimit_activity(struct npu_device *npu_dev, bool enable);
 int npu_bridge_mbox_send_data(struct npu_host_ctx *host_ctx,
 	struct npu_mbox *mbox, void *data);

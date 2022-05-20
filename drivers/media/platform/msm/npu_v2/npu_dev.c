@@ -7,7 +7,6 @@
  * Includes
  * -------------------------------------------------------------------------
  */
-
 #include <linux/clk.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
@@ -90,8 +89,6 @@ static int npu_unload_network(struct npu_client *client,
 	unsigned long arg);
 static int npu_exec_network_v2(struct npu_client *client,
 	unsigned long arg);
-static int npu_receive_event(struct npu_client *client,
-	unsigned long arg);
 static int npu_set_fw_state(struct npu_client *client, uint32_t enable);
 static int npu_set_property(struct npu_client *client,
 	unsigned long arg);
@@ -99,9 +96,9 @@ static int npu_get_property(struct npu_client *client,
 	unsigned long arg);
 static long npu_ioctl(struct file *file, unsigned int cmd,
 					unsigned long arg);
-static unsigned int npu_poll(struct file *filp, struct poll_table_struct *p);
 static int npu_parse_dt_clock(struct npu_device *npu_dev);
 static int npu_parse_dt_regulator(struct npu_device *npu_dev);
+static int npu_parse_dt_bw(struct npu_device *npu_dev);
 static int npu_of_parse_pwrlevels(struct npu_device *npu_dev,
 		struct device_node *node);
 static int npu_pwrctrl_init(struct npu_device *npu_dev);
@@ -209,7 +206,6 @@ static const struct file_operations npu_fops = {
 #ifdef CONFIG_COMPAT
 	 .compat_ioctl = npu_ioctl,
 #endif
-	.poll = npu_poll,
 };
 
 static const struct thermal_cooling_device_ops npu_cooling_ops = {
@@ -576,13 +572,20 @@ int npu_enable_core_power(struct npu_device *npu_dev)
 	mutex_lock(&npu_dev->dev_lock);
 	NPU_DBG("Enable core power %d\n", pwr->pwr_vote_num);
 	if (!pwr->pwr_vote_num) {
-		ret = npu_enable_regulators(npu_dev);
+		ret = npu_set_bw(npu_dev, 100, 100);
 		if (ret)
 			goto fail;
+
+		ret = npu_enable_regulators(npu_dev);
+		if (ret) {
+			npu_set_bw(npu_dev, 0, 0);
+			goto fail;
+		}
 
 		ret = npu_enable_core_clocks(npu_dev);
 		if (ret) {
 			npu_disable_regulators(npu_dev);
+			npu_set_bw(npu_dev, 0, 0);
 			goto fail;
 		}
 		npu_resume_devbw(npu_dev);
@@ -610,6 +613,7 @@ void npu_disable_core_power(struct npu_device *npu_dev)
 		npu_suspend_devbw(npu_dev);
 		npu_disable_core_clocks(npu_dev);
 		npu_disable_regulators(npu_dev);
+		npu_set_bw(npu_dev, 0, 0);
 		pwr->active_pwrlevel = pwr->default_pwrlevel;
 		pwr->uc_pwrlevel = pwr->max_pwrlevel;
 		pwr->cdsprm_pwrlevel = pwr->max_pwrlevel;
@@ -800,21 +804,23 @@ int npu_set_uc_power_level(struct npu_device *npu_dev,
 	return npu_set_power_level(npu_dev, true);
 }
 
-
-
+/* -------------------------------------------------------------------------
+ * Bandwidth Monitor Related
+ * -------------------------------------------------------------------------
+ */
 static void npu_suspend_devbw(struct npu_device *npu_dev)
 {
 	struct npu_pwrctrl *pwr = &npu_dev->pwrctrl;
 	int ret, i;
 
-	if (pwr->bwmon_enabled) {
-		pwr->bwmon_enabled = 0;
+	if (pwr->bwmon_enabled && (pwr->devbw_num > 0)) {
 		for (i = 0; i < pwr->devbw_num; i++) {
 			ret = devfreq_suspend_icc(pwr->devbw[i]);
 			if (ret)
-				pr_err("devfreq_suspend_devbw failed rc:%d\n",
+				NPU_ERR("devfreq_suspend_devbw failed rc:%d\n",
 					ret);
 		}
+		pwr->bwmon_enabled = 0;
 	}
 }
 
@@ -823,13 +829,14 @@ static void npu_resume_devbw(struct npu_device *npu_dev)
 	struct npu_pwrctrl *pwr = &npu_dev->pwrctrl;
 	int ret, i;
 
-	if (!pwr->bwmon_enabled) {
-		pwr->bwmon_enabled = 1;
+	if (!pwr->bwmon_enabled && (pwr->devbw_num > 0)) {
 		for (i = 0; i < pwr->devbw_num; i++) {
 			ret = devfreq_resume_icc(pwr->devbw[i]);
 			if (ret)
-				pr_err("devfreq_resume_devbw failed rc:%d\n", ret);
+				NPU_ERR("devfreq_resume_devbw failed rc:%d\n",
+					ret);
 		}
+		pwr->bwmon_enabled = 1;
 	}
 }
 
@@ -1243,9 +1250,7 @@ static int npu_open(struct inode *inode, struct file *file)
 		return -ENOMEM;
 
 	client->npu_dev = npu_dev;
-	init_waitqueue_head(&client->wait);
 	mutex_init(&client->list_lock);
-	INIT_LIST_HEAD(&client->evt_list);
 	INIT_LIST_HEAD(&(client->mapped_buffer_list));
 	file->private_data = client;
 
@@ -1255,16 +1260,8 @@ static int npu_open(struct inode *inode, struct file *file)
 static int npu_close(struct inode *inode, struct file *file)
 {
 	struct npu_client *client = file->private_data;
-	struct npu_kevent *kevent;
 
 	npu_host_cleanup_networks(client);
-
-	while (!list_empty(&client->evt_list)) {
-		kevent = list_first_entry(&client->evt_list,
-			struct npu_kevent, list);
-		list_del(&kevent->list);
-		kfree(kevent);
-	}
 
 	mutex_destroy(&client->list_lock);
 	kfree(client);
@@ -1513,35 +1510,6 @@ static int npu_exec_network_v2(struct npu_client *client,
 	return ret;
 }
 
-static int npu_receive_event(struct npu_client *client,
-	unsigned long arg)
-{
-	void __user *argp = (void __user *)arg;
-	struct npu_kevent *kevt;
-	int ret = 0;
-
-	mutex_lock(&client->list_lock);
-	if (list_empty(&client->evt_list)) {
-		NPU_ERR("event list is empty\n");
-		ret = -EINVAL;
-	} else {
-		kevt = list_first_entry(&client->evt_list,
-			struct npu_kevent, list);
-		list_del(&kevt->list);
-		npu_process_kevent(client, kevt);
-		ret = copy_to_user(argp, &kevt->evt,
-			sizeof(struct msm_npu_event));
-		if (ret) {
-			NPU_ERR("fail to copy to user\n");
-			ret = -EFAULT;
-		}
-		kfree(kevt);
-	}
-	mutex_unlock(&client->list_lock);
-
-	return ret;
-}
-
 static int npu_set_fw_state(struct npu_client *client, uint32_t enable)
 {
 	struct npu_device *npu_dev = client->npu_dev;
@@ -1703,9 +1671,6 @@ static long npu_ioctl(struct file *file, unsigned int cmd,
 	case MSM_NPU_EXEC_NETWORK_V2:
 		ret = npu_exec_network_v2(client, arg);
 		break;
-	case MSM_NPU_RECEIVE_EVENT:
-		ret = npu_receive_event(client, arg);
-		break;
 	case MSM_NPU_SET_PROP:
 		ret = npu_set_property(client, arg);
 		break;
@@ -1717,23 +1682,6 @@ static long npu_ioctl(struct file *file, unsigned int cmd,
 	}
 
 	return ret;
-}
-
-static unsigned int npu_poll(struct file *filp, struct poll_table_struct *p)
-{
-	struct npu_client *client = filp->private_data;
-	int rc = 0;
-
-	poll_wait(filp, &client->wait, p);
-
-	mutex_lock(&client->list_lock);
-	if (!list_empty(&client->evt_list)) {
-		NPU_DBG("poll cmd done\n");
-		rc = POLLIN | POLLRDNORM;
-	}
-	mutex_unlock(&client->list_lock);
-
-	return rc;
 }
 
 /* -------------------------------------------------------------------------
@@ -1830,6 +1778,17 @@ static int npu_parse_dt_regulator(struct npu_device *npu_dev)
 regulator_err:
 	return rc;
 }
+
+static int npu_parse_dt_bw(struct npu_device *npu_dev)
+{
+	return 0;
+}
+
+int npu_set_bw(struct npu_device *npu_dev, int new_ib, int new_ab)
+{
+	return 0;
+}
+
 #define NPU_FMAX_THRESHOLD 1000000
 static int npu_adjust_max_power_level(struct npu_device *npu_dev)
 {
@@ -2482,6 +2441,10 @@ static int npu_probe(struct platform_device *pdev)
 	if (rc)
 		goto error_get_dev_num;
 
+	rc = npu_parse_dt_bw(npu_dev);
+	if (rc)
+		NPU_WARN("Parse bw info failed\n");
+
 	rc = npu_hw_info_init(npu_dev);
 	if (rc)
 		goto error_get_dev_num;
@@ -2605,7 +2568,6 @@ static int npu_remove(struct platform_device *pdev)
 	unregister_chrdev_region(npu_dev->dev_num, 1);
 	dev_set_drvdata(&pdev->dev, NULL);
 	npu_mbox_deinit(npu_dev);
-
 	g_npu_dev = NULL;
 
 	return 0;
