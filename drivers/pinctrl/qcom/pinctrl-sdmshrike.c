@@ -49,7 +49,8 @@
 		.intr_target_reg = base + 0x8 + REG_SIZE * id,	\
 		.dir_conn_reg = (base == EAST) ? base + 0xcc000 : \
 			((base == WEST) ? base + 0xcc000 : \
-			((base == NORTH) ? EAST + 0xcc000 : base + 0xcd000)), \
+			((base == SOUTH1) ? 0xdcd000 : \
+			((base == NORTH) ? EAST + 0xcc000 : base + 0xcd000))), \
 		.mux_bit = 2,			\
 		.pull_bit = 0,			\
 		.drv_bit = 6,			\
