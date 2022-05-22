@@ -70,8 +70,6 @@ static struct cnss_fw_files FW_FILES_DEFAULT = {
 	"utfbd.bin", "epping.bin", "evicted.bin"
 };
 
-int cnss_loglevel = LOGLEVEL_DEBUG;
-
 struct cnss_driver_event {
 	struct list_head list;
 	enum cnss_driver_event_type type;
@@ -3356,7 +3354,6 @@ static int cnss_probe(struct platform_device *plat_dev)
 		ret = -EEXIST;
 		goto out;
 	}
-
 	ret = cnss_plat_env_available();
 	if (ret)
 		goto out;
@@ -3561,7 +3558,6 @@ static void __exit cnss_exit(void)
 
 module_init(cnss_initialize);
 module_exit(cnss_exit);
-module_param_named(loglevel, cnss_loglevel, int, 0664);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("CNSS2 Platform Driver");

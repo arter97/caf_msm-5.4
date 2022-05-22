@@ -16,7 +16,6 @@
 void *cnss_ipc_log_context;
 void *cnss_ipc_log_long_context;
 #endif
-extern int cnss_loglevel;
 
 static int cnss_pin_connect_show(struct seq_file *s, void *data)
 {
@@ -893,6 +892,24 @@ void cnss_debugfs_destroy(struct cnss_plat_data *plat_priv)
 #endif
 
 #if IS_ENABLED(CONFIG_IPC_LOGGING)
+void cnss_debug_ipc_log_print(void *log_ctx, char *process, const char *fn,
+			      const char *log_level, char *fmt, ...)
+{
+	struct va_format vaf;
+	va_list va_args;
+
+	va_start(va_args, fmt);
+	vaf.fmt = fmt;
+	vaf.va = &va_args;
+
+	if (log_level)
+		printk("%scnss: %pV", log_level, &vaf);
+
+	ipc_log_string(log_ctx, "[%s] %s: %pV", process, fn, &vaf);
+
+	va_end(va_args);
+}
+
 static int cnss_ipc_logging_init(void)
 {
 	cnss_ipc_log_context = ipc_log_context_create(CNSS_IPC_LOG_PAGES,
@@ -928,8 +945,6 @@ static void cnss_ipc_logging_deinit(void)
 #else
 static int cnss_ipc_logging_init(void) { return 0; }
 static void cnss_ipc_logging_deinit(void) {}
-#endif
-
 void cnss_debug_ipc_log_print(void *log_ctx, char *process, const char *fn,
 			      const char *log_level, char *fmt, ...)
 {
@@ -940,25 +955,12 @@ void cnss_debug_ipc_log_print(void *log_ctx, char *process, const char *fn,
 	vaf.fmt = fmt;
 	vaf.va = &va_args;
 
-	if (log_level[0] == KERN_SOH_ASCII && log_level[1]) {
-		if (cnss_loglevel >= (log_level[1] - '0')) {
-			if (log_level == KERN_DEBUG)
-				dev_info(NULL, "cnss: %pV\n", &vaf);
-			else if (log_level == KERN_INFO)
-				dev_info(NULL, "cnss: %pV\n", &vaf);
-			else if (log_level == KERN_WARNING)
-				dev_warn(NULL, "cnss: %pV\n", &vaf);
-			else if (log_level == KERN_ERR)
-				dev_err(NULL, "cnss: %pV\n", &vaf);
-		}
-	}
-
-#if IS_ENABLED(CONFIG_IPC_LOGGING)
-	ipc_log_string(log_ctx, "[%s] %s: %pV", process, fn, &vaf);
-#endif
+	if (log_level)
+		printk("%scnss: %pV", log_level, &vaf);
 
 	va_end(va_args);
 }
+#endif
 
 int cnss_debug_init(void)
 {
