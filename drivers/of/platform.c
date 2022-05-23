@@ -446,6 +446,8 @@ int of_platform_bus_probe(struct device_node *root,
 }
 EXPORT_SYMBOL(of_platform_bus_probe);
 
+struct device_node *soc_dev_node;
+
 /**
  * of_platform_populate() - Populate platform_devices from device tree data
  * @root: parent of the first level to probe or NULL for the root of the tree
@@ -482,6 +484,8 @@ int of_platform_populate(struct device_node *root,
 
 	device_links_supplier_sync_state_pause();
 	for_each_child_of_node(root, child) {
+		if (!memcmp(child->full_name, "soc", 3))
+			soc_dev_node = child;
 		rc = of_platform_bus_create(child, matches, lookup, parent, true);
 		if (rc) {
 			of_node_put(child);
