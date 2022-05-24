@@ -68,7 +68,7 @@
 #include <linux/virtio_config.h>
 #include <uapi/linux/virtio_mmio.h>
 #include <linux/virtio_ring.h>
-
+#include <linux/virtio_ids.h>
 
 
 /* The alignment to use between consumer and producer parts of vring.
@@ -530,13 +530,14 @@ static void virtio_mmio_release_dev(struct device *_d)
 }
 
 /* Platform device */
-
+int first_virtio_blk_index;
 static int virtio_mmio_probe(struct platform_device *pdev)
 {
 	struct virtio_mmio_device *vm_dev;
 	struct resource *mem;
 	unsigned long magic;
 	int rc;
+	static bool first_blk = true;
 
 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!mem)
@@ -611,6 +612,10 @@ static int virtio_mmio_probe(struct platform_device *pdev)
 	if (rc)
 		put_device(&vm_dev->vdev.dev);
 
+	if (vm_dev->vdev.id.device == VIRTIO_ID_BLOCK && first_blk) {
+		first_blk = false;
+		first_virtio_blk_index = vm_dev->vdev.index;
+	}
 	return rc;
 }
 
