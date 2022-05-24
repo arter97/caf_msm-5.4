@@ -1168,6 +1168,9 @@ static int __ref kernel_init(void *unused)
 		pr_err("sched_setaffinity in %s failes\n", __func__);
 	if (sched_setscheduler(current, SCHED_NORMAL, &param))
 		pr_err("sched_setscheduler in %s failes\n", __func__);
+	/* Move init over to a non-isolated CPU */
+	if (set_cpus_allowed_ptr(current, housekeeping_cpumask(HK_FLAG_DOMAIN)) < 0)
+		BUG();
 
 	/*
 	 * We try each of these until one succeeds.
