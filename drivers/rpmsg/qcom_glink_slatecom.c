@@ -639,7 +639,8 @@ static void glink_slatecom_handle_intent_req(struct glink_slatecom *glink,
 	}
 
 	if (!strcmp(channel->name, "ssc_hal")) {
-		pr_err("%s max no of intents reached for cid %d\n", __func__, cid);
+		GLINK_ERR(glink, "%s: max intents reached for cid %d\n",
+							__func__, cid);
 		glink_slatecom_send_intent_req_ack(glink, channel, true);
 		return;
 	}
@@ -681,7 +682,8 @@ static int glink_slatecom_request_intent(struct glink_slatecom *glink,
 	}
 
 	if (!channel->intent_req_result) {
-		dev_err(glink->dev, "intent request not granted for lcid\n");
+		GLINK_ERR(glink, "intent request not granted for lcid %d\n",
+								channel->lcid);
 		ret = -EAGAIN;
 		goto unlock;
 	}
