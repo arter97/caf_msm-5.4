@@ -643,6 +643,11 @@ quit:
 	db_set_busy_state(dbq->vbase, false);
 
 	mutex_unlock(&dbq->lock);
+	/* let user try again incase we miss to submit */
+	if (-ETIMEDOUT == ret) {
+		LOGE("Timed out to send db msg, try again\n");
+		ret = -EAGAIN;
+	}
 	return ret;
 }
 
@@ -794,8 +799,10 @@ static void _signal_contexts(struct qcom_hgsl *hgsl)
 	for (i = 0; i < HGSL_CONTEXT_NUM; i++) {
 		ctxt = hgsl_get_context(hgsl, i);
 
-		if ((ctxt == NULL) || (ctxt->timeline == NULL))
+		if ((ctxt == NULL) || (ctxt->timeline == NULL)) {
+			hgsl_put_context(ctxt);
 			continue;
+		}
 
 		ts = get_context_retired_ts(ctxt);
 		if (ts != ctxt->last_ts) {
