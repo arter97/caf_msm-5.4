@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/module.h>
 #include <linux/virtio.h>
@@ -682,13 +683,14 @@ static void virthab_remove(struct virtio_device *vdev)
 	void *buf;
 	unsigned long flags;
 	int i, j;
+	struct virtio_pchan_link *link;
 
 	spin_lock_irqsave(&vh->mlock, flags);
 	vh->ready = false;
 	spin_unlock_irqrestore(&vh->mlock, flags);
 
 	vdev->config->reset(vdev);
-	for (i = 0; i < hab_driver.ndevices; i++) {
+	for (i = 0; i < vh->mmid_range; i++) {
 		struct vq_pchan *vpc = &vh->vqpchans[i];
 
 		j = 0;
@@ -702,12 +704,16 @@ static void virthab_remove(struct virtio_device *vdev)
 		kfree(vpc->s_pool);
 		kfree(vpc->m_pool);
 		kfree(vpc->l_pool);
+
+		link = vpc->pchan->hyp_data;
+		link->vhab = NULL;
+		link->vpc = NULL;
 	}
 
 	vdev->config->del_vqs(vdev);
 	kfree(vh->vqs);
 	kfree(vh->cbs);
-	for (i = 0; i < hab_driver.ndevices * HAB_PCHAN_VQ_MAX; i++)
+	for (i = 0; i < vh->mmid_range * HAB_PCHAN_VQ_MAX; i++)
 		kfree(vh->names[i]);
 	kfree(vh->names);
 	kfree(vh->vqpchans);
@@ -1071,8 +1077,9 @@ int habhyp_commdev_dealloc(void *commdev)
 	struct physical_channel *pchan = link->pchan;
 
 	pr_info("free commdev %s\n", pchan->name);
-	hab_pchan_put(pchan);
+	link->pchan = NULL;
 	kfree(link);
+	hab_pchan_put(pchan);
 
 	return 0;
 }
