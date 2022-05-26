@@ -74,7 +74,7 @@
 #define QHDR_STATUS_INACTIVE 0x00
 #define QHDR_STATUS_ACTIVE 0x01
 
-#define HGSL_CONTEXT_NUM                     (128)
+#define HGSL_CONTEXT_NUM                     (256)
 #define HGSL_SEND_MSG_MAX_RETRY_COUNT        (150)
 
 // Skip all commands from the bad context
@@ -1371,6 +1371,7 @@ static int hgsl_ioctl_ctxt_create(struct file *filep, unsigned long arg)
 		goto out;
 
 	if (params.ctxthandle >= HGSL_CONTEXT_NUM) {
+		LOGE("invalid ctxt id %d", params.ctxthandle);
 		ret = -EINVAL;
 		goto out;
 	}
@@ -2103,7 +2104,7 @@ static int hgsl_ioctl_issueib(struct file *filep, unsigned long arg)
 	if (remote_issueib)
 		ret = hgsl_hyp_issueib(&priv->hyp_priv, &params, ibs);
 
-	if (!ret && copy_to_user(USRPTR(arg), &params, sizeof(params))) {
+	if (copy_to_user(USRPTR(arg), &params, sizeof(params))) {
 		LOGE("failed to copy param to user");
 		ret = -EFAULT;
 		goto out;
@@ -2203,7 +2204,7 @@ static int hgsl_ioctl_issueib_with_alloc_list(struct file *filep,
 		ret = hgsl_hyp_issueib_with_alloc_list(&priv->hyp_priv,
 			&params, ibs, allocations, be_descs, be_offsets);
 
-	if (!ret && copy_to_user(USRPTR(arg), &params, sizeof(params))) {
+	if (copy_to_user(USRPTR(arg), &params, sizeof(params))) {
 		LOGE("failed to copy param to user");
 		ret = -EFAULT;
 		goto out;
@@ -3256,6 +3257,10 @@ static int qcom_hgsl_register(struct platform_device *pdev,
 		dev_err(&pdev->dev, "cdev_add failed %d\n", ret);
 		goto exit_destroy_device;
 	}
+
+	ret = dma_coerce_mask_and_coherent(hgsl_dev->dev, DMA_BIT_MASK(64));
+	if (ret)
+		LOGW("Failed to set dma mask to 64 bits, ret = %d", ret);
 
 	return 0;
 

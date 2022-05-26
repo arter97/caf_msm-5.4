@@ -245,6 +245,14 @@ out:
 	return err;
 }
 
+static void ufshcd_parse_delay_ssu_flag(struct ufs_hba *hba)
+{
+	if (device_property_read_bool(hba->dev, "qcom,delay-ssu"))
+		hba->delay_ssu = true;
+	else
+		hba->delay_ssu = false;
+}
+
 #ifdef CONFIG_PM
 
 #if defined(CONFIG_SCSI_UFSHCD_QTI)
@@ -501,6 +509,8 @@ int ufshcd_pltfrm_init(struct platform_device *pdev,
 		goto dealloc_host;
 	}
 
+	ufshcd_parse_delay_ssu_flag(hba);
+
 	ufshcd_init_lanes_per_dir(hba);
 
 	err = ufshcd_init(hba, mmio_base, irq);
@@ -508,8 +518,6 @@ int ufshcd_pltfrm_init(struct platform_device *pdev,
 		dev_err(dev, "Initialization failed\n");
 		goto dealloc_host;
 	}
-
-	platform_set_drvdata(pdev, hba);
 
 	pm_runtime_set_active(&pdev->dev);
 	pm_runtime_enable(&pdev->dev);

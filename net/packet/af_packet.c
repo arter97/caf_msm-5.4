@@ -408,17 +408,17 @@ static int __packet_get_status(const struct packet_sock *po, void *frame)
 	}
 }
 
-static __u32 tpacket_get_timestamp(struct sk_buff *skb, struct timespec *ts,
+static __u32 tpacket_get_timestamp(struct sk_buff *skb, struct timespec64 *ts,
 				   unsigned int flags)
 {
 	struct skb_shared_hwtstamps *shhwtstamps = skb_hwtstamps(skb);
 
 	if (shhwtstamps &&
 	    (flags & SOF_TIMESTAMPING_RAW_HARDWARE) &&
-	    ktime_to_timespec_cond(shhwtstamps->hwtstamp, ts))
+	    ktime_to_timespec64_cond(shhwtstamps->hwtstamp, ts))
 		return TP_STATUS_TS_RAW_HARDWARE;
 
-	if (ktime_to_timespec_cond(skb->tstamp, ts))
+	if (ktime_to_timespec64_cond(skb->tstamp, ts))
 		return TP_STATUS_TS_SOFTWARE;
 
 	return 0;
@@ -428,13 +428,20 @@ static __u32 __packet_set_timestamp(struct packet_sock *po, void *frame,
 				    struct sk_buff *skb)
 {
 	union tpacket_uhdr h;
-	struct timespec ts;
+	struct timespec64 ts;
 	__u32 ts_status;
 
 	if (!(ts_status = tpacket_get_timestamp(skb, &ts, po->tp_tstamp)))
 		return 0;
 
 	h.raw = frame;
+	/*
+	 * versions 1 through 3 overflow the timestamps in y2106, since they
+	 * all store the seconds in a 32-bit unsigned integer.
+	 * If we create a version 4, that should have a 64-bit timestamp,
+	 * either 64-bit seconds + 32-bit nanoseconds, or just 64-bit
+	 * nanoseconds.
+	 */
 	switch (po->tp_version) {
 	case TPACKET_V1:
 		h.h1->tp_sec = ts.tv_sec;
@@ -775,8 +782,8 @@ static void prb_close_block(struct tpacket_kbdq_core *pkc1,
 		 * It shouldn't really happen as we don't close empty
 		 * blocks. See prb_retire_rx_blk_timer_expired().
 		 */
-		struct timespec ts;
-		getnstimeofday(&ts);
+		struct timespec64 ts;
+		ktime_get_real_ts64(&ts);
 		h1->ts_last_pkt.ts_sec = ts.tv_sec;
 		h1->ts_last_pkt.ts_nsec	= ts.tv_nsec;
 	}
@@ -806,7 +813,7 @@ static void prb_thaw_queue(struct tpacket_kbdq_core *pkc)
 static void prb_open_block(struct tpacket_kbdq_core *pkc1,
 	struct tpacket_block_desc *pbd1)
 {
-	struct timespec ts;
+	struct timespec64 ts;
 	struct tpacket_hdr_v1 *h1 = &pbd1->hdr.bh1;
 
 	smp_rmb();
@@ -819,7 +826,7 @@ static void prb_open_block(struct tpacket_kbdq_core *pkc1,
 	BLOCK_NUM_PKTS(pbd1) = 0;
 	BLOCK_LEN(pbd1) = BLK_PLUS_PRIV(pkc1->blk_sizeof_priv);
 
-	getnstimeofday(&ts);
+	ktime_get_real_ts64(&ts);
 
 	h1->ts_first_pkt.ts_sec = ts.tv_sec;
 	h1->ts_first_pkt.ts_nsec = ts.tv_nsec;
@@ -1728,7 +1735,10 @@ static int fanout_add(struct sock *sk, u16 id, u16 type_flags)
 		err = -ENOSPC;
 		if (refcount_read(&match->sk_ref) < PACKET_FANOUT_MAX) {
 			__dev_remove_pack(&po->prot_hook);
-			po->fanout = match;
+
+			/* Paired with packet_setsockopt(PACKET_FANOUT_DATA) */
+			WRITE_ONCE(po->fanout, match);
+
 			po->rollover = rollover;
 			rollover = NULL;
 			refcount_set(&match->sk_ref, refcount_read(&match->sk_ref) + 1);
@@ -2172,7 +2182,7 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
 	unsigned short macoff, hdrlen;
 	unsigned int netoff;
 	struct sk_buff *copy_skb = NULL;
-	struct timespec ts;
+	struct timespec64 ts;
 	__u32 ts_status;
 	bool is_drop_n_account = false;
 	unsigned int slot_id = 0;
@@ -2320,7 +2330,7 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
 	skb_copy_bits(skb, 0, h.raw + macoff, snaplen);
 
 	if (!(ts_status = tpacket_get_timestamp(skb, &ts, po->tp_tstamp)))
-		getnstimeofday(&ts);
+		ktime_get_real_ts64(&ts);
 
 	status |= ts_status;
 
@@ -3874,7 +3884,8 @@ packet_setsockopt(struct socket *sock, int level, int optname, char __user *optv
 	}
 	case PACKET_FANOUT_DATA:
 	{
-		if (!po->fanout)
+		/* Paired with the WRITE_ONCE() in fanout_add() */
+		if (!READ_ONCE(po->fanout))
 			return -EINVAL;
 
 		return fanout_set_data(po, optval, optlen);
@@ -4453,9 +4464,10 @@ static int packet_set_ring(struct sock *sk, union tpacket_req_u *req_u,
 	}
 
 out_free_pg_vec:
-	bitmap_free(rx_owner_map);
-	if (pg_vec)
+	if (pg_vec) {
+		bitmap_free(rx_owner_map);
 		free_pg_vec(pg_vec, order, req->tp_block_nr);
+	}
 out:
 	return err;
 }
