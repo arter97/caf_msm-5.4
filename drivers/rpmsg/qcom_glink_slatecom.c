@@ -962,6 +962,9 @@ static int glink_slatecom_send_open_req(struct glink_slatecom *glink,
 	int req_len = ALIGN(sizeof(req.msg) + name_len, SLATECOM_ALIGNMENT);
 	int ret;
 
+	if (req_len > sizeof(req))
+		return -EINVAL;
+
 	kref_get(&channel->refcount);
 
 	mutex_lock(&glink->idr_lock);
@@ -2097,6 +2100,11 @@ static void glink_slatecom_event_handler(void *handle,
 		break;
 	case SLATECOM_EVENT_TO_MASTER_FIFO_USED:
 		rx_pkt_info = kzalloc(sizeof(struct rx_pkt), GFP_KERNEL);
+		if (!rx_pkt_info) {
+			GLINK_ERR(glink, "%s:Error ENOMEM Event %d\n",
+					__func__, event);
+			break;
+		}
 		rx_pkt_info->rx_buf = data->fifo_data.data;
 		rx_pkt_info->rx_len = data->fifo_data.to_master_fifo_used;
 		rx_pkt_info->glink = glink;
