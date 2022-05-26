@@ -86,6 +86,7 @@ static void qrtr_mhi_dev_read(struct qrtr_mhi_dev_ep *qep)
 {
 	struct mhi_req req = { 0 };
 	int rc;
+	int bytes_read;
 
 	req.chan = QRTR_MHI_DEV_IN;
 	req.client = qep->in;
@@ -93,15 +94,20 @@ static void qrtr_mhi_dev_read(struct qrtr_mhi_dev_ep *qep)
 	req.buf = qep->buf_in;
 	req.len = QRTR_MAX_PKT_SIZE;
 
-	rc = mhi_dev_read_channel(&req);
-	if (rc < 0) {
-		dev_err(qep->dev, "failed to read channel %d\n", rc);
-		return;
-	}
+	do {
+		bytes_read = mhi_dev_read_channel(&req);
+		if (bytes_read < 0) {
+			dev_err(qep->dev, "failed to read channel %d\n",
+				bytes_read);
+			return;
+		}
+		if (bytes_read == 0)
+			return;
 
-	rc = qrtr_endpoint_post(&qep->ep, req.buf, req.transfer_len);
-	if (rc == -EINVAL)
-		dev_err(qep->dev, "invalid ipcrouter packet\n");
+		rc = qrtr_endpoint_post(&qep->ep, req.buf, req.transfer_len);
+		if (rc == -EINVAL)
+			dev_err(qep->dev, "invalid ipcrouter packet\n");
+	} while (bytes_read > 0);
 }
 
 static void qrtr_mhi_dev_event_cb(struct mhi_dev_client_cb_reason *reason)
@@ -129,16 +135,16 @@ static int qrtr_mhi_dev_open_channels(struct qrtr_mhi_dev_ep *qep)
 	int rc;
 
 	/* write channel */
-	rc = mhi_dev_open_channel(QRTR_MHI_DEV_OUT, &qep->out,
+	rc = mhi_dev_open_channel(QRTR_MHI_DEV_IN, &qep->in,
 				  qrtr_mhi_dev_event_cb);
 	if (rc < 0)
 		return rc;
 
 	/* read channel */
-	rc = mhi_dev_open_channel(QRTR_MHI_DEV_IN, &qep->in,
+	rc = mhi_dev_open_channel(QRTR_MHI_DEV_OUT, &qep->out,
 				  qrtr_mhi_dev_event_cb);
 	if (rc < 0) {
-		mhi_dev_close_channel(qep->out);
+		mhi_dev_close_channel(qep->in);
 		return rc;
 	}
 	return 0;
@@ -148,13 +154,13 @@ static void qrtr_mhi_dev_close_channels(struct qrtr_mhi_dev_ep *qep)
 {
 	int rc;
 
-	rc = mhi_dev_close_channel(qep->out);
-	if (rc < 0)
-		dev_err(qep->dev, "failed to close out channel %d\n", rc);
-
 	rc = mhi_dev_close_channel(qep->in);
 	if (rc < 0)
 		dev_err(qep->dev, "failed to close in channel %d\n", rc);
+
+	rc = mhi_dev_close_channel(qep->out);
+	if (rc < 0)
+		dev_err(qep->dev, "failed to close out channel %d\n", rc);
 }
 
 static void qrtr_mhi_dev_state_cb(struct mhi_dev_client_cb_data *cb_data)
@@ -216,7 +222,7 @@ static int qrtr_mhi_dev_probe(struct platform_device *pdev)
 	init_completion(&qep->out_tre);
 	qep->ep.xmit = qrtr_mhi_dev_send;
 	rc = mhi_register_state_cb(qrtr_mhi_dev_state_cb, qep,
-				   QRTR_MHI_DEV_OUT);
+				   QRTR_MHI_DEV_IN);
 	if (rc)
 		return rc;
 
