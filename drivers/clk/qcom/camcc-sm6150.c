@@ -823,6 +823,7 @@ static const struct freq_tbl ftbl_cam_cc_mclk0_clk_src[] = {
 	F(19200000, P_BI_TCXO, 1, 0, 0),
 	F(24000000, P_CAM_CC_PLL2_OUT_AUX2, 10, 1, 2),
 	F(34285714, P_CAM_CC_PLL2_OUT_AUX2, 14, 0, 0),
+	F(37209304, P_CAM_CC_PLL2_OUT_AUX2, 12.9, 0, 0),
 	{ }
 };
 
@@ -864,7 +865,7 @@ static struct clk_rcg2 cam_cc_mclk1_clk_src = {
 		.vdd_class = &vdd_cx,
 		.num_rate_max = VDD_NUM,
 		.rate_max = (unsigned long[VDD_NUM]) {
-			[VDD_LOWER] = 34285714},
+			[VDD_LOWER] = 37209304},
 	},
 };
 
