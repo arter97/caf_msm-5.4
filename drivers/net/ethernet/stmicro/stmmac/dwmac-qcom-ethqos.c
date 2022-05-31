@@ -26,112 +26,14 @@
 #include <linux/rtnetlink.h>
 #include <asm-generic/io.h>
 #include <linux/kthread.h>
+#include <linux/io-64-nonatomic-hi-lo.h>
 #include "stmmac.h"
 #include "stmmac_platform.h"
 #include "dwmac-qcom-ethqos.h"
 #include "stmmac_ptp.h"
 
-#define RGMII_IO_MACRO_DEBUG1		0x20
-#define EMAC_SYSTEM_LOW_POWER_DEBUG	0x28
-
-/* RGMII_IO_MACRO_CONFIG fields */
-#define RGMII_CONFIG_FUNC_CLK_EN		BIT(30)
-#define RGMII_CONFIG_POS_NEG_DATA_SEL		BIT(23)
-#define RGMII_CONFIG_GPIO_CFG_RX_INT		GENMASK(21, 20)
-#define RGMII_CONFIG_GPIO_CFG_TX_INT		GENMASK(19, 17)
-#define RGMII_CONFIG_MAX_SPD_PRG_9		GENMASK(16, 8)
-#define RGMII_CONFIG_MAX_SPD_PRG_2		GENMASK(7, 6)
-#define RGMII_CONFIG_INTF_SEL			GENMASK(5, 4)
-#define RGMII_CONFIG_BYPASS_TX_ID_EN		BIT(3)
-#define RGMII_CONFIG_LOOPBACK_EN		BIT(2)
-#define RGMII_CONFIG_PROG_SWAP			BIT(1)
-#define RGMII_CONFIG_DDR_MODE			BIT(0)
-
-/*RGMII DLL CONFIG*/
-#define HSR_DLL_CONFIG					0x000B642C
-#define HSR_DLL_CONFIG_2					0xA001
-#define HSR_MACRO_CONFIG_2					0x01
-#define HSR_DLL_TEST_CTRL					0x1400000
-#define HSR_DDR_CONFIG					0x80040868
-#define HSR_SDCC_USR_CTRL					0x2C010800
-#define MACRO_CONFIG_2_MASK				GENMASK(24, 17)
-#define	DLL_CONFIG_2_MASK				GENMASK(22, 0)
-#define HSR_SDCC_DLL_TEST_CTRL				0x1800000
-#define DDR_CONFIG_PRG_RCLK_DLY			        115
-#define DLL_BYPASS					BIT(30)
-
-/* SDCC_HC_REG_DLL_CONFIG fields */
-#define SDCC_DLL_CONFIG_DLL_RST			BIT(30)
-#define SDCC_DLL_CONFIG_PDN			BIT(29)
-#define SDCC_DLL_CONFIG_MCLK_FREQ		GENMASK(26, 24)
-#define SDCC_DLL_CONFIG_CDR_SELEXT		GENMASK(23, 20)
-#define SDCC_DLL_CONFIG_CDR_EXT_EN		BIT(19)
-#define SDCC_DLL_CONFIG_CK_OUT_EN		BIT(18)
-#define SDCC_DLL_CONFIG_CDR_EN			BIT(17)
-#define SDCC_DLL_CONFIG_DLL_EN			BIT(16)
-#define SDCC_DLL_MCLK_GATING_EN			BIT(5)
-#define SDCC_DLL_CDR_FINE_PHASE			GENMASK(3, 2)
-
-/* SDCC_HC_REG_DDR_CONFIG fields */
-#define SDCC_DDR_CONFIG_PRG_DLY_EN		BIT(31)
-#define SDCC_DDR_CONFIG_EXT_PRG_RCLK_DLY	GENMASK(26, 21)
-#define SDCC_DDR_CONFIG_EXT_PRG_RCLK_DLY_CODE	GENMASK(29, 27)
-#define SDCC_DDR_CONFIG_EXT_PRG_RCLK_DLY_EN	BIT(30)
-#define SDCC_DDR_CONFIG_PRG_RCLK_DLY		GENMASK(8, 0)
-#define SDCC_DDR_CONFIG_TCXO_CYCLES_DLY_LINE    GENMASK(20, 12)
-#define SDCC_DDR_CONFIG_TCXO_CYCLES_CNT		GENMASK(11, 9)
-
-/* SDCC_HC_REG_DLL_CONFIG2 fields */
-#define SDCC_DLL_CONFIG2_DLL_CLOCK_DIS		BIT(21)
-#define SDCC_DLL_CONFIG2_MCLK_FREQ_CALC		GENMASK(17, 10)
-#define SDCC_DLL_CONFIG2_DDR_TRAFFIC_INIT_SEL	GENMASK(3, 2)
-#define SDCC_DLL_CONFIG2_DDR_TRAFFIC_INIT_SW	BIT(1)
-#define SDCC_DLL_CONFIG2_DDR_CAL_EN		BIT(0)
-
-/* SDC4_STATUS bits */
-#define SDC4_STATUS_DLL_LOCK			BIT(7)
-
-/* RGMII_IO_MACRO_CONFIG2 fields */
-#define RGMII_CONFIG2_RSVD_CONFIG15		GENMASK(31, 17)
-#define RGMII_CONFIG2_RGMII_CLK_SEL_CFG		BIT(16)
-#define RGMII_CONFIG2_TX_TO_RX_LOOPBACK_EN	BIT(13)
-#define RGMII_CONFIG2_CLK_DIVIDE_SEL		BIT(12)
-#define RGMII_CONFIG2_RX_PROG_SWAP		BIT(7)
-#define RGMII_CONFIG2_DATA_DIVIDE_CLK_SEL	BIT(6)
-#define RGMII_CONFIG2_TX_CLK_PHASE_SHIFT_EN	BIT(5)
-
-#define EMAC_I0_EMAC_CORE_HW_VERSION_RGOFFADDR 0x00000070
-#define EMAC_HW_v2_3_2_RG 0x20030002
-
-#define MII_BUSY 0x00000001
-#define MII_WRITE 0x00000002
-
-/* GMAC4 defines */
-#define MII_GMAC4_GOC_SHIFT		2
-#define MII_GMAC4_WRITE			BIT(MII_GMAC4_GOC_SHIFT)
-#define MII_GMAC4_READ			(3 << MII_GMAC4_GOC_SHIFT)
-
-#define MII_BUSY 0x00000001
-#define MII_WRITE 0x00000002
-
-#define DWC_ETH_QOS_PHY_INTR_STATUS     0x0013
-
-#define LINK_UP 1
-#define LINK_DOWN 0
-
-#define LINK_DOWN_STATE 0x800
-#define LINK_UP_STATE 0x400
-
-#define MICREL_PHY_ID PHY_ID_KSZ9031
-#define DWC_ETH_QOS_MICREL_PHY_INTCS 0x1b
-#define DWC_ETH_QOS_MICREL_PHY_CTL 0x1f
-#define DWC_ETH_QOS_MICREL_INTR_LEVEL 0x4000
-#define DWC_ETH_QOS_BASIC_STATUS     0x0001
-#define LINK_STATE_MASK 0x4
-#define AUTONEG_STATE_MASK 0x20
-#define MICREL_LINK_UP_INTR_STATUS BIT(0)
-
 void *ipc_emac_log_ctxt;
+void __iomem *tlmm_central_base_addr;
 
 static struct emac_emb_smmu_cb_ctx emac_emb_smmu_ctx = {0};
 struct plat_stmmacenet_data *plat_dat;
@@ -2182,6 +2084,8 @@ static inline u32 qcom_ethqos_rgmii_io_macro_num_of_regs(u32 emac_hw_version)
 		return 27;
 	case EMAC_HW_v2_3_0:
 		return 28;
+	case EMAC_HW_v2_3_2:
+		return 29;
 	case EMAC_HW_NONE:
 	default:
 		return 0;
@@ -2253,6 +2157,91 @@ static int qcom_ethqos_panic_notifier(struct notifier_block *this,
 static struct notifier_block qcom_ethqos_panic_blk = {
 	.notifier_call  = qcom_ethqos_panic_notifier,
 };
+
+/* static int ethqos_update_rgmii_tx_drv_strength(struct qcom_ethqos *ethqos)
+ * {
+ *	int ret = 0;
+ *	struct resource *resource = NULL;
+ *	struct platform_device *pdev = ethqos->pdev;
+ *	struct net_device *dev = platform_get_drvdata(pdev);
+ *	unsigned long tlmm_central_base = 0;
+ *	unsigned long tlmm_central_size = 0;
+ *	unsigned long reg_rgmii_io_pads_voltage = 0;
+ *
+ *	resource = platform_get_resource_byname(ethqos->pdev,
+						IORESOURCE_MEM, "tlmm-central-base");
+
+	if (!resource) {
+		ETHQOSINFO("Resource tlmm-central-base not found\n");
+		goto err_out;
+	}
+
+	tlmm_central_base = resource->start;
+	tlmm_central_size = resource_size(resource);
+	ETHQOSDBG("tlmm_central_base = 0x%x, size = 0x%x\n",
+		  tlmm_central_base, tlmm_central_size);
+
+	tlmm_central_base_addr = ioremap(tlmm_central_base, tlmm_central_size);
+	if (!tlmm_central_base_addr) {
+		ETHQOSERR("cannot map dwc_tlmm_central reg memory, aborting\n");
+		ret = -EIO;
+		goto err_out;
+	}
+
+	ETHQOSDBG("dwc_tlmm_central = %#lx\n", tlmm_central_base_addr);
+
+	reg_rgmii_io_pads_voltage =
+	regulator_get_voltage(ethqos->reg_rgmii_io_pads);
+
+	ETHQOSINFO("IOMACRO pads voltage: %u uV\n", reg_rgmii_io_pads_voltage);
+
+	switch (reg_rgmii_io_pads_voltage) {
+	case 1500000:
+	case 1800000: {
+		switch (ethqos->emac_ver) {
+		case EMAC_HW_v2_0_0:
+		case EMAC_HW_v2_2_0:
+		case EMAC_HW_v2_3_2: {
+		TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_WR(TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_16MA,
+						     TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_16MA,
+						     TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_16MA);
+						     TLMM_RGMII_RX_HV_MODE_CTL_RGWR(0x0);
+		}
+		break;
+		default:
+		break;
+		}
+	}
+	break;
+	case 2500000: {
+		switch (ethqos->emac_ver) {
+		case EMAC_HW_v2_0_0:
+		case EMAC_HW_v2_2_0:
+		if (ethqos->always_on_phy)
+			TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_WR(TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_16MA,
+							     TLMM_RGMII_HDRV_PL_CTL1_TX_HDRV_14MA,
+							     TLMM_RGMII_HDRV_PL_CTL1_TX_HDRV_14MA);
+		else if ((dev->phydev) && (dev->phydev->phy_id == ATH8035_PHY_ID))
+			TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_WR(TLMM_RGMII_HDRV_PL_CTL1_TX_HDRV_14MA,
+							     TLMM_RGMII_HDRV_PL_CTL1_TX_HDRV_14MA,
+							     TLMM_RGMII_HDRV_PL_CTL1_TX_HDRV_14MA);
+		break;
+		default:
+		break;
+		}
+	}
+	break;
+	default:
+	break;
+	}
+
+err_out:
+	if (tlmm_central_base_addr)
+		iounmap(tlmm_central_base_addr);
+
+	return ret;
+}
+*/
 
 static int _qcom_ethqos_probe(void *arg)
 {
@@ -2434,6 +2423,8 @@ static int _qcom_ethqos_probe(void *arg)
 			emac_emb_smmu_ctx.ret = 0;
 		}
 	}
+
+	//ethqos_update_rgmii_tx_drv_strength(ethqos);
 
 	ret = stmmac_dvr_probe(&pdev->dev, plat_dat, &stmmac_res);
 	if (ret)
