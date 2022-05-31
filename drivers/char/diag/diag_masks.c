@@ -775,10 +775,12 @@ static int diag_cmd_set_all_msg_mask(unsigned char *src_buf, int src_len,
 	mask_info->status = (req->rt_mask) ? DIAG_CTRL_MASK_ALL_ENABLED :
 					   DIAG_CTRL_MASK_ALL_DISABLED;
 	for (i = 0; i < driver->msg_mask_tbl_count; i++, mask++) {
-		mutex_lock(&mask->lock);
-		memset(mask->ptr, req->rt_mask,
-		       mask->range * sizeof(uint32_t));
-		mutex_unlock(&mask->lock);
+		if (mask && mask->ptr) {
+			mutex_lock(&mask->lock);
+			memset(mask->ptr, req->rt_mask,
+			       mask->range * sizeof(uint32_t));
+			mutex_unlock(&mask->lock);
+		}
 	}
 	mutex_unlock(&mask_info->lock);
 
@@ -1119,6 +1121,8 @@ static int diag_cmd_set_log_mask(unsigned char *src_buf, int src_len,
 
 	mutex_lock(&mask_info->lock);
 	for (i = 0; i < MAX_EQUIP_ID && !status; i++, mask++) {
+		if (!mask || !mask->ptr)
+			continue;
 		if (mask->equip_id != req->equip_id)
 			continue;
 		mutex_lock(&mask->lock);
@@ -1224,9 +1228,11 @@ static int diag_cmd_disable_log_mask(unsigned char *src_buf, int src_len,
 	mask = (struct diag_log_mask_t *)mask_info->ptr;
 
 	for (i = 0; i < MAX_EQUIP_ID; i++, mask++) {
-		mutex_lock(&mask->lock);
-		memset(mask->ptr, 0, mask->range);
-		mutex_unlock(&mask->lock);
+		if (mask && mask->ptr) {
+			mutex_lock(&mask->lock);
+			memset(mask->ptr, 0, mask->range);
+			mutex_unlock(&mask->lock);
+		}
 	}
 	mask_info->status = DIAG_CTRL_MASK_ALL_DISABLED;
 	if (diag_check_update(APPS_DATA))
