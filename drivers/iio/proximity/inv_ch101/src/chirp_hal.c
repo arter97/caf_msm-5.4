@@ -208,11 +208,7 @@ bool ioport_get_pin_level(ioport_pin_t pin)
 
 int32_t os_enable_interrupt(const uint32_t pin)
 {
-	struct gpio_desc *desc = os_get_pin_desc(pin);
-	unsigned int irq = gpiod_to_irq(desc);
 	struct ch101_client *data = get_chirp_data();
-
-//	printf("%s: irq: %d\n", __func__, irq);
 
 	if (data && data->cbk->setup_int_gpio)
 		data->cbk->setup_int_gpio(data, pin);
@@ -222,11 +218,7 @@ int32_t os_enable_interrupt(const uint32_t pin)
 
 int32_t os_disable_interrupt(const uint32_t pin)
 {
-	struct gpio_desc *desc = os_get_pin_desc(pin);
-	unsigned int irq = gpiod_to_irq(desc);
 	struct ch101_client *data = get_chirp_data();
-
-//	printf("%s: irq: %d\n", __func__, irq);
 
 	if (data && data->cbk->free_int_gpio)
 		data->cbk->free_int_gpio(data, pin);
@@ -248,6 +240,11 @@ void os_delay_us(const uint16_t us)
 void os_delay_ms(const uint16_t ms)
 {
 	msleep(ms);
+}
+
+static inline void get_monotonic_boottime(struct timespec *ts)
+{
+	*ts = ktime_to_timespec(ktime_get_boottime());
 }
 
 u64 os_timestamp_ns(void)

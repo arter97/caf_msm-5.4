@@ -47,7 +47,7 @@
 #define CH101_IRQ_NAME		"ch101_event"
 
 #define CH101_MIN_FREQ_HZ	1
-#define CH101_MAX_FREQ_HZ	100
+#define CH101_MAX_FREQ_HZ	10
 #define CH101_DEFAULT_FREQ	5
 
 #define CH101_IQ_PACK		7		     // Max 8 samples (256 bits)
@@ -359,7 +359,7 @@ static int ch101_write_raw(struct iio_dev *indio_dev,
 }
 
 static IIO_CONST_ATTR_SAMP_FREQ_AVAIL
-("1 2 5 10 100");
+("1 2 5 10");
 
 static struct attribute *ch101_attributes[] = {
 	&iio_const_attr_sampling_frequency_available.dev_attr.attr,
@@ -404,7 +404,7 @@ static irqreturn_t ch101_store_time(int irq, void *p)
 {
 	struct iio_poll_func *pf = p;
 
-	pf->timestamp = ktime_get_boot_ns();
+	pf->timestamp = ktime_get_boottime_ns();
 	pr_info(TAG "%s: t: %llu\n", __func__, pf->timestamp);
 
 	return IRQ_WAKE_THREAD;
@@ -554,7 +554,7 @@ static enum hrtimer_restart ch101_hrtimer_handler(struct hrtimer *t)
 	}
 
 	pr_info(TAG "%s: t: %lld, counter: %d\n",
-		__func__, ktime_get_boot_ns(), data->counter);
+		__func__, ktime_get_boottime_ns(), data->counter);
 
 	complete(&data->data_completion);
 
