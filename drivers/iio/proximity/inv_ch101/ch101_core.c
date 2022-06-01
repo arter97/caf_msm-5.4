@@ -65,7 +65,9 @@ static int  cal_count = TIMER_COUNTER;
 static int  ss_count = TIMER_COUNTER;
 static bool current_state;
 
+#ifndef TDK_RB2
 static struct ch101_i2c_bus ch101_store;
+#endif
 
 static void init_fw(struct ch101_data *data);
 static void test_gpios(struct ch101_data *data);
@@ -563,6 +565,7 @@ static enum hrtimer_restart ch101_hrtimer_handler(struct hrtimer *t)
 	return HRTIMER_RESTART;
 }
 
+#ifndef TDK_RB2
 static void set_gpios_bus(struct device *dev, struct ch101_i2c_bus *bus)
 {
 	int i;
@@ -589,6 +592,7 @@ static void set_gpios_bus(struct device *dev, struct ch101_i2c_bus *bus)
 			bus->gpio_exp_prog_pin[i]);
 	}
 }
+#endif
 
 static void set_gpios(int bus_index, struct ch101_data *data, int rst_pin)
 {
@@ -967,7 +971,9 @@ int ch101_core_probe(struct i2c_client *client, struct regmap *regmap,
 		struct ch101_callbacks *cbk, const char *name)
 {
 	struct ch101_data *data;
+#ifndef TDK_RB2
 	struct ch101_i2c_bus *bus;
+#endif
 	struct device *dev;
 	struct iio_dev *indio_dev;
 	int ret = 0;
@@ -977,11 +983,15 @@ int ch101_core_probe(struct i2c_client *client, struct regmap *regmap,
 
 	dev_info(dev, "%s: Start v.1.65 s: %d", __func__, sizeof(*data));
 
+#ifndef TDK_RB2
+
 	if (ch101_store.i2c_client == NULL) {
 		ch101_store.i2c_client = client;
 		set_gpios_bus(dev, &ch101_store);
 		return 0;
 	}
+
+#endif
 
 	indio_dev = devm_iio_device_alloc(dev, sizeof(*data));
 	if (!indio_dev)
@@ -1001,6 +1011,8 @@ int ch101_core_probe(struct i2c_client *client, struct regmap *regmap,
 	data->client.cbk->setup_int_gpio = setup_int_gpio;
 	data->client.cbk->free_int_gpio = free_int_gpio;
 
+#ifndef TDK_RB2
+
 	if (ch101_store.i2c_client) {
 		bus = &data->client.bus[1];
 		bus->i2c_client = ch101_store.i2c_client;
@@ -1013,6 +1025,8 @@ int ch101_core_probe(struct i2c_client *client, struct regmap *regmap,
 				bus->gpiod_int[i], bus->gpio_exp_prog_pin[i]);
 		}
 	}
+
+#endif
 
 	set_chirp_data(&data->client);
 	set_chirp_buffer(&data->buffer);

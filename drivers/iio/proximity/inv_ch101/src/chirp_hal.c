@@ -54,12 +54,27 @@ struct gpio_desc *os_get_pin_desc(ioport_pin_t pin)
 		return _ch101_client->bus[0].gpiod_int[1];
 	if (pin == CHIRP0_INT_2)
 		return _ch101_client->bus[0].gpiod_int[2];
+
+#ifdef TDK_RB2
+
+	if (pin == CHIRP1_INT_0)
+		return _ch101_client->bus[0].gpiod_int[3];
+	if (pin == CHIRP1_INT_1)
+		return _ch101_client->bus[0].gpiod_int[4];
+	if (pin == CHIRP1_INT_2)
+		return _ch101_client->bus[0].gpiod_int[5];
+
+#else
+
 	if (pin == CHIRP1_INT_0)
 		return _ch101_client->bus[1].gpiod_int[0];
 	if (pin == CHIRP1_INT_1)
 		return _ch101_client->bus[1].gpiod_int[1];
 	if (pin == CHIRP1_INT_2)
 		return _ch101_client->bus[1].gpiod_int[2];
+
+#endif
+
 	if (pin >= CHIRP0_PROG_0 && pin <= CHIRP2_PROG_2)
 		return 0;
 
@@ -78,12 +93,26 @@ u32 os_get_pin_prog(ioport_pin_t pin)
 		return _ch101_client->bus[0].gpio_exp_prog_pin[1];
 	if (pin == CHIRP0_PROG_2)
 		return _ch101_client->bus[0].gpio_exp_prog_pin[2];
+
+#ifdef TDK_RB2
+
+	if (pin == CHIRP1_PROG_0)
+		return _ch101_client->bus[0].gpio_exp_prog_pin[3];
+	if (pin == CHIRP1_PROG_1)
+		return _ch101_client->bus[0].gpio_exp_prog_pin[4];
+	if (pin == CHIRP1_PROG_2)
+		return _ch101_client->bus[0].gpio_exp_prog_pin[5];
+
+#else
+
 	if (pin == CHIRP1_PROG_0)
 		return _ch101_client->bus[1].gpio_exp_prog_pin[0];
 	if (pin == CHIRP1_PROG_1)
 		return _ch101_client->bus[1].gpio_exp_prog_pin[1];
 	if (pin == CHIRP1_PROG_2)
 		return _ch101_client->bus[1].gpio_exp_prog_pin[2];
+
+#endif
 
 //	printf("%s: pin: %d undefined\n", __func__, (u32)pin);
 

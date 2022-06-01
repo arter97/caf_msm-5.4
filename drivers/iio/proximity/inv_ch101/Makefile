@@ -30,3 +30,5 @@ ch101-i2c-objs		+= ch101_i2c.o
 
 # disable some warning flags
 ccflags-y += -Wno-format
+
+ccflags-$(CONFIG_ARCH_BENGAL) += -DTDK_RB2
