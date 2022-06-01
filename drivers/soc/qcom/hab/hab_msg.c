@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include "hab.h"
 #include "hab_grantable.h"
@@ -18,11 +19,75 @@ static int hab_rx_queue_empty(struct virtual_channel *vchan)
 }
 
 static struct hab_message*
+hab_scatter_msg_alloc(struct physical_channel *pchan, size_t sizebytes)
+{
+	struct hab_message *message = NULL;
+	int i = 0;
+	int allocated = 0;
+	bool failed = false;
+	void **scatter_buf = NULL;
+	uint32_t total_num, page_num = 0U;
+
+	/* The scatter routine is only for the message larger than one page size */
+	if (sizebytes <= PAGE_SIZE)
+		return NULL;
+
+	page_num = sizebytes >> PAGE_SHIFT;
+	total_num = (sizebytes % PAGE_SIZE == 0) ? page_num : (page_num + 1);
+	message = kzalloc(sizeof(struct hab_message)
+		+ (total_num * sizeof(void *)), GFP_ATOMIC);
+	if (!message)
+		return NULL;
+	message->scatter = true;
+	scatter_buf = (void **)message->data;
+
+	/*
+	 * All recv buffers need to be prepared before actual recv.
+	 * If instant recving is performed when each page is allocated,
+	 * we cannot ensure the success of the next allocation.
+	 * Part of the message will stuck in the channel if allocation
+	 * failed half way.
+	 */
+	for (i = 0; i < page_num; i++) {
+		scatter_buf[i] = kzalloc(PAGE_SIZE, GFP_ATOMIC);
+		if (scatter_buf[i] == NULL) {
+			failed = true;
+			allocated = i;
+			break;
+		}
+	}
+	if ((!failed) && (sizebytes % PAGE_SIZE != 0)) {
+		scatter_buf[i] = kzalloc(sizebytes % PAGE_SIZE, GFP_ATOMIC);
+		if (scatter_buf[i] == NULL) {
+			failed = true;
+			allocated = i;
+		}
+	}
+
+	if (!failed) {
+		for (i = 0; i < sizebytes / PAGE_SIZE; i++)
+			message->sizebytes += physical_channel_read(pchan,
+				scatter_buf[i], PAGE_SIZE);
+		if (sizebytes % PAGE_SIZE)
+			message->sizebytes += physical_channel_read(pchan,
+				scatter_buf[i], sizebytes % PAGE_SIZE);
+		message->sequence_rx = pchan->sequence_rx;
+	} else {
+		for (i = 0; i < allocated; i++)
+			kfree(scatter_buf[i]);
+		kfree(message);
+		message = NULL;
+	}
+
+	return message;
+}
+
+static struct hab_message*
 hab_msg_alloc(struct physical_channel *pchan, size_t sizebytes)
 {
 	struct hab_message *message;
 
-	if (sizebytes > HAB_HEADER_SIZE_MASK) {
+	if (sizebytes > HAB_HEADER_SIZE_MAX) {
 		pr_err("pchan %s send size too large %zd\n",
 			pchan->name, sizebytes);
 		return NULL;
@@ -30,18 +95,38 @@ hab_msg_alloc(struct physical_channel *pchan, size_t sizebytes)
 
 	message = kzalloc(sizeof(*message) + sizebytes, GFP_ATOMIC);
 	if (!message)
-		return NULL;
+		/*
+		 * big buffer allocation may fail when memory fragment.
+		 * Instead of one big consecutive kmem, try alloc one page at a time
+		 */
+		message = hab_scatter_msg_alloc(pchan, sizebytes);
+	else {
+		message->sizebytes =
+			physical_channel_read(pchan, message->data, sizebytes);
 
-	message->sizebytes =
-		physical_channel_read(pchan, message->data, sizebytes);
-
-	message->sequence_rx = pchan->sequence_rx;
+		message->sequence_rx = pchan->sequence_rx;
+	}
 
 	return message;
 }
 
 void hab_msg_free(struct hab_message *message)
 {
+	int i = 0;
+	uint32_t page_num = 0U;
+	void **scatter_buf = NULL;
+
+	if (unlikely(message->scatter)) {
+		scatter_buf = (void **)message->data;
+		page_num = message->sizebytes >> PAGE_SHIFT;
+
+		if (message->sizebytes % PAGE_SIZE)
+			page_num++;
+
+		for (i = 0; i < page_num; i++)
+			kfree(scatter_buf[i]);
+	}
+
 	kfree(message);
 }
 
@@ -202,7 +287,7 @@ static void hab_msg_drop(struct physical_channel *pchan, size_t sizebytes)
 {
 	uint8_t *data = NULL;
 
-	if (sizebytes > HAB_HEADER_SIZE_MASK) {
+	if (sizebytes > HAB_HEADER_SIZE_MAX) {
 		pr_err("%s read size too large %zd\n", pchan->name, sizebytes);
 		return;
 	}
@@ -330,7 +415,7 @@ int hab_msg_recv(struct physical_channel *pchan,
 	case HAB_PAYLOAD_TYPE_EXPORT:
 		exp_desc_size_expected = sizeof(struct export_desc)
 							+ sizeof(struct compressed_pfns);
-		if (sizebytes > (size_t)(HAB_HEADER_SIZE_MASK) ||
+		if (sizebytes > (size_t)(HAB_HEADER_SIZE_MAX) ||
 			sizebytes < exp_desc_size_expected) {
 			pr_err("%s exp size too large/small %zu header %zu\n",
 				pchan->name, sizebytes, sizeof(*exp_desc));

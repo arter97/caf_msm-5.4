@@ -3771,7 +3771,10 @@ static int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 	if (dev->flags & IFF_UP) {
 		int cpu = smp_processor_id(); /* ok because BHs are off */
 
-		if (txq->xmit_lock_owner != cpu) {
+		/* Other cpus might concurrently change txq->xmit_lock_owner
+		 * to -1 or to their cpu id, but not to our id.
+		 */
+		if (READ_ONCE(txq->xmit_lock_owner) != cpu) {
 			if (dev_xmit_recursion())
 				goto recursion_alert;
 
@@ -4749,7 +4752,7 @@ int (*gsb_nw_stack_recv)(struct sk_buff *skb) __rcu __read_mostly;
 EXPORT_SYMBOL(gsb_nw_stack_recv);
 #endif
 
-static int (*embms_tm_multicast_recv)(struct sk_buff *skb) __rcu __read_mostly;
+int (*embms_tm_multicast_recv)(struct sk_buff *skb) __rcu __read_mostly;
 EXPORT_SYMBOL(embms_tm_multicast_recv);
 
 void process_embms_receive_skb(struct sk_buff *skb)

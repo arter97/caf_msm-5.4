@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __HAB_H
 #define __HAB_H
@@ -111,7 +112,12 @@ struct hab_header {
 /* "Size" of the HAB_HEADER_ID and HAB_VCID_ID must match */
 #define HAB_HEADER_TYPE_SHIFT 16
 #define HAB_HEADER_ID_SHIFT 20
-#define HAB_HEADER_SIZE_MASK 0x0003FFFF
+/*
+ * On HQX platforms, the maximum payload size is
+ * PIPE_SHMEM_SIZE - sizeof(hab_header)
+ * 500KB is big enough for now and leave a margin for other usage
+ */
+#define HAB_HEADER_SIZE_MAX  0x0007D000
 #define HAB_HEADER_TYPE_MASK 0x000F0000
 #define HAB_HEADER_ID_MASK   0xFFF00000
 #define HAB_HEADER_INITIALIZER {0}
@@ -133,7 +139,7 @@ struct hab_header {
 	((header).session_id = (sid))
 
 #define HAB_HEADER_SET_SIZE(header, size) \
-	((header).payload_size = (size) & HAB_HEADER_SIZE_MASK)
+	((header).payload_size = (size))
 
 #define HAB_HEADER_SET_TYPE(header, type) \
 	((header).id_type = ((header).id_type & \
@@ -148,7 +154,7 @@ struct hab_header {
 			HAB_HEADER_ID_MASK))
 
 #define HAB_HEADER_GET_SIZE(header) \
-	((header).payload_size & HAB_HEADER_SIZE_MASK)
+	((header).payload_size)
 
 #define HAB_HEADER_GET_TYPE(header) \
 	(((header).id_type & \
@@ -232,6 +238,7 @@ struct hab_export_ack_recvd {
 struct hab_message {
 	struct list_head node;
 	size_t sizebytes;
+	bool scatter;
 	uint32_t sequence_rx;
 	uint32_t data[];
 };

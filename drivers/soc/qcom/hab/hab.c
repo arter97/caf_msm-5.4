@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include "hab.h"
 
@@ -551,9 +552,9 @@ long hab_vchan_send(struct uhab_context *ctx,
 	struct hab_header header = HAB_HEADER_INITIALIZER;
 	int nonblocking_flag = flags & HABMM_SOCKET_SEND_FLAGS_NON_BLOCKING;
 
-	if (sizebytes > (size_t)HAB_HEADER_SIZE_MASK) {
+	if (sizebytes > (size_t)HAB_HEADER_SIZE_MAX) {
 		pr_err("Message too large, %lu bytes, max is %d\n",
-			sizebytes, HAB_HEADER_SIZE_MASK);
+			sizebytes, HAB_HEADER_SIZE_MAX);
 		return -EINVAL;
 	}
 
