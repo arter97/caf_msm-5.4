@@ -3944,6 +3944,13 @@ static int fastrpc_init_create_static_process(struct fastrpc_file *fl,
 		return err;
 	}
 
+	if (fl->dev_minor == MINOR_NUM_DEV) {
+		err = -ECONNREFUSED;
+		ADSPRPC_ERR(
+			"untrusted app trying to attach to audio PD\n");
+		return err;
+	}
+
 	if (!init->filelen)
 		goto bail;
 
