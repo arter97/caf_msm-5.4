@@ -42,6 +42,7 @@
 	.intr_cfg_reg = REG_BASE + 0x8 + REG_SIZE * id,		\
 	.intr_status_reg = REG_BASE + 0xc + REG_SIZE * id,	\
 	.intr_target_reg = REG_BASE + 0x8 + REG_SIZE * id,	\
+	.dir_conn_reg = REG_BASE + 0xab000,	\
 	.mux_bit = 2,			\
 	.pull_bit = 0,			\
 	.drv_bit = 6,			\
@@ -56,6 +57,7 @@
 	.intr_polarity_bit = 1,		\
 	.intr_detection_bit = 2,	\
 	.intr_detection_width = 2,	\
+	.dir_conn_en_bit = 8,		\
 	.wake_reg = REG_BASE + wake_off,	\
 	.wake_bit = bit,		\
 }
@@ -1329,6 +1331,16 @@ static const struct msm_pingroup sa415m_groups[] = {
 static struct pinctrl_qup sa415m_qup_regs[] = {
 };
 
+static const struct msm_gpio_wakeirq_map sa415m_pdc_map[] = {
+	{ 42, 20 }, { 53, 21 }, { 56, 22 }, { 57, 23 }, { 78, 24 },
+	{ 84, 25 }, { 97, 26 },
+};
+
+static struct msm_dir_conn sa415m_dir_conn[] = {
+	  {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0},
+	  {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0}
+};
+
 static const struct msm_pinctrl_soc_data sa415m_pinctrl = {
 	.pins = sa415m_pins,
 	.npins = ARRAY_SIZE(sa415m_pins),
@@ -1339,6 +1351,9 @@ static const struct msm_pinctrl_soc_data sa415m_pinctrl = {
 	.ngpios = 100,
 	.qup_regs = sa415m_qup_regs,
 	.nqup_regs = ARRAY_SIZE(sa415m_qup_regs),
+	.wakeirq_map = sa415m_pdc_map,
+	.nwakeirq_map = ARRAY_SIZE(sa415m_pdc_map),
+	.dir_conn = sa415m_dir_conn,
 };
 
 static int sa415m_pinctrl_probe(struct platform_device *pdev)
