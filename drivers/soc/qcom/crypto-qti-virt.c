@@ -23,7 +23,7 @@
  * in bio crypt context header file.
  */
 #define BLK_CRYPTO_MAX_WRAPPED_KEY_SIZE	128
-#define HAB_TIMEOUT_MS	(3000)
+#define HAB_TIMEOUT_MS	(50000)
 /* FBE request command ids */
 #define	FBE_GET_MAX_SLOTS         (7)
 #define	FBE_SET_KEY_V2            (8)
