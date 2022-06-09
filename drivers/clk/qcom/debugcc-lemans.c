@@ -27,23 +27,23 @@ static struct measure_clk_data debug_mux_priv = {
 
 static const char *const apss_cc_debug_mux_parent_names[] = {
 	"measure_only_apcs_cl1_l3_post_acd_clk",
-	"measure_only_apcs_gold_post_acd_clk",
-	"measure_only_apcs_goldplus_post_acd_clk",
-	"measure_only_apcs_l3_post_acd_clk",
+	"measure_only_apcs_cl0_gold_post_acd_clk",
+	"measure_only_apcs_cl1_goldplus_post_acd_clk",
+	"measure_only_apcs_cl0_l3_post_acd_clk",
 };
 
 static int apss_cc_debug_mux_sels[] = {
 	0x61,		/* measure_only_apcs_cl1_l3_post_acd_clk */
-	0x41,		/* measure_only_apcs_gold_post_acd_clk */
-	0x45,		/* measure_only_apcs_goldplus_post_acd_clk */
-	0x25,		/* measure_only_apcs_l3_post_acd_clk */
+	0x21,		/* measure_only_apcs_cl0_gold_post_acd_clk */
+	0x25,		/* measure_only_apcs_cl1_goldplus_post_acd_clk */
+	0x41,		/* measure_only_apcs_cl0_l3_post_acd_clk */
 };
 
 static int apss_cc_debug_mux_pre_divs[] = {
 	0x4,		/* measure_only_apcs_cl1_l3_post_acd_clk */
-	0x8,		/* measure_only_apcs_gold_post_acd_clk */
-	0x8,		/* measure_only_apcs_goldplus_post_acd_clk */
-	0x4,		/* measure_only_apcs_l3_post_acd_clk */
+	0x8,		/* measure_only_apcs_cl0_gold_post_acd_clk */
+	0x8,		/* measure_only_apcs_cl1_goldplus_post_acd_clk */
+	0x4,		/* measure_only_apcs_cl0_l3_post_acd_clk */
 };
 
 static struct clk_debug_mux apss_cc_debug_mux = {
@@ -875,26 +875,26 @@ static struct clk_dummy measure_only_apcs_cl1_l3_post_acd_clk = {
 	},
 };
 
-static struct clk_dummy measure_only_apcs_gold_post_acd_clk = {
+static struct clk_dummy measure_only_apcs_cl0_gold_post_acd_clk = {
 	.rrate = 1000,
 	.hw.init = &(const struct clk_init_data){
-		.name = "measure_only_apcs_gold_post_acd_clk",
+		.name = "measure_only_apcs_cl0_gold_post_acd_clk",
 		.ops = &clk_dummy_ops,
 	},
 };
 
-static struct clk_dummy measure_only_apcs_goldplus_post_acd_clk = {
+static struct clk_dummy measure_only_apcs_cl1_goldplus_post_acd_clk = {
 	.rrate = 1000,
 	.hw.init = &(const struct clk_init_data){
-		.name = "measure_only_apcs_goldplus_post_acd_clk",
+		.name = "measure_only_apcs_cl1_goldplus_post_acd_clk",
 		.ops = &clk_dummy_ops,
 	},
 };
 
-static struct clk_dummy measure_only_apcs_l3_post_acd_clk = {
+static struct clk_dummy measure_only_apcs_cl0_l3_post_acd_clk = {
 	.rrate = 1000,
 	.hw.init = &(const struct clk_init_data){
-		.name = "measure_only_apcs_l3_post_acd_clk",
+		.name = "measure_only_apcs_cl0_l3_post_acd_clk",
 		.ops = &clk_dummy_ops,
 	},
 };
@@ -1061,9 +1061,9 @@ static struct clk_dummy measure_only_video_cc_xo_clk = {
 
 static struct clk_hw *debugcc_lemans_hws[] = {
 	&measure_only_apcs_cl1_l3_post_acd_clk.hw,
-	&measure_only_apcs_gold_post_acd_clk.hw,
-	&measure_only_apcs_goldplus_post_acd_clk.hw,
-	&measure_only_apcs_l3_post_acd_clk.hw,
+	&measure_only_apcs_cl0_gold_post_acd_clk.hw,
+	&measure_only_apcs_cl1_goldplus_post_acd_clk.hw,
+	&measure_only_apcs_cl0_l3_post_acd_clk.hw,
 	&measure_only_cam_cc_gdsc_clk.hw,
 	&measure_only_cnoc_clk.hw,
 	&measure_only_gcc_camera_ahb_clk.hw,
