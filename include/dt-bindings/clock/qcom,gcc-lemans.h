@@ -254,6 +254,8 @@
 #define GCC_TSCSS_CNTR_CLK_SRC				243
 #define GCC_TSCSS_ETU_CLK				244
 #define GCC_TSCSS_GLOBAL_CNTR_CLK			245
+#define GCC_SGMI_CLKREF_EN				246
+#define GCC_EDP_REF_CLKREF_EN				247
 
 /* GCC resets */
 #define GCC_EMAC0_BCR					0

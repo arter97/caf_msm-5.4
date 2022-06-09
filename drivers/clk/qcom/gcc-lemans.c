@@ -2452,6 +2452,19 @@ static struct clk_branch gcc_disp_hf_axi_clk = {
 	},
 };
 
+static struct clk_branch gcc_edp_ref_clkref_en = {
+	.halt_reg = 0x97448,
+	.halt_check = BRANCH_HALT,
+	.clkr = {
+		.enable_reg = 0x97448,
+		.enable_mask = BIT(0),
+		.hw.init = &(const struct clk_init_data){
+			.name = "gcc_edp_ref_clkref_en",
+			.ops = &clk_branch2_ops,
+		},
+	},
+};
+
 static struct clk_branch gcc_emac0_axi_clk = {
 	.halt_reg = 0xb6018,
 	.halt_check = BRANCH_HALT_VOTED,
@@ -3984,6 +3997,19 @@ static struct clk_branch gcc_sdcc1_ice_core_clk = {
 	},
 };
 
+static struct clk_branch gcc_sgmi_clkref_en = {
+	.halt_reg = 0x9c034,
+	.halt_check = BRANCH_HALT,
+	.clkr = {
+		.enable_reg = 0x9c034,
+		.enable_mask = BIT(0),
+		.hw.init = &(const struct clk_init_data){
+			.name = "gcc_sgmi_clkref_en",
+			.ops = &clk_branch2_ops,
+		},
+	},
+};
+
 static struct clk_branch gcc_ufs_card_ahb_clk = {
 	.halt_reg = 0x81020,
 	.halt_check = BRANCH_HALT_VOTED,
@@ -4896,6 +4922,8 @@ static struct clk_regmap *gcc_lemans_clocks[] = {
 	[GCC_USB_CLKREF_EN] = &gcc_usb_clkref_en.clkr,
 	[GCC_VIDEO_AXI0_CLK] = &gcc_video_axi0_clk.clkr,
 	[GCC_VIDEO_AXI1_CLK] = &gcc_video_axi1_clk.clkr,
+	[GCC_EDP_REF_CLKREF_EN] = &gcc_edp_ref_clkref_en.clkr,
+	[GCC_SGMI_CLKREF_EN] = &gcc_sgmi_clkref_en.clkr,
 };
 
 static const struct qcom_reset_map gcc_lemans_resets[] = {
