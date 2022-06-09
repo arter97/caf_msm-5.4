@@ -584,6 +584,11 @@ quit:
 	db_set_busy_state(dbq->vbase, false);
 
 	mutex_unlock(&dbq->lock);
+	/* let user try again incase we miss to submit */
+	if (-ETIMEDOUT == ret) {
+		LOGE("Timed out to send db msg, try again\n");
+		ret = -EAGAIN;
+	}
 	return ret;
 }
 
@@ -735,8 +740,10 @@ static void _signal_contexts(struct qcom_hgsl *hgsl)
 	for (i = 0; i < HGSL_CONTEXT_NUM; i++) {
 		ctxt = hgsl_get_context(hgsl, i);
 
-		if ((ctxt == NULL) || (ctxt->timeline == NULL))
+		if ((ctxt == NULL) || (ctxt->timeline == NULL)) {
+			hgsl_put_context(ctxt);
 			continue;
+		}
 
 		ts = get_context_retired_ts(ctxt);
 		if (ts != ctxt->last_ts) {
@@ -1839,6 +1846,7 @@ static int hgsl_ioctl_mem_map_smmu(struct file *filep, unsigned long arg)
 		goto out;
 	}
 
+	params.size = PAGE_ALIGN(params.size);
 	mem_node->flags = params.flags;
 	ret = hgsl_hyp_mem_map_smmu(hab_channel, &params, mem_node);
 
@@ -1927,8 +1935,8 @@ static int hgsl_ioctl_mem_cache_operation(struct file *filep, unsigned long arg)
 	struct hgsl_ioctl_mem_cache_operation_params params;
 	struct qcom_hgsl *hgsl = priv->dev;
 	struct hgsl_mem_node *node_found = NULL;
-	struct hgsl_mem_node *tmp = NULL;
 	int ret = 0;
+	uint64_t gpuaddr = 0;
 	bool internal = false;
 
 	if (copy_from_user(&params, USRPTR(arg), sizeof(params))) {
@@ -1937,26 +1945,23 @@ static int hgsl_ioctl_mem_cache_operation(struct file *filep, unsigned long arg)
 		goto out;
 	}
 
-	mutex_lock(&priv->lock);
-	list_for_each_entry(tmp, &priv->mem_allocated, node) {
-		if (tmp->memdesc.gpuaddr == params.gpuaddr) {
-			node_found = tmp;
-			internal = true;
-			break;
-		}
-	}
-	if (!node_found) {
-		list_for_each_entry(tmp, &priv->mem_mapped, node) {
-			if (tmp->memdesc.gpuaddr == params.gpuaddr) {
-				node_found = tmp;
-				internal = false;
-				break;
-			}
-		}
+	gpuaddr = params.gpuaddr + params.offsetbytes;
+	if ((gpuaddr < params.gpuaddr) || ((gpuaddr + params.sizebytes) <= gpuaddr)) {
+		ret = -EINVAL;
+		goto out;
 	}
 
+	mutex_lock(&priv->lock);
+	node_found = hgsl_mem_find_base_locked(&priv->mem_allocated,
+					gpuaddr, params.sizebytes);
+	if (node_found)
+		internal = true;
+	else
+		node_found = hgsl_mem_find_base_locked(&priv->mem_mapped,
+					gpuaddr, params.sizebytes);
+
 	ret = hgsl_mem_cache_op(hgsl->dev, node_found, internal,
-		params.offsetbytes, params.sizebytes, params.operation);
+			gpuaddr - node_found->memdesc.gpuaddr, params.sizebytes, params.operation);
 	mutex_unlock(&priv->lock);
 
 out:
@@ -3257,6 +3262,10 @@ static int qcom_hgsl_register(struct platform_device *pdev,
 		dev_err(&pdev->dev, "cdev_add failed %d\n", ret);
 		goto exit_destroy_device;
 	}
+
+	ret = dma_coerce_mask_and_coherent(hgsl_dev->dev, DMA_BIT_MASK(64));
+	if (ret)
+		LOGW("Failed to set dma mask to 64 bits, ret = %d", ret);
 
 	return 0;
 

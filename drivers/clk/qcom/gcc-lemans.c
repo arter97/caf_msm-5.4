@@ -76,7 +76,7 @@ static struct clk_alpha_pll gcc_gpll0 = {
 				[VDD_LOWER] = 615000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1500000000,
-				[VDD_NOMINAL] = 1750000000,
+				[VDD_NOMINAL] = 1800000000,
 				[VDD_HIGH] = 2000000000},
 		},
 	},
@@ -126,7 +126,7 @@ static struct clk_alpha_pll gcc_gpll1 = {
 				[VDD_LOWER] = 615000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1500000000,
-				[VDD_NOMINAL] = 1750000000,
+				[VDD_NOMINAL] = 1800000000,
 				[VDD_HIGH] = 2000000000},
 		},
 	},
@@ -154,7 +154,7 @@ static struct clk_alpha_pll gcc_gpll4 = {
 				[VDD_LOWER] = 615000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1500000000,
-				[VDD_NOMINAL] = 1750000000,
+				[VDD_NOMINAL] = 1800000000,
 				[VDD_HIGH] = 2000000000},
 		},
 	},
@@ -182,7 +182,7 @@ static struct clk_alpha_pll gcc_gpll7 = {
 				[VDD_LOWER] = 615000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1500000000,
-				[VDD_NOMINAL] = 1750000000,
+				[VDD_NOMINAL] = 1800000000,
 				[VDD_HIGH] = 2000000000},
 		},
 	},
@@ -210,7 +210,7 @@ static struct clk_alpha_pll gcc_gpll9 = {
 				[VDD_LOWER] = 615000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1500000000,
-				[VDD_NOMINAL] = 1750000000,
+				[VDD_NOMINAL] = 1800000000,
 				[VDD_HIGH] = 2000000000},
 		},
 	},
@@ -1587,7 +1587,15 @@ static struct clk_rcg2 gcc_qupv3_wrap3_s0_clk_src = {
 };
 
 static const struct freq_tbl ftbl_gcc_sdcc1_apps_clk_src[] = {
-	F(384000000, P_GCC_GPLL9_OUT_MAIN, 1, 0, 0),
+	F(144000, P_BI_TCXO, 16, 3, 25),
+	F(400000, P_BI_TCXO, 12, 1, 4),
+	F(19200000, P_BI_TCXO, 1, 0, 0),
+	F(20000000, P_GCC_GPLL0_OUT_EVEN, 5, 1, 3),
+	F(25000000, P_GCC_GPLL0_OUT_EVEN, 12, 0, 0),
+	F(50000000, P_GCC_GPLL0_OUT_EVEN, 6, 0, 0),
+	F(100000000, P_GCC_GPLL0_OUT_EVEN, 3, 0, 0),
+	F(192000000, P_GCC_GPLL9_OUT_MAIN, 4, 0, 0),
+	F(384000000, P_GCC_GPLL9_OUT_MAIN, 2, 0, 0),
 	{ }
 };
 

@@ -1,21 +1,31 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
+#include <linux/sched.h>
+#include <linux/debugfs.h>
+#include <linux/crc32.h>
 #include "virtio_fastrpc_core.h"
 #include "virtio_fastrpc_mem.h"
 #include "virtio_fastrpc_queue.h"
 
 #define M_FDLIST			16
-#define FASTRPC_DMAHANDLE_NOMAP		16
+#define M_CRCLIST			64
+#define M_DSP_PERF_LIST		12
+#define M_KERNEL_PERF_LIST (PERF_KEY_MAX)
+#define M_DSP_PERF_LIST		12
 
-#define VIRTIO_FASTRPC_CMD_OPEN		1
-#define VIRTIO_FASTRPC_CMD_CLOSE	2
-#define VIRTIO_FASTRPC_CMD_INVOKE	3
-#define VIRTIO_FASTRPC_CMD_MMAP		4
-#define VIRTIO_FASTRPC_CMD_MUNMAP	5
-#define VIRTIO_FASTRPC_CMD_CONTROL	6
+#define FASTRPC_DMAHANDLE_NOMAP	16
+
+#define VIRTIO_FASTRPC_CMD_OPEN			1
+#define VIRTIO_FASTRPC_CMD_CLOSE		2
+#define VIRTIO_FASTRPC_CMD_INVOKE		3
+#define VIRTIO_FASTRPC_CMD_MMAP			4
+#define VIRTIO_FASTRPC_CMD_MUNMAP		5
+#define VIRTIO_FASTRPC_CMD_CONTROL		6
+#define VIRTIO_FASTRPC_CMD_GET_DSP_INFO	7
 
 #define STATIC_PD			0
 #define DYNAMIC_PD			1
@@ -25,10 +35,8 @@
 #define FASTRPC_STATIC_HANDLE_LISTENER	3
 #define FASTRPC_STATIC_HANDLE_MAX	20
 
+#define UNSIGNED_PD_SUPPORT 1
 #define PERF_CAPABILITY   (1 << 1)
-
-#define M_KERNEL_PERF_LIST (PERF_KEY_MAX)
-#define M_DSP_PERF_LIST (12)
 
 #define PERF_END (void)0
 
@@ -65,13 +73,30 @@ enum fastrpc_perfkeys {
 	PERF_KEY_MAX = 10,
 };
 
+enum virtio_fastrpc_invoke_attr {
+	/* bit0, 1: FE/BE crc enabled, 0: FE/BE crc disabled */
+	VIRTIO_FASTRPC_INVOKE_CRC = 1 << 0,
+	VIRTIO_FASTRPC_INVOKE_PERF = 1 << 1,
+	VIRTIO_FASTRPC_INVOKE_ASYNC = 1 << 2,
+};
+
+enum fastrpc_buf_attr {
+	/* bit0, 1: ION buffer, 0: normal buffer*/
+	FASTRPC_BUF_ATTR_ION = 1 << 0,
+	/* bit1, 1: buffer data is in an intermediate buffer, 0: buffer data is in invoke message */
+	FASTRPC_BUF_ATTR_INTERNAL = 1 << 1,
+	/* bit2, 1: cached buffer, 0: uncached buffer */
+	FASTRPC_BUF_ATTR_CACHED = 1 << 2,
+};
+
 static uint32_t kernel_capabilities[FASTRPC_MAX_ATTRIBUTES -
 FASTRPC_MAX_DSP_ATTRIBUTES] = {
 	PERF_CAPABILITY	/* PERF_LOGGING_V2_SUPPORT feature is supported, unsupported = 0 */
 };
 
 struct virt_fastrpc_buf {
-	u32 type;
+	u32 attrs;
+	u32 crc;
 	u64 pv;	/* buffer virtual address */
 	u64 buf_len;	/* buffer length */
 	u64 offset;	/* buffer offset */
@@ -92,6 +117,13 @@ struct virt_open_msg {
 	struct virt_msg_hdr hdr;	/* virtio fastrpc message header */
 	u32 domain;			/* DSP domain id */
 	u32 pd;				/* DSP PD */
+	u32 attrs;			/* DSP PD attributes */
+} __packed;
+
+struct virt_cap_msg {
+	struct virt_msg_hdr hdr;	/* virtio fastrpc message header */
+	u32 domain;		/* DSP domain id */
+	u32 dsp_caps[FASTRPC_MAX_DSP_ATTRIBUTES];	/* DSP capability */
 } __packed;
 
 struct virt_control_msg {
@@ -104,6 +136,7 @@ struct virt_invoke_msg {
 	struct virt_msg_hdr hdr;	/* virtio fastrpc message header */
 	u32 handle;			/* remote handle */
 	u32 sc;				/* scalars describing the data */
+	u32 attrs;
 	struct virt_fastrpc_buf pra[0];	/* remote arguments list */
 } __packed;
 
@@ -139,6 +172,23 @@ static inline int64_t getnstimediff(struct timespec64 *start)
 	ns = timespec64_to_ns(&b);
 	return ns;
 }
+
+enum fastrpc_proc_attr {
+	/* Macro for Debug attr */
+	FASTRPC_MODE_DEBUG	= 1 << 0,
+	/* Macro for Ptrace */
+	FASTRPC_MODE_PTRACE	= 1 << 1,
+	/* Macro for CRC Check */
+	FASTRPC_MODE_CRC	= 1 << 2,
+	/* Macro for Unsigned PD */
+	FASTRPC_MODE_UNSIGNED_MODULE	= 1 << 3,
+	/* Macro for Adaptive QoS */
+	FASTRPC_MODE_ADAPTIVE_QOS	= 1 << 4,
+	/* Macro for System Process */
+	FASTRPC_MODE_SYSTEM_PROCESS	= 1 << 5,
+	/* Macro for Prvileged Process */
+	FASTRPC_MODE_PRIVILEGED	= (1 << 6),
+};
 
 static struct virt_fastrpc_msg *virt_alloc_msg(struct fastrpc_file *fl, int size)
 {
@@ -219,6 +269,7 @@ struct fastrpc_file *fastrpc_file_alloc(void)
 	INIT_HLIST_HEAD(&fl->cached_bufs);
 	INIT_HLIST_HEAD(&fl->remote_bufs);
 	fl->tgid = current->tgid;
+	fl->tgid_open = current->tgid;
 	fl->mode = FASTRPC_MODE_SERIAL;
 	fl->domain = -1;
 	fl->cid = -1;
@@ -347,7 +398,7 @@ static int virt_fastrpc_close(struct fastrpc_file *fl)
 	int err;
 
 	if (fl->cid < 0) {
-		dev_err(me->dev, "channel id %d is invalid\n", fl->cid);
+		dev_err(me->dev, "close: channel id %d is invalid\n", fl->cid);
 		return -EINVAL;
 	}
 
@@ -504,6 +555,7 @@ static int context_alloc(struct fastrpc_file *fl,
 	ctx->handle = invoke->handle;
 	ctx->pid = current->pid;
 	ctx->tgid = fl->tgid;
+	ctx->crc = (uint32_t *)invokefd->crc;
 	ctx->perf_dsp = (uint64_t *)invokefd->perf_dsp;
 	ctx->perf_kernel = (uint64_t *)invokefd->perf_kernel;
 
@@ -540,6 +592,19 @@ static void context_save_interrupted(struct fastrpc_invoke_ctx *ctx)
 	spin_unlock(&ctx->fl->hlock);
 }
 
+static void calc_compare_crc(struct fastrpc_invoke_ctx *ctx, unsigned char *va,
+		int len, uint32_t *lcrc, uint32_t *rcrc)
+{
+	struct fastrpc_apps *me = ctx->fl->apps;
+
+	if (unlikely(ctx->crc)) {
+		*lcrc = crc32_be(0, va, len);
+		if (rcrc && (*rcrc != *lcrc))
+			dev_err(me->dev, "FE/BE crc is not matched 0x%x:0x%x\n",
+					*lcrc, *rcrc);
+	}
+}
+
 static int get_args(struct fastrpc_invoke_ctx *ctx)
 {
 	struct fastrpc_file *fl = ctx->fl;
@@ -553,6 +618,9 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 	struct virt_fastrpc_buf *rpra;
 	struct virt_fastrpc_dmahandle *handle;
 	uint64_t *fdlist;
+	uint32_t *crclist = NULL;
+	uint32_t *early_hint = NULL;
+	uint64_t *perf_dsp_list = NULL;
 	unsigned int *attrs = ctx->attrs;
 	struct fastrpc_mmap **maps = ctx->maps;
 	size_t copylen = 0, size = 0, handle_len = 0, metalen;
@@ -613,7 +681,8 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 
 	metalen = sizeof(*vmsg) + total * sizeof(*rpra)
 		+ handles * sizeof(struct virt_fastrpc_dmahandle)
-		+ sizeof(uint64_t) * M_FDLIST;
+		+ sizeof(uint64_t) * M_FDLIST + sizeof(uint32_t) * M_CRCLIST
+		+ sizeof(uint32_t) + sizeof(uint64_t) * M_DSP_PERF_LIST;
 	size = metalen + copylen + handle_len;
 	if (size > me->buf_size) {
 		/* if user buffer contents exceed virtio buffer limits,
@@ -669,12 +738,17 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 	vmsg->hdr.result = 0xffffffff;
 	vmsg->handle = ctx->handle;
 	vmsg->sc = ctx->sc;
+	vmsg->attrs = ctx->crc ? VIRTIO_FASTRPC_INVOKE_CRC : 0;
 	rpra = (struct virt_fastrpc_buf *)vmsg->pra;
 	handle = (struct virt_fastrpc_dmahandle *)&rpra[total];
 	fdlist = (uint64_t *)&handle[handles];
-	payload = (char *)&fdlist[M_FDLIST];
+	crclist = (uint32_t *)&fdlist[M_FDLIST];
+	early_hint = (uint32_t *)&crclist[M_CRCLIST];
+	perf_dsp_list = (uint64_t *)&early_hint[1];
+	payload = (char *)&perf_dsp_list[M_DSP_PERF_LIST];
 
-	memset(fdlist, 0, sizeof(uint64_t) * M_FDLIST);
+	memset(fdlist, 0, sizeof(uint64_t) * M_FDLIST + sizeof(uint32_t) * M_CRCLIST +
+		sizeof(uint64_t) * M_DSP_PERF_LIST + sizeof(uint32_t));
 
 	PERF(ctx->fl->profile, GET_COUNTER(perf_counter, PERF_COPY),
 	for (i = 0; i < bufs; i++) {
@@ -687,9 +761,11 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 		int index = 0;
 		uint64_t offset = 0;
 
+		rpra[i].attrs = 0;
 		if (maps[i]) {
 			table = maps[i]->table;
-			rpra[i].type = FASTRPC_BUF_TYPE_ION;
+			rpra[i].attrs |= FASTRPC_BUF_ATTR_ION;
+			rpra[i].crc = 0;
 			rpra[i].pv = buf;
 			rpra[i].buf_len = len;
 			rpra[i].payload_len = table->nents *
@@ -699,6 +775,8 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 				sgbuf[index].pv = sg_dma_address(sgl);
 				sgbuf[index].len = sg_dma_len(sgl);
 			}
+			calc_compare_crc(ctx, (uint8_t *)payload, (int)rpra[i].payload_len,
+					&(rpra[i].crc), NULL);
 			down_read(&current->mm->mmap_sem);
 			VERIFY(err, NULL != (vma = find_vma(current->mm, maps[i]->va)));
 			if (err) {
@@ -720,7 +798,8 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 		} else if (ctx->desc &&
 			   ctx->desc[i].type == FASTRPC_BUF_TYPE_INTERNAL) {
 			table = &ctx->desc[i].buf->sgt;
-			rpra[i].type = FASTRPC_BUF_TYPE_INTERNAL;
+			rpra[i].attrs |= FASTRPC_BUF_ATTR_INTERNAL;
+			rpra[i].crc = 0;
 			rpra[i].pv = buf;
 			rpra[i].buf_len = len;
 			rpra[i].payload_len = table->nents *
@@ -730,6 +809,8 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 				sgbuf[index].pv = page_to_phys(sg_page(sgl));
 				sgbuf[index].len = sgl->length;
 			}
+			calc_compare_crc(ctx, (uint8_t *)payload, (int)rpra[i].payload_len,
+					&(rpra[i].crc), NULL);
 			if (i < inbufs && len) {
 				K_COPY_FROM_USER(err, 0, ctx->desc[i].buf->va,
 						lpra[i].buf.pv, len);
@@ -741,7 +822,7 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 			payload += rpra[i].payload_len;
 		} else {
 			/* copy non ion buffers */
-			rpra[i].type = FASTRPC_BUF_TYPE_NORMAL;
+			rpra[i].crc = 0;
 			rpra[i].pv = buf;
 			rpra[i].buf_len = len;
 			rpra[i].payload_len = len;
@@ -750,6 +831,8 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 						lpra[i].buf.pv, len);
 				if (err)
 					goto bail;
+				calc_compare_crc(ctx, (uint8_t *)payload, (int)len,
+						&(rpra[i].crc), NULL);
 			}
 			rpra[i].offset = 0;
 			payload += len;
@@ -770,7 +853,7 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 			handle[hlist].offset = (uint32_t)(uintptr_t)lpra[i].buf.pv;
 			/* copy dma handle sglist to data area */
 			table = maps[i]->table;
-			rpra[i].type = FASTRPC_BUF_TYPE_ION;
+			rpra[i].attrs = FASTRPC_BUF_ATTR_ION;
 			rpra[i].buf_len = lpra[i].buf.len;
 			rpra[i].payload_len = table->nents *
 				sizeof(struct virt_fastrpc_sgl);
@@ -779,6 +862,9 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 				sgbuf[index].pv = sg_dma_address(sgl);
 				sgbuf[index].len = sg_dma_len(sgl);
 			}
+			calc_compare_crc(ctx, (uint8_t *)payload, (int) rpra[i].payload_len,
+					&(rpra[i].crc), NULL);
+			rpra[i].offset = 0;
 			payload += rpra[i].payload_len;
 		}
 	}
@@ -799,7 +885,11 @@ static int put_args(struct fastrpc_invoke_ctx *ctx)
 	remote_arg_t *lpra = ctx->lpra;
 	struct virt_fastrpc_buf *rpra;
 	struct virt_fastrpc_dmahandle *handle;
+	uint32_t crc;
 	uint64_t *fdlist;
+	uint32_t *crclist = NULL;
+	uint32_t *early_hint = NULL;
+	uint64_t *perf_dsp_list = NULL;
 	struct fastrpc_mmap **maps = ctx->maps, *mmap = NULL;
 	char *payload;
 
@@ -826,7 +916,10 @@ static int put_args(struct fastrpc_invoke_ctx *ctx)
 	rpra = (struct virt_fastrpc_buf *)rsp->pra;
 	handle = (struct virt_fastrpc_dmahandle *)&rpra[total];
 	fdlist = (uint64_t *)&handle[handles];
-	payload = (char *)&fdlist[M_FDLIST] + ctx->outbufs_offset;
+	crclist = (uint32_t *)(fdlist + M_FDLIST);
+	early_hint = (uint32_t *)(crclist + M_CRCLIST);
+	perf_dsp_list = (uint64_t *)(early_hint + 1);
+	payload = (char *)&perf_dsp_list[M_DSP_PERF_LIST] + ctx->outbufs_offset;
 
 	for (i = inbufs; i < bufs; i++) {
 		if (maps[i]) {
@@ -841,6 +934,9 @@ static int put_args(struct fastrpc_invoke_ctx *ctx)
 			if (err)
 				goto bail;
 		} else {
+			calc_compare_crc(ctx, (uint8_t *)payload, (int)rpra[i].buf_len,
+					&crc, &(rpra[i].crc));
+
 			K_COPY_TO_USER(err, 0, lpra[i].buf.pv,
 					payload, rpra[i].buf_len);
 			if (err)
@@ -860,6 +956,10 @@ static int put_args(struct fastrpc_invoke_ctx *ctx)
 		}
 	}
 	mutex_unlock(&fl->map_mutex);
+	if (ctx->crc && crclist && rpra)
+		K_COPY_TO_USER(err, 0, ctx->crc,
+				crclist, M_CRCLIST * sizeof(uint32_t));
+
 bail:
 	return err;
 }
@@ -1325,20 +1425,99 @@ bail:
 	return err;
 }
 
+static int fastrpc_set_process_info(struct fastrpc_file *fl)
+{
+	int err = 0, buf_size = 0;
+	char strpid[PID_SIZE];
+	char cur_comm[TASK_COMM_LEN];
+
+	memcpy(cur_comm, current->comm, TASK_COMM_LEN);
+	cur_comm[TASK_COMM_LEN - 1] = '\0';
+	fl->tgid = current->tgid;
+
+	/*
+	 * Third-party apps don't have permission to open the fastrpc device, so
+	 * it is opened on their behalf by DSP HAL. This is detected by
+	 * comparing current PID with the one stored during device open.
+	 */
+	if (current->tgid != fl->tgid_open)
+		fl->untrusted_process = true;
+	scnprintf(strpid, PID_SIZE, "%d", current->pid);
+	if (fl->apps->debugfs_root) {
+		buf_size = strlen(cur_comm) + strlen("_")
+			+ strlen(strpid) + 1;
+
+		spin_lock(&fl->hlock);
+		if (fl->debug_buf_alloced_attempted) {
+			spin_unlock(&fl->hlock);
+			return err;
+		}
+		fl->debug_buf_alloced_attempted = 1;
+		spin_unlock(&fl->hlock);
+		fl->debug_buf = kzalloc(buf_size, GFP_KERNEL);
+
+		if (!fl->debug_buf) {
+			err = -ENOMEM;
+			spin_lock(&fl->hlock);
+			fl->debug_buf_alloced_attempted = 0;
+			spin_unlock(&fl->hlock);
+			return err;
+		}
+		scnprintf(fl->debug_buf, buf_size, "%.10s%s%d",
+			cur_comm, "_", current->pid);
+		fl->debugfs_file = debugfs_create_file(fl->debug_buf, 0644,
+			fl->apps->debugfs_root, fl, fl->apps->debugfs_fops);
+		if (IS_ERR_OR_NULL(fl->debugfs_file)) {
+			dev_warn(fl->apps->dev, "%s: %s: failed to create debugfs file %s\n",
+				cur_comm, __func__, fl->debug_buf);
+			fl->debugfs_file = NULL;
+			kfree(fl->debug_buf);
+			fl->debug_buf = NULL;
+			spin_lock(&fl->hlock);
+			fl->debug_buf_alloced_attempted = 0;
+			spin_unlock(&fl->hlock);
+		}
+	}
+	return err;
+}
+
 int fastrpc_ioctl_get_info(struct fastrpc_file *fl,
 					uint32_t *info)
 {
 	int err = 0;
 	uint32_t domain;
+	struct fastrpc_channel_ctx *chan;
 
 	VERIFY(err, fl != NULL);
 	if (err)
 		goto bail;
+	err = fastrpc_set_process_info(fl);
+	if (err)
+		goto bail;
+
 	if (fl->domain == -1) {
 		domain = *info;
 		VERIFY(err, domain < fl->apps->num_channels);
 		if (err)
 			goto bail;
+		chan = &fl->apps->channel[domain];
+		/* Check to see if the device node is non-secure */
+		if (fl->dev_minor == MINOR_NUM_DEV) {
+			/*
+			 * If an app is trying to offload to a secure remote
+			 * channel by opening the non-secure device node, allow
+			 * the access if the subsystem supports unsigned
+			 * offload. Untrusted apps will be restricted from
+			 * offloading to signed PD using DSP HAL.
+			 */
+			if (chan->secure == true
+			&& !chan->unsigned_support) {
+				dev_err(fl->apps->dev,
+				"cannot use domain %d with non-secure device\n", domain);
+				err = -EACCES;
+				goto bail;
+			}
+		}
 		fl->domain = domain;
 	}
 	*info = 1;
@@ -1346,7 +1525,8 @@ bail:
 	return err;
 }
 
-static int virt_fastrpc_open(struct fastrpc_file *fl)
+static int virt_fastrpc_open(struct fastrpc_file *fl,
+		struct fastrpc_ioctl_init_attrs *uproc)
 {
 	struct fastrpc_apps *me = fl->apps;
 	struct virt_open_msg *vmsg, *rsp = NULL;
@@ -1369,6 +1549,8 @@ static int virt_fastrpc_open(struct fastrpc_file *fl)
 	vmsg->hdr.result = 0xffffffff;
 	vmsg->domain = fl->domain;
 	vmsg->pd = fl->pd;
+	vmsg->attrs = uproc->attrs;
+
 
 	err = fastrpc_txbuf_send(fl, vmsg, sizeof(*vmsg));
 	if (err)
@@ -1383,7 +1565,7 @@ static int virt_fastrpc_open(struct fastrpc_file *fl)
 	if (err)
 		goto bail;
 	if (rsp->hdr.cid < 0) {
-		dev_err(me->dev, "channel id %d is invalid\n", rsp->hdr.cid);
+		dev_err(me->dev, "open: channel id %d is invalid\n", rsp->hdr.cid);
 		err = -EINVAL;
 		goto bail;
 	}
@@ -1401,6 +1583,23 @@ int fastrpc_init_process(struct fastrpc_file *fl,
 {
 	int err = 0;
 	struct fastrpc_ioctl_init *init = &uproc->init;
+	int domain = fl->domain;
+	struct fastrpc_channel_ctx *chan = &fl->apps->channel[domain];
+
+	if (chan->unsigned_support && fl->dev_minor == MINOR_NUM_DEV) {
+		/*
+		 * Make sure third party applications
+		 * can spawn only unsigned PD when
+		 * channel configured as secure.
+		 */
+		if (chan->secure && !(uproc->attrs & FASTRPC_MODE_UNSIGNED_MODULE)) {
+			err = -ECONNREFUSED;
+			goto bail;
+		}
+	} else if (!(chan->unsigned_support) && (uproc->attrs & FASTRPC_MODE_UNSIGNED_MODULE)) {
+		err = -ECONNREFUSED;
+		goto bail;
+	}
 
 	switch (init->flags) {
 	case FASTRPC_INIT_ATTACH:
@@ -1409,6 +1608,18 @@ int fastrpc_init_process(struct fastrpc_file *fl,
 		break;
 	case FASTRPC_INIT_CREATE:
 		fl->pd = DYNAMIC_PD;
+		/* Untrusted apps are not allowed to offload to signedPD on DSP. */
+		if (fl->untrusted_process) {
+			VERIFY(err, uproc->attrs & FASTRPC_MODE_UNSIGNED_MODULE);
+			if (err) {
+				err = -ECONNREFUSED;
+				dev_err(fl->apps->dev,
+					"untrusted app trying to offload to signed remote process\n");
+				goto bail;
+			}
+		}
+
+		fl->procattrs = uproc->attrs;
 		break;
 	case FASTRPC_INIT_CREATE_STATIC:
 		fl->pd = STATIC_PD;
@@ -1416,10 +1627,110 @@ int fastrpc_init_process(struct fastrpc_file *fl,
 	default:
 		return -ENOTTY;
 	}
-	err = virt_fastrpc_open(fl);
+	err = virt_fastrpc_open(fl, uproc);
 	if (err)
 		goto bail;
 	fl->dsp_proc_init = 1;
+bail:
+	return err;
+}
+
+static int virt_fastrpc_get_dsp_info(struct fastrpc_file *fl,
+		u32 *dsp_attributes)
+{
+	struct fastrpc_apps *me = fl->apps;
+	struct virt_cap_msg *vmsg, *rsp = NULL;
+	struct virt_fastrpc_msg *msg;
+	int err;
+
+	msg = virt_alloc_msg(fl, sizeof(*vmsg));
+	if (!msg) {
+		dev_err(me->dev, "%s: no memory\n", __func__);
+		return -ENOMEM;
+	}
+
+	vmsg = (struct virt_cap_msg *)msg->txbuf;
+	vmsg->hdr.pid = fl->tgid;
+	vmsg->hdr.tid = current->pid;
+	vmsg->hdr.cid = -1;
+	vmsg->hdr.cmd = VIRTIO_FASTRPC_CMD_GET_DSP_INFO;
+	vmsg->hdr.len = sizeof(*vmsg);
+	vmsg->hdr.msgid = msg->msgid;
+	vmsg->hdr.result = 0xffffffff;
+	vmsg->domain = fl->domain;
+	memset(vmsg->dsp_caps, 0, FASTRPC_MAX_DSP_ATTRIBUTES * sizeof(u32));
+
+	err = fastrpc_txbuf_send(fl, vmsg, sizeof(*vmsg));
+	if (err)
+		goto bail;
+	wait_for_completion(&msg->work);
+
+	rsp = msg->rxbuf;
+	if (!rsp)
+		goto bail;
+
+	err = rsp->hdr.result;
+	if (err)
+		goto bail;
+	memcpy(dsp_attributes, rsp->dsp_caps, FASTRPC_MAX_DSP_ATTRIBUTES * sizeof(u32));
+bail:
+	if (rsp)
+		fastrpc_rxbuf_send(fl, rsp, me->buf_size);
+	virt_free_msg(fl, msg);
+
+	return err;
+}
+
+static int fastrpc_get_info_from_kernel(
+		struct fastrpc_ioctl_capability *cap,
+		struct fastrpc_file *fl)
+{
+	int err = 0;
+	uint32_t domain = cap->domain, attribute_ID = cap->attribute_ID;
+	struct fastrpc_dsp_capabilities *dsp_cap_ptr = NULL;
+
+	/*
+	 * Check if number of attribute IDs obtained from userspace
+	 * is less than the number of attribute IDs supported by
+	 * kernel
+	 */
+	if (attribute_ID >= FASTRPC_MAX_ATTRIBUTES) {
+		err = -EOVERFLOW;
+		goto bail;
+	}
+
+	dsp_cap_ptr = &fl->apps->channel[domain].dsp_cap_kernel;
+
+	if (attribute_ID >= FASTRPC_MAX_DSP_ATTRIBUTES) {
+		/* Driver capability, pass it to user */
+		memcpy(&cap->capability,
+			&kernel_capabilities[attribute_ID -
+			FASTRPC_MAX_DSP_ATTRIBUTES],
+			sizeof(cap->capability));
+	} else if (!dsp_cap_ptr->is_cached) {
+		/*
+		 * Information not on kernel, query device for information
+		 * and cache on kernel
+		 */
+		err = virt_fastrpc_get_dsp_info(fl,
+			  dsp_cap_ptr->dsp_attributes);
+		if (err)
+			goto bail;
+
+		fl->apps->channel[domain].unsigned_support =
+			!!(dsp_cap_ptr->dsp_attributes[UNSIGNED_PD_SUPPORT]);
+
+		memcpy(&cap->capability,
+			&dsp_cap_ptr->dsp_attributes[attribute_ID],
+			sizeof(cap->capability));
+
+		dsp_cap_ptr->is_cached = 1;
+	} else {
+		/* Information on Kernel, pass it to user */
+		memcpy(&cap->capability,
+			&dsp_cap_ptr->dsp_attributes[attribute_ID],
+			sizeof(cap->capability));
+	}
 bail:
 	return err;
 }
@@ -1428,14 +1739,10 @@ int fastrpc_ioctl_get_dsp_info(struct fastrpc_ioctl_capability *cap,
 		void *param, struct fastrpc_file *fl)
 {
 	int err = 0;
-	uint32_t domain, attribute_ID;
 
 	K_COPY_FROM_USER(err, 0, cap, param, sizeof(struct fastrpc_ioctl_capability));
 	if (err)
 		goto bail;
-
-	domain = cap->domain;
-	attribute_ID = cap->attribute_ID;
 
 	VERIFY(err, cap->domain < fl->apps->num_channels);
 	if (err) {
@@ -1443,21 +1750,12 @@ int fastrpc_ioctl_get_dsp_info(struct fastrpc_ioctl_capability *cap,
 		goto bail;
 	}
 	cap->capability = 0;
-	if (attribute_ID >= FASTRPC_MAX_ATTRIBUTES) {
-		err = -EOVERFLOW;
-		goto bail;
-	}
-	if (attribute_ID >= FASTRPC_MAX_DSP_ATTRIBUTES) {
-		// Driver capability, pass it to user
-		memcpy(&cap->capability,
-				&kernel_capabilities[attribute_ID -
-				FASTRPC_MAX_DSP_ATTRIBUTES],
-				sizeof(cap->capability));
-	}
 
+	err = fastrpc_get_info_from_kernel(cap, fl);
+	if (err)
+		goto bail;
 	K_COPY_TO_USER(err, 0, &((struct fastrpc_ioctl_capability *)
 				param)->capability, &cap->capability, sizeof(cap->capability));
-
 bail:
 	return err;
 }
