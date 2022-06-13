@@ -41,15 +41,13 @@
 #define DEBUGFS_SIZE			3072
 #define UL_SIZE				25
 
-#define CDSP_DOMAIN_ID	3
-#define CDSP1_DOMAIN_ID	4
 /*
  * Increase only for critical patches which must be consistent with BE,
  * if not, the basic function is broken.
  */
 #define FE_MAJOR_VER 0x4
 /* Increase for new features. */
-#define FE_MINOR_VER 0x1
+#define FE_MINOR_VER 0x2
 #define FE_VERSION (FE_MAJOR_VER << 16 | FE_MINOR_VER)
 #define BE_MAJOR_VER(ver) (((ver) >> 16) & 0xffff)
 
@@ -190,7 +188,7 @@ static inline void get_fastrpc_ioctl_munmap_64(
 }
 
 union fastrpc_ioctl_param {
-	struct fastrpc_ioctl_invoke_perf inv;
+	struct fastrpc_ioctl_invoke_async inv;
 	struct fastrpc_ioctl_mmap mmap;
 	struct fastrpc_ioctl_mmap_64 mmap64;
 	struct fastrpc_ioctl_munmap munmap;
@@ -199,6 +197,7 @@ union fastrpc_ioctl_param {
 	struct fastrpc_ioctl_init_attrs init;
 	struct fastrpc_ioctl_control cp;
 	struct fastrpc_ioctl_capability cap;
+	struct fastrpc_ioctl_invoke2 inv2;
 };
 
 static int fastrpc_mmap_ioctl(struct fastrpc_file *fl,
@@ -374,7 +373,7 @@ static int fastrpc_init_ioctl(struct fastrpc_ioctl_init_attrs *init,
 }
 
 static int check_invoke_supported(struct fastrpc_file *fl,
-		struct fastrpc_ioctl_invoke_perf *inv)
+		struct fastrpc_ioctl_invoke_async *inv)
 {
 	int err = 0;
 	struct fastrpc_apps *me = fl->apps;
@@ -405,6 +404,7 @@ static long fastrpc_ioctl(struct file *file, unsigned int ioctl_num,
 	p.inv.crc = NULL;
 	p.inv.perf_kernel = NULL;
 	p.inv.perf_dsp = NULL;
+	p.inv.job = NULL;
 
 	spin_lock(&fl->hlock);
 	if (fl->file_close == 1) {
@@ -443,6 +443,15 @@ static long fastrpc_ioctl(struct file *file, unsigned int ioctl_num,
 			goto bail;
 
 		err = fastrpc_internal_invoke(fl, fl->mode, &p.inv);
+		break;
+	case FASTRPC_IOCTL_INVOKE2:
+		K_COPY_FROM_USER(err, 0, &p.inv2, param,
+				sizeof(struct fastrpc_ioctl_invoke2));
+		if (err) {
+			err = -EFAULT;
+			goto bail;
+		}
+		err = fastrpc_internal_invoke2(fl, &p.inv2);
 		break;
 	case FASTRPC_IOCTL_MMAP:
 	case FASTRPC_IOCTL_MUNMAP:
@@ -552,7 +561,11 @@ static int recv_single(struct virt_msg_hdr *rsp, unsigned int len)
 	}
 	msg->rxbuf = (void *)rsp;
 
-	complete(&msg->work);
+	if (msg->ctx && msg->ctx->asyncjob.isasyncjob)
+		fastrpc_queue_completed_async_job(msg->ctx);
+	else
+		complete(&msg->work);
+
 	return 0;
 }
 
