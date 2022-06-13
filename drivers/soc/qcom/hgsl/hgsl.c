@@ -448,7 +448,9 @@ static int db_queue_wait_freewords(struct doorbell_queue *dbq, uint32_t size)
 			}
 		}
 
-		udelay(1000);
+		if (msleep_interruptible(1))
+			/* Let user handle this */
+			return -EINTR;
 	} while (retry_count++ < HGSL_QFREE_MAX_RETRY_COUNT);
 
 	return -ETIMEDOUT;
@@ -515,7 +517,11 @@ static int db_send_msg(struct hgsl_priv  *priv,
 		rmb();
 
 		if (hard_reset_req) {
-			udelay(1000);
+			if (msleep_interruptible(1)) {
+				/* Let user handle this */
+				ret = -EINTR;
+				goto quit;
+			}
 			if (retry_count++ > HGSL_SEND_MSG_MAX_RETRY_COUNT) {
 				ret = -ETIMEDOUT;
 				goto quit;
