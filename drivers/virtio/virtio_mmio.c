@@ -90,6 +90,7 @@ struct virtio_mmio_device {
 	/* a list of queues so we can dispatch IRQs */
 	spinlock_t lock;
 	struct list_head virtqueues;
+	struct work_struct stub_work;
 };
 
 struct virtio_mmio_vq_info {
@@ -277,6 +278,43 @@ static bool vm_notify(struct virtqueue *vq)
 	 * signal the other end */
 	writel(vq->index, vm_dev->base + VIRTIO_MMIO_QUEUE_NOTIFY);
 	return true;
+}
+
+static irqreturn_t stub_interrupt(int irq, void *opaque)
+{
+	struct virtio_mmio_device *vm_dev = opaque;
+
+	if (readl(vm_dev->base + VIRTIO_MMIO_DEVICE_ID))
+		schedule_work(&vm_dev->stub_work);
+
+	return IRQ_HANDLED;
+}
+
+static int finish_probe(struct virtio_mmio_device *vm_dev);
+
+static int virtio_mmio_request_irq(irq_handler_t handler,
+                                  struct virtio_mmio_device *vm_dev)
+{
+	int err;
+
+	err = request_irq(platform_get_irq(vm_dev->pdev, 0), handler,
+			  IRQF_SHARED, dev_name(&vm_dev->pdev->dev), vm_dev);
+	if (err)
+		dev_err(&vm_dev->pdev->dev, "%s request_irq(%s) returns %d\n",
+			__func__, dev_name(&vm_dev->pdev->dev), err);
+
+	return err;
+}
+
+static void virtio_mmio_stub_work(struct work_struct *stub_work)
+{
+	struct virtio_mmio_device *vm_dev =
+		container_of(stub_work, struct virtio_mmio_device, stub_work);
+
+	free_irq(platform_get_irq(vm_dev->pdev, 0), vm_dev);
+
+	if (finish_probe(vm_dev))
+		virtio_mmio_request_irq(stub_interrupt, vm_dev);
 }
 
 /* Notify all virtqueues on an interrupt. */
@@ -575,6 +613,24 @@ static int virtio_mmio_probe(struct platform_device *pdev)
 				vm_dev->version);
 		return -ENXIO;
 	}
+	vm_dev->vdev.id.device = readl(vm_dev->base + VIRTIO_MMIO_DEVICE_ID);
+	if (!vm_dev->vdev.id.device) {
+		rc = virtio_mmio_request_irq(stub_interrupt, vm_dev);
+		if (rc)
+			return rc;
+
+		INIT_WORK(&vm_dev->stub_work, virtio_mmio_stub_work);
+
+		return 0;
+	}
+
+	return finish_probe(vm_dev);
+}
+
+static int finish_probe(struct virtio_mmio_device *vm_dev)
+{
+	struct platform_device *pdev = vm_dev->pdev;
+	int rc;
 
 	vm_dev->vdev.id.device = readl(vm_dev->base + VIRTIO_MMIO_DEVICE_ID);
 	if (vm_dev->vdev.id.device == 0) {
