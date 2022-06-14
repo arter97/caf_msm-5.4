@@ -1246,8 +1246,8 @@ static int spi_geni_mas_setup(struct spi_master *spi)
 {
 	struct spi_geni_master *mas = spi_master_get_devdata(spi);
 	int proto = get_se_proto(mas->base);
-	unsigned int major;
-	unsigned int minor;
+	unsigned int major = 0;
+	unsigned int minor = 0;
 	unsigned int step;
 	int hw_ver;
 	int ret = 0;
@@ -1392,7 +1392,7 @@ setup_ipc:
 			__func__, major, minor, step, mas->oversampling);
 		}
 	}
-	if (mas->set_miso_sampling)
+	if (mas->set_miso_sampling && major && minor)
 		spi_geni_set_sampling_rate(mas, major, minor);
 
 	if (mas->dis_autosuspend)
