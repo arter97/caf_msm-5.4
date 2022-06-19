@@ -399,6 +399,7 @@ static size_t copy_page_to_iter_pipe(struct page *page, size_t offset, size_t by
 	pipe->nrbufs++;
 	buf->ops = &page_cache_pipe_buf_ops;
 	get_page(buf->page = page);
+	buf->flags = 0;
 	buf->offset = offset;
 	buf->len = bytes;
 	i->iov_offset = offset + bytes;
@@ -524,6 +525,7 @@ static size_t push_pipe(struct iov_iter *i, size_t size,
 			break;
 		pipe->nrbufs++;
 		pipe->bufs[idx].ops = &default_pipe_buf_ops;
+		pipe->bufs[idx].flags = 0;
 		pipe->bufs[idx].page = page;
 		pipe->bufs[idx].offset = 0;
 		if (left <= PAGE_SIZE) {
