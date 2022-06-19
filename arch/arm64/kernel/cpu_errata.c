@@ -799,6 +799,14 @@ static const struct midr_range erratum_845719_list[] = {
 	MIDR_REV(MIDR_BRAHMA_B53, 0, 0),
 	{},
 };
+
+static const struct midr_range arm64_workaround_845719_cpus[] = {
+	/* Cortex-A53 r0p[01234] */
+	MIDR_RANGE(MIDR_CORTEX_A53, 0, 0, 0, 4),
+	/* Kryo2xx Silver rAp4 */
+	MIDR_RANGE(MIDR_KRYO2XX_SILVER, 0xA, 0x4, 0xA, 0x4),
+	{},
+};
 #endif
 
 #ifdef CONFIG_ARM64_ERRATUM_843419
@@ -861,6 +869,11 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.desc = "ARM erratum 845719",
 		.capability = ARM64_WORKAROUND_845719,
 		ERRATA_MIDR_RANGE_LIST(erratum_845719_list),
+	},
+	{
+		.desc = "ARM erratum 845719",
+		.capability = ARM64_WORKAROUND_845719,
+		ERRATA_MIDR_RANGE_LIST(arm64_workaround_845719_cpus),
 	},
 #endif
 #ifdef CONFIG_CAVIUM_ERRATUM_23154
