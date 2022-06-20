@@ -1421,6 +1421,12 @@ static int dapm_widget_power_check(struct snd_soc_dapm_widget *w)
 	else
 		w->new_power = w->power_check(w);
 
+	/* power up after stream is up */
+	if (w->id == snd_soc_dapm_dai_in || w->id == snd_soc_dapm_dai_out) {
+		if (!w->active)
+			w->new_power = 0;
+	}
+
 	w->power_checked = true;
 
 	return w->new_power;
@@ -1955,7 +1961,7 @@ static bool dapm_idle_bias_off(struct snd_soc_dapm_context *dapm)
  *  o Input pin to Output pin (bypass, sidetone)
  *  o DAC to ADC (loopback).
  */
-static int dapm_power_widgets(struct snd_soc_card *card, int event)
+int dapm_power_widgets(struct snd_soc_card *card, int event)
 {
 	struct snd_soc_dapm_widget *w;
 	struct snd_soc_dapm_context *d;
@@ -4400,7 +4406,7 @@ static void dapm_connect_dai_link_widgets(struct snd_soc_card *card,
 	}
 }
 
-static void soc_dapm_dai_stream_event(struct snd_soc_dai *dai, int stream,
+void soc_dapm_dai_stream_event(struct snd_soc_dai *dai, int stream,
 	int event)
 {
 	struct snd_soc_dapm_widget *w;

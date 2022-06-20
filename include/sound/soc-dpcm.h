@@ -187,5 +187,7 @@ static inline void dpcm_path_put(struct snd_soc_dapm_widget_list **list)
 	kfree(*list);
 }
 
+int dpcm_path_get_codec_dai_widgets(struct snd_soc_pcm_runtime *fe,
+	int stream, struct snd_soc_dapm_widget_list **list);
 
 #endif

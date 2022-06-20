@@ -175,6 +175,44 @@ int snd_soc_set_runtime_hwparams(struct snd_pcm_substream *substream,
 }
 EXPORT_SYMBOL_GPL(snd_soc_set_runtime_hwparams);
 
+/* Power only connected CODEC DAI */
+void snd_soc_dapm_stream_event_fe(struct snd_soc_pcm_runtime *fe, int stream,
+		int event)
+{
+	struct snd_soc_card *card = fe->card;
+	struct snd_soc_dai *codec_dai;
+	struct snd_soc_dapm_widget *w;
+	int i, j, paths;
+	struct snd_soc_dapm_widget_list *list;
+
+	paths = dpcm_path_get_codec_dai_widgets(fe, stream, &list);
+
+	mutex_lock_nested(&card->dapm_mutex, SND_SOC_DAPM_CLASS_RUNTIME);
+
+	soc_dapm_dai_stream_event(fe->cpu_dai, stream, event);
+
+	if (paths > 0) {
+		for (i = 0; i < fe->num_codecs; i++) {
+			codec_dai = fe->codec_dais[i];
+			if (stream == SNDRV_PCM_STREAM_PLAYBACK)
+				w = codec_dai->playback_widget;
+			else
+				w = codec_dai->capture_widget;
+
+			for (j = 0; j < list->num_widgets; ++j) {
+				if (list->widgets[j] == w)
+					soc_dapm_dai_stream_event(codec_dai, stream, event);
+			}
+		}
+
+		dapm_power_widgets(fe->card, event);
+
+	}
+
+	mutex_unlock(&card->dapm_mutex);
+	dpcm_path_put(&list);
+}
+
 /* DPCM stream event, send event to FE and all active BEs. */
 int dpcm_dapm_stream_event(struct snd_soc_pcm_runtime *fe, int dir,
 	int event)
@@ -195,7 +233,7 @@ int dpcm_dapm_stream_event(struct snd_soc_pcm_runtime *fe, int dir,
 		snd_soc_dapm_stream_event(be, dir, event);
 	}
 
-	snd_soc_dapm_stream_event(fe, dir, event);
+	snd_soc_dapm_stream_event_fe(fe, dir, event);
 
 	return 0;
 }
@@ -1506,6 +1544,55 @@ int dpcm_path_get(struct snd_soc_pcm_runtime *fe,
 			dpcm_end_walk_at_be);
 
 	dev_dbg(fe->dev, "ASoC: found %d audio %s paths\n", paths,
+			stream ? "capture" : "playback");
+
+	return paths;
+}
+
+
+bool dpcm_end_walk_at_fe_codec_dai(struct snd_soc_dapm_widget *widget,
+		enum snd_soc_dapm_direction dir)
+{
+	struct snd_soc_card *card = widget->dapm->card;
+	struct snd_soc_pcm_runtime *rtd;
+	struct snd_soc_dai *dai;
+	int i;
+
+	if (dir == SND_SOC_DAPM_DIR_OUT) {
+		for_each_card_rtds(card, rtd) {
+			if (rtd->dai_link->no_pcm)
+				continue;
+
+			for_each_rtd_codec_dai(rtd, i, dai) {
+				if (dai->playback_widget == widget)
+					return true;
+			}
+		}
+	} else { /* SND_SOC_DAPM_DIR_IN */
+		for_each_card_rtds(card, rtd) {
+			if (rtd->dai_link->no_pcm)
+				continue;
+
+			for_each_rtd_codec_dai(rtd, i, dai) {
+				if (dai->capture_widget == widget)
+					return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+int dpcm_path_get_codec_dai_widgets(struct snd_soc_pcm_runtime *fe,
+	int stream, struct snd_soc_dapm_widget_list **list)
+{
+	struct snd_soc_dai *cpu_dai = fe->cpu_dai;
+	int paths;
+
+	paths = snd_soc_dapm_dai_get_connected_widgets(cpu_dai, stream, list,
+			dpcm_end_walk_at_fe_codec_dai);
+
+	dev_dbg(fe->dev, "ASoC: found %d audio %s CODEC DAI paths\n", paths,
 			stream ? "capture" : "playback");
 
 	return paths;

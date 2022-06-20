@@ -491,6 +491,11 @@ struct snd_soc_dapm_widget *snd_soc_dapm_kcontrol_widget(
 int snd_soc_dapm_force_bias_level(struct snd_soc_dapm_context *dapm,
 	enum snd_soc_bias_level level);
 
+int dapm_power_widgets(struct snd_soc_card *card, int event);
+
+void soc_dapm_dai_stream_event(struct snd_soc_dai *dai, int stream,
+	int event);
+
 /* dapm widget types */
 enum snd_soc_dapm_type {
 	snd_soc_dapm_input = 0,		/* input pin */
