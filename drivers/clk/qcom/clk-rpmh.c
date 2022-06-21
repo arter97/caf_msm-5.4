@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk-provider.h>
@@ -630,6 +631,18 @@ static const struct clk_rpmh_desc clk_rpmh_lemans = {
 	.num_clks = ARRAY_SIZE(lemans_rpmh_clocks),
 };
 
+static struct clk_hw *sdxpoorwills_rpmh_clocks[] = {
+	[RPMH_CXO_CLK]		= &sdm845_bi_tcxo.hw,
+	[RPMH_CXO_CLK_A]	= &sdm845_bi_tcxo_ao.hw,
+	[RPMH_RF_CLK1]		= &sdm845_rf_clk1.hw,
+	[RPMH_RF_CLK1_A]	= &sdm845_rf_clk1_ao.hw,
+};
+
+static const struct clk_rpmh_desc clk_rpmh_sdxpoorwills = {
+	.clks = sdxpoorwills_rpmh_clocks,
+	.num_clks = ARRAY_SIZE(sdxpoorwills_rpmh_clocks),
+};
+
 static struct clk_hw *of_clk_rpmh_hw_get(struct of_phandle_args *clkspec,
 					 void *data)
 {
@@ -732,6 +745,7 @@ static const struct of_device_id clk_rpmh_match_table[] = {
 	{ .compatible = "qcom,direwolf-rpmh-clk", .data = &clk_rpmh_direwolf},
 	{ .compatible = "qcom,sdx55-rpmh-clk",  .data = &clk_rpmh_sdx55},
 	{ .compatible = "qcom,lemans-rpmh-clk", .data = &clk_rpmh_lemans},
+	{ .compatible = "qcom,sdxpoorwills-rpmh-clk", .data = &clk_rpmh_sdxpoorwills},
 	{ }
 };
 MODULE_DEVICE_TABLE(of, clk_rpmh_match_table);
