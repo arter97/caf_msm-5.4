@@ -126,6 +126,7 @@ const struct raid6_recov_calls *const raid6_recov_algos[] = {
 
 static inline const struct raid6_recov_calls *raid6_choose_recov(void)
 {
+#ifdef DEBUG
 	const struct raid6_recov_calls *const *algo;
 	const struct raid6_recov_calls *best;
 
@@ -133,6 +134,9 @@ static inline const struct raid6_recov_calls *raid6_choose_recov(void)
 		if (!best || (*algo)->priority > best->priority)
 			if (!(*algo)->valid || (*algo)->valid())
 				best = *algo;
+#else
+	const struct raid6_recov_calls *best = &raid6_recov_neon;
+#endif
 
 	if (best) {
 		raid6_2data_recov = best->data2;
@@ -148,6 +152,7 @@ static inline const struct raid6_recov_calls *raid6_choose_recov(void)
 static inline const struct raid6_calls *raid6_choose_gen(
 	void *(*const dptrs)[(65536/PAGE_SIZE)+2], const int disks)
 {
+#ifdef DEBUG
 	unsigned long perf, bestgenperf, bestxorperf, j0, j1;
 	int start = (disks>>1)-1, stop = disks-3;	/* work on the second half of the disks */
 	const struct raid6_calls *const *algo;
@@ -218,6 +223,18 @@ static inline const struct raid6_calls *raid6_choose_gen(
 		raid6_call = *best;
 	} else
 		pr_err("raid6: Yikes!  No algorithm found!\n");
+#else
+	const struct raid6_calls *best = &raid6_neonx8;
+
+	if (best) {
+		pr_info("raid6: using algorithm %s gen()\n",
+		       best->name);
+		if (best->xor_syndrome)
+			pr_info("raid6: .... xor(), rmw enabled\n");
+		raid6_call = *best;
+	} else
+		pr_err("raid6: Yikes!  No algorithm found!\n");
+#endif
 
 	return best;
 }
