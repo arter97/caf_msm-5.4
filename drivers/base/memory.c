@@ -22,6 +22,7 @@
 #include <linux/mutex.h>
 #include <linux/stat.h>
 #include <linux/slab.h>
+#include <linux/memblock.h>
 
 #include <linux/atomic.h>
 #include <linux/uaccess.h>
@@ -469,6 +470,18 @@ static ssize_t allocated_bytes_show(struct device *dev,
 	used = block_sz - (tot_free_pages * PAGE_SIZE);
 	return scnprintf(buf, PAGE_SIZE, "%lu\n", used);
 }
+
+static ssize_t aligned_blocks_addr_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	return memblock_dump_aligned_blocks_addr(buf);
+}
+
+static ssize_t aligned_blocks_num_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	return memblock_dump_aligned_blocks_num(buf);
+}
 #endif
 
 static DEVICE_ATTR_RO(phys_index);
@@ -477,6 +490,8 @@ static DEVICE_ATTR_RO(phys_device);
 static DEVICE_ATTR_RO(removable);
 #ifdef CONFIG_MEMORY_HOTPLUG
 static DEVICE_ATTR_RO(allocated_bytes);
+static DEVICE_ATTR_RO(aligned_blocks_addr);
+static DEVICE_ATTR_RO(aligned_blocks_num);
 #endif
 
 /*
@@ -858,6 +873,10 @@ static struct attribute *memory_root_attrs[] = {
 
 	&dev_attr_block_size_bytes.attr,
 	&dev_attr_auto_online_blocks.attr,
+#ifdef CONFIG_MEMORY_HOTPLUG
+	&dev_attr_aligned_blocks_addr.attr,
+	&dev_attr_aligned_blocks_num.attr,
+#endif
 	NULL
 };
 
