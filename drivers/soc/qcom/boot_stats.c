@@ -18,10 +18,13 @@
 #include <linux/slab.h>
 #include <linux/suspend.h>
 #include <linux/uaccess.h>
+#include <linux/cdev.h>
+#include <linux/fs.h>
 #include <soc/qcom/boot_stats.h>
 #include <linux/hashtable.h>
 
-#define MARKER_STRING_WIDTH 40
+#define MAX_STRING_LEN 256
+#define MARKER_STRING_WIDTH 50
 #define TS_WHOLE_NUM_WIDTH 8
 #define TS_PRECISION_WIDTH 3
 /* Field width to consider the spaces, 's' character and \n */
@@ -55,14 +58,11 @@ struct boot_marker {
 	char marker_name[MARKER_STRING_WIDTH];
 	unsigned long long timer_value;
 	struct list_head list;
-	struct hlist_node hash;
 	spinlock_t slock;
 };
 
 static struct boot_marker boot_marker_list;
 static struct kobject *bootkpi_obj;
-static int num_markers;
-static DECLARE_HASHTABLE(marker_htable, 5);
 
 #ifdef CONFIG_QCOM_SOC_SLEEP_STATS
 static u64 get_time_in_msec(u64 counter)
@@ -165,8 +165,6 @@ static void _destroy_boot_marker(const char *name)
 			list) {
 		if (strnstr(marker->marker_name, name,
 			 strlen(marker->marker_name))) {
-			num_markers--;
-			hash_del(&marker->hash);
 			list_del(&marker->list);
 			kfree(marker);
 		}
@@ -174,59 +172,150 @@ static void _destroy_boot_marker(const char *name)
 	spin_unlock(&boot_marker_list.slock);
 }
 
-/*
- * Function to calculate the cumulative sum of all
- * the characters in the string
- */
-static unsigned int calculate_marker_charsum(const char *name)
+static bool swap_marker(char *old, char *new, char *code)
 {
-	unsigned int sum = 0;
-	int len = strlen(name);
-
-	do {
-		sum += (unsigned int)name[--len];
-	} while (len);
-
-	return sum;
-}
-
-static struct boot_marker *find_entry(const char *name)
-{
-	struct boot_marker *marker;
-	unsigned int sum = calculate_marker_charsum(name);
-
-	hash_for_each_possible(marker_htable, marker, hash, sum) {
-		if (!strcmp(marker->marker_name, name))
-			return marker;
+	if (strnstr(old, "M - DRIVER F/S Init",
+		sizeof("M - DRIVER F/S Init"))) {
+		snprintf(new, 256, "SYS_FS_INIT");
+		snprintf(code, 4, "101");
+		return true;
+	} else if (strnstr(old, "M - DRIVER F/S Ready",
+		sizeof("M - DRIVER F/S Ready"))) {
+		snprintf(new, 256, "SYS_FS_READY");
+		snprintf(code, 4, "101");
+		return true;
+	} else if (strnstr(old, "M - DRIVER CPLD Ready",
+		sizeof("M - DRIVER CPLD Ready"))) {
+		snprintf(new, 256, "SYS_CPLD_Linux_COMM_Init");
+		snprintf(code, 4, "101");
+		return true;
+	} else if (strnstr(old, "M - DRIVER Kernel Boot Done",
+		sizeof("M - DRIVER Kernel Boot Done"))) {
+		snprintf(new, 256, "SYS_KERNEL_END");
+		snprintf(code, 4, "101");
+		return true;
+	} else if (strnstr(old, "W - weston main begin",
+		sizeof("W - weston main begin"))) {
+		snprintf(new, 256, "HMI_Weston_Start");
+		snprintf(code, 4, "111");
+		return true;
+	} else if (strnstr(old, "W - connector power on",
+		sizeof("W - connector power on"))) {
+		snprintf(new, 256, "HMI_Weston_Poweron");
+		snprintf(code, 4, "111");
+		return true;
+	} else if (strnstr(old, "W - backend full ready",
+		sizeof("W - backend full ready"))) {
+		snprintf(new, 256, "HMI_Weston_Backend_Ready");
+		snprintf(code, 4, "111");
+		return true;
+	} else if (strnstr(old, "W - first commit submitted",
+		sizeof("W - first commit submitted"))) {
+		snprintf(new, 256, "HMI_Weston_FirstFrame_Submitted");
+		snprintf(code, 4, "111");
+		return true;
+	} else if (strnstr(old, "W - first frame have been displayed",
+		sizeof("W - first frame have been displayed"))) {
+		snprintf(new, 256, "HMI_IVI_Disclaimer");
+		snprintf(code, 4, "111");
+		return true;
+	} else if (strnstr(old, "M - USB Device is enumerated",
+		sizeof("M - USB Device is enumerated"))) {
+		snprintf(new, 256, "SYS_USB_Gadget_Ready");
+		snprintf(code, 4, "101");
+		return true;
+	} else if (strnstr(old, "V - agl system session complete",
+		sizeof("V - agl system session complete"))) {
+		snprintf(new, 256, "HMI_Agl_Session_Complete");
+		snprintf(code, 4, "111");
+		return true;
+	} else if (strnstr(old, "V - agl first user logged in",
+		sizeof("V - agl first user logged in"))) {
+		snprintf(new, 256, "HMI_Agl_User_Login");
+		snprintf(code, 4, "111");
+		return true;
+	} else if (strnstr(old, "start_container",
+		sizeof("start_container"))) {
+		snprintf(new, 256, "HMI_Container_Start");
+		snprintf(code, 4, "111");
+		return true;
+	} else if (strnstr(old, "lxc-app",
+		sizeof("lxc-app"))) {
+		snprintf(new, 256, "HMI_Container_Ready");
+		snprintf(code, 4, "111");
+		return true;
+	} else if (strnstr(old, "W - libgbm begin",
+		sizeof("W - libgbm begin"))) {
+		snprintf(new, 256, "HMI_Gfx_Gbm_Begins");
+		snprintf(code, 4, "111");
+		return true;
+	} else if (strnstr(old, "M - DRIVER Audio Ready",
+		sizeof("M - DRIVER Audio Ready"))) {
+		snprintf(new, 256, "SYS_Virtual_Audio_FE_Ready");
+		snprintf(code, 4, "101");
+		return true;
+	} else if (strnstr(old, "M - USER Virtual Display FE ready",
+		sizeof("M - USER Virtual Display FE ready"))) {
+		snprintf(new, 256, "SYS_Virtual_Display_FE_Ready");
+		snprintf(code, 4, "101");
+		return true;
+	} else if (strnstr(old, "M - USER GFX FE Ready",
+		sizeof("M - USER GFX FE Ready"))) {
+		snprintf(new, 256, "SYS_Virtual_GFX_FE_Ready");
+		snprintf(code, 4, "101");
+		return true;
+	} else if (strnstr(old, "M - User Space Start",
+		sizeof("M - User Space Start"))) {
+		snprintf(new, 256, "SYS_Systemd_Start");
+		snprintf(code, 4, "101");
+		return true;
+	} else if (strnstr(old, "M - APPSBL Start",
+		sizeof("M - APPSBL Start"))
+		|| strnstr(old, "D - APPSBL Kernel Load Start",
+		sizeof("D - APPSBL Kernel Load Start"))
+		|| strnstr(old, "D - APPSBL Kernel Load End",
+		sizeof("D - APPSBL Kernel Load End"))
+		|| strnstr(old, "D - APPSBL Kernel Load Time",
+		sizeof("D - APPSBL Kernel Load Time"))
+		|| strnstr(old, "D - APPSBL Kernel Auth Time",
+		sizeof("D - APPSBL Kernel Auth Time"))
+		|| strnstr(old, "M - APPSBL End",
+		sizeof("M - APPSBL End"))
+		|| strnstr(old, "M - DRIVER GENI_HS_UART_0 Init",
+		sizeof("M - DRIVER GENI_HS_UART_0 Init"))
+		|| strnstr(old, "M - DRIVER GENI_HS_UART_0 Ready",
+		sizeof("M - DRIVER GENI_HS_UART_0 Ready"))) {
+		return false;
 	}
-
-	return NULL;
+	if ((old[0] >= '0') && (old[0] <= '9')) {
+		memcpy(code, old, 3);
+		code[3] = 0;
+		if (strnstr(old+4, "KPI_MARKER", sizeof("KPI_MARKER")))
+			snprintf(new, 256, "%s", old+15);
+		else
+			snprintf(new, 256, "%s", old+4);
+	} else {
+		snprintf(code, 4, "100");
+		if (strnstr(old, "KPI_MARKER", sizeof("KPI_MARKER")))
+			snprintf(new, 256, "%s", old+11);
+		else
+			snprintf(new, 256, "%s", old);
+	}
+	return true;
 }
 
 static void _create_boot_marker(const char *name,
 		unsigned long long timer_value)
 {
 	struct boot_marker *new_boot_marker;
-	struct boot_marker *marker;
-	unsigned int sum;
+	char new_marker[256];
+	char new_code[4];
 
-	if (num_markers >= MAX_NUM_MARKERS) {
-		pr_err("boot_stats: Cannot create marker %s. Limit exceeded!\n",
-			name);
-		return;
-	}
-
-	marker = find_entry(name);
-	if (marker) {
-		marker->timer_value = timer_value;
-		return;
-	}
-
-	pr_debug("%-*s%*llu.%0*llu seconds\n",
-			MARKER_STRING_WIDTH, name,
-			TS_WHOLE_NUM_WIDTH, timer_value/TIMER_KHZ,
-			TS_PRECISION_WIDTH, ((timer_value % TIMER_KHZ)
-			 * 1000) / TIMER_KHZ);
+	if (swap_marker((char *)name, new_marker, new_code))
+		pr_info("%-3s KPI_MARKER %llus%09lluns %s\n",
+				new_code, timer_value/TIMER_KHZ,
+				(((timer_value % TIMER_KHZ)
+				* 1000000000) / TIMER_KHZ), new_marker);
 
 	new_boot_marker = kmalloc(sizeof(*new_boot_marker), GFP_ATOMIC);
 	if (!new_boot_marker)
@@ -235,13 +324,10 @@ static void _create_boot_marker(const char *name,
 	strlcpy(new_boot_marker->marker_name, name,
 			sizeof(new_boot_marker->marker_name));
 	new_boot_marker->timer_value = timer_value;
-	sum = calculate_marker_charsum(new_boot_marker->marker_name);
 
 	spin_lock(&boot_marker_list.slock);
 	list_add_tail(&(new_boot_marker->list), &(boot_marker_list.list));
-	hash_add(marker_htable, &new_boot_marker->hash, sum);
 	spin_unlock(&boot_marker_list.slock);
-	num_markers++;
 }
 
 static void boot_marker_cleanup(void)
@@ -252,8 +338,6 @@ static void boot_marker_cleanup(void)
 	spin_lock(&boot_marker_list.slock);
 	list_for_each_entry_safe(marker, temp_addr, &boot_marker_list.list,
 			list) {
-		num_markers--;
-		hash_del(&marker->hash);
 		list_del(&marker->list);
 		kfree(marker);
 	}
@@ -314,6 +398,8 @@ static ssize_t bootkpi_reader(struct file *fp, struct kobject *obj,
 	static char *kpi_buf;
 	static int temp;
 	int ret = 0;
+	char new_marker[256];
+	char new_code[4];
 
 	if (!kpi_buf) {
 		kpi_buf = kmalloc(BOOTKPI_BUF_SIZE, GFP_KERNEL);
@@ -325,26 +411,12 @@ static ssize_t bootkpi_reader(struct file *fp, struct kobject *obj,
 		spin_lock(&boot_marker_list.slock);
 		list_for_each_entry(marker, &boot_marker_list.list, list) {
 			WARN_ON((BOOTKPI_BUF_SIZE - temp) <= 0);
-
-			ts_whole_num = marker->timer_value/TIMER_KHZ;
-			ts_precision = ((marker->timer_value % TIMER_KHZ)
-					* 1000)	/ TIMER_KHZ;
-
-			/*
-			 * Field width of
-			 * Marker name		- MARKER_STRING_WIDTH
-			 * Timestamp		- TS_WHOLE_NUM_WIDTH
-			 * Timestamp precision	- TS_PRECISION_WIDTH
-			 */
-			temp += scnprintf(kpi_buf + temp,
-					BOOTKPI_BUF_SIZE - temp,
-					"%-*s%*llu.%0*llu s\n",
-					MARKER_STRING_WIDTH,
-					marker->marker_name,
-					TS_WHOLE_NUM_WIDTH, ts_whole_num,
-					TS_PRECISION_WIDTH, ts_precision);
-
-
+		if (swap_marker(marker->marker_name, new_marker, new_code))
+			temp += scnprintf(kpi_buf + temp, BOOTKPI_BUF_SIZE - temp,
+					"%-3s KPI_MARKER %llus%09lluns %s\n",
+					new_code, marker->timer_value/TIMER_KHZ,
+					(((marker->timer_value % TIMER_KHZ)
+					* 1000000000) / TIMER_KHZ), new_marker);
 		}
 
 		spin_unlock(&boot_marker_list.slock);
@@ -434,6 +506,106 @@ kobj_err:
 	return ret;
 }
 
+static dev_t mpm_dev_no;
+static struct class *mpm_class;
+static struct device *mpm_dev;
+static struct cdev mpm_cdev;
+static int mpm_device_registered;
+
+static ssize_t mpm_dev_read(struct file *fp, char __user *user_buffer,
+		size_t count, loff_t *position)
+{
+	int rc = 0;
+	unsigned int ticks = (unsigned int)msm_timer_get_sclk_ticks();
+
+	*position = 0;
+	rc = simple_read_from_buffer(user_buffer, count, position, &ticks, 4);
+	return rc;
+}
+
+static ssize_t mpm_dev_write(struct file *fp, const char __user *user_buffer,
+		size_t count, loff_t *position)
+{
+	int rc = 0;
+	char buf[MAX_STRING_LEN];
+
+	if (count > MAX_STRING_LEN)
+		return -EINVAL;
+	*position = 0;
+	rc = simple_write_to_buffer(buf,
+			sizeof(buf) - 1, position, user_buffer, count);
+	if (rc < 0)
+		return rc;
+	buf[rc] = '\0';
+	place_marker(buf);
+	return rc;
+}
+
+static int mpm_dev_open(struct inode *inode, struct file *file)
+{
+	return 0;
+}
+
+static const struct file_operations mpm_dev_fops = {
+	.owner = THIS_MODULE,
+	.open = mpm_dev_open,
+	.read = mpm_dev_read,
+	.write = mpm_dev_write,
+};
+
+static void mpm_device_register(void)
+{
+	int ret;
+
+	ret = alloc_chrdev_region(&mpm_dev_no, 0, 1, "mpm");
+	if (ret < 0) {
+		pr_err("mpm: alloc_chrdev_region failed %d\n", ret);
+		return;
+	}
+
+	mpm_class = class_create(THIS_MODULE, "mpm");
+	if (IS_ERR(mpm_class)) {
+		pr_err("mpm: class_create failed %d\n", ret);
+		goto exit_unreg_chrdev_region;
+	}
+
+	mpm_dev = device_create(mpm_class, NULL, mpm_dev_no, NULL, "mpm");
+
+	if (IS_ERR(mpm_dev)) {
+		pr_err("mpm: class_device_create failed %d\n", ret);
+		goto exit_destroy_class;
+	}
+
+	cdev_init(&mpm_cdev, &mpm_dev_fops);
+	mpm_cdev.owner = THIS_MODULE;
+
+	ret = cdev_add(&mpm_cdev, mpm_dev_no, 1);
+	if (ret < 0) {
+		pr_err("mpm: cdev_add failed %d\n", ret);
+		goto exit_destroy_device;
+	}
+
+	mpm_device_registered = 1;
+	return;
+
+exit_destroy_device:
+	device_destroy(mpm_class, mpm_dev_no);
+exit_destroy_class:
+	class_destroy(mpm_class);
+exit_unreg_chrdev_region:
+	unregister_chrdev_region(mpm_dev_no, 1);
+}
+
+static void mpm_device_unregister(void)
+{
+	if (mpm_device_registered) {
+		cdev_del(&mpm_cdev);
+		device_destroy(mpm_class, mpm_dev_no);
+		class_destroy(mpm_class);
+		unregister_chrdev_region(mpm_dev_no, 1);
+	}
+}
+
 static int init_bootkpi(void)
 {
 	int ret = 0;
@@ -444,6 +616,7 @@ static int init_bootkpi(void)
 
 	INIT_LIST_HEAD(&boot_marker_list.list);
 	spin_lock_init(&boot_marker_list.slock);
+	mpm_device_register();
 
 	ret = register_pm_notifier(&boot_kpi_pm_nb);
 	if (ret)
@@ -458,6 +631,7 @@ static void exit_bootkpi(void)
 	sysfs_remove_file(bootkpi_obj, &mpm_timer_attribute.attr);
 	sysfs_remove_bin_file(bootkpi_obj, &kpi_values_attribute);
 	kobject_del(bootkpi_obj);
+	mpm_device_unregister();
 }
 #endif
 
