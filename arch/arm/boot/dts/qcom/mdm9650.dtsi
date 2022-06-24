@@ -971,7 +971,7 @@
 
 	qcom,ipc_router_usb_xprt {
 		compatible = "qcom,ipc-router-usb-xprt";
-		qcom,ch-name = "IPCRTR";
+		qcom,ch-name = "IPC";
 		qcom,xprt-remote = "apps";
 		qcom,xprt-linkid = <2>;
 		qcom,xprt-version = <1>;
