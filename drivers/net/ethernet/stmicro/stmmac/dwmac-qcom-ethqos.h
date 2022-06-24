@@ -316,6 +316,46 @@ enum IO_MACRO_PHY_MODE {
 		MII_MODE
 };
 
+#define RGMII_IO_BASE_ADDRESS ethqos->rgmii_base
+
+#define RGMII_IO_MACRO_CONFIG_RGOFFADDR_OFFSET (0x00000000)
+
+#define RGMII_IO_MACRO_CONFIG_RGWR(data)\
+	writel_relaxed(data, RGMII_IO_MACRO_CONFIG_RGOFFADDR)
+
+#define RGMII_IO_MACRO_CONFIG_RGOFFADDR \
+	(RGMII_IO_BASE_ADDRESS + RGMII_IO_MACRO_CONFIG_RGOFFADDR_OFFSET)
+
+#define RX_CONTEXT_DESC_RDES3_OWN_MLF_WR(ptr, data)\
+	SET_BITS(0x1f, 0x1f, ptr, data)
+
+#define RGMII_IO_MACRO_CONFIG_RGRD(data)\
+	((data) = (readl_relaxed((RGMII_IO_MACRO_CONFIG_RGOFFADDR))))
+
+#define RGMII_GPIO_CFG_TX_INT_MASK (unsigned long)(0x3)
+
+#define RGMII_GPIO_CFG_TX_INT_WR_MASK (unsigned long)(0xfff9ffff)
+
+#define RGMII_GPIO_CFG_TX_INT_UDFWR(data) do {\
+	unsigned long v;\
+	RGMII_IO_MACRO_CONFIG_RGRD(v);\
+	v = ((v & RGMII_GPIO_CFG_TX_INT_WR_MASK) | \
+	(((data) & RGMII_GPIO_CFG_TX_INT_MASK) << 17));\
+	RGMII_IO_MACRO_CONFIG_RGWR(v);\
+} while (0)
+
+#define RGMII_GPIO_CFG_RX_INT_MASK (unsigned long)(0x3)
+
+#define RGMII_GPIO_CFG_RX_INT_WR_MASK (unsigned long)(0xffe7ffff)
+
+#define RGMII_GPIO_CFG_RX_INT_UDFWR(data) do {\
+	unsigned long v;\
+	RGMII_IO_MACRO_CONFIG_RGRD(v);\
+	v = ((v & RGMII_GPIO_CFG_RX_INT_WR_MASK) | \
+	(((data) & RGMII_GPIO_CFG_RX_INT_MASK) << 19));\
+	RGMII_IO_MACRO_CONFIG_RGWR(v);\
+} while (0)
+
 struct ethqos_emac_por {
 	unsigned int offset;
 	unsigned int value;
@@ -441,6 +481,9 @@ struct qcom_ethqos {
 	struct pinctrl_state *rgmii_txc_suspend_state;
 	struct pinctrl_state *rgmii_txc_resume_state;
 	int always_on_phy;
+
+	u32 emac_mem_base;
+	bool ipa_enabled;
 };
 
 struct pps_cfg {
