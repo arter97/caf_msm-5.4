@@ -4056,7 +4056,6 @@ static int msm_geni_serial_get_ver_info(struct uart_port *uport)
 	msm_port->ver_info.hw_ver = geni_se_qupv3_get_hw_version(msm_port->wrapper_dev);
 	dev_err(uport->dev, "%s:HW version %d\n", __func__, msm_port->ver_info.hw_ver);
 
-	msm_geni_serial_enable_interrupts(uport);
 exit_ver_info:
 	return ret;
 }
@@ -4124,12 +4123,12 @@ static int msm_geni_serial_get_irq_pinctrl(struct platform_device *pdev,
 		}
 	}
 
-	uport->irq = platform_get_irq(pdev, 0);
-	if (uport->irq < 0) {
-		ret = uport->irq;
+	ret = platform_get_irq(pdev, 0);
+	if (ret < 0) {
 		dev_err(&pdev->dev, "Failed to get IRQ %d\n", ret);
 		return ret;
 	}
+	uport->irq = ret;
 
 	dev_port->name = devm_kasprintf(uport->dev, GFP_KERNEL,
 					"msm_serial_geni%d", uport->line);
@@ -4419,6 +4418,7 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 
 	/* Initialize the GSI mode */
 	msm_geni_serial_init_gsi(uport);
+	msm_geni_serial_enable_interrupts(uport);
 	if (!dev_port->is_console)
 		se_geni_clks_off(&dev_port->serial_rsc);
 
@@ -4481,6 +4481,10 @@ static int msm_geni_serial_remove(struct platform_device *pdev)
 static void msm_geni_serial_allow_rx(struct msm_geni_serial_port *port)
 {
 	u32 uart_manual_rfr;
+
+	/* Avoid Manual RFR for HW version < 2.7 */
+	if (port->ver_info.hw_ver < QUP_SE_VERSION_2_7)
+		return;
 
 	uart_manual_rfr = (UART_MANUAL_RFR_EN | UART_RFR_READY);
 	geni_write_reg_nolog(uart_manual_rfr, port->uport.membase,
