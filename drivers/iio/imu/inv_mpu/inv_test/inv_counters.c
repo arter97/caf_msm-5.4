@@ -134,7 +134,6 @@ static struct class_attribute inv_class_attr[] = {
 
 static struct class inv_counters_class = {
 	.name = "inv_counters",
-	.owner = THIS_MODULE,
 	.class_attrs = (struct class_attribute *) &inv_class_attr
 };
 

@@ -57,5 +57,3 @@ obj-$(CONFIG_INV_MPU_IIO_I2C) += inv-mpu-iio-i2c.o
 inv-mpu-iio-i2c-objs := inv_mpu_i2c.o
 obj-$(CONFIG_INV_MPU_IIO_SPI) += inv-mpu-iio-spi.o
 inv-mpu-iio-spi-objs := inv_mpu_spi.o
-
-obj-y += inv_test/
