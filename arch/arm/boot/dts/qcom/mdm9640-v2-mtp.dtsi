@@ -32,6 +32,12 @@
 		compatible = "qcom,ntn2_avb";
 		ntn-supply-enable-gpio = <&pmd9635_gpios 3 0>;
 		qcom,ntn-rc-num = <0>;
+		qcom,msm-bus,name = "ntn2";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+			<45 512 0 0>,
+			<45 512 0 640000>;
 	};
 };
 
