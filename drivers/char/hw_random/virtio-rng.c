@@ -98,7 +98,7 @@ static int probe_common(struct virtio_device *vdev)
 		err = index;
 		goto err_ida;
 	}
-	sprintf(vi->name, "virtio_rng.%d", index);
+	snprintf(vi->name, sizeof(vi->name), "virtio_rng.%d", index);
 	init_completion(&vi->have_data);
 
 	vi->hwrng = (struct hwrng) {
