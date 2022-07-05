@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/debugfs.h>
@@ -24,6 +25,7 @@
 #include "cvp_hfi_api.h"
 #include "msm_v4l2_private.h"
 #include "msm_cvp_clocks.h"
+#include "msm_cvp_dsp.h"
 
 #define BASE_DEVICE_NUMBER 32
 #define CLASS_NAME              "cvp"
@@ -282,7 +284,7 @@ static struct attribute_group msm_cvp_core_attr_group = {
 		.attrs = msm_cvp_core_attrs,
 };
 
-static const struct of_device_id msm_cvp_dt_match[] = {
+static const struct of_device_id msm_cvp_plat_match[] = {
 	{.compatible = "qcom,msm-cvp"},
 	{.compatible = "qcom,msm-cvp,context-bank"},
 	{.compatible = "qcom,msm-cvp,bus"},
@@ -397,7 +399,7 @@ static int msm_probe_cvp_device(struct platform_device *pdev)
 	 * context-bank details and store it in core->resources.context_banks
 	 * list.
 	 */
-	rc = of_platform_populate(pdev->dev.of_node, msm_cvp_dt_match, NULL,
+	rc = of_platform_populate(pdev->dev.of_node, msm_cvp_plat_match, NULL,
 			&pdev->dev);
 	if (rc) {
 		dprintk(CVP_ERR, "Failed to trigger probe for sub-devices\n");
@@ -405,6 +407,10 @@ static int msm_probe_cvp_device(struct platform_device *pdev)
 	}
 
 	atomic64_set(&core->kernel_trans_id, 0);
+
+	rc = cvp_dsp_device_init();
+	if (rc)
+		dprintk(CVP_WARN, "Failed to initialize DSP driver\n");
 
 	return rc;
 
@@ -534,14 +540,14 @@ static const struct dev_pm_ops msm_cvp_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(msm_cvp_pm_suspend, msm_cvp_pm_resume)
 };
 
-MODULE_DEVICE_TABLE(of, msm_cvp_dt_match);
+MODULE_DEVICE_TABLE(of, msm_cvp_plat_match);
 
 static struct platform_driver msm_cvp_driver = {
 	.probe = msm_cvp_probe,
 	.remove = msm_cvp_remove,
 	.driver = {
 		.name = "msm_cvp_v4l2",
-		.of_match_table = msm_cvp_dt_match,
+		.of_match_table = msm_cvp_plat_match,
 		.pm = &msm_cvp_pm_ops,
 	},
 };
@@ -586,7 +592,7 @@ static int __init msm_cvp_init(void)
 
 static void __exit msm_cvp_exit(void)
 {
-
+	cvp_dsp_device_exit();
 	kmem_cache_destroy(cvp_driver->msg_cache);
 	kmem_cache_destroy(cvp_driver->fence_data_cache);
 	kmem_cache_destroy(cvp_driver->frame_cache);

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "msm_cvp.h"
@@ -23,9 +24,9 @@ void print_internal_buffer(u32 tag, const char *str,
 
 	if (cbuf->smem.dma_buf) {
 		dprintk(tag,
-		"%s: %x : idx %2d fd %d off %d %s size %d flags %#x iova %#x",
+		"%s: %x : idx %2d fd %d off %d size %d flags %#x iova %#x",
 		str, hash32_ptr(inst->session), cbuf->buf.index, cbuf->buf.fd,
-		cbuf->buf.offset, cbuf->smem.dma_buf->buf_name, cbuf->buf.size,
+		cbuf->buf.offset,  cbuf->buf.size,
 		cbuf->buf.flags, cbuf->smem.device_addr);
 	} else {
 		dprintk(tag,
@@ -436,8 +437,8 @@ static int msm_cvp_map_buf_user_persist(struct msm_cvp_inst *inst,
 	*iova = cbuf->smem.device_addr;
 
 	dprintk(CVP_DBG,
-	"%s: %x : fd %d %s size %d", "map persist", hash32_ptr(inst->session),
-	cbuf->smem.fd, cbuf->smem.dma_buf->buf_name, cbuf->smem.size);
+	"%s: %x : fd %d size %d", "map persist", hash32_ptr(inst->session),
+	cbuf->smem.fd, cbuf->smem.size);
 	return rc;
 
 exit:
@@ -1039,24 +1040,28 @@ static int msm_cvp_thread_fence_run(void *data)
 	switch (cvp_hfi_defs[pkt_idx].type) {
 	case HFI_CMD_SESSION_CVP_DME_FRAME:
 	{
+		struct synx_import_params params;
+
 		for (i = 0; i < HFI_DME_BUF_NUM-1; i++) {
 			if (fence[(i<<1)]) {
-				rc = synx_import(fence[(i<<1)],
-					fence[((i<<1)+1)], &synx_obj);
+				params.h_synx = fence[(i<<1)];
+				params.secure_key = fence[((i<<1)+1)];
+				params.new_h_synx = &synx_obj;
+				rc = synx_import(inst->synx_session_id, &params);
 				if (rc) {
 					dprintk(CVP_ERR,
 						"%s: synx_import failed\n",
 						__func__);
 					synx_state = SYNX_STATE_SIGNALED_ERROR;
 				}
-				rc = synx_wait(synx_obj, timeout_ms);
+				rc = synx_wait(inst->synx_session_id, synx_obj, timeout_ms);
 				if (rc) {
 					dprintk(CVP_ERR,
 						"%s: synx_wait failed\n",
 						__func__);
 					synx_state = SYNX_STATE_SIGNALED_ERROR;
 				}
-				rc = synx_release(synx_obj);
+				rc = synx_release(inst->synx_session_id, synx_obj);
 				if (rc) {
 					dprintk(CVP_ERR,
 						"%s: synx_release failed\n",
@@ -1090,28 +1095,32 @@ static int msm_cvp_thread_fence_run(void *data)
 					HAL_SESSION_DME_FRAME_CMD_DONE);
 			if (rc) {
 				dprintk(CVP_ERR,
-				"%s: wait for signal failed, rc %d\n",
-				__func__, rc);
+					"%s: wait for signal failed, rc %d\n",
+					__func__, rc);
 				synx_state = SYNX_STATE_SIGNALED_ERROR;
 			}
 			mutex_unlock(&inst->fence_lock);
 		}
 
 		if (ica_enabled) {
-			rc = synx_import(fence[2], fence[3], &synx_obj);
+			params.h_synx = fence[2];
+			params.secure_key = fence[3];
+			params.new_h_synx = &synx_obj;
+
+			rc = synx_import(inst->synx_session_id, &params);
 			if (rc) {
 				dprintk(CVP_ERR, "%s: synx_import failed\n",
 					__func__);
 				synx_state = SYNX_STATE_SIGNALED_ERROR;
 			}
-			rc = synx_signal(synx_obj, synx_state);
+			rc = synx_signal(inst->synx_session_id, synx_obj, synx_state);
 			if (rc) {
 				dprintk(CVP_ERR, "%s: synx_signal failed\n",
 					__func__);
 				synx_state = SYNX_STATE_SIGNALED_ERROR;
 			}
 
-			rc = synx_release(synx_obj);
+			rc = synx_release(inst->synx_session_id, synx_obj);
 			if (rc) {
 				dprintk(CVP_ERR, "%s: synx_release failed\n",
 					__func__);
@@ -1119,19 +1128,21 @@ static int msm_cvp_thread_fence_run(void *data)
 			}
 		}
 
-		rc = synx_import(fence[((HFI_DME_BUF_NUM-1)<<1)],
-				fence[((HFI_DME_BUF_NUM-1)<<1)+1],
-				&synx_obj);
+		params.h_synx = fence[((HFI_DME_BUF_NUM-1)<<1)];
+		params.secure_key = fence[((HFI_DME_BUF_NUM-1)<<1)+1];
+		params.new_h_synx = &synx_obj;
+
+		rc = synx_import(inst->synx_session_id, &params);
 		if (rc) {
 			dprintk(CVP_ERR, "%s: synx_import failed\n", __func__);
 			synx_state = SYNX_STATE_SIGNALED_ERROR;
 		}
-		rc = synx_signal(synx_obj, synx_state);
+		rc = synx_signal(inst->synx_session_id, synx_obj, synx_state);
 		if (rc) {
 			dprintk(CVP_ERR, "%s: synx_signal failed\n", __func__);
 			synx_state = SYNX_STATE_SIGNALED_ERROR;
 		}
-		rc = synx_release(synx_obj);
+		rc = synx_release(inst->synx_session_id, synx_obj);
 		if (rc) {
 			dprintk(CVP_ERR, "%s: synx_release failed\n",
 				__func__);
@@ -1141,24 +1152,29 @@ static int msm_cvp_thread_fence_run(void *data)
 	}
 	case HFI_CMD_SESSION_CVP_ICA_FRAME:
 	{
+		struct synx_import_params params;
+
 		for (i = 0; i < cvp_hfi_defs[pkt_idx].buf_num-1; i++) {
 			if (fence[(i<<1)]) {
-				rc = synx_import(fence[(i<<1)],
-					fence[((i<<1)+1)], &synx_obj);
+				params.h_synx = fence[(i<<1)];
+				params.secure_key = fence[((i<<1)+1)];
+				params.new_h_synx = &synx_obj;
+
+				rc = synx_import(inst->synx_session_id, &params);
 				if (rc) {
 					dprintk(CVP_ERR,
 						"%s: synx_import failed\n",
 						__func__);
 					goto exit;
 				}
-				rc = synx_wait(synx_obj, timeout_ms);
+				rc = synx_wait(inst->synx_session_id, synx_obj, timeout_ms);
 				if (rc) {
 					dprintk(CVP_ERR,
 						"%s: synx_wait failed\n",
 						__func__);
 					goto exit;
 				}
-				rc = synx_release(synx_obj);
+				rc = synx_release(inst->synx_session_id, synx_obj);
 				if (rc) {
 					dprintk(CVP_ERR,
 						"%s: synx_release failed\n",
@@ -1198,17 +1214,20 @@ static int msm_cvp_thread_fence_run(void *data)
 		}
 		mutex_unlock(&inst->fence_lock);
 
-		rc = synx_import(fence[2], fence[3], &synx_obj);
+		params.h_synx = fence[2];
+		params.secure_key = fence[3];
+		params.new_h_synx = &synx_obj;
+		rc = synx_import(inst->synx_session_id, &params);
 		if (rc) {
 			dprintk(CVP_ERR, "%s: synx_import failed\n", __func__);
 			goto exit;
 		}
-		rc = synx_signal(synx_obj, synx_state);
+		rc = synx_signal(inst->synx_session_id, synx_obj, synx_state);
 		if (rc) {
 			dprintk(CVP_ERR, "%s: synx_signal failed\n", __func__);
 			goto exit;
 		}
-		rc = synx_release(synx_obj);
+		rc = synx_release(inst->synx_session_id, synx_obj);
 		if (rc) {
 			dprintk(CVP_ERR, "%s: synx_release failed\n", __func__);
 			goto exit;
@@ -1220,25 +1239,28 @@ static int msm_cvp_thread_fence_run(void *data)
 		int in_fence_num = fence[0];
 		int out_fence_num = fence[1];
 		int start_out = in_fence_num + 1;
+		struct synx_import_params params;
 
 		for (i = 1; i < in_fence_num + 1; i++) {
 			if (fence[(i<<1)]) {
-				rc = synx_import(fence[(i<<1)],
-					fence[((i<<1)+1)], &synx_obj);
+				params.h_synx = fence[(i<<1)];
+				params.secure_key = fence[((i<<1)+1)];
+				params.new_h_synx = &synx_obj;
+				rc = synx_import(inst->synx_session_id, &params);
 				if (rc) {
 					dprintk(CVP_ERR,
 						"%s: synx_import %d failed\n",
 						__func__, i<<1);
 					goto exit;
 				}
-				rc = synx_wait(synx_obj, timeout_ms);
+				rc = synx_wait(inst->synx_session_id, synx_obj, timeout_ms);
 				if (rc) {
 					dprintk(CVP_ERR,
 						"%s: synx_wait %d failed\n",
 						__func__, i<<1);
 					goto exit;
 				}
-				rc = synx_release(synx_obj);
+				rc = synx_release(inst->synx_session_id, synx_obj);
 				if (rc) {
 					dprintk(CVP_ERR,
 						"%s: synx_release %d failed\n",
@@ -1273,22 +1295,24 @@ static int msm_cvp_thread_fence_run(void *data)
 
 		for (i = start_out; i <  start_out + out_fence_num; i++) {
 			if (fence[(i<<1)]) {
-				rc = synx_import(fence[(i<<1)],
-					fence[((i<<1)+1)], &synx_obj);
+				params.h_synx = fence[(i<<1)];
+				params.secure_key = fence[((i<<1)+1)];
+				params.new_h_synx = &synx_obj;
+				rc = synx_import(inst->synx_session_id, &params);
 				if (rc) {
 					dprintk(CVP_ERR,
 						"%s: synx_import %d failed\n",
 						__func__, i<<1);
 					goto exit;
 				}
-				rc = synx_signal(synx_obj, synx_state);
+				rc = synx_signal(inst->synx_session_id, synx_obj, synx_state);
 				if (rc) {
 					dprintk(CVP_ERR,
 						"%s: synx_signal %d failed\n",
 						__func__, i<<1);
 					goto exit;
 				}
-				rc = synx_release(synx_obj);
+				rc = synx_release(inst->synx_session_id, synx_obj);
 				if (rc) {
 					dprintk(CVP_ERR,
 						"%s: synx_release %d failed\n",
@@ -1556,77 +1580,6 @@ static void aggregate_power_update(struct msm_cvp_core *core,
 	rt_pwr->bw_sum += bw_sum[1];
 }
 
-
-static void aggregate_power_request(struct msm_cvp_core *core,
-	struct cvp_power_level *nrt_pwr,
-	struct cvp_power_level *rt_pwr,
-	unsigned int max_clk_rate)
-{
-	struct msm_cvp_inst *inst;
-	int i;
-	unsigned long core_sum[2] = {0}, ctlr_sum[2] = {0}, fw_sum[2] = {0};
-	unsigned long op_core_max[2] = {0}, op_ctlr_max[2] = {0};
-	unsigned long op_fw_max[2] = {0}, bw_sum[2] = {0}, op_bw_max[2] = {0};
-
-	list_for_each_entry(inst, &core->instances, list) {
-		if (inst->state == MSM_CVP_CORE_INVALID ||
-			inst->state == MSM_CVP_CORE_UNINIT ||
-			is_subblock_profile_existed(inst))
-			continue;
-		if (inst->prop.priority <= CVP_RT_PRIO_THRESHOLD) {
-			/* Non-realtime session use index 0 */
-			i = 0;
-		} else {
-			i = 1;
-		}
-		dprintk(CVP_PROF, "pwrReq sess %pK core %u ctl %u fw %u\n",
-			inst, inst->power.clock_cycles_a,
-			inst->power.clock_cycles_b,
-			inst->power.reserved[0]);
-		dprintk(CVP_PROF, "pwrReq op_core %u op_ctl %u op_fw %u\n",
-			inst->power.reserved[1],
-			inst->power.reserved[2],
-			inst->power.reserved[3]);
-
-		core_sum[i] += inst->power.clock_cycles_a;
-		ctlr_sum[i] += inst->power.clock_cycles_b;
-		fw_sum[i] += inst->power.reserved[0];
-		op_core_max[i] =
-			(op_core_max[i] >= inst->power.reserved[1]) ?
-			op_core_max[i] : inst->power.reserved[1];
-		op_ctlr_max[i] =
-			(op_ctlr_max[i] >= inst->power.reserved[2]) ?
-			op_ctlr_max[i] : inst->power.reserved[2];
-		op_fw_max[i] =
-			(op_fw_max[i] >= inst->power.reserved[3]) ?
-			op_fw_max[i] : inst->power.reserved[3];
-		bw_sum[i] += inst->power.ddr_bw;
-		op_bw_max[i] =
-			(op_bw_max[i] >= inst->power.reserved[4]) ?
-			op_bw_max[i] : inst->power.reserved[4];
-	}
-
-	for (i = 0; i < 2; i++) {
-		core_sum[i] = max_3(core_sum[i], ctlr_sum[i], fw_sum[i]);
-		op_core_max[i] = max_3(op_core_max[i],
-			op_ctlr_max[i], op_fw_max[i]);
-		op_core_max[i] =
-			(op_core_max[i] > max_clk_rate) ?
-			max_clk_rate : op_core_max[i];
-		bw_sum[i] = (bw_sum[i] >= op_bw_max[i]) ?
-			bw_sum[i] : op_bw_max[i];
-	}
-
-	nrt_pwr->core_sum += core_sum[0];
-	nrt_pwr->op_core_sum = (nrt_pwr->op_core_sum >= op_core_max[0]) ?
-			nrt_pwr->op_core_sum : op_core_max[0];
-	nrt_pwr->bw_sum += bw_sum[0];
-	rt_pwr->core_sum += core_sum[1];
-	rt_pwr->op_core_sum = (rt_pwr->op_core_sum >= op_core_max[1]) ?
-			rt_pwr->op_core_sum : op_core_max[1];
-	rt_pwr->bw_sum += bw_sum[1];
-}
-
 /**
  * adjust_bw_freqs(): calculate CVP clock freq and bw required to sustain
  * required use case.
@@ -1641,7 +1594,7 @@ static void aggregate_power_request(struct msm_cvp_core *core,
 static int adjust_bw_freqs(void)
 {
 	struct msm_cvp_core *core;
-	struct cvp_hfi_device *hdev;
+	struct iris_hfi_device *hdev;
 	struct bus_info *bus;
 	struct clock_set *clocks;
 	struct clock_info *cl;
@@ -1649,12 +1602,13 @@ static int adjust_bw_freqs(void)
 	unsigned int tbl_size;
 	unsigned int cvp_min_rate, cvp_max_rate, max_bw, min_bw;
 	struct cvp_power_level rt_pwr = {0}, nrt_pwr = {0};
-	unsigned long core_sum, op_core_sum, bw_sum;
+	unsigned long tmp, core_sum, op_core_sum, bw_sum;
 	int i, rc = 0;
+	unsigned long ctrl_freq;
 
 	core = list_first_entry(&cvp_driver->cores, struct msm_cvp_core, list);
 
-	hdev = core->device;
+	hdev = core->device->hfi_device_data;
 	clocks = &core->resources.clock_set;
 	cl = &clocks->clock_tbl[clocks->count - 1];
 	tbl = core->resources.allowed_clks_tbl;
@@ -1663,16 +1617,12 @@ static int adjust_bw_freqs(void)
 	cvp_max_rate = tbl[tbl_size - 1].clock_rate;
 	bus = &core->resources.bus_set.bus_tbl[1];
 	max_bw = bus->range[1];
-	min_bw = max_bw/10;
+	min_bw = max_bw/100;
 
-	aggregate_power_request(core, &nrt_pwr, &rt_pwr, cvp_max_rate);
-	dprintk(CVP_DBG, "PwrReq nrt %u %u rt %u %u\n",
-		nrt_pwr.core_sum, nrt_pwr.op_core_sum,
-		rt_pwr.core_sum, rt_pwr.op_core_sum);
 	aggregate_power_update(core, &nrt_pwr, &rt_pwr, cvp_max_rate);
-	dprintk(CVP_DBG, "PwrUpdate nrt %u %u rt %u %u\n",
-		nrt_pwr.core_sum, nrt_pwr.op_core_sum,
-		rt_pwr.core_sum, rt_pwr.op_core_sum);
+	dprintk(CVP_PROF, "PwrUpdate nrt %u %u %lld rt %u %u %lld\n",
+		nrt_pwr.core_sum, nrt_pwr.op_core_sum, nrt_pwr.bw_sum,
+		rt_pwr.core_sum, rt_pwr.op_core_sum, rt_pwr.bw_sum);
 
 	if (rt_pwr.core_sum > cvp_max_rate) {
 		dprintk(CVP_WARN, "%s clk vote out of range %lld\n",
@@ -1689,7 +1639,7 @@ static int adjust_bw_freqs(void)
 
 	if (core_sum > cvp_max_rate) {
 		core_sum = cvp_max_rate;
-	} else	if (core_sum < cvp_min_rate) {
+	} else if (core_sum <= cvp_min_rate) {
 		core_sum = cvp_min_rate;
 	} else {
 		for (i = 1; i < tbl_size; i++)
@@ -1699,6 +1649,7 @@ static int adjust_bw_freqs(void)
 	}
 
 	bw_sum = rt_pwr.bw_sum + nrt_pwr.bw_sum;
+	bw_sum = bw_sum >> 10;
 	bw_sum = (bw_sum > max_bw) ? max_bw : bw_sum;
 	bw_sum = (bw_sum < min_bw) ? min_bw : bw_sum;
 
@@ -1709,24 +1660,23 @@ static int adjust_bw_freqs(void)
 		return -EINVAL;
 	}
 
-	mutex_unlock(&core->lock);
-	rc = msm_bus_scale_update_bw(bus->client, bw_sum, 0);
+	tmp = core->curr_freq;
+	core->curr_freq = core_sum;
+	rc = msm_cvp_set_clocks(core);
 	if (rc) {
-		dprintk(CVP_ERR, "Failed voting bus %s to ab %u\n",
-			bus->name, bw_sum);
-		goto exit;
-	}
-
-	rc = call_hfi_op(hdev, scale_clocks, hdev->hfi_device_data, core_sum);
-	if (rc)
 		dprintk(CVP_ERR,
 			"Failed to set clock rate %u %s: %d %s\n",
 			core_sum, cl->name, rc, __func__);
+		core->curr_freq = tmp;
+		return rc;
+	}
 
-exit:
-	mutex_lock(&core->lock);
-	if (!rc)
-		core->curr_freq = core_sum;
+	ctrl_freq = (core->curr_freq*3)>>1;
+	hdev->clk_freq = core->curr_freq;
+	rc = icc_set_bw(bus->client, bw_sum, 0);
+	if (rc)
+		dprintk(CVP_ERR, "Failed voting bus %s to ab %u\n",
+			bus->name, bw_sum);
 
 	return rc;
 }
@@ -2338,11 +2288,10 @@ int msm_cvp_session_deinit(struct msm_cvp_inst *inst)
 			struct cvp_buf_type *buf = &frame_buf->buf;
 
 			dprintk(CVP_DBG,
-				"%s: %x : fd %d off %d size %d %s\n",
+				"%s: %x : fd %d off %d size %d\n",
 				"remove from frame list",
 				hash32_ptr(inst->session),
-				buf->fd, buf->offset, buf->size,
-				buf->dbuf->buf_name);
+				buf->fd, buf->offset, buf->size);
 
 			list_del(&frame_buf->list);
 			kmem_cache_free(cvp_driver->frame_buf_cache,

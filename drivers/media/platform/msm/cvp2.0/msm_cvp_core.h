@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _MSM_CVP_CORE_H_
@@ -10,7 +11,7 @@
 #include <linux/types.h>
 #include <linux/dma-buf.h>
 #include <linux/msm_ion.h>
-#include <media/msm_cvp_private.h>
+#include <media/msm_cvp_private_2.0.h>
 #include <media/msm_cvp_utils.h>
 #include <media/msm_cvp_vidc.h>
 

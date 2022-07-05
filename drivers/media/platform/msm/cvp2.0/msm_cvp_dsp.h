@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef MSM_CVP_DSP_H
@@ -12,6 +13,9 @@
 
 #define CVP_APPS_DSP_GLINK_GUID "cvp-glink-apps-dsp"
 #define CVP_APPS_DSP_SMD_GUID "cvp-smd-apps-dsp"
+
+int cvp_dsp_device_init(void);
+void cvp_dsp_device_exit(void);
 
 /*
  * API for CVP driver to send physical address to dsp driver

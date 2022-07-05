@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/bitops.h>
@@ -672,11 +673,8 @@ static void hfi_process_sys_get_prop_image_version(
 		struct cvp_hfi_msg_sys_property_info_packet *pkt)
 {
 	int i = 0;
-	size_t smem_block_size = 0;
-	u8 *smem_table_ptr;
-	char version[256];
+
 	const u32 version_string_size = 128;
-	const u32 smem_image_index = 14 * 128;
 	u8 *str_image_version;
 	int req_bytes;
 
@@ -695,19 +693,12 @@ static void hfi_process_sys_get_prop_image_version(
 	 */
 	for (i = 0; i < version_string_size; i++) {
 		if (str_image_version[i] != '\0')
-			version[i] = str_image_version[i];
+			cvp_driver->fw_version[i] = str_image_version[i];
 		else
-			version[i] = ' ';
+			cvp_driver->fw_version[i] = ' ';
 	}
-	version[i] = '\0';
-	dprintk(CVP_DBG, "F/W version: %s\n", version);
-
-	smem_table_ptr = qcom_smem_get(QCOM_SMEM_HOST_ANY,
-			SMEM_IMAGE_VERSION_TABLE, &smem_block_size);
-	if ((smem_image_index + version_string_size) <= smem_block_size &&
-			smem_table_ptr)
-		memcpy(smem_table_ptr + smem_image_index,
-				str_image_version, version_string_size);
+	cvp_driver->fw_version[i - 1] = '\0';
+	dprintk(CVP_FW, "F/W version: %s\n", cvp_driver->fw_version);
 }
 
 static int hfi_process_sys_property_info(u32 device_id,

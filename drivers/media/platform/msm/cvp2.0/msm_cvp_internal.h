@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _MSM_CVP_INTERNAL_H_
@@ -13,8 +14,7 @@
 #include <linux/completion.h>
 #include <linux/wait.h>
 #include <linux/workqueue.h>
-#include <linux/msm-bus.h>
-#include <linux/msm-bus-board.h>
+#include <linux/interconnect.h>
 #include <linux/kref.h>
 #include <linux/cdev.h>
 #include <linux/slab.h>
@@ -22,8 +22,9 @@
 #include <linux/dma-mapping.h>
 #include "msm_cvp_core.h"
 #include <media/msm_media_info.h>
-#include <media/msm_cvp_private.h>
+#include <media/msm_cvp_private_2.0.h>
 #include "cvp_hfi_api.h"
+#include <synx_api.h>
 
 #define MAX_SUPPORTED_INSTANCES 16
 #define MAX_NAME_LENGTH 64
@@ -168,6 +169,7 @@ struct msm_cvp_drv {
 	struct kmem_cache *frame_cache;
 	struct kmem_cache *frame_buf_cache;
 	struct kmem_cache *internal_buf_cache;
+	char fw_version[CVP_VERSION_LENGTH];
 };
 
 enum profiling_points {
@@ -337,6 +339,7 @@ struct msm_cvp_inst {
 	struct cvp_session_prop prop;
 	u32 cur_cmd_type;
 	struct mutex fence_lock;
+	struct synx_session synx_session_id;
 };
 
 struct msm_cvp_fence_thread_data {

@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __MSM_CVP_RESOURCES_H__
@@ -74,7 +75,7 @@ struct bus_info {
 	struct device *dev;
 	struct devfreq_dev_profile devfreq_prof;
 	struct devfreq *devfreq;
-	struct msm_bus_client_handle *client;
+	struct icc_path *client;
 	bool is_prfm_gov_used;
 };
 

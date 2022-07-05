@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/dma-direction.h>
@@ -15,7 +16,7 @@
 #include "cvp_hfi_api.h"
 #include "msm_cvp_clocks.h"
 #include <linux/dma-buf.h>
-#include <uapi/media/msm_media_info.h>
+#include <media/msm_media_info.h>
 #include <synx_api.h>
 
 #define MAX_EVENTS 30
@@ -254,6 +255,7 @@ void *msm_cvp_open(int core_id, int session_type)
 	struct msm_cvp_core *core = NULL;
 	int rc = 0;
 	int i = 0;
+	struct synx_initialization_params params;
 
 	if (core_id >= MSM_CVP_CORES_MAX ||
 			session_type >= MSM_CVP_MAX_DEVICES) {
@@ -302,8 +304,11 @@ void *msm_cvp_open(int core_id, int session_type)
 	init_waitqueue_head(&inst->event_handler.wq);
 
 	kref_init(&inst->kref);
-
-	synx_initialize(NULL);
+	params.name = "cvp-kernel-client";
+	if (synx_initialize(&inst->synx_session_id, &params)) {
+		dprintk(CVP_ERR, "%s synx_initialize failed\n", __func__);
+		rc = -EFAULT;
+	}
 
 	inst->session_type = session_type;
 	inst->state = MSM_CVP_CORE_UNINIT_DONE;
@@ -356,7 +361,7 @@ fail_init:
 	DEINIT_MSM_CVP_LIST(&inst->cvpdspbufs);
 	DEINIT_MSM_CVP_LIST(&inst->frames);
 
-	synx_uninitialize();
+	synx_uninitialize(inst->synx_session_id);
 
 	kfree(inst);
 	inst = NULL;
@@ -418,7 +423,7 @@ int msm_cvp_destroy(struct msm_cvp_inst *inst)
 	list_del(&inst->list);
 	mutex_unlock(&core->lock);
 
-	synx_uninitialize();
+	synx_uninitialize(inst->synx_session_id);
 
 	DEINIT_MSM_CVP_LIST(&inst->persistbufs);
 	DEINIT_MSM_CVP_LIST(&inst->cvpcpubufs);

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/jiffies.h>
@@ -1824,15 +1825,15 @@ int cvp_comm_release_persist_buffers(struct msm_cvp_inst *inst)
 
 		if (buf->buffer_ownership == DRIVER) {
 			dprintk(CVP_DBG,
-			"%s: %x : fd %d %s size %d",
+			"%s: %x : fd %d size %d",
 			"free arp", hash32_ptr(inst->session), buf->smem.fd,
-			buf->smem.dma_buf->buf_name, buf->smem.size);
+			 buf->smem.size);
 			msm_cvp_smem_free(handle);
 		} else if (buf->buffer_ownership == CLIENT) {
 			dprintk(CVP_DBG,
-			"%s: %x : fd %d %s size %d",
+			"%s: %x : fd %d size %d",
 			"unmap persist", hash32_ptr(inst->session),
-			buf->smem.fd, buf->smem.dma_buf->buf_name,
+			buf->smem.fd,
 			buf->smem.size);
 			msm_cvp_smem_unmap_dma_buf(inst, &buf->smem);
 		}

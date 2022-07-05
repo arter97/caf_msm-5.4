@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/module.h>
 #include <linux/rpmsg.h>
@@ -577,7 +578,7 @@ static struct rpmsg_driver cvp_dsp_rpmsg_client = {
 	},
 };
 
-static int __init cvp_dsp_device_init(void)
+int cvp_dsp_device_init(void)
 {
 	struct cvp_dsp_apps *me = &gfa_cv;
 	int err;
@@ -608,7 +609,7 @@ register_bail:
 	return err;
 }
 
-static void __exit cvp_dsp_device_exit(void)
+void cvp_dsp_device_exit(void)
 {
 	struct cvp_dsp_apps *me = &gfa_cv;
 
@@ -621,7 +622,3 @@ static void __exit cvp_dsp_device_exit(void)
 		unregister_rpmsg_driver(&cvp_dsp_rpmsg_client);
 }
 
-late_initcall(cvp_dsp_device_init);
-module_exit(cvp_dsp_device_exit);
-
-MODULE_LICENSE("GPL v2");

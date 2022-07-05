@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
-#include <asm/dma-iommu.h>
 #include <asm/memory.h>
 #include <linux/clk/qcom.h>
 #include <linux/coresight-stm.h>
@@ -21,7 +21,7 @@
 #include <linux/workqueue.h>
 #include <linux/platform_device.h>
 #include <linux/soc/qcom/llcc-qcom.h>
-#include <soc/qcom/scm.h>
+#include <linux/qcom_scm.h>
 #include <soc/qcom/socinfo.h>
 #include <linux/soc/qcom/smem.h>
 #include <soc/qcom/subsystem_restart.h>
@@ -1084,7 +1084,7 @@ static int __devfreq_target(struct device *devfreq_dev,
 
 	/* we expect governors to provide values in kBps form, convert to Bps */
 	ab = *freq * 1000;
-	rc = msm_bus_scale_update_bw(bus->client, ab, 0);
+	rc = icc_set_bw(bus->client, ab, 0);
 		dprintk(CVP_ERR, "Failed voting bus %s to ab %llu\n: %d",
 				bus->name, ab, rc);
 		goto err_unknown_device;
@@ -1144,17 +1144,7 @@ static int __unvote_buses(struct iris_hfi_device *device)
 	device->bus_vote.data_count = 0;
 
 	iris_hfi_for_each_bus(device, bus) {
-#ifdef USE_DEVFREQ_SCALE_BUS
-		unsigned long zero = 0;
-
-		if (!bus->is_prfm_gov_used)
-			rc = devfreq_suspend_device(bus->devfreq);
-		else
-			rc = __devfreq_target(bus->dev, &zero, 0);
-#else
-		rc = msm_bus_scale_update_bw(bus->client, 0, 0);
-#endif
-
+		rc = icc_set_bw(bus->client, 0, 0);
 		if (rc) {
 			dprintk(CVP_ERR,
 			"%s: Failed unvoting bus\n", __func__);
@@ -1195,26 +1185,11 @@ no_data_count:
 
 	iris_hfi_for_each_bus(device, bus) {
 		if (bus) {
-#ifdef USE_DEVFREQ_SCALE_BUS
-			if (bus->devfreq) {
-				if (!bus->is_prfm_gov_used) {
-					rc = devfreq_resume_device(
-						bus->devfreq);
-					if (rc)
-						goto err_no_mem;
-				} else {
-					bus->devfreq->nb.notifier_call(
-						&bus->devfreq->nb, 0, NULL);
-				}
-			}
-#else
-			rc = msm_bus_scale_update_bw(bus->client,
-				bus->range[1], 0);
+			rc = icc_set_bw(bus->client, bus->range[1], 0);
 			if (rc)
 				dprintk(CVP_ERR,
 				"Failed voting bus %s to ab %u\n",
 				bus->name, bus->range[1]*1000);
-#endif
 		}
 	}
 
@@ -1299,29 +1274,14 @@ err_create_pkt:
 
 static int __tzbsp_set_cvp_state(enum tzbsp_subsys_state state)
 {
-	int tzbsp_rsp = 0;
 	int rc = 0;
-	struct scm_desc desc = {0};
 
-	desc.args[0] = state;
-	desc.args[1] = TZBSP_CVP_PAS_ID;
-	desc.arginfo = SCM_ARGS(2);
-
-	rc = scm_call2(SCM_SIP_FNID(SCM_SVC_BOOT,
-			TZBSP_PIL_SET_STATE), &desc);
-	tzbsp_rsp = desc.ret[0];
+	rc = qcom_scm_set_remote_state(state, TZBSP_CVP_PAS_ID);
+	dprintk(CVP_ERR, "Set state %d, resp %d\n", state, rc);
 
 	if (rc) {
-		dprintk(CVP_ERR, "Failed scm_call %d\n", rc);
+		dprintk(CVP_ERR, "Failed qcom_scm_set_remote_state %d\n", rc);
 		return rc;
-	}
-
-	dprintk(CVP_DBG, "Set state %d, resp %d\n", state, tzbsp_rsp);
-	if (tzbsp_rsp) {
-		dprintk(CVP_ERR,
-			"Failed to set cvp core state to suspend: %d\n",
-			tzbsp_rsp);
-		return -EINVAL;
 	}
 
 	return 0;
@@ -2291,10 +2251,6 @@ static int iris_hfi_core_init(void *device)
 	__sys_set_idle_indicator(device, true);
 
 	if (dev->res->pm_qos_latency_us) {
-#ifdef CONFIG_SMP
-		dev->qos.type = PM_QOS_REQ_AFFINE_IRQ;
-		dev->qos.irq = dev->cvp_hal_data->irq;
-#endif
 		pm_qos_add_request(&dev->qos, PM_QOS_CPU_DMA_LATENCY,
 				dev->res->pm_qos_latency_us);
 	}
@@ -3551,7 +3507,6 @@ failed_to_reset:
 static inline void __disable_unprepare_clks(struct iris_hfi_device *device)
 {
 	struct clock_info *cl;
-	int rc = 0;
 
 	if (!device) {
 		dprintk(CVP_ERR, "Invalid params: %pK\n", device);
@@ -3561,18 +3516,6 @@ static inline void __disable_unprepare_clks(struct iris_hfi_device *device)
 	iris_hfi_for_each_clock_reverse(device, cl) {
 		dprintk(CVP_DBG, "Clock: %s disable and unprepare\n",
 				cl->name);
-		rc = clk_set_flags(cl->clk, CLKFLAG_NORETAIN_PERIPH);
-		if (rc) {
-			dprintk(CVP_WARN,
-				"Failed set flag NORETAIN_PERIPH %s\n",
-					cl->name);
-		}
-		rc = clk_set_flags(cl->clk, CLKFLAG_NORETAIN_MEM);
-		if (rc) {
-			dprintk(CVP_WARN,
-				"Failed set flag NORETAIN_MEM %s\n",
-					cl->name);
-		}
 		clk_disable_unprepare(cl->clk);
 	}
 }
@@ -3630,19 +3573,6 @@ static inline int __prepare_enable_clks(struct iris_hfi_device *device)
 		 */
 		if (cl->has_scaling)
 			clk_set_rate(cl->clk, clk_round_rate(cl->clk, 0));
-
-		rc = clk_set_flags(cl->clk, CLKFLAG_RETAIN_PERIPH);
-		if (rc) {
-			dprintk(CVP_WARN,
-				"Failed set flag RETAIN_PERIPH %s\n",
-					cl->name);
-		}
-		rc = clk_set_flags(cl->clk, CLKFLAG_RETAIN_MEM);
-		if (rc) {
-			dprintk(CVP_WARN,
-				"Failed set flag RETAIN_MEM %s\n",
-					cl->name);
-		}
 		rc = clk_prepare_enable(cl->clk);
 		if (rc) {
 			dprintk(CVP_ERR, "Failed to enable clocks\n");
@@ -3682,8 +3612,7 @@ static void __deinit_bus(struct iris_hfi_device *device)
 		bus->devfreq = NULL;
 #endif
 		dev_set_drvdata(bus->dev, NULL);
-
-		msm_bus_scale_unregister(bus->client);
+		icc_put(bus->client);
 		bus->client = NULL;
 	}
 }
@@ -3724,9 +3653,8 @@ static int __init_bus(struct iris_hfi_device *device)
 		WARN(dev_get_drvdata(bus->dev), "%s's drvdata already set\n",
 				dev_name(bus->dev));
 		dev_set_drvdata(bus->dev, device);
-
-		bus->client = msm_bus_scale_register(bus->master, bus->slave,
-				bus->name, false);
+		bus->client = icc_get(&device->res->pdev->dev,
+				bus->master, bus->slave);
 		if (IS_ERR_OR_NULL(bus->client)) {
 			rc = PTR_ERR(bus->client) ?: -EBADHANDLE;
 			dprintk(CVP_ERR, "Failed to register bus %s: %d\n",
@@ -3926,54 +3854,6 @@ static void __deinit_resources(struct iris_hfi_device *device)
 	__deinit_regulators(device);
 	kfree(device->sys_init_capabilities);
 	device->sys_init_capabilities = NULL;
-}
-
-static int __protect_cp_mem(struct iris_hfi_device *device)
-{
-	struct cvp_tzbsp_memprot memprot;
-	unsigned int resp = 0;
-	int rc = 0;
-	struct context_bank_info *cb;
-	struct scm_desc desc = {0};
-
-	if (!device)
-		return -EINVAL;
-
-	memprot.cp_start = 0x0;
-	memprot.cp_size = 0x0;
-	memprot.cp_nonpixel_start = 0x0;
-	memprot.cp_nonpixel_size = 0x0;
-
-	list_for_each_entry(cb, &device->res->context_banks, list) {
-		if (!strcmp(cb->name, "cvp_hlos")) {
-			desc.args[1] = memprot.cp_size =
-				cb->addr_range.start;
-			dprintk(CVP_DBG, "%s memprot.cp_size: %#x\n",
-				__func__, memprot.cp_size);
-		}
-
-		if (!strcmp(cb->name, "cvp_sec_nonpixel")) {
-			desc.args[2] = memprot.cp_nonpixel_start =
-				cb->addr_range.start;
-			desc.args[3] = memprot.cp_nonpixel_size =
-				cb->addr_range.size;
-			dprintk(CVP_DBG,
-				"%s memprot.cp_nonpixel_start: %#x size: %#x\n",
-				__func__, memprot.cp_nonpixel_start,
-				memprot.cp_nonpixel_size);
-		}
-	}
-
-	desc.arginfo = SCM_ARGS(4);
-	rc = 0;
-	resp = desc.ret[0];
-
-	if (rc) {
-		dprintk(CVP_ERR, "Failed to protect memory(%d) response: %d\n",
-				rc, resp);
-	}
-
-	return rc;
 }
 
 static int __disable_regulator(struct regulator_info *rinfo,
@@ -4575,10 +4455,6 @@ static inline int __resume(struct iris_hfi_device *device)
 	__set_threshold_registers(device);
 
 	if (device->res->pm_qos_latency_us) {
-#ifdef CONFIG_SMP
-		device->qos.type = PM_QOS_REQ_AFFINE_IRQ;
-		device->qos.irq = device->cvp_hal_data->irq;
-#endif
 		pm_qos_add_request(&device->qos, PM_QOS_CPU_DMA_LATENCY,
 				device->res->pm_qos_latency_us);
 	}
@@ -4645,19 +4521,8 @@ static int __load_fw(struct iris_hfi_device *device)
 		}
 	}
 
-	if (!device->res->firmware_base) {
-		rc = __protect_cp_mem(device);
-		if (rc) {
-			dprintk(CVP_ERR, "Failed to protect memory\n");
-			goto fail_protect_mem;
-		}
-	}
 	trace_msm_v4l2_cvp_fw_load_end("msm_v4l2_cvp cvp fw load end");
 	return rc;
-fail_protect_mem:
-	if (device->resources.fw.cookie)
-		subsystem_put(device->resources.fw.cookie);
-	device->resources.fw.cookie = NULL;
 fail_load_fw:
 	call_iris_op(device, power_off, device);
 fail_iris_power_on:
@@ -4688,12 +4553,8 @@ static void __unload_fw(struct iris_hfi_device *device)
 
 static int iris_hfi_get_fw_info(void *dev, struct cvp_hal_fw_info *fw_info)
 {
-	int i = 0, j = 0;
+	int i = 0;
 	struct iris_hfi_device *device = dev;
-	size_t smem_block_size = 0;
-	u8 *smem_table_ptr;
-	char version[CVP_VERSION_LENGTH] = "";
-	const u32 smem_image_index = 14 * 128;
 
 	if (!device || !fw_info) {
 		dprintk(CVP_ERR,
@@ -4704,16 +4565,7 @@ static int iris_hfi_get_fw_info(void *dev, struct cvp_hal_fw_info *fw_info)
 
 	mutex_lock(&device->lock);
 
-	smem_table_ptr = qcom_smem_get(QCOM_SMEM_HOST_ANY,
-			SMEM_IMAGE_VERSION_TABLE, &smem_block_size);
-	if (smem_table_ptr &&
-			((smem_image_index +
-			  CVP_VERSION_LENGTH) <= smem_block_size))
-		memcpy(version,
-			smem_table_ptr + smem_image_index,
-			CVP_VERSION_LENGTH);
-
-	while (version[i++] != 'V' && i < CVP_VERSION_LENGTH)
+	while (cvp_driver->fw_version[i++] != 'V' && i < CVP_VERSION_LENGTH)
 		;
 
 	if (i == CVP_VERSION_LENGTH - 1) {
@@ -4721,10 +4573,9 @@ static int iris_hfi_get_fw_info(void *dev, struct cvp_hal_fw_info *fw_info)
 		fw_info->version[0] = '\0';
 		goto fail_version_string;
 	}
-
-	for (i--; i < CVP_VERSION_LENGTH && j < CVP_VERSION_LENGTH - 1; i++)
-		fw_info->version[j++] = version[i];
-	fw_info->version[j] = '\0';
+	memcpy(&fw_info->version[0], &cvp_driver->fw_version[0],
+			CVP_VERSION_LENGTH);
+	fw_info->version[CVP_VERSION_LENGTH - 1] = '\0';
 
 fail_version_string:
 	dprintk(CVP_DBG, "F/W version retrieved : %s\n", fw_info->version);
