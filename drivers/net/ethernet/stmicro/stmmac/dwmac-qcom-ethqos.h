@@ -216,7 +216,8 @@ do  {\
 #define AUTONEG_STATE_MASK 0x20
 #define MICREL_LINK_UP_INTR_STATUS BIT(0)
 
-#define TLMM_BASE_ADDRESS (tlmm_central_base_addr)
+#define TLMM_BASE_RGMII_CTRL1 (tlmm_rgmii_pull_ctl1_base)
+#define TLMM_BASE_RX_CTR (tlmm_rgmii_rx_ctr_base)
 
 #define TLMM_RGMII_HDRV_PULL_CTL1_ADDRESS_OFFSET\
 	(((ethqos->emac_ver == EMAC_HW_v2_3_2) ? 0xA7000\
@@ -226,7 +227,7 @@ do  {\
 
 #define TLMM_RGMII_HDRV_PULL_CTL1_ADDRESS\
 	(((unsigned long *)\
-		(TLMM_BASE_ADDRESS + TLMM_RGMII_HDRV_PULL_CTL1_ADDRESS_OFFSET)))
+		(TLMM_BASE_RGMII_CTRL1)))
 
 #define TLMM_RGMII_HDRV_PULL_CTL1_RGWR(data)\
 	iowrite32(data,	(void __iomem *)TLMM_RGMII_HDRV_PULL_CTL1_ADDRESS)
@@ -285,7 +286,7 @@ do  {\
 
 #define TLMM_RGMII_RX_HV_MODE_CTL_ADDRESS\
 	((unsigned long *)\
-	 (TLMM_BASE_ADDRESS + TLMM_RGMII_RX_HV_MODE_CTL_ADDRESS_OFFSET))\
+	 (TLMM_BASE_RX_CTR))\
 
 #define TLMM_RGMII_RX_HV_MODE_CTL_RGWR(data)\
 	(iowrite32(data, (void __iomem *)TLMM_RGMII_RX_HV_MODE_CTL_ADDRESS))
@@ -401,6 +402,7 @@ struct ethqos_io_macro {
 	u32 pps_remove;
 	u32 l3_master_dev;
 	u32 ipv6_wq;
+	u32 rgmii_tx_drv;
 };
 
 struct qcom_ethqos {
