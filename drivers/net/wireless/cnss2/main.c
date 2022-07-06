@@ -29,12 +29,11 @@
 #define CNSS_DUMP_NAME			"CNSS_WLAN"
 #define CNSS_DUMP_DESC_SIZE		0x1000
 #define CNSS_DUMP_SEG_VER		0x1
-#define RECOVERY_DELAY_MS		100
 #define FILE_SYSTEM_READY		1
 #define FW_READY_TIMEOUT		20000
 #define FW_ASSERT_TIMEOUT		5000
 #define CNSS_EVENT_PENDING		2989
-#define COLD_BOOT_CAL_SHUTDOWN_DELAY_MS	50
+#define POWER_RESET_MIN_DELAY_MS	100
 #define MAX_NAME_LEN			12
 
 #define CNSS_QUIRKS_DEFAULT		0
@@ -1387,7 +1386,7 @@ static void cnss_recovery_work_handler(struct work_struct *work)
 
 	cnss_bus_dev_shutdown(plat_priv);
 	cnss_bus_dev_ramdump(plat_priv);
-	msleep(RECOVERY_DELAY_MS);
+	msleep(POWER_RESET_MIN_DELAY_MS);
 
 	ret = cnss_bus_dev_powerup(plat_priv);
 	if (ret)
@@ -1814,7 +1813,7 @@ static int cnss_cold_boot_cal_done_hdlr(struct cnss_plat_data *plat_priv,
 		goto skip_shutdown;
 
 	cnss_bus_dev_shutdown(plat_priv);
-	msleep(COLD_BOOT_CAL_SHUTDOWN_DELAY_MS);
+	msleep(POWER_RESET_MIN_DELAY_MS);
 
 skip_shutdown:
 	complete(&plat_priv->cal_complete);
