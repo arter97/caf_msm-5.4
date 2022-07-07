@@ -542,24 +542,20 @@ static int qrtr_tx_wait(struct qrtr_node *node, struct sockaddr_qrtr *to,
 	/* Assume sk is set correctly for all data type packets */
 	timeo = sock_sndtimeo(sk, flags & MSG_DONTWAIT);
 
-	mutex_lock(&node->qrtr_tx_lock);
-	flow = radix_tree_lookup(&node->qrtr_tx_flow, key);
-	if (!flow) {
-		flow = kzalloc(sizeof(*flow), GFP_KERNEL);
-		if (flow) {
-			INIT_LIST_HEAD(&flow->waiters);
-			radix_tree_insert(&node->qrtr_tx_flow, key, flow);
-		}
-	}
-	mutex_unlock(&node->qrtr_tx_lock);
-
-	/* Set confirm_rx if we where unable to find and allocate a flow */
-	if (!flow)
-		return 1;
-
 	ret = timeo;
 	for (;;) {
 		mutex_lock(&node->qrtr_tx_lock);
+		flow = radix_tree_lookup(&node->qrtr_tx_flow, key);
+		if (!flow) {
+			flow = kzalloc(sizeof(*flow), GFP_KERNEL);
+			if (!flow) {
+				mutex_unlock(&node->qrtr_tx_lock);
+				return 1;
+			}
+			INIT_LIST_HEAD(&flow->waiters);
+			radix_tree_insert(&node->qrtr_tx_flow, key, flow);
+		}
+
 		if (READ_ONCE(flow->tx_failed)) {
 			WRITE_ONCE(flow->tx_failed, 0);
 			confirm_rx = 1;
@@ -1249,8 +1245,10 @@ static void qrtr_cleanup_flow_control(struct qrtr_node *node,
 {
 	struct qrtr_ctrl_pkt *pkt;
 	unsigned long key;
+	void __rcu **slot;
 	struct sockaddr_qrtr src;
 	struct qrtr_tx_flow *flow;
+	struct radix_tree_iter iter;
 	struct qrtr_tx_flow_waiter *waiter;
 	struct qrtr_tx_flow_waiter *temp;
 	u32 cmd;
@@ -1280,8 +1278,15 @@ static void qrtr_cleanup_flow_control(struct qrtr_node *node,
 		sock_put(waiter->sk);
 		kfree(waiter);
 	}
-	kfree(flow);
-	radix_tree_delete(&node->qrtr_tx_flow, key);
+
+	radix_tree_for_each_slot(slot, &node->qrtr_tx_flow, &iter, 0) {
+		if (flow == (struct qrtr_tx_flow *)rcu_dereference(*slot)) {
+			radix_tree_iter_delete(&node->qrtr_tx_flow,
+					       &iter, slot);
+			kfree(flow);
+			break;
+		}
+	}
 	mutex_unlock(&node->qrtr_tx_lock);
 }
 
@@ -1312,8 +1317,8 @@ static void qrtr_handle_del_proc(struct qrtr_node *node, struct sk_buff *skb)
 			sock_put(waiter->sk);
 			kfree(waiter);
 		}
+		radix_tree_iter_delete(&node->qrtr_tx_flow, &iter, slot);
 		kfree(flow);
-		radix_tree_delete(&node->qrtr_tx_flow, iter.index);
 	}
 	mutex_unlock(&node->qrtr_tx_lock);
 
