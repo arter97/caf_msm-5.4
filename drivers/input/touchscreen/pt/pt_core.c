@@ -570,6 +570,9 @@ static int pt_hid_exec_cmd_(struct pt_core_data *cd,
 		+ (hid_cmd->has_data_register ? 2 : 0)	/* Data register */
 		+ hid_cmd->write_length;                /* Data length */
 
+	if (cmd_length < 4 || cmd_length > PT_MAX_PIP1_MSG_SIZE)
+		return -EPROTO;
+
 	cmd = kzalloc(cmd_length, GFP_KERNEL);
 	if (!cmd)
 		return -ENOMEM;
@@ -2122,12 +2125,15 @@ static int _pt_request_pip2_send_cmd(struct device *dev,
 	struct pt_core_data *cd = dev_get_drvdata(dev);
 	struct pip2_cmd_structure pip2_cmd;
 	int rc = 0;
-	int i = 0;
-	int j = 0;
+	u16 i = 0;
+	u16 j = 0;
 	u16 write_len;
 	u8 *write_buf = NULL;
 	u16 read_len;
 	u8 extra_bytes;
+
+	if (report_body_len > 247)
+		return -EPROTO;
 
 	memset(&pip2_cmd, 0, sizeof(pip2_cmd));
 	/* Hard coded register for PIP2.x */
@@ -2255,8 +2261,8 @@ static int _pt_pip2_send_cmd_no_int(struct device *dev,
 	int max_retry = 0;
 	int retry = 0;
 	int rc = 0;
-	int i = 0;
-	int j = 0;
+	u16 i = 0;
+	u16 j = 0;
 	u16 write_len;
 	u8 *write_buf = NULL;
 	u16 read_len;
@@ -2269,6 +2275,9 @@ static int _pt_pip2_send_cmd_no_int(struct device *dev,
 	u32 resp_time_max = pt_pip2_get_cmd_resp_time_max(id);
 	struct pt_core_data *cd = dev_get_drvdata(dev);
 	struct pip2_cmd_structure pip2_cmd;
+
+	if (report_body_len > 247)
+		return -EPROTO;
 
 	if (protect == PT_CORE_CMD_PROTECTED) {
 		rc = request_exclusive(cd,
@@ -3776,7 +3785,8 @@ static int pt_pip1_read_data_block_(struct pt_core_data *cd,
 	if (length == 0 || *actual_read_len == 0)
 		return 0;
 
-	if (read_buf_size >= *actual_read_len)
+	if (read_buf_size >= *actual_read_len &&
+	    *actual_read_len < PT_MAX_PIP2_MSG_SIZE)
 		memcpy(read_buf, &cd->response_buf[10], *actual_read_len);
 	else
 		return -EPROTO;
@@ -3848,7 +3858,7 @@ static int pt_pip1_write_data_block_(struct pt_core_data *cd,
 		u8 *security_key, u16 *actual_write_len)
 {
 	/* row_number + write_len + ebid + security_key + crc */
-	int full_write_length = 2 + 2 + 1 + write_length + 8 + 2;
+	u16 full_write_length = 2 + 2 + 1 + write_length + 8 + 2;
 	u8 *full_write_buf;
 	u8 cmd_offset = 0;
 	u16 crc;
@@ -3861,6 +3871,9 @@ static int pt_pip1_write_data_block_(struct pt_core_data *cd,
 		.write_length = full_write_length,
 		.timeout_ms = PT_PIP1_CMD_WRITE_CONF_BLOCK_TIMEOUT,
 	};
+
+	if (write_length > PT_CAL_DATA_ROW_SIZE)
+		return -EINVAL;
 
 	full_write_buf = kzalloc(full_write_length, GFP_KERNEL);
 	if (!full_write_buf)
@@ -4792,7 +4805,7 @@ static int pt_pip_calibrate_ext_(struct pt_core_data *cd,
 	 * When doing a calibration on a flashless DUT, save CAL data in
 	 * the TTDL cache on any successful calibration
 	 */
-	if (*status == 0 && cd->cal_cache_in_host) {
+	if (cd->response_buf[5] == 0 && cd->cal_cache_in_host) {
 		pt_debug(cd->dev, DL_INFO, "%s: Retrieve and Save CAL\n",
 			__func__);
 		rc = _pt_manage_local_cal_data(cd->dev, PT_CAL_DATA_SAVE,
@@ -6982,6 +6995,7 @@ static int _pt_request_hw_version(struct device *dev, char *hw_version)
 		goto exit_error;
 	}
 
+	memset(return_data, 0, ARRAY_SIZE(return_data));
 	/* For Parade TC or TT parts */
 	if (cd->active_dut_generation == DUT_PIP2_CAPABLE) {
 		rc = _pt_request_pip2_send_cmd(dev,
@@ -8410,7 +8424,7 @@ static int pt_parse_input(struct pt_core_data *cd)
 		pt_debug(cd->dev, DL_WARN,
 			"%s: DUT - Empty buffer detected\n", __func__);
 		return 0;
-	} else if (size > PT_MAX_INPUT) {
+	} else if (size > PT_MAX_INPUT || size < 0) {
 		pt_debug(cd->dev, DL_ERROR,
 			"%s: DUT - Unexpected len field in active bus data!\n",
 			__func__);
@@ -13613,7 +13627,7 @@ static ssize_t pt_pip2_cmd_rsp_store(struct device *dev,
 
 	length = _pt_ic_parse_input_hex(dev, buf, size,
 			input_data, PT_MAX_PIP2_MSG_SIZE);
-	if (length <= 0 || length > PT_MAX_PIP2_MSG_SIZE) {
+	if (length <= 0 || length > (PT_MAX_PIP2_MSG_SIZE - 2)) {
 		pt_debug(dev, DL_ERROR, "%s: Invalid number of arguments\n",
 			__func__);
 		rc = -EINVAL;
@@ -16273,11 +16287,12 @@ exit:
 	if (boot_err)
 		*boot_err = last_err;
 
-	pt_debug(cd->dev, DL_INFO, "%s: %s=0x%02X, %s=0x%02X, %s=0x%02X\n",
-			__func__,
-			"Detected", detected,
-			"slave_irq_toggled", *slave_irq_toggled,
-			"slave_bus_toggled", *slave_bus_toggled);
+	if (slave_irq_toggled && slave_bus_toggled)
+		pt_debug(cd->dev, DL_INFO, "%s: %s=0x%02X, %s=0x%02X, %s=0x%02X\n",
+				__func__,
+				"Detected", detected,
+				"slave_irq_toggled", *slave_irq_toggled,
+				"slave_bus_toggled", *slave_bus_toggled);
 	return rc;
 }
 
