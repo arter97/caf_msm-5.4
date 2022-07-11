@@ -1956,9 +1956,16 @@ static int hgsl_ioctl_mem_cache_operation(struct file *filep, unsigned long arg)
 					gpuaddr, params.sizebytes);
 	if (node_found)
 		internal = true;
-	else
+	else {
 		node_found = hgsl_mem_find_base_locked(&priv->mem_mapped,
 					gpuaddr, params.sizebytes);
+		if (!node_found) {
+			LOGE("failed to find node %d", ret);
+			ret = -EINVAL;
+			mutex_unlock(&priv->lock);
+			goto out;
+		}
+	}
 
 	ret = hgsl_mem_cache_op(hgsl->dev, node_found, internal,
 			gpuaddr - node_found->memdesc.gpuaddr, params.sizebytes, params.operation);
