@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved. */
+/* Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.*/
 
 #include <asm/arch_timer.h>
 #include <linux/debugfs.h>
@@ -1063,7 +1064,16 @@ void mhi_deinit_chan_ctxt(struct mhi_controller *mhi_cntrl,
 	vfree(buf_ring->base);
 
 	buf_ring->base = tre_ring->base = NULL;
+	tre_ring->ctxt_wp = NULL;
 	chan_ctxt->rbase = 0;
+	chan_ctxt->rlen = 0;
+	chan_ctxt->rp = chan_ctxt->wp = chan_ctxt->rbase;
+	tre_ring->rp = tre_ring->wp = tre_ring->base;
+	buf_ring->rp = buf_ring->wp = buf_ring->base;
+
+	/* Update to all cores */
+	smp_wmb();
+
 }
 
 int mhi_init_chan_ctxt(struct mhi_controller *mhi_cntrl,
