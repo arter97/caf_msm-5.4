@@ -47,6 +47,7 @@ enum hab_payload_type {
 #define DEVICE_GFX_NAME "hab_ogles"
 #define DEVICE_VID_NAME "hab_vid"
 #define DEVICE_VID2_NAME "hab_vid2"
+#define DEVICE_VID3_NAME "hab_vid3"
 #define DEVICE_MISC_NAME "hab_misc"
 #define DEVICE_QCPE1_NAME "hab_qcpe_vm1"
 #define DEVICE_CLK1_NAME "hab_clock_vm1"
