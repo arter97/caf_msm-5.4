@@ -788,7 +788,7 @@ static int slatecom_resume_l(void *handle)
 	}
 
 complete:
-	SLATECOM_ERR("slatecom resume completed\n");
+	SLATECOM_INFO("slatecom resume completed\n");
 	atomic_set(&state, SLATECOM_STATE_ACTIVE);
 	atomic_set(&slate_is_spi_active, 1);
 
@@ -1652,7 +1652,7 @@ static int slatecom_pm_suspend(struct device *dev)
 	struct slate_spi_priv *slate_spi = spi_get_drvdata(s_dev);
 	int ret = 0;
 
-	SLATECOM_ERR("entry\n");
+	SLATECOM_INFO("entry\n");
 
 	if (!(g_slav_status_reg & BIT(31))) {
 		SLATECOM_ERR("Slate boot is not complete, skip SPI suspend\n");
@@ -1676,7 +1676,7 @@ static int slatecom_pm_suspend(struct device *dev)
 	ret = request_threaded_irq(slate_irq, NULL, slate_irq_tasklet_hndlr_during_suspend,
 		IRQF_TRIGGER_RISING | IRQF_ONESHOT, "qcom-slate_spi", slate_spi);
 
-	SLATECOM_ERR("suspended\n");
+	SLATECOM_INFO("suspended\n");
 	return (atomic_read(&slate_is_spi_active)) ? -ECANCELED : 0;
 }
 
@@ -1687,7 +1687,7 @@ static int slatecom_pm_resume(struct device *dev)
 	struct slate_spi_priv *spi =
 		container_of(slate_com_drv, struct slate_spi_priv, lhandle);
 
-	SLATECOM_ERR("entry\n");
+	SLATECOM_INFO("entry\n");
 	free_irq(slate_irq, spi);
 	ret = request_threaded_irq(slate_irq, NULL, slate_irq_tasklet_hndlr,
 		IRQF_TRIGGER_HIGH | IRQF_ONESHOT, "qcom-slate_spi", spi);
@@ -1713,7 +1713,7 @@ static int slatecom_pm_resume(struct device *dev)
 		atomic_set(&slate_is_spi_active, 1);
 		atomic_set(&slate_is_runtime_suspend, 0);
 		ret = slatecom_resume_l(&clnt_handle);
-		SLATECOM_ERR("Slatecom resumed with : %d\n", ret);
+		SLATECOM_INFO("Slatecom resumed with : %d\n", ret);
 		mutex_unlock(&slate_task_mutex);
 
 		return ret;
@@ -1723,7 +1723,7 @@ static int slatecom_pm_resume(struct device *dev)
 static void slatecom_pm_complete(struct device *dev)
 {
 	/* resume if state is still SLATECOM_STATE_SUSPEND_PREPARE*/
-	SLATECOM_ERR("entry\n");
+	SLATECOM_INFO("entry\n");
 	if (atomic_read(&state) == SLATECOM_STATE_SUSPEND_PREPARE) {
 		slatecom_pm_resume(dev);
 	}
@@ -1737,7 +1737,7 @@ static int slatecom_pm_runtime_suspend(struct device *dev)
 	struct slate_spi_priv *slate_spi = spi_get_drvdata(s_dev);
 	int ret = 0;
 
-	SLATECOM_ERR("entry\n");
+	SLATECOM_INFO("entry\n");
 	clnt_handle.slate_spi = slate_spi;
 
 	if (atomic_read(&state) == SLATECOM_STATE_RUNTIME_SUSPEND)
@@ -1770,7 +1770,7 @@ static int slatecom_pm_runtime_resume(struct device *dev)
 	struct slate_spi_priv *spi =
 		container_of(slate_com_drv, struct slate_spi_priv, lhandle);
 
-	SLATECOM_ERR("entry\n");
+	SLATECOM_INFO("entry\n");
 	clnt_handle.slate_spi = spi;
 
 	if (atomic_read(&spi->irq_lock) == 1) {
@@ -1784,7 +1784,7 @@ static int slatecom_pm_runtime_resume(struct device *dev)
 	atomic_set(&slate_is_spi_active, 1);
 	atomic_set(&slate_is_runtime_suspend, 0);
 	ret = slatecom_resume_l(&clnt_handle);
-	SLATECOM_ERR("Slatecom Runtime resumed with : %d\n", ret);
+	SLATECOM_INFO("Slatecom Runtime resumed with : %d\n", ret);
 	mutex_unlock(&slate_task_mutex);
 	return ret;
 }
