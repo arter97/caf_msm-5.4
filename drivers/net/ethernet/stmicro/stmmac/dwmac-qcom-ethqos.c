@@ -2298,6 +2298,150 @@ bool qcom_ethqos_ipa_enabled(void)
 	return false;
 }
 
+void qcom_ethqos_serdes_init(struct qcom_ethqos *ethqos, int speed)
+{
+	int retry = 500;
+	unsigned int val;
+
+	/****************MODULE: SGMII_PHY_SGMII_PCS**********************************/
+	writel_relaxed(0x01, ethqos->sgmii_base + QSERDES_PCS_SW_RESET);
+	writel_relaxed(0x01, ethqos->sgmii_base + QSERDES_PCS_POWER_DOWN_CONTROL);
+
+	/***************** MODULE: QSERDES_COM_SGMII_QMP_PLL*********/
+	writel_relaxed(0x0F, ethqos->sgmii_base + QSERDES_COM_PLL_IVCO);
+	writel_relaxed(0x06, ethqos->sgmii_base + QSERDES_COM_CP_CTRL_MODE0);
+	writel_relaxed(0x16, ethqos->sgmii_base + QSERDES_COM_PLL_RCTRL_MODE0);
+	writel_relaxed(0x36, ethqos->sgmii_base + QSERDES_COM_PLL_CCTRL_MODE0);
+	writel_relaxed(0x1A, ethqos->sgmii_base + QSERDES_COM_SYSCLK_EN_SEL);
+	writel_relaxed(0x0A, ethqos->sgmii_base + QSERDES_COM_LOCK_CMP1_MODE0);
+	writel_relaxed(0x1A, ethqos->sgmii_base + QSERDES_COM_LOCK_CMP2_MODE0);
+	writel_relaxed(0x82, ethqos->sgmii_base + QSERDES_COM_DEC_START_MODE0);
+	writel_relaxed(0x55, ethqos->sgmii_base + QSERDES_COM_DIV_FRAC_START1_MODE0);
+	writel_relaxed(0x55, ethqos->sgmii_base + QSERDES_COM_DIV_FRAC_START2_MODE0);
+	writel_relaxed(0x03, ethqos->sgmii_base + QSERDES_COM_DIV_FRAC_START3_MODE0);
+	writel_relaxed(0x24, ethqos->sgmii_base + QSERDES_COM_VCO_TUNE1_MODE0);
+
+	writel_relaxed(0x02, ethqos->sgmii_base + QSERDES_COM_VCO_TUNE2_MODE0);
+	writel_relaxed(0x00, ethqos->sgmii_base + QSERDES_COM_VCO_TUNE_INITVAL2);
+	writel_relaxed(0x04, ethqos->sgmii_base + QSERDES_COM_HSCLK_SEL);
+	writel_relaxed(0x00, ethqos->sgmii_base + QSERDES_COM_HSCLK_HS_SWITCH_SEL);
+	writel_relaxed(0x0A, ethqos->sgmii_base + QSERDES_COM_CORECLK_DIV_MODE0);
+	writel_relaxed(0x00, ethqos->sgmii_base + QSERDES_COM_CORE_CLK_EN);
+	writel_relaxed(0xB9, ethqos->sgmii_base + QSERDES_COM_BIN_VCOCAL_CMP_CODE1_MODE0);
+	writel_relaxed(0x1E, ethqos->sgmii_base + QSERDES_COM_BIN_VCOCAL_CMP_CODE2_MODE0);
+	writel_relaxed(0x11, ethqos->sgmii_base + QSERDES_COM_BIN_VCOCAL_HSCLK_SEL);
+
+	/******************MODULE: QSERDES_TX0_SGMII_QMP_TX***********************/
+	writel_relaxed(0x05, ethqos->sgmii_base + QSERDES_TX_TX_BAND);
+	writel_relaxed(0x0A, ethqos->sgmii_base + QSERDES_TX_SLEW_CNTL);
+	writel_relaxed(0x09, ethqos->sgmii_base + QSERDES_TX_RES_CODE_LANE_OFFSET_TX);
+	writel_relaxed(0x09, ethqos->sgmii_base + QSERDES_TX_RES_CODE_LANE_OFFSET_RX);
+	writel_relaxed(0x05, ethqos->sgmii_base + QSERDES_TX_LANE_MODE_1);
+	writel_relaxed(0x00, ethqos->sgmii_base + QSERDES_TX_LANE_MODE_3);
+	writel_relaxed(0x12, ethqos->sgmii_base + QSERDES_TX_RCV_DETECT_LVL_2);
+	writel_relaxed(0x0C, ethqos->sgmii_base + QSERDES_TX_TRAN_DRVR_EMP_EN);
+
+	/*****************MODULE: QSERDES_RX0_SGMII_QMP_RX*******************/
+	writel_relaxed(0x0A, ethqos->sgmii_base + QSERDES_RX_UCDR_FO_GAIN);
+	writel_relaxed(0x06, ethqos->sgmii_base + QSERDES_RX_UCDR_SO_GAIN);
+	writel_relaxed(0x0A, ethqos->sgmii_base + QSERDES_RX_UCDR_FASTLOCK_FO_GAIN);
+	writel_relaxed(0x7F, ethqos->sgmii_base + QSERDES_RX_UCDR_SO_SATURATION_AND_ENABLE);
+	writel_relaxed(0x00, ethqos->sgmii_base + QSERDES_RX_UCDR_FASTLOCK_COUNT_LOW);
+	writel_relaxed(0x01, ethqos->sgmii_base + QSERDES_RX_UCDR_FASTLOCK_COUNT_HIGH);
+	writel_relaxed(0x81, ethqos->sgmii_base + QSERDES_RX_UCDR_PI_CONTROLS);
+	writel_relaxed(0x80, ethqos->sgmii_base + QSERDES_RX_UCDR_PI_CTRL2);
+	writel_relaxed(0x04, ethqos->sgmii_base + QSERDES_RX_RX_TERM_BW);
+	writel_relaxed(0x08, ethqos->sgmii_base + QSERDES_RX_VGA_CAL_CNTRL2);
+	writel_relaxed(0x0F, ethqos->sgmii_base + QSERDES_RX_GM_CAL);
+	writel_relaxed(0x04, ethqos->sgmii_base + QSERDES_RX_RX_EQU_ADAPTOR_CNTRL1);
+	writel_relaxed(0x00, ethqos->sgmii_base + QSERDES_RX_RX_EQU_ADAPTOR_CNTRL2);
+	writel_relaxed(0x4A, ethqos->sgmii_base + QSERDES_RX_RX_EQU_ADAPTOR_CNTRL3);
+	writel_relaxed(0x0A, ethqos->sgmii_base + QSERDES_RX_RX_EQU_ADAPTOR_CNTRL4);
+	writel_relaxed(0x80, ethqos->sgmii_base + QSERDES_RX_RX_IDAC_TSETTLE_LOW);
+	writel_relaxed(0x01, ethqos->sgmii_base + QSERDES_RX_RX_IDAC_TSETTLE_HIGH);
+	writel_relaxed(0x20, ethqos->sgmii_base + QSERDES_RX_RX_IDAC_MEASURE_TIME);
+	writel_relaxed(0x17, ethqos->sgmii_base + QSERDES_RX_RX_EQ_OFFSET_ADAPTOR_CNTRL1);
+	writel_relaxed(0x00, ethqos->sgmii_base + QSERDES_RX_RX_OFFSET_ADAPTOR_CNTRL2);
+	writel_relaxed(0x0F, ethqos->sgmii_base + QSERDES_RX_SIGDET_CNTRL);
+	writel_relaxed(0x1E, ethqos->sgmii_base + QSERDES_RX_SIGDET_DEGLITCH_CNTRL);
+	writel_relaxed(0x05, ethqos->sgmii_base + QSERDES_RX_RX_BAND);
+	writel_relaxed(0xE0, ethqos->sgmii_base + QSERDES_RX_RX_MODE_00_LOW);
+	writel_relaxed(0xC8, ethqos->sgmii_base + QSERDES_RX_RX_MODE_00_HIGH);
+	writel_relaxed(0xC8, ethqos->sgmii_base + QSERDES_RX_RX_MODE_00_HIGH2);
+	writel_relaxed(0x09, ethqos->sgmii_base + QSERDES_RX_RX_MODE_00_HIGH3);
+	writel_relaxed(0xB1, ethqos->sgmii_base + QSERDES_RX_RX_MODE_00_HIGH4);
+	writel_relaxed(0xE0, ethqos->sgmii_base + QSERDES_RX_RX_MODE_01_LOW);
+	writel_relaxed(0xC8, ethqos->sgmii_base + QSERDES_RX_RX_MODE_01_HIGH);
+	writel_relaxed(0xC8, ethqos->sgmii_base + QSERDES_RX_RX_MODE_01_HIGH2);
+	writel_relaxed(0x09, ethqos->sgmii_base + QSERDES_RX_RX_MODE_01_HIGH3);
+	writel_relaxed(0xB1, ethqos->sgmii_base + QSERDES_RX_RX_MODE_01_HIGH4);
+	writel_relaxed(0xE0, ethqos->sgmii_base + QSERDES_RX_RX_MODE_10_LOW);
+	writel_relaxed(0xC8, ethqos->sgmii_base + QSERDES_RX_RX_MODE_10_HIGH);
+	writel_relaxed(0xC8, ethqos->sgmii_base + QSERDES_RX_RX_MODE_10_HIGH2);
+	writel_relaxed(0x3B, ethqos->sgmii_base + QSERDES_RX_RX_MODE_10_HIGH3);
+	writel_relaxed(0xB7, ethqos->sgmii_base + QSERDES_RX_RX_MODE_10_HIGH4);
+	writel_relaxed(0x0C, ethqos->sgmii_base + QSERDES_RX_DCC_CTRL1);
+
+	/****************MODULE: SGMII_PHY_SGMII_PCS**********************************/
+	writel_relaxed(0x0C, ethqos->sgmii_base + QSERDES_PCS_LINE_RESET_TIME);
+	writel_relaxed(0x1F, ethqos->sgmii_base + QSERDES_PCS_TX_LARGE_AMP_DRV_LVL);
+	writel_relaxed(0x03, ethqos->sgmii_base + QSERDES_PCS_TX_SMALL_AMP_DRV_LVL);
+	writel_relaxed(0x83, ethqos->sgmii_base + QSERDES_PCS_TX_MID_TERM_CTRL1);
+	writel_relaxed(0x08, ethqos->sgmii_base + QSERDES_PCS_TX_MID_TERM_CTRL2);
+	writel_relaxed(0x0C, ethqos->sgmii_base + QSERDES_PCS_SGMII_MISC_CTRL8);
+	writel_relaxed(0x00, ethqos->sgmii_base + QSERDES_PCS_SW_RESET);
+	msleep(50);
+	writel_relaxed(0x01, ethqos->sgmii_base + QSERDES_PCS_PHY_START);
+	msleep(50);
+
+	do {
+		val = readl_relaxed(ethqos->sgmii_base + QSERDES_COM_C_READY_STATUS);
+		val &= BIT(0);
+		if (val)
+			break;
+		usleep_range(1000, 1500);
+		retry--;
+	} while (retry > 0);
+	if (!retry)
+		ETHQOSERR("QSERDES_COM_C_READY_STATUS timedout with retry = %d\n", retry);
+
+	retry = 500;
+	do {
+		val = readl_relaxed(ethqos->sgmii_base + QSERDES_PCS_PCS_READY_STATUS);
+		val &= BIT(0);
+		if (val)
+			break;
+		usleep_range(1000, 1500);
+		retry--;
+	} while (retry > 0);
+	if (!retry)
+		ETHQOSERR("PCS_READY timedout with retry = %d\n", retry);
+
+	retry = 500;
+	do {
+		val = readl_relaxed(ethqos->sgmii_base + QSERDES_PCS_PCS_READY_STATUS);
+		val &= BIT(7);
+		if (val)
+			break;
+		usleep_range(1000, 1500);
+		retry--;
+	} while (retry > 0);
+	if (!retry)
+		ETHQOSERR("SGMIIPHY_READY timedout with retry = %d\n", retry);
+
+	retry = 5000;
+	do {
+		val = readl_relaxed(ethqos->sgmii_base + QSERDES_COM_CMN_STATUS);
+		val &= BIT(1);
+		if (val)
+			break;
+		usleep_range(1000, 1500);
+		retry--;
+	} while (retry > 0);
+	if (!retry)
+		ETHQOSERR("PLL Lock Status timedout with retry = %d\n", retry);
+}
+
 static int _qcom_ethqos_probe(void *arg)
 {
 	struct platform_device *pdev = (struct platform_device *)arg;
