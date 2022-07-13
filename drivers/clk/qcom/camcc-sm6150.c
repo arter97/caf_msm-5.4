@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk-provider.h>
@@ -823,6 +824,13 @@ static const struct freq_tbl ftbl_cam_cc_mclk0_clk_src[] = {
 	F(19200000, P_BI_TCXO, 1, 0, 0),
 	F(24000000, P_CAM_CC_PLL2_OUT_AUX2, 10, 1, 2),
 	F(34285714, P_CAM_CC_PLL2_OUT_AUX2, 14, 0, 0),
+	{ }
+};
+
+static const struct freq_tbl ftbl_cam_cc_mclk1_clk_src[] = {
+	F(19200000, P_BI_TCXO, 1, 0, 0),
+	F(24000000, P_CAM_CC_PLL2_OUT_AUX2, 10, 1, 2),
+	F(34285714, P_CAM_CC_PLL2_OUT_AUX2, 14, 0, 0),
 	F(37209304, P_CAM_CC_PLL2_OUT_AUX2, 12.9, 0, 0),
 	{ }
 };
@@ -853,7 +861,7 @@ static struct clk_rcg2 cam_cc_mclk1_clk_src = {
 	.mnd_width = 8,
 	.hid_width = 5,
 	.parent_map = cam_cc_parent_map_3,
-	.freq_tbl = ftbl_cam_cc_mclk0_clk_src,
+	.freq_tbl = ftbl_cam_cc_mclk1_clk_src,
 	.enable_safe_config = true,
 	.clkr.hw.init = &(struct clk_init_data){
 		.name = "cam_cc_mclk1_clk_src",
