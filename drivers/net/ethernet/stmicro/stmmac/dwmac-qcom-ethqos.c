@@ -3726,6 +3726,7 @@ ethqos_emac_mem_base(ethqos);
 	ethqos->ipa_enabled = true;
 	priv->rx_queue[IPA_DMA_RX_CH].skip_sw = true;
 	priv->tx_queue[IPA_DMA_TX_CH].skip_sw = true;
+	ethqos_ipa_offload_event_handler(ethqos, EV_PROBE_INIT);
 #endif
 
 	rgmii_dump(ethqos);
@@ -3874,7 +3875,9 @@ static int qcom_ethqos_suspend(struct device *dev)
 	int ret;
 	struct stmmac_priv *priv;
 	struct plat_stmmacenet_data *plat;
+	int allow_suspend = 1;
 
+	ETHQOSDBG("Suspend Enter\n");
 	if (of_device_is_compatible(dev->of_node, "qcom,emac-smmu-embedded")) {
 		ETHQOSDBG("smmu return\n");
 		return 0;
@@ -3886,6 +3889,12 @@ static int qcom_ethqos_suspend(struct device *dev)
 
 	ndev = dev_get_drvdata(dev);
 
+	ethqos_ipa_offload_event_handler(&allow_suspend, EV_DPM_SUSPEND);
+	if (!allow_suspend) {
+		enable_irq_wake(ndev->irq);
+		ETHQOSDBG("Suspend Exit enable IRQ\n");
+		return 0;
+	}
 	if (!ndev || !netif_running(ndev))
 		return -EINVAL;
 	priv = netdev_priv(ndev);
@@ -3965,6 +3974,13 @@ static int qcom_ethqos_resume(struct device *dev)
 		ETHQOSINFO("enable phy at resume\n");
 		ethqos_phy_power_on(ethqos);
 	}
+
+	if (!ethqos->clks_suspended) {
+		disable_irq_wake(ndev->irq);
+		ETHQOSDBG("Resume Exit disable IRQ\n");
+		return 0;
+	}
+
 	qcom_ethqos_phy_resume_clks(ethqos);
 
 	if (ethqos->current_phy_mode == DISABLE_PHY_SUSPEND_ENABLE_RESUME) {
@@ -3995,6 +4011,8 @@ static int qcom_ethqos_resume(struct device *dev)
 			      0, RGMII_IO_MACRO_CONFIG);
 		ETHQOSINFO("Loopback EN Disabled\n");
 	}
+
+	ethqos_ipa_offload_event_handler(NULL, EV_DPM_RESUME);
 
 	ETHQOSDBG("<--Resume Exit\n");
 	return ret;
