@@ -2017,6 +2017,16 @@ int usb_gsi_ep_op(struct usb_ep *ep, void *op_data, enum gsi_ep_op op)
 	case GSI_EP_OP_DISABLE:
 		ret = ep->ops->disable(ep);
 		break;
+	case GSI_DYNAMIC_EP_INTR_CALC:
+		/*
+		 * Some targets have more number of H/w accelerated EP's
+		 * in order to support them, need to increase GSI
+		 * interrupts, this case will do the same.
+		 */
+		request = (struct usb_gsi_request *)op_data;
+		request->ep_intr_num =
+			(dwc->num_gsi_eps - ((dwc->num_eps - 1) - dep->number));
+		break;
 	default:
 		dev_err(mdwc->dev, "%s: Invalid opcode GSI EP\n", __func__);
 	}
