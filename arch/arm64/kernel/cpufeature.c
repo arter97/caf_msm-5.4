@@ -935,18 +935,6 @@ static bool has_cache_idc(const struct arm64_cpu_capabilities *entry,
 	return ctr & BIT(CTR_IDC_SHIFT);
 }
 
-static void cpu_emulate_effective_ctr(const struct arm64_cpu_capabilities *__unused)
-{
-	/*
-	 * If the CPU exposes raw CTR_EL0.IDC = 0, while effectively
-	 * CTR_EL0.IDC = 1 (from CLIDR values), we need to trap accesses
-	 * to the CTR_EL0 on this CPU and emulate it with the real/safe
-	 * value.
-	 */
-	if (!(read_cpuid_cachetype() & BIT(CTR_IDC_SHIFT)))
-		sysreg_clear_set(sctlr_el1, SCTLR_EL1_UCT, 0);
-}
-
 static bool has_cache_dic(const struct arm64_cpu_capabilities *entry,
 			  int scope)
 {
@@ -972,6 +960,31 @@ has_useable_cnp(const struct arm64_cpu_capabilities *entry, int scope)
 		return false;
 
 	return has_cpuid_feature(entry, scope);
+}
+
+#ifdef CONFIG_UNMAP_KERNEL_AT_EL0
+bool kpti_ng = true;
+#else
+bool kpti_ng = false;
+#endif
+void check_cpuid_kpti(void)
+{
+	struct arm64_cpu_capabilities entry;
+	static bool checked;
+
+	if (checked)
+		return;
+
+	entry.sys_reg = SYS_ID_AA64PFR0_EL1;
+	entry.field_pos = ID_AA64PFR0_CSV3_SHIFT;
+	entry.min_field_value = 1;
+
+	if (has_cpuid_feature(&entry, SCOPE_LOCAL_CPU))
+		kpti_ng = false;
+	else
+		kpti_ng = true;
+
+	checked = true;
 }
 
 static bool __meltdown_safe = true;
@@ -1043,49 +1056,6 @@ static bool unmap_kernel_at_el0(const struct arm64_cpu_capabilities *entry,
 	return !meltdown_safe;
 }
 
-#ifdef CONFIG_UNMAP_KERNEL_AT_EL0
-static void __nocfi
-kpti_install_ng_mappings(const struct arm64_cpu_capabilities *__unused)
-{
-	typedef void (kpti_remap_fn)(int, int, phys_addr_t);
-	extern kpti_remap_fn idmap_kpti_install_ng_mappings;
-	kpti_remap_fn *remap_fn;
-
-	static bool kpti_applied = false;
-	int cpu = smp_processor_id();
-
-	if (__this_cpu_read(this_cpu_vector) == vectors) {
-		const char *v = arm64_get_bp_hardening_vector(EL1_VECTOR_KPTI);
-
-		__this_cpu_write(this_cpu_vector, v);
-	}
-
-	/*
-	 * We don't need to rewrite the page-tables if either we've done
-	 * it already or we have KASLR enabled and therefore have not
-	 * created any global mappings at all.
-	 */
-	if (kpti_applied || kaslr_offset() > 0)
-		return;
-
-	remap_fn = (void *)__pa_function(idmap_kpti_install_ng_mappings);
-
-	cpu_install_idmap();
-	remap_fn(cpu, num_online_cpus(), __pa_symbol(swapper_pg_dir));
-	cpu_uninstall_idmap();
-
-	if (!cpu)
-		kpti_applied = true;
-
-	return;
-}
-#else
-static void
-kpti_install_ng_mappings(const struct arm64_cpu_capabilities *__unused)
-{
-}
-#endif	/* CONFIG_UNMAP_KERNEL_AT_EL0 */
-
 static int __init parse_kpti(char *str)
 {
 	bool enabled;
@@ -1125,12 +1095,6 @@ static bool cpu_can_use_dbm(const struct arm64_cpu_capabilities *cap)
 {
 	return has_cpuid_feature(cap, SCOPE_LOCAL_CPU) &&
 	       !cpu_has_broken_dbm();
-}
-
-static void cpu_enable_hw_dbm(struct arm64_cpu_capabilities const *cap)
-{
-	if (cpu_can_use_dbm(cap))
-		__cpu_enable_hw_dbm();
 }
 
 static bool has_hw_dbm(const struct arm64_cpu_capabilities *cap,
@@ -1282,28 +1246,6 @@ static void cpu_enable_ssbs(const struct arm64_cpu_capabilities *__unused)
 }
 #endif /* CONFIG_ARM64_SSBD */
 
-#ifdef CONFIG_ARM64_PAN
-static void cpu_enable_pan(const struct arm64_cpu_capabilities *__unused)
-{
-	/*
-	 * We modify PSTATE. This won't work from irq context as the PSTATE
-	 * is discarded once we return from the exception.
-	 */
-	WARN_ON_ONCE(in_interrupt());
-
-	sysreg_clear_set(sctlr_el1, SCTLR_EL1_SPAN, 0);
-	asm(SET_PSTATE_PAN(1));
-}
-#endif /* CONFIG_ARM64_PAN */
-
-#ifdef CONFIG_ARM64_RAS_EXTN
-static void cpu_clear_disr(const struct arm64_cpu_capabilities *__unused)
-{
-	/* Firmware may have left a deferred SError in this register. */
-	write_sysreg_s(0, SYS_DISR_EL1);
-}
-#endif /* CONFIG_ARM64_RAS_EXTN */
-
 #ifdef CONFIG_ARM64_PTR_AUTH
 static void cpu_enable_address_auth(struct arm64_cpu_capabilities const *cap)
 {
@@ -1349,7 +1291,7 @@ static const struct arm64_cpu_capabilities arm64_features[] = {
 		.field_pos = ID_AA64MMFR1_PAN_SHIFT,
 		.sign = FTR_UNSIGNED,
 		.min_field_value = 1,
-		.cpu_enable = cpu_enable_pan,
+		//.cpu_enable = cpu_enable_pan,
 	},
 #endif /* CONFIG_ARM64_PAN */
 #if defined(CONFIG_AS_LSE) && defined(CONFIG_ARM64_LSE_ATOMICS)
@@ -1424,7 +1366,7 @@ static const struct arm64_cpu_capabilities arm64_features[] = {
 		.field_pos = ID_AA64PFR0_CSV3_SHIFT,
 		.min_field_value = 1,
 		.matches = unmap_kernel_at_el0,
-		.cpu_enable = kpti_install_ng_mappings,
+		//.cpu_enable = kpti_install_ng_mappings,
 	},
 	{
 		/* FP/SIMD is not implemented */
@@ -1477,7 +1419,7 @@ static const struct arm64_cpu_capabilities arm64_features[] = {
 		.sign = FTR_UNSIGNED,
 		.field_pos = ID_AA64PFR0_RAS_SHIFT,
 		.min_field_value = ID_AA64PFR0_RAS_V1,
-		.cpu_enable = cpu_clear_disr,
+		//.cpu_enable = cpu_clear_disr,
 	},
 #endif /* CONFIG_ARM64_RAS_EXTN */
 #ifdef CONFIG_ARM64_AMU_EXTN
@@ -1503,7 +1445,7 @@ static const struct arm64_cpu_capabilities arm64_features[] = {
 		.capability = ARM64_HAS_CACHE_IDC,
 		.type = ARM64_CPUCAP_SYSTEM_FEATURE,
 		.matches = has_cache_idc,
-		.cpu_enable = cpu_emulate_effective_ctr,
+		//.cpu_enable = cpu_emulate_effective_ctr,
 	},
 	{
 		.desc = "Instruction cache invalidation not required for I/D coherence",
@@ -1539,7 +1481,7 @@ static const struct arm64_cpu_capabilities arm64_features[] = {
 		.field_pos = ID_AA64MMFR1_HADBS_SHIFT,
 		.min_field_value = 2,
 		.matches = has_hw_dbm,
-		.cpu_enable = cpu_enable_hw_dbm,
+		//.cpu_enable = cpu_enable_hw_dbm,
 	},
 #endif
 	{
@@ -1574,7 +1516,7 @@ static const struct arm64_cpu_capabilities arm64_features[] = {
 		.sign = FTR_UNSIGNED,
 		.field_pos = ID_AA64MMFR2_CNP_SHIFT,
 		.min_field_value = 1,
-		.cpu_enable = cpu_enable_cnp,
+		//.cpu_enable = cpu_enable_cnp,
 	},
 #endif
 	{
@@ -1868,6 +1810,26 @@ static void update_cpu_capabilities(u16 scope_mask)
 	}
 }
 
+static bool cpu_has_non_boot_scope_capabilities(void)
+{
+	int i;
+	u16 non_boot_scope = SCOPE_ALL & ~SCOPE_BOOT_CPU;
+
+	for_each_available_cap(i) {
+		const struct arm64_cpu_capabilities *cap = cpu_hwcaps_ptrs[i];
+
+		if (WARN_ON(!cap))
+			continue;
+
+		if (!(cap->type & non_boot_scope))
+			continue;
+
+		if (cap->cpu_enable)
+			return true;
+	}
+	return false;
+}
+
 /*
  * Enable all the available capabilities on this CPU. The capabilities
  * with BOOT_CPU scope are handled separately and hence skipped here.
@@ -1937,7 +1899,7 @@ static void __init enable_cpu_capabilities(u16 scope_mask)
 	 * instead of on_each_cpu() which uses an IPI, giving us a
 	 * PSTATE that disappears when we return.
 	 */
-	if (!boot_scope)
+	if (!boot_scope && cpu_has_non_boot_scope_capabilities())
 		stop_machine(cpu_enable_non_boot_scope_capabilities,
 			     NULL, cpu_online_mask);
 }

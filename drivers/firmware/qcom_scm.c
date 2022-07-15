@@ -17,6 +17,7 @@
 #include <linux/clk.h>
 #include <linux/reset-controller.h>
 #include <soc/qcom/qseecom_scm.h>
+#include <linux/async.h>
 
 #include "qcom_scm.h"
 #include "qtee_shmbridge_internal.h"
@@ -1304,7 +1305,7 @@ static struct platform_driver qcom_scm_driver = {
 	.shutdown = qcom_scm_shutdown,
 };
 
-static int __init qcom_scm_init(void)
+int __init qcom_scm_init(void)
 {
 	int ret;
 
@@ -1314,7 +1315,7 @@ static int __init qcom_scm_init(void)
 
 	return qtee_shmbridge_driver_init();
 }
-subsys_initcall(qcom_scm_init);
+//subsys_initcall(qcom_scm_init);
 
 #ifdef CONFIG_QCOM_RTIC
 static int __init scm_mem_protection_init(void)

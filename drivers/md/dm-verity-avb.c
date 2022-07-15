@@ -214,7 +214,7 @@ static void __exit dm_verity_avb_exit(void)
 {
 }
 
-module_init(dm_verity_avb_init);
+subsys_initcall(dm_verity_avb_init);
 module_exit(dm_verity_avb_exit);
 
 MODULE_AUTHOR("David Zeuthen <zeuthen@google.com>");

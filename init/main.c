@@ -94,6 +94,7 @@
 #include <linux/rodata_test.h>
 #include <linux/jump_label.h>
 #include <linux/mem_encrypt.h>
+#include <uapi/linux/sched/types.h>
 
 #include <asm/io.h>
 #include <asm/bugs.h>
@@ -1034,11 +1035,22 @@ static void __init do_initcalls(void)
  */
 static void __init do_basic_setup(void)
 {
+	struct cpumask cpumask;
+	struct sched_param param = { .sched_priority = MAX_RT_PRIO - 1 };
+
 	cpuset_init_smp();
 	driver_init();
 	init_irq_proc();
 	do_ctors();
 	usermodehelper_enable();
+	if (sched_setscheduler(current, SCHED_FIFO, &param))
+		pr_err("sched_setscheduler in %s failes\n", __func__);
+	cpumask_clear(&cpumask);
+	cpumask_set_cpu(1, &cpumask);
+	cpumask_set_cpu(2, &cpumask);
+	cpumask_set_cpu(3, &cpumask);
+	if (sched_setaffinity(0, &cpumask))
+		pr_err("sched_setaffinity in %s failes\n", __func__);
 	do_initcalls();
 }
 
@@ -1097,7 +1109,8 @@ static void mark_readonly(void)
 		 * flushed so that we don't hit false positives looking for
 		 * insecure pages which are W+X.
 		 */
-		rcu_barrier();
+		if (initrd_start)
+			rcu_barrier();
 		mark_rodata_ro();
 		rodata_test();
 	} else
@@ -1118,6 +1131,8 @@ void __weak free_initmem(void)
 static int __ref kernel_init(void *unused)
 {
 	int ret;
+	struct sched_param param = { .sched_priority = 0 };
+	struct cpumask cpumask;
 
 	kernel_init_freeable();
 	/* need to finish all async __init code before freeing the memory */
@@ -1149,6 +1164,15 @@ static int __ref kernel_init(void *unused)
 		pr_err("Failed to execute %s (error %d)\n",
 		       ramdisk_execute_command, ret);
 	}
+
+	cpumask_setall(&cpumask);
+	if (sched_setaffinity(0, &cpumask))
+		pr_err("sched_setaffinity in %s failes\n", __func__);
+	if (sched_setscheduler(current, SCHED_NORMAL, &param))
+		pr_err("sched_setscheduler in %s failes\n", __func__);
+	/* Move init over to a non-isolated CPU */
+	if (set_cpus_allowed_ptr(current, housekeeping_cpumask(HK_FLAG_DOMAIN)) < 0)
+		BUG();
 
 	/*
 	 * We try each of these until one succeeds.

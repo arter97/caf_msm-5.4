@@ -124,6 +124,7 @@ static struct platform_driver qcom_soc_wdt_driver = {
 		.name = "msm_watchdog",
 		.pm = &qcom_soc_dev_pm_ops,
 		.of_match_table = qcom_soc_match_table,
+		.probe_type		= PROBE_PREFER_ASYNCHRONOUS,
 	},
 };
 
