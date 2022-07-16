@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022,2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __HAB_H
 #define __HAB_H
@@ -405,6 +405,7 @@ int hab_vchan_recv(struct uhab_context *ctx,
 		struct hab_message **msg,
 		int vcid,
 		int *rsize,
+		unsigned int timeout,
 		unsigned int flags);
 void hab_vchan_stop(struct virtual_channel *vchan);
 void hab_vchans_stop(struct physical_channel *pchan);
@@ -466,7 +467,8 @@ int habmm_imp_hyp_map_check(void *imp_ctx, struct export_desc *exp);
 
 void hab_msg_free(struct hab_message *message);
 int hab_msg_dequeue(struct virtual_channel *vchan,
-		struct hab_message **msg, int *rsize, unsigned int flags);
+		struct hab_message **msg, int *rsize, unsigned int timeout,
+		unsigned int flags);
 
 int hab_msg_recv(struct physical_channel *pchan,
 		struct hab_header *header);

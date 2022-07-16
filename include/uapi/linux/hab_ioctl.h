@@ -18,6 +18,7 @@ struct hab_recv {
 	__u64 data;
 	__s32 vcid;
 	__u32 sizebytes;
+	__u32 timeout;
 	__u32 flags;
 };
 

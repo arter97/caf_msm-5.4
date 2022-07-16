@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022,2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/of_device.h>
 #include "hab.h"
@@ -191,7 +191,8 @@ static long hab_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 		}
 
 		ret = hab_vchan_recv(ctx, &msg, recv_param->vcid,
-				&recv_param->sizebytes, recv_param->flags);
+				&recv_param->sizebytes, recv_param->timeout,
+				recv_param->flags);
 
 		if (msg) {
 			if (ret == 0)

@@ -632,6 +632,7 @@ int hab_vchan_recv(struct uhab_context *ctx,
 				struct hab_message **message,
 				int vcid,
 				int *rsize,
+				unsigned int timeout,
 				unsigned int flags)
 {
 	struct virtual_channel *vchan;
@@ -656,15 +657,8 @@ int hab_vchan_recv(struct uhab_context *ctx,
 		physical_channel_rx_dispatch((unsigned long) vchan->pchan);
 	}
 
-	ret = hab_msg_dequeue(vchan, message, rsize, flags);
-	if (!(*message)) {
-		if (nonblocking_flag)
-			ret = -EAGAIN;
-		else if (vchan->otherend_closed)
-			ret = -ENODEV;
-		else if (ret == -ERESTARTSYS)
-			ret = -EINTR;
-	} else if (!ret) {
+	ret = hab_msg_dequeue(vchan, message, rsize, timeout, flags);
+	if (!ret && *message) {
 		/* log msg recv timestamp: exit hab_vchan_recv */
 		trace_hab_vchan_recv_done(vchan, *message);
 
