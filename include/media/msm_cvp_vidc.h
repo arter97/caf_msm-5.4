@@ -1,13 +1,19 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * CVP driver functions shared with video driver.
  */
 
 #ifndef _MSM_CVP_VIDC_H_
 #define _MSM_CVP_VIDC_H_
+
+#if IS_ENABLED(CONFIG_MSM_CVP_V2)
+#include <uapi/media/msm_cvp_private_2.0.h>
+#else
 #include <uapi/media/msm_cvp_private.h>
+#endif
 
 /**
  * struct cvp_kmd_usecase_desc - store generic usecase
@@ -37,7 +43,7 @@ struct cvp_kmd_usecase_desc {
 #define VIDEO_NONREALTIME 1
 #define VIDEO_REALTIME 5
 
-#if IS_ENABLED(CONFIG_MSM_CVP)
+#if IS_ENABLED(CONFIG_MSM_CVP_V2) || IS_ENABLED(CONFIG_MSM_CVP)
 void *msm_cvp_open(int core_id, int session_type);
 int msm_cvp_close(void *instance);
 int msm_cvp_private(void *cvp_inst, unsigned int cmd, struct cvp_kmd_arg *arg);
