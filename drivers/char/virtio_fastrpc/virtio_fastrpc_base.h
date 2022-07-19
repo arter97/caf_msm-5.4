@@ -18,6 +18,9 @@
 #define PID_SIZE		10
 #define FASTRPC_MSG_MAX	256
 
+#define CDSP_DOMAIN_ID	3
+#define CDSP1_DOMAIN_ID	4
+
 struct fastrpc_dsp_capabilities {
 	uint32_t is_cached;	/* ! Flag if dsp attributes are cached */
 	uint32_t dsp_attributes[FASTRPC_MAX_DSP_ATTRIBUTES];

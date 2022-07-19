@@ -191,6 +191,21 @@ enum fastrpc_proc_attr {
 	FASTRPC_MODE_PRIVILEGED	= (1 << 6),
 };
 
+static void virt_free_msg(struct fastrpc_file *fl, struct virt_fastrpc_msg *msg)
+{
+	struct fastrpc_apps *me = fl->apps;
+	unsigned long flags;
+
+	spin_lock_irqsave(&me->msglock, flags);
+	if (me->msgtable[msg->msgid] == msg)
+		me->msgtable[msg->msgid] = NULL;
+	else
+		dev_err(me->dev, "can't find msg %d in table\n", msg->msgid);
+	spin_unlock_irqrestore(&me->msglock, flags);
+
+	kfree(msg);
+}
+
 static struct virt_fastrpc_msg *virt_alloc_msg(struct fastrpc_file *fl, int size)
 {
 	struct fastrpc_apps *me = fl->apps;
@@ -208,14 +223,6 @@ static struct virt_fastrpc_msg *virt_alloc_msg(struct fastrpc_file *fl, int size
 	if (!msg)
 		return NULL;
 
-	buf = get_a_tx_buf(fl);
-	if (!buf) {
-		dev_err(me->dev, "can't get tx buffer\n");
-		kfree(msg);
-		return NULL;
-	}
-
-	msg->txbuf = buf;
 	init_completion(&msg->work);
 	spin_lock_irqsave(&me->msglock, flags);
 	for (i = 0; i < FASTRPC_MSG_MAX; i++) {
@@ -232,28 +239,23 @@ static struct virt_fastrpc_msg *virt_alloc_msg(struct fastrpc_file *fl, int size
 		kfree(msg);
 		return NULL;
 	}
+
+	buf = get_a_tx_buf(fl);
+	if (!buf) {
+		dev_err(me->dev, "can't get tx buffer\n");
+		virt_free_msg(fl, msg);
+		return NULL;
+	}
+
+	msg->txbuf = buf;
 	return msg;
-}
-
-static void virt_free_msg(struct fastrpc_file *fl, struct virt_fastrpc_msg *msg)
-{
-	struct fastrpc_apps *me = fl->apps;
-	unsigned long flags;
-
-	spin_lock_irqsave(&me->msglock, flags);
-	if (me->msgtable[msg->msgid] == msg)
-		me->msgtable[msg->msgid] = NULL;
-	else
-		dev_err(me->dev, "can't find msg %d in table\n", msg->msgid);
-	spin_unlock_irqrestore(&me->msglock, flags);
-
-	kfree(msg);
 }
 
 static void context_list_ctor(struct fastrpc_ctx_lst *me)
 {
 	INIT_HLIST_HEAD(&me->interrupted);
 	INIT_HLIST_HEAD(&me->pending);
+	INIT_LIST_HEAD(&me->async_queue);
 }
 
 struct fastrpc_file *fastrpc_file_alloc(void)
@@ -266,9 +268,11 @@ struct fastrpc_file *fastrpc_file_alloc(void)
 		return NULL;
 	context_list_ctor(&fl->clst);
 	spin_lock_init(&fl->hlock);
+	spin_lock_init(&fl->aqlock);
 	INIT_HLIST_HEAD(&fl->maps);
 	INIT_HLIST_HEAD(&fl->cached_bufs);
 	INIT_HLIST_HEAD(&fl->remote_bufs);
+	init_waitqueue_head(&fl->async_wait_queue);
 	fl->tgid = current->tgid;
 	fl->tgid_open = current->tgid;
 	fl->mode = FASTRPC_MODE_SERIAL;
@@ -441,6 +445,7 @@ bail:
 int fastrpc_file_free(struct fastrpc_file *fl)
 {
 	struct fastrpc_mmap *map = NULL, *lmap = NULL;
+	unsigned long flags;
 
 	if (!fl)
 		return 0;
@@ -452,6 +457,12 @@ int fastrpc_file_free(struct fastrpc_file *fl)
 	spin_lock(&fl->hlock);
 	fl->file_close = 1;
 	spin_unlock(&fl->hlock);
+
+	/* Dummy wake up to exit Async worker thread */
+	spin_lock_irqsave(&fl->aqlock, flags);
+	atomic_add(1, &fl->async_queue_job_count);
+	wake_up_interruptible(&fl->async_wait_queue);
+	spin_unlock_irqrestore(&fl->aqlock, flags);
 
 	fastrpc_context_list_dtor(fl);
 	fastrpc_cached_buf_list_free(fl);
@@ -508,7 +519,7 @@ static int context_restore_interrupted(struct fastrpc_file *fl,
 }
 
 static int context_alloc(struct fastrpc_file *fl,
-			struct fastrpc_ioctl_invoke_perf *invokefd,
+			struct fastrpc_ioctl_invoke_async *invokefd,
 			struct fastrpc_invoke_ctx **po)
 {
 	int err = 0, bufs, size = 0;
@@ -527,6 +538,7 @@ static int context_alloc(struct fastrpc_file *fl,
 
 	INIT_HLIST_NODE(&ctx->hn);
 	hlist_add_fake(&ctx->hn);
+	INIT_LIST_HEAD(&ctx->asyncn);
 	ctx->fl = fl;
 	ctx->maps = (struct fastrpc_mmap **)(&ctx[1]);
 	ctx->lpra = (remote_arg_t *)(&ctx->maps[bufs]);
@@ -570,6 +582,13 @@ static int context_alloc(struct fastrpc_file *fl,
 		}
 		memset(ctx->perf, 0, sizeof(*(ctx->perf)));
 		ctx->perf->tid = fl->tgid;
+	}
+
+	if (invokefd->job) {
+		K_COPY_FROM_USER(err, 0, &ctx->asyncjob, invokefd->job,
+				sizeof(ctx->asyncjob));
+		if (err)
+			goto bail;
 	}
 
 	spin_lock(&fl->hlock);
@@ -727,6 +746,7 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 		err = -ENOMEM;
 		goto bail;
 	}
+	ctx->msg->ctx = ctx;
 
 	ctx->size = size;
 	vmsg = (struct virt_invoke_msg *)ctx->msg->txbuf;
@@ -1010,8 +1030,20 @@ static void fastrpc_update_invoke_count(uint32_t handle, uint64_t *perf_counter,
 	}
 }
 
+void fastrpc_queue_completed_async_job(struct fastrpc_invoke_ctx *ctx)
+{
+	struct fastrpc_file *fl = ctx->fl;
+	unsigned long flags;
+
+	spin_lock_irqsave(&fl->aqlock, flags);
+	list_add_tail(&ctx->asyncn, &fl->clst.async_queue);
+	atomic_add(1, &fl->async_queue_job_count);
+	wake_up_interruptible(&fl->async_wait_queue);
+	spin_unlock_irqrestore(&fl->aqlock, flags);
+}
+
 int fastrpc_internal_invoke(struct fastrpc_file *fl,
-			uint32_t mode, struct fastrpc_ioctl_invoke_perf *inv)
+			uint32_t mode, struct fastrpc_ioctl_invoke_async *inv)
 {
 	struct fastrpc_ioctl_invoke *invoke = &inv->inv;
 	struct fastrpc_apps *me = fl->apps;
@@ -1019,6 +1051,7 @@ int fastrpc_internal_invoke(struct fastrpc_file *fl,
 	int err = 0, interrupted = 0;
 	struct timespec64 invoket = {0};
 	uint64_t *perf_counter = NULL;
+	bool isasyncinvoke = false;
 
 	VERIFY(err, invoke->handle != FASTRPC_STATIC_HANDLE_KERNEL);
 	if (err) {
@@ -1047,6 +1080,7 @@ int fastrpc_internal_invoke(struct fastrpc_file *fl,
 	VERIFY(err, 0 == context_alloc(fl, inv, &ctx));
 	if (err)
 		goto bail;
+	isasyncinvoke = (ctx->asyncjob.isasyncjob ? true : false);
 
 	if (fl->profile)
 		perf_counter = (uint64_t *)ctx->perf + PERF_COUNT;
@@ -1063,6 +1097,8 @@ int fastrpc_internal_invoke(struct fastrpc_file *fl,
 	if (err)
 		goto bail;
 
+	if (isasyncinvoke)
+		goto invoke_end;
 wait:
 	interrupted = wait_for_completion_interruptible(&ctx->msg->work);
 	VERIFY(err, 0 == (err = interrupted));
@@ -1087,6 +1123,154 @@ bail:
 		context_free(ctx);
 	}
 
+invoke_end:
+	if (fl->profile && !interrupted && isasyncinvoke)
+		fastrpc_update_invoke_count(invoke->handle, perf_counter,
+				&invoket);
+	return err;
+}
+
+static int fastrpc_wait_on_async_queue(
+			struct fastrpc_ioctl_async_response *async_res,
+			struct fastrpc_file *fl)
+{
+	int err = 0, ierr = 0, interrupted = 0;
+	struct fastrpc_invoke_ctx *ctx = NULL, *ictx = NULL, *n = NULL;
+	struct virt_invoke_msg *rsp = NULL;
+	unsigned long flags;
+	uint64_t *perf_counter = NULL;
+
+read_async_job:
+	interrupted = wait_event_interruptible(fl->async_wait_queue,
+				atomic_read(&fl->async_queue_job_count));
+
+	if (!fl || fl->file_close >= 1) {
+		err = -EBADF;
+		goto bail;
+	}
+	VERIFY(err, 0 == (err = interrupted));
+	if (err)
+		goto bail;
+
+	spin_lock_irqsave(&fl->aqlock, flags);
+	list_for_each_entry_safe(ictx, n, &fl->clst.async_queue, asyncn) {
+		list_del_init(&ictx->asyncn);
+		atomic_sub(1, &fl->async_queue_job_count);
+		ctx = ictx;
+		break;
+	}
+	spin_unlock_irqrestore(&fl->aqlock, flags);
+	if (fl->profile && ctx)
+		perf_counter = (uint64_t *)ctx->perf + PERF_COUNT;
+	if (ctx) {
+		async_res->jobid = ctx->asyncjob.jobid;
+		rsp = (struct virt_invoke_msg *)(ctx->msg->rxbuf);
+		async_res->result = rsp->hdr.result;
+		async_res->handle = ctx->handle;
+		async_res->sc = ctx->sc;
+		async_res->perf_dsp = (uint64_t *)ctx->perf_dsp;
+		async_res->perf_kernel = (uint64_t *)ctx->perf_kernel;
+
+		if (async_res->result != 0)
+			goto bail;
+		PERF(ctx->fl->profile, GET_COUNTER(perf_counter, PERF_PUTARGS),
+		VERIFY(ierr, 0 == (ierr = put_args(ctx)));
+		PERF_END);
+		if (ierr)
+			goto bail;
+	} else {
+		dev_err(fl->apps->dev, "Invalid async job wake up\n");
+		goto read_async_job;
+	}
+bail:
+	if (ierr)
+		async_res->result = ierr;
+	if (ctx) {
+		if (ctx->perf && ctx->perf_kernel &&
+				ctx->handle > FASTRPC_STATIC_HANDLE_MAX)
+			K_COPY_TO_USER_WITHOUT_ERR(0, ctx->perf_kernel,
+					ctx->perf, M_KERNEL_PERF_LIST * sizeof(uint64_t));
+		context_free(ctx);
+	}
+	return err;
+}
+
+static int fastrpc_get_async_response(
+		struct fastrpc_ioctl_async_response *async_res,
+			void *param, struct fastrpc_file *fl)
+{
+	int err = 0;
+
+	err = fastrpc_wait_on_async_queue(async_res, fl);
+	if (err)
+		goto bail;
+	K_COPY_TO_USER(err, 0, param, async_res,
+			sizeof(struct fastrpc_ioctl_async_response));
+bail:
+	return err;
+}
+
+int fastrpc_internal_invoke2(struct fastrpc_file *fl,
+				struct fastrpc_ioctl_invoke2 *inv2)
+{
+	union {
+		struct fastrpc_ioctl_invoke_async inv;
+		struct fastrpc_ioctl_async_response async_res;
+	} p;
+	struct fastrpc_dsp_capabilities *dsp_cap_ptr = NULL;
+	uint32_t size = 0;
+	int err = 0, domain = fl->domain;
+
+	if (inv2->req == FASTRPC_INVOKE2_ASYNC ||
+		inv2->req == FASTRPC_INVOKE2_ASYNC_RESPONSE) {
+		VERIFY(err, domain == CDSP_DOMAIN_ID || domain == CDSP1_DOMAIN_ID);
+		if (err)
+			goto bail;
+
+		dsp_cap_ptr = &fl->apps->channel[domain].dsp_cap_kernel;
+		VERIFY(err, dsp_cap_ptr->dsp_attributes[ASYNC_FASTRPC_CAP] == 1);
+		if (err) {
+			err = -EPROTONOSUPPORT;
+			goto bail;
+		}
+	}
+	switch (inv2->req) {
+	case FASTRPC_INVOKE2_ASYNC:
+		size = sizeof(struct fastrpc_ioctl_invoke_async);
+		VERIFY(err, size >= inv2->size);
+		if (err) {
+			err = -EBADE;
+			goto bail;
+		}
+
+		K_COPY_FROM_USER(err, 0, &p.inv, (void *)inv2->invparam, size);
+		if (err)
+			goto bail;
+
+		VERIFY(err, 0 == (err = fastrpc_internal_invoke(fl, fl->mode,
+						&p.inv)));
+		if (err)
+			goto bail;
+		break;
+	case FASTRPC_INVOKE2_ASYNC_RESPONSE:
+		VERIFY(err,
+		sizeof(struct fastrpc_ioctl_async_response) >= inv2->size);
+		if (err) {
+			err = -EBADE;
+			goto bail;
+		}
+		err = fastrpc_get_async_response(&p.async_res,
+						(void *)inv2->invparam, fl);
+		break;
+	case FASTRPC_INVOKE2_KERNEL_OPTIMIZATIONS:
+		err = -ENOTTY;
+		dev_err(fl->apps->dev, "kernel optimization is not supported\n");
+		break;
+	default:
+		err = -ENOTTY;
+		break;
+	}
+bail:
 	return err;
 }
 
@@ -1724,6 +1908,9 @@ static int fastrpc_get_info_from_kernel(
 
 		fl->apps->channel[domain].unsigned_support =
 			!!(dsp_cap_ptr->dsp_attributes[UNSIGNED_PD_SUPPORT]);
+
+		/* WA for async invoke support, need to be removed later */
+		dsp_cap_ptr->dsp_attributes[ASYNC_FASTRPC_CAP] = 1;
 
 		memcpy(&cap->capability,
 			&dsp_cap_ptr->dsp_attributes[attribute_ID],
