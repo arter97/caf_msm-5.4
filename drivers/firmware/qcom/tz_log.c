@@ -1468,7 +1468,10 @@ static void tzdbg_query_encrypted_log(void)
 
 	ret = qcom_scm_query_encrypted_log_feature(&enabled);
 	if (ret) {
-		pr_err("scm_call QUERY_ENCR_LOG_FEATURE failed ret %d\n", ret);
+		if (ret == -EIO)
+			pr_info("SCM_CALL : SYS CALL NOT SUPPORTED IN TZ\n");
+		else
+			pr_err("scm_call QUERY_ENCR_LOG_FEATURE failed ret %d\n", ret);
 		tzdbg.is_encrypted_log_enabled = false;
 	} else {
 		pr_warn("encrypted qseelog enabled is %d\n", enabled);
