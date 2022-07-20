@@ -33,7 +33,7 @@
 #include <linux/security.h>
 #include <trace/events/power.h>
 #include <soc/qcom/boot_stats.h>
-#include <linux/workqueue.h>
+
 #include "power.h"
 
 
@@ -46,7 +46,6 @@ static char resume_file[256] = CONFIG_PM_STD_PARTITION;
 dev_t swsusp_resume_device;
 sector_t swsusp_resume_block;
 __visible int in_suspend __nosavedata;
-struct work_struct swsusp_free_work;
 
 enum {
 	HIBERNATION_INVALID,
@@ -404,7 +403,7 @@ int hibernation_snapshot(int platform_mode)
 
 	/* We may need to release the preallocated image pages here. */
 	if (error || !in_suspend)
-		queue_work(system_wq, &swsusp_free_work);
+		swsusp_free();
 
 	msg = in_suspend ? (error ? PMSG_RECOVER : PMSG_THAW) : PMSG_RESTORE;
 	dpm_resume(msg);
@@ -693,10 +692,6 @@ static int load_image_and_restore(void)
 	return error;
 }
 
-static void swsusp_free_wq_func(struct work_struct *work)
-{
-	swsusp_free();
-}
 /**
  * hibernate - Carry out system hibernation, including saving the image.
  */
@@ -725,7 +720,6 @@ int hibernate(void)
 		goto Exit;
 	}
 
-	INIT_WORK(&swsusp_free_work, swsusp_free_wq_func);
 	ksys_sync_helper();
 
 	error = freeze_processes();
