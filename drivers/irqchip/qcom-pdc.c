@@ -20,6 +20,7 @@
 #include <linux/of_device.h>
 #include <linux/soc/qcom/irq.h>
 #include <linux/spinlock.h>
+#include <linux/suspend.h>
 #include <linux/syscore_ops.h>
 #include <linux/slab.h>
 #include <linux/types.h>
@@ -115,18 +116,19 @@ static int qcom_pdc_gic_set_irqchip_state(struct irq_data *d,
 static void pdc_enable_intr(struct irq_data *d, bool on)
 {
 	int pin_out = d->hwirq;
+	unsigned long flags;
 	u32 index, mask;
 	u32 enable;
 
 	index = pin_out / 32;
 	mask = pin_out % 32;
 
-	raw_spin_lock(&pdc_lock);
+	raw_spin_lock_irqsave(&pdc_lock, flags);
 	enable = pdc_reg_read(IRQ_ENABLE_BANK, index);
 	enable = on ? ENABLE_INTR(enable, mask) : CLEAR_INTR(enable, mask);
 	pdc_reg_write(IRQ_ENABLE_BANK, index, enable);
 	ipc_log_string(pdc_ipc_log, "PIN=%d enable=%d", d->hwirq, on);
-	raw_spin_unlock(&pdc_lock);
+	raw_spin_unlock_irqrestore(&pdc_lock, flags);
 }
 
 static void qcom_pdc_gic_disable(struct irq_data *d)
@@ -316,20 +318,33 @@ static struct irq_chip qcom_pdc_gic_chip = {
 };
 
 #ifdef CONFIG_QTI_PDC_SAVE_RESTORE
+static bool in_hibernation;
 static u32 pdc_enabled[MAX_ENABLE_REGS] = { 0 };
+
+static int pdc_suspend_notifier(struct notifier_block *nb,
+				unsigned long event, void *dummy)
+{
+	if (event == PM_HIBERNATION_PREPARE)
+		in_hibernation = true;
+	else if (event == PM_POST_HIBERNATION)
+		in_hibernation = false;
+
+	return NOTIFY_OK;
+}
 
 static int pdc_suspend(void)
 {
-	int i, n;
-	u32 reg_index;
+	int i, last_region = pdc_region_cnt - 1;
+	u32 max_reg_index, max_irq;
 
-	for (n = 0; n < pdc_region_cnt; n++) {
-		for (i = 0; i < pdc_region[n].cnt; i++) {
-			reg_index = (i + pdc_region[n].pin_base) >> 5;
-			pdc_enabled[reg_index] = pdc_reg_read(IRQ_ENABLE_BANK,
-							      reg_index);
-		}
-	}
+	if (!in_hibernation)
+		return 0;
+
+	max_irq = pdc_region[last_region].pin_base + pdc_region[last_region].cnt;
+	max_reg_index = max_irq / 32;
+
+	for (i = 0; i <= max_reg_index; i++)
+		pdc_enabled[i] = pdc_reg_read(IRQ_ENABLE_BANK, i);
 
 	return 0;
 }
@@ -338,6 +353,9 @@ static void pdc_resume(void)
 {
 	int i;
 	u32 config;
+
+	if (!in_hibernation)
+		return;
 
 	for (i = 0; i < PDC_MAX_IRQS; i++) {
 		if (pdc_type_config[i].set) {
@@ -360,15 +378,26 @@ static void pdc_resume(void)
 	}
 }
 
+static struct notifier_block pdc_notifier_block = {
+	.notifier_call = pdc_suspend_notifier,
+};
+
 static struct syscore_ops pdc_syscore_ops = {
 	.suspend = pdc_suspend,
 	.resume = pdc_resume,
 };
 
-static int __init pdc_init_syscore(void)
+static int pdc_init_syscore(void)
 {
+	int ret;
+
 	register_syscore_ops(&pdc_syscore_ops);
-	return 0;
+
+	ret = register_pm_notifier(&pdc_notifier_block);
+	if (ret)
+		unregister_syscore_ops(&pdc_syscore_ops);
+
+	return ret;
 }
 #ifndef MODULE
 arch_initcall(pdc_init_syscore);
@@ -606,7 +635,7 @@ static int pdc_setup_mux_mapping(struct device_node *np)
 	return 0;
 }
 
-static int __init qcom_pdc_early_init(void)
+static int qcom_pdc_early_init(void)
 {
 	pdc_ipc_log = ipc_log_context_create(PDC_IPC_LOG_SZ, "pdc", 0);
 
@@ -727,6 +756,7 @@ static const struct of_device_id qcom_pdc_match_table[] = {
 	{ .compatible = "qcom,sm6150-pdc" },
 	{ .compatible = "qcom,yupik-pdc" },
 	{ .compatible = "qcom,kona-pdc" },
+	{ .compatible = "qcom,lemans-pdc" },
 	{}
 };
 MODULE_DEVICE_TABLE(of, qcom_pdc_match_table);
@@ -749,7 +779,9 @@ IRQCHIP_DECLARE(pdc_sm8150, "qcom,sm8150-pdc", qcom_pdc_init);
 IRQCHIP_DECLARE(pdc_yupik, "qcom,yupik-pdc", qcom_pdc_init);
 IRQCHIP_DECLARE(pdc_sdxlemur, "qcom,sdxlemur-pdc", qcom_pdc_init);
 IRQCHIP_DECLARE(pdc_sa515m, "qcom,sa515m-pdc", qcom_pdc_init);
+IRQCHIP_DECLARE(pdc_sa415m, "qcom,sa415m-pdc", qcom_pdc_init);
 IRQCHIP_DECLARE(pdc_kona, "qcom,kona-pdc", qcom_pdc_init);
+IRQCHIP_DECLARE(pdc_lemans, "qcom,lemans-pdc", qcom_pdc_init);
 #endif
 
 MODULE_DESCRIPTION("Qualcomm Technologies, Inc. Power Domain Controller");

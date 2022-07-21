@@ -1895,9 +1895,6 @@ static int icnss_modem_notifier_nb(struct notifier_block *nb,
 			icnss_msa0_ramdump(priv);
 		}
 
-		if (test_bit(ICNSS_LOW_POWER, &priv->state) &&
-			     priv->low_power_support)
-			clear_bit(ICNSS_LOW_POWER, &priv->state);
 		goto out;
 	case SUBSYS_BEFORE_DS_ENTRY:
 		if (test_bit(ICNSS_MODE_ON, &priv->state))
@@ -1964,8 +1961,9 @@ static int icnss_modem_notifier_nb(struct notifier_block *nb,
 	icnss_driver_event_post(priv, ICNSS_DRIVER_EVENT_PD_SERVICE_DOWN,
 				ICNSS_EVENT_SYNC, event_data);
 
-	mod_timer(&priv->recovery_timer,
-		  jiffies + msecs_to_jiffies(ICNSS_RECOVERY_TIMEOUT));
+	if (notif->crashed)
+		mod_timer(&priv->recovery_timer,
+			  jiffies + msecs_to_jiffies(ICNSS_RECOVERY_TIMEOUT));
 out:
 	icnss_pr_vdbg("Exit %s,state: 0x%lx\n", __func__, priv->state);
 	return NOTIFY_OK;
@@ -2200,11 +2198,13 @@ event_post:
 	}
 
 	clear_bit(ICNSS_HOST_TRIGGERED_PDR, &priv->state);
+
+	if (event_data->crashed)
+		mod_timer(&priv->recovery_timer,
+			  jiffies + msecs_to_jiffies(ICNSS_RECOVERY_TIMEOUT));
+
 	icnss_driver_event_post(priv, ICNSS_DRIVER_EVENT_PD_SERVICE_DOWN,
 				ICNSS_EVENT_SYNC, event_data);
-
-	mod_timer(&priv->recovery_timer,
-		  jiffies + msecs_to_jiffies(ICNSS_RECOVERY_TIMEOUT));
 done:
 	if (notification == SERVREG_NOTIF_SERVICE_STATE_UP_V01)
 		clear_bit(ICNSS_FW_DOWN, &priv->state);
@@ -4417,6 +4417,11 @@ static int icnss_remove(struct platform_device *pdev)
 void icnss_recovery_timeout_hdlr(struct timer_list *t)
 {
 	struct icnss_priv *priv = from_timer(priv, t, recovery_timer);
+
+	if (test_bit(ICNSS_LOW_POWER, &priv->state)) {
+		icnss_pr_info("Device is in low power mode");
+		return;
+	}
 
 	icnss_pr_err("Timeout waiting for FW Ready 0x%lx\n", priv->state);
 	ICNSS_ASSERT(0);

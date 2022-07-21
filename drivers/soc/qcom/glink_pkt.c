@@ -157,6 +157,11 @@ static int glink_pkt_rpdev_cb(struct rpmsg_device *rpdev, void *buf, int len,
 	unsigned long flags;
 	struct sk_buff *skb;
 
+	if (!gpdev) {
+		GLINK_PKT_ERR("channel is in reset\n");
+		return -ENETRESET;
+	}
+
 	skb = alloc_skb(len, GFP_ATOMIC);
 	if (!skb)
 		return -ENOMEM;
@@ -296,12 +301,13 @@ static int glink_pkt_release(struct inode *inode, struct file *file)
 		wake_up_interruptible(&gpdev->readq);
 		gpdev->sig_change = false;
 		spin_unlock_irqrestore(&gpdev->queue_lock, flags);
+
+		if (gpdev->drv_registered && gpdev->enable_ch_close) {
+			unregister_rpmsg_driver(&gpdev->drv);
+			gpdev->drv_registered = 0;
+		}
 	}
 
-	if (gpdev->drv_registered && gpdev->enable_ch_close) {
-		unregister_rpmsg_driver(&gpdev->drv);
-		gpdev->drv_registered = 0;
-	}
 	put_device(dev);
 
 	return 0;
@@ -689,6 +695,10 @@ error:
 static void glink_pkt_release_device(struct device *dev)
 {
 	struct glink_pkt_device *gpdev = dev_to_gpdev(dev);
+
+	GLINK_PKT_INFO("for %s by %s:%d ref_cnt[%d]\n",
+		       gpdev->ch_name, current->comm,
+		       task_pid_nr(current), refcount_read(&gpdev->refcount));
 
 	ida_simple_remove(&glink_pkt_minor_ida, MINOR(gpdev->dev.devt));
 	cdev_del(&gpdev->cdev);

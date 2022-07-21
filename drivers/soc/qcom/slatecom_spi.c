@@ -142,6 +142,7 @@ struct event_list {
 };
 static void *slate_com_drv;
 static uint32_t g_slav_status_reg;
+static uint32_t g_slave_status_auto_clear_reg;
 static bool is_hibernate;
 
 /* SLATECOM client callbacks set-up */
@@ -242,6 +243,10 @@ int slatecom_set_spi_state(enum slatecom_spi_state state)
 			SLATECOM_INFO("Waiting to set state busy....\n");
 			msleep(100);
 		}
+		/* After PIL seq, clear preceding state. As rmproc
+		 * reloaded, it is unaware of previous context.
+		 */
+		atomic_set(&ok_to_sleep, 0);
 	}
 	spi_state = state;
 	SLATECOM_INFO("state = %d\n", state);
@@ -608,6 +613,7 @@ static void slate_irq_tasklet_hndlr_l(void)
 		SLATECOM_INFO("SLAVE_STATUS_READY = 0x%08X, OK_TO_SLEEP_CLEARED = 0x%08X\n",
 				(slave_status_reg & SLAVE_STATUS_READY),
 				(OK_TO_SLEEP_CLEARED & slav_status_auto_clear_reg));
+		g_slave_status_auto_clear_reg = slav_status_auto_clear_reg;
 		atomic_set(&ok_to_sleep, 0);
 		atomic_set(&slate_is_spi_active, 1);
 		complete(&slate_resume_wait);
@@ -787,6 +793,7 @@ complete:
 	atomic_set(&slate_is_spi_active, 1);
 
 unlock:
+	g_slave_status_auto_clear_reg = 0;
 	mutex_unlock(&slate_resume_mutex);
 	return 0;
 }
@@ -1652,7 +1659,16 @@ static int slatecom_pm_suspend(struct device *dev)
 		return 0;
 	}
 
-	atomic_set(&slate_is_spi_active, 0);
+	if ((g_slave_status_auto_clear_reg & OK_TO_SLEEP_CLEARED) &&
+			(g_slav_status_reg & SLAVE_STATUS_READY)) {
+		SLATECOM_ERR("Slate is in active, Abort Suspend\n");
+		atomic_set(&slate_is_runtime_suspend, 0);
+		atomic_set(&state, SLATECOM_STATE_ACTIVE);
+		atomic_set(&slate_is_spi_active, 1);
+		g_slave_status_auto_clear_reg = 0;
+		return -ECANCELED;
+	}
+
 	atomic_set(&state, SLATECOM_STATE_SUSPEND);
 	atomic_set(&slate_is_runtime_suspend, 0);
 
@@ -1661,7 +1677,7 @@ static int slatecom_pm_suspend(struct device *dev)
 		IRQF_TRIGGER_RISING | IRQF_ONESHOT, "qcom-slate_spi", slate_spi);
 
 	SLATECOM_ERR("suspended\n");
-	return 0;
+	return (atomic_read(&slate_is_spi_active)) ? -ECANCELED : 0;
 }
 
 static int slatecom_pm_resume(struct device *dev)
