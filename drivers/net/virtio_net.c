@@ -1104,9 +1104,7 @@ static void receive_buf(struct virtnet_info *vi, struct receive_queue *rq,
 	if (hdr->hdr.flags & VIRTIO_NET_HDR_F_TIMESTAMP) {
 		stats->bytes -= HW_TIMESTAMP_LEN;
 		skb_copy_bits(skb, skb->len - HW_TIMESTAMP_LEN, &hwts, HW_TIMESTAMP_LEN);
-		skb->len -= HW_TIMESTAMP_LEN;
-		skb->data_len = (skb->data_len <= HW_TIMESTAMP_LEN) ? 0 :
-						(skb->data_len - HW_TIMESTAMP_LEN);
+		pskb_trim(skb, skb->len - HW_TIMESTAMP_LEN);
 		if (vi->rx_hwts_enabled) {
 			ts = skb_hwtstamps(skb);
 			if (ts)
