@@ -44,6 +44,7 @@
 #include "dwmac1000.h"
 #include "dwxgmac2.h"
 #include "hwif.h"
+#include "dwmac-qcom-ipa-offload.h"
 
 #define	STMMAC_ALIGN(x)		ALIGN(ALIGN(x, SMP_CACHE_BYTES), 16)
 #define	TSO_MAX_BUFF_SIZE	(SZ_16K - 1)
@@ -152,14 +153,24 @@ static void stmmac_disable_all_queues(struct stmmac_priv *priv)
 	u32 tx_queues_cnt = priv->plat->tx_queues_to_use;
 	u32 maxq = max(rx_queues_cnt, tx_queues_cnt);
 	u32 queue;
+	struct stmmac_rx_queue *rx_q;
+	struct stmmac_tx_queue *tx_q;
 
 	for (queue = 0; queue < maxq; queue++) {
 		struct stmmac_channel *ch = &priv->channel[queue];
+		rx_q = &priv->rx_queue[queue];
+		tx_q = &priv->tx_queue[queue];
 
-		if (queue < rx_queues_cnt)
+		if (queue < rx_queues_cnt) {
+			if (rx_q->skip_sw)
+				continue;
 			napi_disable(&ch->rx_napi);
-		if (queue < tx_queues_cnt)
+		}
+		if (queue < tx_queues_cnt) {
+			if (tx_q->skip_sw)
+				continue;
 			napi_disable(&ch->tx_napi);
+		}
 	}
 }
 
@@ -173,14 +184,24 @@ static void stmmac_enable_all_queues(struct stmmac_priv *priv)
 	u32 tx_queues_cnt = priv->plat->tx_queues_to_use;
 	u32 maxq = max(rx_queues_cnt, tx_queues_cnt);
 	u32 queue;
+	struct stmmac_rx_queue *rx_q;
+	struct stmmac_tx_queue *tx_q;
 
 	for (queue = 0; queue < maxq; queue++) {
 		struct stmmac_channel *ch = &priv->channel[queue];
+		rx_q = &priv->rx_queue[queue];
+		tx_q = &priv->tx_queue[queue];
 
-		if (queue < rx_queues_cnt)
+		if (queue < rx_queues_cnt) {
+			if (rx_q->skip_sw)
+				continue;
 			napi_enable(&ch->rx_napi);
-		if (queue < tx_queues_cnt)
+		}
+		if (queue < tx_queues_cnt) {
+			if (tx_q->skip_sw)
+				continue;
 			napi_enable(&ch->tx_napi);
+		}
 	}
 }
 
@@ -999,6 +1020,8 @@ static void stmmac_mac_link_down(struct phylink_config *config,
 	priv->eee_active = false;
 	stmmac_eee_init(priv);
 	stmmac_set_eee_pls(priv, priv->hw, false);
+	if (priv->tx_queue[IPA_DMA_TX_CH].skip_sw)
+		ethqos_ipa_offload_event_handler(priv, EV_PHY_LINK_DOWN);
 }
 
 static void stmmac_mac_link_up(struct phylink_config *config,
@@ -1013,6 +1036,9 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 		priv->eee_enabled = stmmac_eee_init(priv);
 		stmmac_set_eee_pls(priv, priv->hw, true);
 	}
+
+	if (priv->tx_queue[IPA_DMA_TX_CH].skip_sw)
+		ethqos_ipa_offload_event_handler(priv, EV_PHY_LINK_UP);
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
 	if (!priv->boot_kpi) {
 		place_marker("M - Ethernet is Ready.Link is UP");
@@ -1906,11 +1932,17 @@ static void stmmac_start_all_dma(struct stmmac_priv *priv)
 	u32 tx_channels_count = priv->plat->tx_queues_to_use;
 	u32 chan = 0;
 
-	for (chan = 0; chan < rx_channels_count; chan++)
+	for (chan = 0; chan < rx_channels_count; chan++) {
+		if (priv->rx_queue[chan].skip_sw)
+			continue;
 		stmmac_start_rx_dma(priv, chan);
+	}
 
-	for (chan = 0; chan < tx_channels_count; chan++)
+	for (chan = 0; chan < tx_channels_count; chan++) {
+		if (priv->tx_queue[chan].skip_sw)
+			continue;
 		stmmac_start_tx_dma(priv, chan);
+	}
 }
 
 /**
@@ -1925,11 +1957,16 @@ static void stmmac_stop_all_dma(struct stmmac_priv *priv)
 	u32 tx_channels_count = priv->plat->tx_queues_to_use;
 	u32 chan = 0;
 
-	for (chan = 0; chan < rx_channels_count; chan++)
+	for (chan = 0; chan < rx_channels_count; chan++) {
+		if (priv->rx_queue[chan].skip_sw)
+			continue;
 		stmmac_stop_rx_dma(priv, chan);
-
-	for (chan = 0; chan < tx_channels_count; chan++)
+	}
+	for (chan = 0; chan < tx_channels_count; chan++) {
+		if (priv->tx_queue[chan].skip_sw)
+			continue;
 		stmmac_stop_tx_dma(priv, chan);
+	}
 }
 
 /**
@@ -1948,6 +1985,7 @@ static void stmmac_dma_operation_mode(struct stmmac_priv *priv)
 	u32 rxmode = 0;
 	u32 chan = 0;
 	u8 qmode = 0;
+u32 mtl_rx_int;
 
 	if (rxfifosz == 0)
 		rxfifosz = priv->dma_cap.rx_fifo_size;
@@ -1983,8 +2021,16 @@ static void stmmac_dma_operation_mode(struct stmmac_priv *priv)
 
 		stmmac_dma_rx_mode(priv, priv->ioaddr, rxmode, chan,
 				rxfifosz, qmode);
+
+	if (priv->rx_queue[chan].skip_sw) {
+		mtl_rx_int = readl_relaxed(priv->ioaddr +
+					   (0x00000d00 + 0x2c));
+		writel_relaxed(mtl_rx_int & ~(BIT(24)),
+			       priv->ioaddr +
+			       (0x00000d00 + 0x2c));
+	}
 		stmmac_set_dma_bfsize(priv, priv->ioaddr, priv->dma_buf_sz,
-				chan);
+				      chan);
 	}
 
 	for (chan = 0; chan < tx_channels_count; chan++) {
@@ -2206,16 +2252,20 @@ static int stmmac_napi_check(struct stmmac_priv *priv, u32 chan)
 						 &priv->xstats, chan);
 	struct stmmac_channel *ch = &priv->channel[chan];
 
-	if ((status & handle_rx) && (chan < priv->plat->rx_queues_to_use)) {
-		if (napi_schedule_prep(&ch->rx_napi)) {
-			stmmac_disable_dma_irq(priv, priv->ioaddr, chan);
-			__napi_schedule_irqoff(&ch->rx_napi);
-			status |= handle_tx;
+	if (!priv->tx_queue[chan].skip_sw) {
+		if ((status & handle_rx) && chan < priv->plat->rx_queues_to_use) {
+			if (napi_schedule_prep(&ch->rx_napi)) {
+				stmmac_disable_dma_irq(priv, priv->ioaddr, chan);
+				__napi_schedule_irqoff(&ch->rx_napi);
+				status |= handle_tx;
+			}
 		}
 	}
 
-	if ((status & handle_tx) && (chan < priv->plat->tx_queues_to_use))
-		napi_schedule_irqoff(&ch->tx_napi);
+	if (!priv->tx_queue[chan].skip_sw) {
+		if ((status & handle_tx) && chan < priv->plat->tx_queues_to_use)
+			napi_schedule_irqoff(&ch->tx_napi);
+	}
 
 	return status;
 }
@@ -2367,7 +2417,8 @@ static int stmmac_init_dma_engine(struct stmmac_priv *priv)
 
 		stmmac_init_rx_chan(priv, priv->ioaddr, priv->plat->dma_cfg,
 				    rx_q->dma_rx_phy, chan);
-
+		if (priv->rx_queue[chan].skip_sw)
+			continue;
 		rx_q->rx_tail_addr = rx_q->dma_rx_phy +
 			    (DMA_RX_SIZE * sizeof(struct dma_desc));
 		stmmac_set_rx_tail_ptr(priv, priv->ioaddr,
@@ -2380,7 +2431,8 @@ static int stmmac_init_dma_engine(struct stmmac_priv *priv)
 
 		stmmac_init_tx_chan(priv, priv->ioaddr, priv->plat->dma_cfg,
 				    tx_q->dma_tx_phy, chan);
-
+		if (priv->tx_queue[chan].skip_sw)
+			continue;
 		tx_q->tx_tail_addr = tx_q->dma_tx_phy;
 		stmmac_set_tx_tail_ptr(priv, priv->ioaddr,
 				       tx_q->tx_tail_addr, chan);
@@ -2414,10 +2466,12 @@ static void stmmac_tx_timer(struct timer_list *t)
 	 * If NAPI is already running we can miss some events. Let's rearm
 	 * the timer and try again.
 	 */
-	if (likely(napi_schedule_prep(&ch->tx_napi)))
-		__napi_schedule(&ch->tx_napi);
+	if (!tx_q->skip_sw) {
+		if (likely(napi_schedule_prep(&ch->tx_napi)))
+			__napi_schedule(&ch->tx_napi);
 	else
 		mod_timer(&tx_q->txtimer, STMMAC_COAL_TIMER(10));
+	}
 }
 
 /**
@@ -2516,6 +2570,8 @@ static void stmmac_rx_queue_dma_chan_map(struct stmmac_priv *priv)
 	u32 chan;
 
 	for (queue = 0; queue < rx_queues_count; queue++) {
+		if (priv->rx_queue[queue].skip_sw)
+			continue;
 		chan = priv->plat->rx_queues_cfg[queue].chan;
 		stmmac_map_mtl_to_dma(priv, priv->hw, queue, chan);
 	}
@@ -2924,6 +2980,8 @@ static int stmmac_open(struct net_device *dev)
 
 	stmmac_enable_all_queues(priv);
 	netif_tx_start_all_queues(priv->dev);
+	if (priv->tx_queue[IPA_DMA_TX_CH].skip_sw)
+		ethqos_ipa_offload_event_handler(priv, EV_DEV_OPEN);
 
 	if (priv->plat->mac2mac_en) {
 		stmmac_mac2mac_adjust_link(priv->plat->mac2mac_rgmii_speed,
@@ -2999,6 +3057,8 @@ static int stmmac_release(struct net_device *dev)
 
 	/* Release and free the Rx/Tx resources */
 	free_dma_desc_resources(priv);
+	if (priv->tx_queue[IPA_DMA_TX_CH].skip_sw)
+		ethqos_ipa_offload_event_handler(priv, EV_DEV_CLOSE);
 
 	/* Disable the MAC Rx/Tx */
 	stmmac_mac_set(priv, priv->ioaddr, false);
@@ -4110,6 +4170,8 @@ static irqreturn_t stmmac_interrupt(int irq, void *dev_id)
 		}
 
 		for (queue = 0; queue < queues_count; queue++) {
+			if (priv->rx_queue[queue].skip_sw)
+				continue;
 			status = stmmac_host_mtl_irq_status(priv, priv->hw,
 							    queue);
 		}

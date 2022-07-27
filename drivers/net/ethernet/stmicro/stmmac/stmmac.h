@@ -57,6 +57,7 @@ struct stmmac_tx_queue {
 	dma_addr_t dma_tx_phy;
 	u32 tx_tail_addr;
 	u32 mss;
+	bool skip_sw;
 };
 
 struct stmmac_rx_buffer {
@@ -85,6 +86,7 @@ struct stmmac_rx_queue {
 		unsigned int len;
 		unsigned int error;
 	} state;
+	bool skip_sw;
 };
 
 struct stmmac_channel {
