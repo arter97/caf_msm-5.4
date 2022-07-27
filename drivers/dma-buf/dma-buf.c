@@ -111,12 +111,14 @@ static void dma_buf_release(struct dentry *dentry)
 	if (dmabuf->resv == (struct dma_resv *)&dmabuf[1])
 		dma_resv_fini(dmabuf->resv);
 
+	WARN_ON(!list_empty(&dmabuf->attachments));
 	module_put(dmabuf->owner);
 	kfree(dmabuf->name);
 	kfree(msm_dma_buf);
 }
 
 static int dma_buf_file_release(struct inode *inode, struct file *file)
+
 {
 	struct dma_buf *dmabuf;
 
