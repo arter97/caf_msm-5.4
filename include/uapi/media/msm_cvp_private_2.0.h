@@ -1,11 +1,10 @@
 /* SPDX-License-Identifier: GPL-2.0-only WITH Linux-syscall-note */
 /*
  * Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __MSM_CVP_PRIVATE_V2_H__
 #define __MSM_CVP_PRIVATE_V2_H__
-
-#include <linux/videodev2.h>
 
 #define MAX_DFS_HFI_PARAMS 20
 #define HFI_MAX_PLANES 4
