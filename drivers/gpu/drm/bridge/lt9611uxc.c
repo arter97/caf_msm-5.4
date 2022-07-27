@@ -164,7 +164,7 @@ static void lt9611_hpd_work(struct work_struct *work)
 	struct lt9611 *pdata = container_of(work, struct lt9611, work);
 
 	if (!pdata || !pdata->connector.funcs ||
-		!pdata->connector.funcs->detect || !pdata->hpd_support)
+		!pdata->connector.funcs->detect)
 		return;
 
 	dev = pdata->connector.dev;
@@ -332,7 +332,6 @@ u8 lt9611_get_version(struct lt9611 *pdata)
 
 	lt9611_write_byte(pdata, 0xFF, 0x80);
 	lt9611_write_byte(pdata, 0xEE, 0x00);
-	msleep(50);
 
 	return revison;
 }
@@ -927,7 +926,6 @@ static int lt9611_read_device_id(struct lt9611 *pdata)
 
 	lt9611_write_byte(pdata, 0xFF, 0x80);
 	lt9611_write_byte(pdata, 0xEE, 0x00);
-	msleep(50);
 
 	return ret;
 }
@@ -947,7 +945,7 @@ static irqreturn_t lt9611_irq_thread_handler(int irq, void *dev_id)
 		if (irq_status) {
 			lt9611_write_byte(pdata, 0x22, 0);
 			lt9611_read(pdata, 0x23, &hpd_status, 1);
-			pr_debug("irq hpd status 0x%x\n", hpd_status);
+			pr_debug("irq hdp status 0x%x\n", hpd_status);
 		}
 	} else
 		pr_err("get irq status failed\n");
@@ -970,7 +968,7 @@ static void lt9611_reset(struct lt9611 *pdata, bool on_off)
 		gpio_set_value(pdata->reset_gpio, 0);
 		msleep(20);
 		gpio_set_value(pdata->reset_gpio, 1);
-		msleep(300);
+		msleep(20);
 	} else {
 		gpio_set_value(pdata->reset_gpio, 0);
 	}
@@ -1389,11 +1387,11 @@ lt9611_connector_detect(struct drm_connector *connector, bool force)
 	u8 hpd_status = 0;
 	struct lt9611 *pdata = connector_to_lt9611(connector);
 
-	pdata->status = connector_status_disconnected;
+	pdata->status = connector_status_connected;
 	if (force && pdata->hpd_support) {
 		lt9611_write_byte(pdata, 0xFF, 0x80);
 		lt9611_write_byte(pdata, 0xEE, 0x01);
-		lt9611_write_byte(pdata, 0xFF, 0xB0);
+		lt9611_write_byte(pdata, 0xFF, 0x80);
 		if (!lt9611_read(pdata, 0x23, &hpd_status, 1)) {
 			if (hpd_status & BIT(1))
 				pdata->status = connector_status_connected;
@@ -1494,11 +1492,7 @@ static void lt9611_bridge_enable(struct drm_bridge *bridge)
 
 static void lt9611_bridge_disable(struct drm_bridge *bridge)
 {
-	struct lt9611 *pdata = bridge_to_lt9611(bridge);
-
 	pr_debug("bridge disable\n");
-	lt9611_enable_vreg(pdata, false);
-	lt9611_reset(pdata, false);
 }
 
 static void lt9611_bridge_mode_set(struct drm_bridge *bridge,
@@ -1627,7 +1621,6 @@ static void lt9611_bridge_pre_enable(struct drm_bridge *bridge)
 	struct lt9611 *pdata = bridge_to_lt9611(bridge);
 
 	pr_debug("bridge pre_enable\n");
-	lt9611_enable_vreg(pdata, true);
 	lt9611_reset(pdata, true);
 }
 
@@ -1809,11 +1802,21 @@ static int lt9611_probe(struct i2c_client *client,
 
 	lt9611_reset(pdata, true);
 
+	pdata->irq = gpio_to_irq(pdata->irq_gpio);
+	ret = request_threaded_irq(pdata->irq, NULL, lt9611_irq_thread_handler,
+		IRQF_TRIGGER_FALLING | IRQF_ONESHOT, "lt9611", pdata);
+	if (ret) {
+		pr_err("failed to request irq\n");
+		goto err_i2c_prog;
+	}
+
 	ret = lt9611_read_device_id(pdata);
 	if (ret) {
 		pr_err("failed to read chip rev\n");
-		goto err_i2c_prog;
+		goto err_sysfs_init;
 	}
+
+	msleep(200);
 
 	i2c_set_clientdata(client, pdata);
 	dev_set_drvdata(&client->dev, pdata);
@@ -1821,13 +1824,15 @@ static int lt9611_probe(struct i2c_client *client,
 	ret = lt9611_sysfs_init(&client->dev);
 	if (ret) {
 		pr_err("sysfs init failed\n");
-		goto err_i2c_prog;
+		goto err_sysfs_init;
 	}
 
 	chip_version = lt9611_get_version(pdata);
 	pdata->hpd_support = false;
 	if (chip_version) {
 		pr_info("LT9611 works, no need to upgrade FW\n");
+		if (chip_version >= 0x40)
+			pdata->hpd_support = true;
 	} else {
 		ret = request_firmware_nowait(THIS_MODULE, true,
 			"lt9611_fw.bin", &client->dev, GFP_KERNEL, pdata,
@@ -1835,7 +1840,7 @@ static int lt9611_probe(struct i2c_client *client,
 		if (ret) {
 			dev_err(&client->dev,
 				"Failed to invoke firmware loader: %d\n", ret);
-			goto err_i2c_prog;
+			goto err_sysfs_init;
 		} else
 			return 0;
 	}
@@ -1850,23 +1855,15 @@ static int lt9611_probe(struct i2c_client *client,
 	pdata->wq = create_singlethread_workqueue("lt9611_wk");
 	if (!pdata->wq) {
 		pr_err("Error creating lt9611 wq\n");
-		goto err_i2c_prog;
+		goto err_sysfs_init;
 	}
 	INIT_WORK(&pdata->work, lt9611_hpd_work);
 
-	pdata->irq = gpio_to_irq(pdata->irq_gpio);
-	ret = request_threaded_irq(pdata->irq, NULL, lt9611_irq_thread_handler,
-		IRQF_TRIGGER_FALLING | IRQF_ONESHOT, "lt9611_irq", pdata);
-	if (ret) {
-		pr_err("failed to request irq\n");
-		goto err_i2c_prog;
-	}
-
-	if (!pdata->hpd_support)
-		disable_irq(pdata->irq);
-
 	return 0;
 
+err_sysfs_init:
+	disable_irq(pdata->irq);
+	free_irq(pdata->irq, pdata);
 err_i2c_prog:
 	lt9611_gpio_configure(pdata, false);
 err_dt_supply:
@@ -1891,8 +1888,7 @@ static int lt9611_remove(struct i2c_client *client)
 
 	lt9611_sysfs_remove(&client->dev);
 
-	if (pdata->hpd_support)
-		disable_irq(pdata->irq);
+	disable_irq(pdata->irq);
 	free_irq(pdata->irq, pdata);
 
 	ret = lt9611_gpio_configure(pdata, false);
