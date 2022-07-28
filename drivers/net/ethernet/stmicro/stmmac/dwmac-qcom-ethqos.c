@@ -34,7 +34,8 @@
 #include "dwmac-qcom-ipa-offload.h"
 
 void *ipc_emac_log_ctxt;
-void __iomem *tlmm_central_base_addr;
+void __iomem *tlmm_rgmii_pull_ctl1_base;
+void __iomem *tlmm_rgmii_rx_ctr_base;
 
 static struct emac_emb_smmu_cb_ctx emac_emb_smmu_ctx = {0};
 struct plat_stmmacenet_data *plat_dat;
@@ -1711,6 +1712,14 @@ static void read_rgmii_io_macro_node_setting(struct device_node *np_hw, struct q
 		ethqos->io_macro.ipv6_wq = 0;
 	}
 
+	ret = of_property_read_u32(np_hw,
+				   "rgmii-tx-drv",
+				   &ethqos->io_macro.rgmii_tx_drv);
+	if (ret) {
+		ETHQOSDBG("default rgmii_tx_drv\n");
+		ethqos->io_macro.rgmii_tx_drv = 0;
+	}
+
 }
 
 static void qcom_ethqos_bringup_iface(struct work_struct *work)
@@ -2180,22 +2189,23 @@ static struct notifier_block qcom_ethqos_panic_blk = {
 	.notifier_call  = qcom_ethqos_panic_notifier,
 };
 
-/* static int ethqos_update_rgmii_tx_drv_strength(struct qcom_ethqos *ethqos)
- * {
- *	int ret = 0;
- *	struct resource *resource = NULL;
- *	struct platform_device *pdev = ethqos->pdev;
- *	struct net_device *dev = platform_get_drvdata(pdev);
- *	unsigned long tlmm_central_base = 0;
- *	unsigned long tlmm_central_size = 0;
- *	unsigned long reg_rgmii_io_pads_voltage = 0;
- *
- *	resource = platform_get_resource_byname(ethqos->pdev,
-						IORESOURCE_MEM, "tlmm-central-base");
+static int ethqos_update_rgmii_tx_drv_strength(struct qcom_ethqos *ethqos)
+{
+	int ret = 0;
+	struct resource *resource = NULL;
+	struct platform_device *pdev = ethqos->pdev;
+	struct net_device *dev = platform_get_drvdata(pdev);
+	u32 tlmm_central_base = 0;
+	u32 tlmm_central_size = 0;
+	unsigned long reg_rgmii_io_pads_voltage = 0;
+	size_t size = 4;
+
+	resource =
+	 platform_get_resource_byname(ethqos->pdev, IORESOURCE_MEM, "tlmm-central-base");
 
 	if (!resource) {
 		ETHQOSINFO("Resource tlmm-central-base not found\n");
-		goto err_out;
+		goto err_out_rgmii_rx_ctr;
 	}
 
 	tlmm_central_base = resource->start;
@@ -2203,14 +2213,26 @@ static struct notifier_block qcom_ethqos_panic_blk = {
 	ETHQOSDBG("tlmm_central_base = 0x%x, size = 0x%x\n",
 		  tlmm_central_base, tlmm_central_size);
 
-	tlmm_central_base_addr = ioremap(tlmm_central_base, tlmm_central_size);
-	if (!tlmm_central_base_addr) {
-		ETHQOSERR("cannot map dwc_tlmm_central reg memory, aborting\n");
+	tlmm_rgmii_pull_ctl1_base = ioremap(tlmm_central_base +
+					    TLMM_RGMII_HDRV_PULL_CTL1_ADDRESS_OFFSET,
+					    size);
+	if (!tlmm_rgmii_pull_ctl1_base) {
+		ETHQOSERR("cannot map tlmm_rgmii_pull_ctl1_base reg memory, aborting\n");
 		ret = -EIO;
-		goto err_out;
+		goto err_out_rgmii_ctl1;
 	}
 
-	ETHQOSDBG("dwc_tlmm_central = %#lx\n", tlmm_central_base_addr);
+	tlmm_rgmii_rx_ctr_base = ioremap(tlmm_central_base +
+					 TLMM_RGMII_RX_HV_MODE_CTL_ADDRESS_OFFSET,
+					 size);
+	if (!tlmm_rgmii_rx_ctr_base) {
+		ETHQOSERR("cannot map tlmm_rgmii_rx_ctr_base reg memory, aborting\n");
+		ret = -EIO;
+		goto err_out_rgmii_rx_ctr;
+	}
+
+	ETHQOSDBG("tlmm_rgmii_pull_ctl1_base = %#lx , tlmm_rgmii_rx_ctr_base= %lx\n",
+		  tlmm_rgmii_pull_ctl1_base, tlmm_rgmii_rx_ctr_base);
 
 	reg_rgmii_io_pads_voltage =
 	regulator_get_voltage(ethqos->reg_rgmii_io_pads);
@@ -2257,13 +2279,24 @@ static struct notifier_block qcom_ethqos_panic_blk = {
 	break;
 	}
 
-err_out:
-	if (tlmm_central_base_addr)
-		iounmap(tlmm_central_base_addr);
+err_out_rgmii_rx_ctr:
+	if (tlmm_rgmii_rx_ctr_base)
+		iounmap(tlmm_rgmii_rx_ctr_base);
+
+err_out_rgmii_ctl1:
+	if (tlmm_rgmii_pull_ctl1_base)
+		iounmap(tlmm_rgmii_pull_ctl1_base);
 
 	return ret;
 }
-*/
+
+bool qcom_ethqos_ipa_enabled(void)
+{
+#ifdef CONFIG_ETH_IPA_OFFLOAD
+	return pethqos->ipa_enabled;
+#endif
+	return false;
+}
 
 static int _qcom_ethqos_probe(void *arg)
 {
@@ -2447,8 +2480,8 @@ static int _qcom_ethqos_probe(void *arg)
 	}
 
 	ethqos->ioaddr = (&stmmac_res)->addr;
-
-	//ethqos_update_rgmii_tx_drv_strength(ethqos);
+	if (ethqos->io_macro.rgmii_tx_drv)
+		ethqos_update_rgmii_tx_drv_strength(ethqos);
 
 	ret = stmmac_dvr_probe(&pdev->dev, plat_dat, &stmmac_res);
 	if (ret)
