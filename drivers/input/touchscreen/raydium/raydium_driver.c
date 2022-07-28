@@ -1188,9 +1188,9 @@ static void raydium_work_handler(struct work_struct *work)
 
 #ifdef GESTURE_EN
 	unsigned char u8_i;
-	LOGD(LOG_INFO, "[touch]ts->blank:%x, g_u8_i2c_mode:%x\n",
+	LOGD(LOG_DEBUG, "[touch]ts->blank:%x, g_u8_i2c_mode:%x\n",
 			g_raydium_ts->blank, g_u8_i2c_mode);
-	LOGD(LOG_INFO, "[touch]u8_tp_status:%x, g_raydium_ts->is_palm:%x\n",
+	LOGD(LOG_DEBUG, "[touch]u8_tp_status:%x, g_raydium_ts->is_palm:%x\n",
 			u8_tp_status[POS_GES_STATUS], g_raydium_ts->is_palm);
 
 	if (g_u8_i2c_mode == PDA2_MODE) {
@@ -1204,18 +1204,18 @@ static void raydium_work_handler(struct work_struct *work)
 
 	if (g_raydium_ts->blank == DRM_PANEL_BLANK_LP ||
 	g_raydium_ts->blank == DRM_PANEL_BLANK_POWERDOWN || g_raydium_ts->fb_state == FB_OFF) {
-		LOGD(LOG_INFO, "[touch] elseif u8_tp_status:%x\n", u8_tp_status[POS_GES_STATUS]);
+		LOGD(LOG_DEBUG, "[touch] elseif u8_tp_status:%x\n", u8_tp_status[POS_GES_STATUS]);
 		/*need check small area*/
 		/*if (u8_tp_status[POS_GES_STATUS] == RAD_WAKE_UP */
 		 /*&& g_u8_wakeup_flag == false) { */
 		if (u8_tp_status[POS_GES_STATUS] == 0)	{
-			input_report_key(g_raydium_ts->input_dev, KEY_POWER, true);
+			input_report_key(g_raydium_ts->input_dev, KEY_WAKEUP, true);
 			usleep_range(9500, 10500);
 			input_sync(g_raydium_ts->input_dev);
 
-			input_report_key(g_raydium_ts->input_dev, KEY_POWER, false);
+			input_report_key(g_raydium_ts->input_dev, KEY_WAKEUP, false);
 			input_sync(g_raydium_ts->input_dev);
-			LOGD(LOG_INFO, "[touch]display wake up with g_u8_resetflag true\n");
+			LOGD(LOG_DEBUG, "[touch]display wake up with g_u8_resetflag true\n");
 			/*goto exit;*/
 		}
 	}
@@ -2286,7 +2286,7 @@ static int raydium_ts_probe(struct i2c_client *client,
 
 #ifdef GESTURE_EN
 	input_set_capability(input_dev, EV_KEY, KEY_SLEEP);
-	input_set_capability(input_dev, EV_KEY, KEY_POWER);
+	input_set_capability(input_dev, EV_KEY, KEY_WAKEUP);
 #endif
 
 	/*suspend/resume routine*/
