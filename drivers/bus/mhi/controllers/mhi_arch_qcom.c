@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.*/
+/* Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.*/
 
 #include <linux/async.h>
 #include <linux/debugfs.h>
@@ -512,16 +513,7 @@ int mhi_arch_pcie_init(struct mhi_controller *mhi_cntrl)
 		ret = of_property_read_string(mhi_ofnode, "interconnect-names",
 					      &arch_info->icc_name);
 		if (ret) {
-			MHI_CNTRL_ERR("No interconnect name specified\n");
-			return -ENOENT;
-		}
-		arch_info->icc_path = of_icc_get(&mhi_port->dev,
-						arch_info->icc_name);
-		if (IS_ERR(arch_info->icc_path))  {
-			ret = PTR_ERR(arch_info->icc_path);
-			MHI_CNTRL_ERR("Interconnect path for %s not found, ret: %d\n",
-					arch_info->icc_name, ret);
-			return ret;
+			MHI_CNTRL_ERR("Interconnect not required for VM\n");
 		}
 
 		arch_info->bw_cfg_table = devm_kzalloc(&mhi_port->dev,

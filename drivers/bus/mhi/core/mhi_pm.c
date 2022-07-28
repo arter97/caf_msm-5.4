@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved. */
+/* Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.*/
 
 #include <linux/debugfs.h>
 #include <linux/delay.h>
@@ -394,7 +395,8 @@ int mhi_pm_m0_transition(struct mhi_controller *mhi_cntrl)
 
 		read_lock_irq(&mhi_chan->lock);
 		/* only ring DB if ring is not empty */
-		if (tre_ring->base && tre_ring->wp  != tre_ring->rp)
+		if (tre_ring->base && tre_ring->wp  != tre_ring->rp &&
+		    mhi_chan->ch_state == MHI_CH_STATE_ENABLED)
 			mhi_ring_chan_db(mhi_cntrl, mhi_chan);
 		read_unlock_irq(&mhi_chan->lock);
 	}
@@ -1521,6 +1523,8 @@ int mhi_pm_fast_resume(struct mhi_controller *mhi_cntrl, bool notify_client)
 		/* check EP is in proper state */
 		if (mhi_cntrl->link_status(mhi_cntrl, mhi_cntrl->priv_data)) {
 			MHI_ERR("Unable to access EP Config space\n");
+			write_unlock_irq(&mhi_cntrl->pm_lock);
+			tasklet_enable(&mhi_cntrl->mhi_event->task);
 			return -EIO;
 		}
 

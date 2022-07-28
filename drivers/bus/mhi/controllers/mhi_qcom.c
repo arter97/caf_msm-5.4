@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.*/
+/* Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.*/
 
 #include <asm/arch_timer.h>
 #include <linux/debugfs.h>
@@ -920,6 +921,7 @@ static struct pci_device_id mhi_pcie_device_id[] = {
 	{PCI_DEVICE(MHI_PCIE_VENDOR_ID, 0x0304)},
 	{PCI_DEVICE(MHI_PCIE_VENDOR_ID, 0x0305)},
 	{PCI_DEVICE(MHI_PCIE_VENDOR_ID, 0x0306)},
+	{PCI_DEVICE(MHI_PCIE_VENDOR_ID, 0x0109)},
 	{PCI_DEVICE(MHI_PCIE_VENDOR_ID, MHI_PCIE_DEBUG_ID)},
 	{0},
 };
