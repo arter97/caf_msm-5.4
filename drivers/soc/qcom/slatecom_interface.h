@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef SLATECOM_INTERFACE_H
 #define SLATECOM_INTERFACE_H
@@ -122,6 +123,10 @@ enum WMSlateCtrlChnlOpcode {
 	 */
 	GMI_MGR_WLAN_BOOT_COMPLETE = 17,
 
+	GMI_WLAN_5G_CONNECT = 18,
+
+	GMI_WLAN_5G_DISCONNECT  = 19,
+
 	/*
 	 * DEBUG Opcodes
 	 */
@@ -129,9 +134,9 @@ enum WMSlateCtrlChnlOpcode {
 
 	GMI_MGR_DISABLE_QCLI = 92,		/* Disable QCLI */
 
-	GMI_WEAR_MGR_PMIC_RTC_ENABLE = 93,		/* Enable RTC alarm */
+	GMI_MGR_ENABLE_PMIC_RTC = 93,		/* Enable PMIC RTC */
 
-	GMI_WEAR_MGR_PMIC_RTC_DISABLE = 94,		/* Disable RTC alarm */
+	GMI_MGR_DISABLE_PMIC_RTC = 94,		/* Disable PMIC RTC */
 };
 
 /*

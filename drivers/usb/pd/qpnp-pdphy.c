@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2018, 2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -793,6 +794,56 @@ static int pdphy_request_irq(struct usb_pdphy *pdphy,
 	return 0;
 }
 
+static int pdphy_request_interrupts(struct usb_pdphy *pdphy)
+{
+	struct device *dev = pdphy->dev;
+	int ret;
+
+	ret = pdphy_request_irq(pdphy, dev->of_node,
+		&pdphy->sig_tx_irq, "sig-tx", NULL,
+		pdphy_sig_tx_irq_thread, (IRQF_TRIGGER_RISING | IRQF_ONESHOT));
+	if (ret < 0)
+		return ret;
+
+	ret = pdphy_request_irq(pdphy, dev->of_node,
+		&pdphy->sig_rx_irq, "sig-rx", NULL,
+		pdphy_sig_rx_irq_thread, (IRQF_TRIGGER_RISING | IRQF_ONESHOT));
+	if (ret < 0)
+		return ret;
+
+	ret = pdphy_request_irq(pdphy, dev->of_node,
+		&pdphy->msg_tx_irq, "msg-tx", pdphy_msg_tx_irq,
+		NULL, (IRQF_TRIGGER_RISING | IRQF_ONESHOT));
+	if (ret < 0)
+		return ret;
+
+	ret = pdphy_request_irq(pdphy, dev->of_node,
+		&pdphy->msg_rx_irq, "msg-rx", pdphy_msg_rx_irq,
+		NULL, (IRQF_TRIGGER_RISING | IRQF_ONESHOT));
+	if (ret < 0)
+		return ret;
+
+	ret = pdphy_request_irq(pdphy, dev->of_node,
+		&pdphy->msg_tx_failed_irq, "msg-tx-failed", pdphy_msg_tx_irq,
+		NULL, (IRQF_TRIGGER_RISING | IRQF_ONESHOT));
+	if (ret < 0)
+		return ret;
+
+	ret = pdphy_request_irq(pdphy, dev->of_node,
+		&pdphy->msg_tx_discarded_irq, "msg-tx-discarded",
+		pdphy_msg_tx_irq, NULL,
+		(IRQF_TRIGGER_RISING | IRQF_ONESHOT));
+	if (ret < 0)
+		return ret;
+
+	ret = pdphy_request_irq(pdphy, dev->of_node,
+		&pdphy->msg_rx_discarded_irq, "msg-rx-discarded",
+		pdphy_msg_rx_discarded_irq, NULL,
+		(IRQF_TRIGGER_RISING | IRQF_ONESHOT));
+
+	return ret;
+}
+
 static int pdphy_probe(struct platform_device *pdev)
 {
 	int ret;
@@ -829,47 +880,7 @@ static int pdphy_probe(struct platform_device *pdev)
 		return PTR_ERR(pdphy->vdd_pdphy);
 	}
 
-	ret = pdphy_request_irq(pdphy, pdev->dev.of_node,
-		&pdphy->sig_tx_irq, "sig-tx", NULL,
-		pdphy_sig_tx_irq_thread, (IRQF_TRIGGER_RISING | IRQF_ONESHOT));
-	if (ret < 0)
-		return ret;
-
-	ret = pdphy_request_irq(pdphy, pdev->dev.of_node,
-		&pdphy->sig_rx_irq, "sig-rx", NULL,
-		pdphy_sig_rx_irq_thread, (IRQF_TRIGGER_RISING | IRQF_ONESHOT));
-	if (ret < 0)
-		return ret;
-
-	ret = pdphy_request_irq(pdphy, pdev->dev.of_node,
-		&pdphy->msg_tx_irq, "msg-tx", pdphy_msg_tx_irq,
-		NULL, (IRQF_TRIGGER_RISING | IRQF_ONESHOT));
-	if (ret < 0)
-		return ret;
-
-	ret = pdphy_request_irq(pdphy, pdev->dev.of_node,
-		&pdphy->msg_rx_irq, "msg-rx", pdphy_msg_rx_irq,
-		NULL, (IRQF_TRIGGER_RISING | IRQF_ONESHOT));
-	if (ret < 0)
-		return ret;
-
-	ret = pdphy_request_irq(pdphy, pdev->dev.of_node,
-		&pdphy->msg_tx_failed_irq, "msg-tx-failed", pdphy_msg_tx_irq,
-		NULL, (IRQF_TRIGGER_RISING | IRQF_ONESHOT));
-	if (ret < 0)
-		return ret;
-
-	ret = pdphy_request_irq(pdphy, pdev->dev.of_node,
-		&pdphy->msg_tx_discarded_irq, "msg-tx-discarded",
-		pdphy_msg_tx_irq, NULL,
-		(IRQF_TRIGGER_RISING | IRQF_ONESHOT));
-	if (ret < 0)
-		return ret;
-
-	ret = pdphy_request_irq(pdphy, pdev->dev.of_node,
-		&pdphy->msg_rx_discarded_irq, "msg-rx-discarded",
-		pdphy_msg_rx_discarded_irq, NULL,
-		(IRQF_TRIGGER_RISING | IRQF_ONESHOT));
+	ret = pdphy_request_interrupts(pdphy);
 	if (ret < 0)
 		return ret;
 
@@ -913,6 +924,42 @@ static void pdphy_shutdown(struct platform_device *pdev)
 		pdphy->shutdown_cb(pdphy->usbpd);
 }
 
+static int pdphy_freeze(struct device *dev)
+{
+	struct usb_pdphy *pdphy = dev_get_drvdata(dev);
+
+	dev_dbg(dev, "pdphy PM freeze\n");
+
+	devm_free_irq(dev, pdphy->sig_tx_irq, pdphy);
+	devm_free_irq(dev, pdphy->sig_rx_irq, pdphy);
+	devm_free_irq(dev, pdphy->msg_tx_irq, pdphy);
+	devm_free_irq(dev, pdphy->msg_rx_irq, pdphy);
+	devm_free_irq(dev, pdphy->msg_tx_failed_irq, pdphy);
+	devm_free_irq(dev, pdphy->msg_tx_discarded_irq, pdphy);
+	devm_free_irq(dev, pdphy->msg_rx_discarded_irq, pdphy);
+
+	return 0;
+}
+
+static int pdphy_restore(struct device *dev)
+{
+	struct usb_pdphy *pdphy = dev_get_drvdata(dev);
+	int ret;
+
+	dev_dbg(dev, "pdphy PM restore\n");
+
+	ret = pdphy_request_interrupts(pdphy);
+	if (ret < 0)
+		return ret;
+
+	return 0;
+}
+
+static const struct dev_pm_ops pdphy_pm_ops = {
+	.freeze = pdphy_freeze,
+	.restore = pdphy_restore,
+};
+
 static const struct of_device_id pdphy_match_table[] = {
 	{
 		.compatible	 = "qcom,qpnp-pdphy",
@@ -925,6 +972,7 @@ static struct platform_driver pdphy_driver = {
 	 .driver	 = {
 		 .name			= "qpnp-pdphy",
 		 .of_match_table	= pdphy_match_table,
+		 .pm = &pdphy_pm_ops,
 	 },
 	 .probe		= pdphy_probe,
 	 .remove	= pdphy_remove,

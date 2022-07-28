@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only WITH Linux-syscall-note */
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef LINUX_SLATECOM_INTERFACE_H
 #define LINUX_SLATECOM_INTERFACE_H
@@ -22,6 +23,7 @@
 #define SLATECOM_SLATE_UNLOAD 12
 #define SLATECOM_DEVICE_STATE_TRANSITION 13
 #define SLATE_SEND_TIME_DATA 14
+#define SLATECOM_SEND_DEBUG_CONFIG 15
 #define EXCHANGE_CODE  'V'
 
 struct slate_ui_data {
@@ -47,6 +49,8 @@ enum slate_event_type {
 	SLATE_DSP_READY,
 	SLATE_BT_ERROR,
 	SLATE_BT_READY,
+	SLATE_SNS_ERROR,
+	SLATE_SNS_READY,
 };
 
 enum device_state_transition {
@@ -56,6 +60,13 @@ enum device_state_transition {
 	STATE_DS_EXIT,
 	STATE_S2D_ENTER,
 	STATE_S2D_EXIT,
+};
+
+enum debug_config {
+	ENABLE_PMIC_RTC,
+	DISABLE_PMIC_RTC,
+	ENABLE_QCLI,
+	DISABLE_QCLI,
 };
 
 #define REG_READ \
@@ -102,6 +113,9 @@ enum device_state_transition {
 	struct slate_ui_data)
 #define SEND_TIME_DATA \
 	_IOWR(EXCHANGE_CODE, SLATE_SEND_TIME_DATA, \
+	struct slate_ui_data)
+#define SEND_DEBUG_CONFIG \
+	_IOWR(EXCHANGE_CODE, SLATECOM_SEND_DEBUG_CONFIG, \
 	struct slate_ui_data)
 #endif /* LINUX_SLATECOM_INTERFACE_H */
 

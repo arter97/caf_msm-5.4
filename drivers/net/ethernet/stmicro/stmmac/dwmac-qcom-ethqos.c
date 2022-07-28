@@ -134,6 +134,7 @@
 void *ipc_emac_log_ctxt;
 
 static struct emac_emb_smmu_cb_ctx emac_emb_smmu_ctx = {0};
+struct plat_stmmacenet_data *plat_dat;
 static struct qcom_ethqos *pethqos;
 
 static unsigned char dev_addr[ETH_ALEN] = {
@@ -1317,9 +1318,9 @@ static void ethqos_handle_phy_interrupt(struct qcom_ethqos *ethqos)
 
 		if (!priv->plat->mac2mac_en) {
 			if (phy_intr_status & LINK_UP_STATE)
-				phylink_mac_change(priv->phylink, LINK_UP);
+				phy_mac_interrupt(priv->phydev);
 			else if (phy_intr_status & LINK_DOWN_STATE)
-				phylink_mac_change(priv->phylink, LINK_DOWN);
+				phy_mac_interrupt(priv->phydev);
 		}
 	}
 }
@@ -1411,7 +1412,8 @@ static void emac_emb_smmu_exit(void)
 	emac_emb_smmu_ctx.iommu_domain = NULL;
 }
 
-static int emac_emb_smmu_cb_probe(struct platform_device *pdev)
+static int emac_emb_smmu_cb_probe(struct platform_device *pdev,
+				  struct plat_stmmacenet_data *plat_dat)
 {
 	int result = 0;
 	u32 iova_ap_mapping[2];
@@ -1448,6 +1450,7 @@ static int emac_emb_smmu_cb_probe(struct platform_device *pdev)
 		iommu_get_domain_for_dev(&emac_emb_smmu_ctx.smmu_pdev->dev);
 
 	ETHQOSINFO("Successfully attached to IOMMU\n");
+	plat_dat->stmmac_emb_smmu_ctx = emac_emb_smmu_ctx;
 	if (emac_emb_smmu_ctx.pdev_master)
 		goto smmu_probe_done;
 
@@ -1485,15 +1488,16 @@ static void qcom_ethqos_phy_suspend_clks(struct qcom_ethqos *ethqos)
 
 	ethqos_update_rgmii_clk_and_bus_cfg(ethqos, 0);
 
-	if (priv->plat->stmmac_clk)
-		clk_disable_unprepare(priv->plat->stmmac_clk);
+	if (ethqos->phy_wol_supported) {
+		if (priv->plat->stmmac_clk)
+			clk_disable_unprepare(priv->plat->stmmac_clk);
 
-	if (priv->plat->pclk)
-		clk_disable_unprepare(priv->plat->pclk);
+		if (priv->plat->pclk)
+			clk_disable_unprepare(priv->plat->pclk);
 
-	if (priv->plat->clk_ptp_ref)
-		clk_disable_unprepare(priv->plat->clk_ptp_ref);
-
+		if (priv->plat->clk_ptp_ref)
+			clk_disable_unprepare(priv->plat->clk_ptp_ref);
+	}
 	if (ethqos->rgmii_clk)
 		clk_disable_unprepare(ethqos->rgmii_clk);
 
@@ -1531,14 +1535,16 @@ static void qcom_ethqos_phy_resume_clks(struct qcom_ethqos *ethqos)
 
 	ETHQOSINFO("Enter\n");
 
-	if (priv->plat->stmmac_clk)
-		clk_prepare_enable(priv->plat->stmmac_clk);
+	if (ethqos->phy_wol_supported) {
+		if (priv->plat->stmmac_clk)
+			clk_prepare_enable(priv->plat->stmmac_clk);
 
-	if (priv->plat->pclk)
-		clk_prepare_enable(priv->plat->pclk);
+		if (priv->plat->pclk)
+			clk_prepare_enable(priv->plat->pclk);
 
-	if (priv->plat->clk_ptp_ref)
-		clk_prepare_enable(priv->plat->clk_ptp_ref);
+		if (priv->plat->clk_ptp_ref)
+			clk_prepare_enable(priv->plat->clk_ptp_ref);
+	}
 
 	if (ethqos->rgmii_clk)
 		clk_prepare_enable(ethqos->rgmii_clk);
@@ -2253,7 +2259,6 @@ static int _qcom_ethqos_probe(void *arg)
 	struct platform_device *pdev = (struct platform_device *)arg;
 	struct device_node *np = pdev->dev.of_node;
 	struct device_node *rgmii_io_macro_node = NULL;
-	struct plat_stmmacenet_data *plat_dat = NULL;
 	struct stmmac_resources stmmac_res;
 	struct qcom_ethqos *ethqos = NULL;
 	struct resource *res = NULL;
@@ -2263,7 +2268,7 @@ static int _qcom_ethqos_probe(void *arg)
 
 	if (of_device_is_compatible(pdev->dev.of_node,
 				    "qcom,emac-smmu-embedded"))
-		return emac_emb_smmu_cb_probe(pdev);
+		return emac_emb_smmu_cb_probe(pdev, plat_dat);
 
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
 	place_marker("M - Ethernet probe start");
@@ -2300,6 +2305,20 @@ static int _qcom_ethqos_probe(void *arg)
 		ethqos->is_gpio_phy_reset = true;
 		ETHQOSDBG("qcom,phy-reset present\n");
 	}
+
+	if (of_property_read_u32(np, "qcom,phyvoltage_min",
+				 &ethqos->phyvoltage_min))
+		ethqos->phyvoltage_min = 3075000;
+	else
+		ETHQOSINFO("qcom,phyvoltage_min = %d\n",
+			   ethqos->phyvoltage_min);
+
+	if (of_property_read_u32(np, "qcom,phyvoltage_max",
+				 &ethqos->phyvoltage_max))
+		ethqos->phyvoltage_max = 3200000;
+	else
+		ETHQOSINFO("qcom,phyvoltage_max = %d\n",
+			   ethqos->phyvoltage_max);
 
 	ethqos_init_regulators(ethqos);
 	ethqos_init_gpio(ethqos);
@@ -2356,7 +2375,6 @@ static int _qcom_ethqos_probe(void *arg)
 	plat_dat->tx_select_queue = dwmac_qcom_select_queue;
 	plat_dat->get_plat_tx_coal_frames =  dwmac_qcom_get_plat_tx_coal_frames;
 	plat_dat->has_gmac4 = 1;
-	plat_dat->pmt = 1;
 	plat_dat->tso_en = of_property_read_bool(np, "snps,tso");
 	plat_dat->early_eth = ethqos->early_eth_enabled;
 	plat_dat->handle_prv_ioctl = ethqos_handle_prv_ioctl;
@@ -2416,8 +2434,6 @@ static int _qcom_ethqos_probe(void *arg)
 			emac_emb_smmu_ctx.ret = 0;
 		}
 	}
-
-	plat_dat->stmmac_emb_smmu_ctx = emac_emb_smmu_ctx;
 
 	ret = stmmac_dvr_probe(&pdev->dev, plat_dat, &stmmac_res);
 	if (ret)
@@ -2588,6 +2604,17 @@ static int qcom_ethqos_suspend(struct device *dev)
 	ret = stmmac_suspend(dev);
 	qcom_ethqos_phy_suspend_clks(ethqos);
 
+	/* Suspend the PHY TXC clock. */
+	if (ethqos->rgmii_txc_suspend_state) {
+		/* Remove TXC clock source from Phy.*/
+		ret = pinctrl_select_state(ethqos->pinctrl,
+					   ethqos->rgmii_txc_suspend_state);
+	if (ret)
+		ETHQOSERR("Unable to set rgmii_txc_suspend_state state, err = %d\n", ret);
+	else
+		ETHQOSINFO("Set rgmii_txc_suspend_state succeed\n");
+	}
+
 	priv->boot_kpi = false;
 	ETHQOSDBG(" ret = %d\n", ret);
 	return ret;
@@ -2613,6 +2640,17 @@ static int qcom_ethqos_resume(struct device *dev)
 	if (!ndev || !netif_running(ndev)) {
 		ETHQOSERR(" Resume not possible\n");
 		return -EINVAL;
+	}
+
+	/* Resume the PhY TXC clock. */
+	if (ethqos->rgmii_txc_resume_state) {
+		/* Enable TXC clock source from Phy.*/
+		ret = pinctrl_select_state(ethqos->pinctrl,
+					   ethqos->rgmii_txc_resume_state);
+		if (ret)
+			ETHQOSERR("Unable to set rgmii_rxc_resume_state state, err = %d\n", ret);
+		else
+			ETHQOSINFO("Set rgmii_rxc_resume_state succeed\n");
 	}
 
 	qcom_ethqos_phy_resume_clks(ethqos);
