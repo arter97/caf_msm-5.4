@@ -654,8 +654,10 @@ static int cnss_fw_mem_ready_hdlr(struct cnss_plat_data *plat_priv)
 	if (ret)
 		goto out;
 
-	if (cnss_wlfw_qdss_dnld_send_sync(plat_priv))
-		cnss_pr_info("Failed to download qdss configuration file");
+	if (plat_priv->device_id != QCA6390_DEVICE_ID) {
+		if (cnss_wlfw_qdss_dnld_send_sync(plat_priv))
+			cnss_pr_info("Failed to download qdss configuration file");
+	}
 
 	return 0;
 out:
