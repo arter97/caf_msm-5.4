@@ -288,11 +288,23 @@ static int rpmb_virtio_dev_init(struct virtio_rpmb_info *vi)
 {
 	int ret = 0;
 	struct device *dev = &vi->vq->vdev->dev;
+#ifdef VIRTIO_RPMB_DRAFT_SPEC
+	struct virtio_device *vdev = dev_to_virtio(dev);
+	u8 max_wr_cnt, max_rd_cnt;
+#endif
 
 	rpmb_virtio_ops.dev_id_len = strlen(id);
 	rpmb_virtio_ops.dev_id = id;
+#ifdef VIRTIO_RPMB_DRAFT_SPEC
+	virtio_cread(vdev, struct virtio_rpmb_config, max_wr_cnt, &max_wr_cnt);
+	virtio_cread(vdev, struct virtio_rpmb_config, max_rd_cnt, &max_rd_cnt);
+	/* With the coding below zero means unlimited as in the virtio spec */
+	rpmb_virtio_ops.wr_cnt_max = max_wr_cnt;
+	rpmb_virtio_ops.rd_cnt_max = max_rd_cnt;
+#else
 	rpmb_virtio_ops.wr_cnt_max = 1;
 	rpmb_virtio_ops.rd_cnt_max = 1;
+#endif
 	rpmb_virtio_ops.block_size = 1;
 
 	vi->rdev = rpmb_dev_register(dev, 0, &rpmb_virtio_ops);
