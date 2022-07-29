@@ -280,7 +280,7 @@ static int rpmb_virtio_get_capacity(struct device *dev, u8 target)
 static struct rpmb_ops rpmb_virtio_ops = {
 	.cmd_seq = rpmb_virtio_cmd_seq,
 	.get_capacity = rpmb_virtio_get_capacity,
-	.type = RPMB_TYPE_EMMC,
+	.type = RPMB_TYPE_VIRTIO,
 	.auth_method = RPMB_HMAC_ALGO_SHA_256,
 };
 
