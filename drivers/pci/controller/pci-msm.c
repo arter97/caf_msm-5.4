@@ -893,6 +893,7 @@ struct msm_pcie_dev_t {
 	struct mutex drv_pc_lock;
 
 	bool drv_supported;
+	bool nogdsc_retention;
 
 	void (*rumi_init)(struct msm_pcie_dev_t *pcie_dev);
 
@@ -3230,12 +3231,14 @@ static int msm_pcie_clk_init(struct msm_pcie_dev_t *dev)
 
 	PCIE_DBG(dev, "RC%d: entry\n", dev->rc_idx);
 
-	rc = regulator_enable(dev->gdsc);
+	if (!regulator_is_enabled(dev->gdsc)) {
+		rc = regulator_enable(dev->gdsc);
 
-	if (rc) {
-		PCIE_ERR(dev, "PCIe: fail to enable GDSC for RC%d (%s)\n",
-			dev->rc_idx, dev->pdev->name);
-		return rc;
+		if (rc) {
+			PCIE_ERR(dev, "PCIe:fail to enable GDSC for RC%d (%s)\n",
+				dev->rc_idx, dev->pdev->name);
+			return rc;
+		}
 	}
 
 	/* switch pipe clock source after gdsc is turned on */
@@ -3373,7 +3376,8 @@ static void msm_pcie_clk_deinit(struct msm_pcie_dev_t *dev)
 	if (dev->pipe_clk_mux && dev->ref_clk_src)
 		clk_set_parent(dev->pipe_clk_mux, dev->ref_clk_src);
 
-	regulator_disable(dev->gdsc);
+	if (!dev->nogdsc_retention)
+		regulator_disable(dev->gdsc);
 
 	PCIE_DBG(dev, "RC%d: exit\n", dev->rc_idx);
 }
@@ -6392,6 +6396,11 @@ static int msm_pcie_probe(struct platform_device *pdev)
 				 "PCIe: RC%d: DRV: failed to setup DRV: ret: %d\n",
 				pcie_dev->rc_idx, ret);
 	}
+
+	pcie_dev->nogdsc_retention = of_property_read_bool(of_node,
+					"qcom,nogdsc-retention");
+	PCIE_DBG(pcie_dev, "GDSC retention is %s supported\n",
+		pcie_dev->nogdsc_retention ? "not" : "");
 
 	msm_pcie_i2c_ctrl_init(pcie_dev);
 
