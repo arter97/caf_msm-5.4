@@ -1238,27 +1238,27 @@ static int  pt_get_cmcp_info(struct pt_device_access_data *dad,
 		}
 		cm_ave_data_panel /= (tx_num * rx_num);
 		cmcp_info->cm_ave_data_panel = cm_ave_data_panel;
-	}
 
-	/* Calculate gradient panel sensor column/row here */
-	calculate_gd_info(gd_sensor_col, gd_sensor_row, tx_num, rx_num,
-		cm_data_panel, 1, 1);
-	for (i = 0; i < tx_num; i++) {
-		pt_debug(dev, DL_DEBUG,
-			"i=%d max=%d,min=%d,ave=%d, gradient=%d", i,
-			gd_sensor_col[i].cm_max,
-			gd_sensor_col[i].cm_min,
-			gd_sensor_col[i].cm_ave,
-			gd_sensor_col[i].gradient_val);
-	}
+		/* Calculate gradient panel sensor column/row here */
+		calculate_gd_info(gd_sensor_col, gd_sensor_row, tx_num, rx_num,
+			cm_data_panel, 1, 1);
+		for (i = 0; i < tx_num; i++) {
+			pt_debug(dev, DL_DEBUG,
+				"i=%d max=%d,min=%d,ave=%d, gradient=%d", i,
+				gd_sensor_col[i].cm_max,
+				gd_sensor_col[i].cm_min,
+				gd_sensor_col[i].cm_ave,
+				gd_sensor_col[i].gradient_val);
+		}
 
-	for (i = 0; i < rx_num; i++) {
-		pt_debug(dev, DL_DEBUG,
-			"i=%d max=%d,min=%d,ave=%d, gradient=%d", i,
-			gd_sensor_row[i].cm_max,
-			gd_sensor_row[i].cm_min,
-			gd_sensor_row[i].cm_ave,
-			gd_sensor_row[i].gradient_val);
+		for (i = 0; i < rx_num; i++) {
+			pt_debug(dev, DL_DEBUG,
+				"i=%d max=%d,min=%d,ave=%d, gradient=%d", i,
+				gd_sensor_row[i].cm_max,
+				gd_sensor_row[i].cm_min,
+				gd_sensor_row[i].cm_ave,
+				gd_sensor_row[i].gradient_val);
+		}
 	}
 
 	/*Get cp data*/
@@ -1294,12 +1294,12 @@ static int  pt_get_cmcp_info(struct pt_device_access_data *dad,
 			pt_debug(dev, DL_DEBUG, "cp_tx_cal_data_panel[%d]=%d\n",
 				i, cp_tx_cal_data_panel[i]);
 		}
-	}
 
-	/*get cp_sensor_tx_delta,using the first sensor cal value for temp */
-	/*multiple 1000 to increase accuracy*/
-	cmcp_info->cp_sensor_tx_delta = ABS((cp_tx_cal_data_panel[0]
-		- cp_tx_ave_data_panel) * 1000 / cp_tx_ave_data_panel);
+		/*get cp_sensor_tx_delta,using the first sensor cal value for temp */
+		/*multiple 1000 to increase accuracy*/
+		cmcp_info->cp_sensor_tx_delta = ABS((cp_tx_cal_data_panel[0]
+			- cp_tx_ave_data_panel) * 1000 / cp_tx_ave_data_panel);
+	}
 
 	/*Get cp_rx_data_panel*/
 	if (cp_rx_data_panel != NULL) {
@@ -1327,12 +1327,12 @@ static int  pt_get_cmcp_info(struct pt_device_access_data *dad,
 				"cp_rx_cal_data_panel[%d]=%d\n", i,
 				cp_rx_cal_data_panel[i]);
 		}
-	}
 
-	/*get cp_sensor_rx_delta,using the first sensor cal value for temp */
-	/*multiple 1000 to increase accuracy*/
-	cmcp_info->cp_sensor_rx_delta = ABS((cp_rx_cal_data_panel[0]
-		- cp_rx_ave_data_panel) * 1000 / cp_rx_ave_data_panel);
+		/*get cp_sensor_rx_delta,using the first sensor cal value for temp */
+		/*multiple 1000 to increase accuracy*/
+		cmcp_info->cp_sensor_rx_delta = ABS((cp_rx_cal_data_panel[0]
+			- cp_rx_ave_data_panel) * 1000 / cp_rx_ave_data_panel);
+	}
 
 	if (btn_num == 0) {
 		pt_debug(dev, DL_INFO, "%s: Skip Button Test\n", __func__);
@@ -2101,15 +2101,22 @@ int save_engineering_data(struct device *dev, char *out_buf, int index,
 {
 	int i;
 	int j;
-	int tx_num = cmcp_info->tx_num;
-	int rx_num = cmcp_info->rx_num;
-	int btn_num = cmcp_info->btn_num;
+	int tx_num = 0;
+	int rx_num = 0;
+	int btn_num = 0;
 	int tmp = 0;
 	uint32_t fw_revision_control;
 	uint32_t fw_config_ver;
 	char device_id[20] = {0};
 	struct pt_device_access_data *dad
 		= pt_get_device_access_data(dev);
+
+	if ((result == NULL) || (cmcp_info == NULL))
+		return -EINVAL;
+
+	tx_num = cmcp_info->tx_num;
+	rx_num = cmcp_info->rx_num;
+	btn_num = cmcp_info->btn_num;
 
 	fw_revision_control = dad->si->ttdata.revctrl;
 	fw_config_ver = dad->si->ttdata.fw_ver_conf;
@@ -2950,12 +2957,18 @@ int result_save(struct device *dev, char *buf,
 	int byte_left;
 
 	out_buf = kzalloc(MAX_BUF_LEN, GFP_KERNEL);
-	if (configuration == NULL)
+	if (configuration == NULL) {
 		pt_debug(dev, DL_WARN, "config is NULL");
-	if (result == NULL)
+		return -ENOMEM;
+	}
+	if (result == NULL) {
 		pt_debug(dev, DL_WARN, "result is NULL");
-	if (cmcp_info == NULL)
+		return -ENOMEM;
+	}
+	if (cmcp_info == NULL) {
 		pt_debug(dev, DL_WARN, "cmcp_info is NULL");
+		return -ENOMEM;
+	}
 
 	index = save_header(out_buf, index, result);
 	index = save_engineering_data(dev, out_buf, index,
@@ -3292,7 +3305,8 @@ int cmcp_return_one_value(struct device *dev, const char *buf, u32 *offset,
 		}
 	} else {
 		/* Multiple line: line count */
-		*line_num = line_count;
+		if (line_num)
+			*line_num = line_count;
 		/* Reset for next case */
 		line_count = 1;
 	}

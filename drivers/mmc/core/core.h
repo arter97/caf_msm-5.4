@@ -79,6 +79,7 @@ static inline void mmc_delay(unsigned int ms)
 
 void mmc_rescan(struct work_struct *work);
 void mmc_start_host(struct mmc_host *host);
+void __mmc_stop_host(struct mmc_host *host);
 void mmc_stop_host(struct mmc_host *host);
 
 void _mmc_detect_change(struct mmc_host *host, unsigned long delay,
@@ -112,7 +113,9 @@ extern void mmc_cqe_clk_scaling_start_busy(struct mmc_queue *mq,
 	struct mmc_host *host, bool lock_needed);
 extern void mmc_cqe_clk_scaling_stop_busy(struct mmc_host *host,
 			bool lock_needed, bool is_cqe_dcmd);
+#if defined(CONFIG_DEEPSLEEP)
 extern void mmc_is_deepsleep(struct mmc_host *host);
+#endif
 #endif
 int mmc_execute_tuning(struct mmc_card *card);
 int mmc_hs200_to_hs400(struct mmc_card *card);

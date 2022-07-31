@@ -657,6 +657,7 @@ struct fastrpc_file {
 	bool is_ramdump_pend;
 	/* Flag to indicate dynamic process creation status*/
 	bool in_process_create;
+	struct completion shutdown;
 };
 
 static struct fastrpc_apps gfa;
@@ -3609,6 +3610,12 @@ static int fastrpc_init_attach_process(struct fastrpc_file *fl,
 	remote_arg_t ra[1];
 	struct fastrpc_ioctl_invoke_async ioctl;
 
+	if (fl->dev_minor == MINOR_NUM_DEV) {
+		err = -ECONNREFUSED;
+		ADSPRPC_ERR(
+			"untrusted app trying to attach to privileged DSP PD\n");
+		return err;
+	}
 	/*
 	 * Prepare remote arguments for creating thread group
 	 * in guestOS/staticPD on the remote subsystem.
@@ -3883,6 +3890,13 @@ static int fastrpc_init_create_static_process(struct fastrpc_file *fl,
 		unsigned int pageslen;
 	} inbuf;
 
+	if (fl->dev_minor == MINOR_NUM_DEV) {
+		err = -ECONNREFUSED;
+		ADSPRPC_ERR(
+			"untrusted app trying to attach to audio PD\n");
+		return err;
+	}
+
 	if (!init->filelen)
 		goto bail;
 
@@ -4096,7 +4110,6 @@ static int fastrpc_send_cpuinfo_to_dsp(struct fastrpc_file *fl)
 	ioctl.perf_kernel = NULL;
 	ioctl.perf_dsp = NULL;
 	ioctl.job = NULL;
-	fl->pd = 1;
 
 	err = fastrpc_internal_invoke(fl, FASTRPC_MODE_PARALLEL, KERNEL_MSG_WITH_ZERO_PID, &ioctl);
 	if (!err)
@@ -4137,7 +4150,6 @@ static int fastrpc_get_info_from_dsp(struct fastrpc_file *fl,
 	ioctl.perf_kernel = NULL;
 	ioctl.perf_dsp = NULL;
 	ioctl.job = NULL;
-	fl->pd = 1;
 
 	err = fastrpc_internal_invoke(fl, FASTRPC_MODE_PARALLEL, KERNEL_MSG_WITH_ZERO_PID, &ioctl);
 bail:
@@ -4237,7 +4249,7 @@ static int fastrpc_release_current_dsp_process(struct fastrpc_file *fl)
 	}
 	VERIFY(err, fl->apps->channel[fl->cid].issubsystemup == 1);
 	if (err) {
-		err = -ECONNRESET;
+		wait_for_completion(&fl->shutdown);
 		goto bail;
 	}
 	tgid = fl->tgid;
@@ -5689,6 +5701,7 @@ static int fastrpc_device_open(struct inode *inode, struct file *filp)
 	spin_lock(&me->hlock);
 	hlist_add_head(&fl->hn, &me->drivers);
 	spin_unlock(&me->hlock);
+	init_completion(&fl->shutdown);
 	fl->dev_pm_qos_req = kcalloc(me->silvercores.corecount,
 				sizeof(struct dev_pm_qos_request),
 				GFP_KERNEL);
@@ -6333,6 +6346,8 @@ static int fastrpc_restart_notifier_cb(struct notifier_block *nb,
 {
 	struct fastrpc_apps *me = &gfa;
 	struct fastrpc_channel_ctx *ctx;
+	struct fastrpc_file *fl;
+	struct hlist_node *n;
 	struct notif_data *notifdata = (struct notif_data *)data;
 	int cid = -1;
 
@@ -6345,6 +6360,16 @@ static int fastrpc_restart_notifier_cb(struct notifier_block *nb,
 		ctx->ssrcount++;
 		ctx->issubsystemup = 0;
 		mutex_unlock(&me->channel[cid].smd_mutex);
+	} else if (code == SUBSYS_AFTER_SHUTDOWN) {
+		pr_info("adsprpc: %s: %s subsystem is down\n",
+			__func__, gcinfo[cid].subsys);
+		spin_lock(&me->hlock);
+		hlist_for_each_entry_safe(fl, n, &me->drivers, hn) {
+			if (fl->cid != cid)
+				continue;
+			complete(&fl->shutdown);
+		}
+		spin_unlock(&me->hlock);
 	} else if (code == SUBSYS_RAMDUMP_NOTIFICATION) {
 		if (cid == RH_CID) {
 			if (me->ramdump_handle)

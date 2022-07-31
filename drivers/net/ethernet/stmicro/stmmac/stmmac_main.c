@@ -1108,7 +1108,6 @@ static int stmmac_init_phy(struct net_device *dev)
 			netdev_err(priv->dev, "no phy at addr %d\n", addr);
 			return -ENODEV;
 		}
-		ret = phylink_connect_phy(priv->phylink, priv->phydev);
 
 		if (!priv->plat->mac2mac_en) {
 			if (((priv->phydev->phy_id &
@@ -1125,6 +1124,11 @@ static int stmmac_init_phy(struct net_device *dev)
 		if (priv->plat->phy_intr_en_extn_stm && priv->plat->phy_intr_en) {
 			priv->phydev->irq = PHY_IGNORE_INTERRUPT;
 			priv->phydev->interrupts =  PHY_INTERRUPT_ENABLED;
+		}
+
+		ret = phylink_connect_phy(priv->phylink, priv->phydev);
+
+		if (priv->plat->phy_intr_en_extn_stm && priv->plat->phy_intr_en) {
 			if (priv->phydev->drv->ack_interrupt &&
 			    !priv->phydev->drv->ack_interrupt(priv->phydev)) {
 				pr_info(" qcom-ethqos: %s ack_interrupt successful aftre connect\n",
@@ -4797,6 +4801,8 @@ int stmmac_dvr_probe(struct device *device,
 	ndev->vlan_features |= ndev->hw_features;
 	/* Both mac100 and gmac support receive VLAN tag detection */
 	ndev->features |= NETIF_F_HW_VLAN_CTAG_RX | NETIF_F_HW_VLAN_STAG_RX;
+	priv->dma_cap.vlhash = 0;
+	priv->dma_cap.vlins = 0;
 	if (priv->dma_cap.vlhash) {
 		ndev->features |= NETIF_F_HW_VLAN_CTAG_FILTER;
 		ndev->features |= NETIF_F_HW_VLAN_STAG_FILTER;
@@ -5166,7 +5172,7 @@ static int __init stmmac_cmdline_opt(char *str)
 	char *opt;
 
 	if (!str || !*str)
-		return -EINVAL;
+		return 1;
 	while ((opt = strsep(&str, ",")) != NULL) {
 		if (!strncmp(opt, "debug:", 6)) {
 			if (kstrtoint(opt + 6, 0, &debug))
@@ -5197,11 +5203,11 @@ static int __init stmmac_cmdline_opt(char *str)
 				goto err;
 		}
 	}
-	return 0;
+	return 1;
 
 err:
 	pr_err("%s: ERROR broken module parameter conversion", __func__);
-	return -EINVAL;
+	return 1;
 }
 
 __setup("stmmaceth=", stmmac_cmdline_opt);
