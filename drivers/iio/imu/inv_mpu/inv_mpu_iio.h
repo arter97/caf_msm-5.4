@@ -27,17 +27,18 @@
 #include <linux/iio/imu/mpu.h>
 #include <linux/interrupt.h>
 #include <linux/semaphore.h>
-#ifdef CONFIG_HAS_WAKELOCK
-#include <linux/wakelock.h>
-#else
 #include <linux/pm_wakeup.h>
-#endif
 #include <linux/wait.h>
 
 #include <linux/iio/sysfs.h>
+#include <linux/iio/buffer.h>
+#include <linux/iio/buffer_impl.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/kfifo_buf.h>
-
+#include <linux/input.h>
+#include <linux/ktime.h>
+#include <linux/slab.h>
+#include <linux/kthread.h>
 #ifdef CONFIG_INV_MPU_IIO_ICM20648
 #include "icm20648/dmp3Default.h"
 #endif
@@ -131,9 +132,37 @@
 #define COVARIANCE_SIZE          14
 #define ACCEL_COVARIANCE_SIZE  (COVARIANCE_SIZE * sizeof(int))
 
+#ifdef CONFIG_ENABLE_IAM_ACC_GYRO_BUFFERING
+#define INV_ACC_MAXSAMPLE	4000
+#define INV_GYRO_MAXSAMPLE	4000
+#define G_MAX			23920640
+struct inv_acc_sample {
+	int xyz[3];
+	unsigned int tsec;
+	unsigned long long tnsec;
+};
+struct inv_gyro_sample {
+	int xyz[3];
+	unsigned int tsec;
+	unsigned long long tnsec;
+};
+enum {
+	ACCEL_FSR_2G = 0,
+	ACCEL_FSR_4G = 1,
+	ACCEL_FSR_8G = 2,
+	ACCEL_FSR_16G = 3
+};
+enum {
+	GYRO_FSR_250DPS = 0,
+	GYRO_FSR_500DPS = 1,
+	GYRO_FSR_1000DPS = 2,
+	GYRO_FSR_2000DPS = 3
+};
+#endif
+
 enum inv_bus_type {
-	BUS_I2C = 0,
-	BUS_SPI,
+	BUS_IIO_I2C = 0,
+	BUS_IIO_SPI,
 };
 
 struct inv_mpu_state;
@@ -718,16 +747,15 @@ struct inv_mpu_state {
 	enum inv_devices chip_type;
 	enum inv_bus_type bus_type;
 	enum inv_fifo_count_mode fifo_count_mode;
-#ifdef CONFIG_HAS_WAKELOCK
-	struct wake_lock wake_lock;
-#else
-	struct wakeup_source wake_lock;
-#endif
+	struct wakeup_source *inv_wl;
 #ifdef TIMER_BASED_BATCHING
 	struct hrtimer hr_batch_timer;
 	u64 batch_timeout;
 	bool is_batch_timer_running;
 	struct work_struct batch_work;
+	struct kthread_worker kworker;
+	struct task_struct *kworker_task;
+	struct kthread_work hrtimer_work;
 #endif
 	struct i2c_client *client;
 	struct mpu_platform_data plat_data;
@@ -825,6 +853,26 @@ struct inv_mpu_state {
 	u8 int_en_2;
 	u8 gesture_int_count;
 	u8 smplrt_div;
+#ifdef CONFIG_ENABLE_IAM_ACC_GYRO_BUFFERING
+	bool read_acc_boot_sample;
+	bool read_gyro_boot_sample;
+	int acc_bufsample_cnt;
+	int gyro_bufsample_cnt;
+	bool acc_buffer_inv_samples;
+	bool gyro_buffer_inv_samples;
+	struct kmem_cache *inv_acc_cachepool;
+	struct kmem_cache *inv_gyro_cachepool;
+	struct inv_acc_sample *inv_acc_samplist[INV_ACC_MAXSAMPLE];
+	struct inv_gyro_sample *inv_gyro_samplist[INV_GYRO_MAXSAMPLE];
+	ktime_t timestamp;
+	int max_buffer_time;
+	struct input_dev *accbuf_dev;
+	struct input_dev *gyrobuf_dev;
+	int report_evt_cnt;
+	struct mutex acc_sensor_buff;
+	struct mutex gyro_sensor_buff;
+#endif
+
 };
 
 /**
