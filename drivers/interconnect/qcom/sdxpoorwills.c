@@ -429,23 +429,12 @@ static struct qcom_icc_node xm_sdc1 = {
 	.links = { SLAVE_AOSS, SLAVE_ANOC_SNOC },
 };
 
-static struct qcom_icc_qosbox xm_usb3_qos = {
-	.regs = icc_qnoc_qos_regs[ICC_QNOC_QOSGEN_TYPE_RPMH],
-	.num_ports = 1,
-	.offsets = { 0xf000 },
-	.config = &(struct qos_config) {
-		.prio = 0,
-		.urg_fwd = 0,
-	},
-};
-
 static struct qcom_icc_node xm_usb3 = {
 	.name = "xm_usb3",
 	.id = MASTER_USB3,
 	.channels = 1,
 	.buswidth = 8,
 	.noc_ops = &qcom_qnoc4_ops,
-	.qosbox = &xm_usb3_qos,
 	.num_links = 1,
 	.links = { SLAVE_ANOC_SNOC },
 };
