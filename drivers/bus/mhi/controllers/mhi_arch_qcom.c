@@ -457,7 +457,7 @@ int mhi_arch_pcie_init(struct mhi_controller *mhi_cntrl)
 	struct mhi_dev *mhi_dev = mhi_controller_get_devdata(mhi_cntrl);
 	struct arch_info *arch_info = mhi_dev->arch_info;
 	struct mhi_link_info *cur_link_info;
-	struct ssr_client_hook *ssr_ops;
+	struct ssr_client_hook *ssr_ops = NULL;
 	char node[32];
 	int ret;
 	u16 linkstat;
