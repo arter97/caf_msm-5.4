@@ -20,6 +20,9 @@
 #include <linux/uaccess.h>
 #include <soc/qcom/boot_stats.h>
 #include <linux/hashtable.h>
+#ifdef CONFIG_QCOM_SOC_SLEEP_STATS
+#include <asm/arch_timer.h>
+#endif
 
 #define MARKER_STRING_WIDTH 40
 #define TS_WHOLE_NUM_WIDTH 8
