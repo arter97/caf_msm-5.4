@@ -2940,7 +2940,7 @@ int cnss_qmi_get_dms_mac(struct cnss_plat_data *plat_priv)
 	int ret = 0;
 
 	if  (!test_bit(CNSS_QMI_DMS_CONNECTED, &plat_priv->driver_state)) {
-		cnss_pr_err("DMS QMI connection not established\n");
+		cnss_pr_dbg("DMS QMI connection not established\n");
 		return -EAGAIN;
 	}
 	cnss_pr_dbg("Requesting DMS MAC address");

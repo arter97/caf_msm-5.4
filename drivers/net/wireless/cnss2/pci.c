@@ -4318,7 +4318,7 @@ static int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
 
 	of_node = of_parse_phandle(pci_dev->dev.of_node, "qcom,iommu-group", 0);
 	if (!of_node) {
-		cnss_pr_err("No iommu group configuration\n");
+		cnss_pr_dbg("No iommu group configuration\n");
 		return ret;
 	}
 
