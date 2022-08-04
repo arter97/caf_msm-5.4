@@ -694,6 +694,23 @@ void mhi_fw_load_handler(struct mhi_controller *mhi_cntrl)
 	ret = mhi_fw_load_bhi(mhi_cntrl, dma_addr, size);
 	mhi_free_coherent(mhi_cntrl, size, buf, dma_addr);
 
+	if (!ret && mhi_cntrl->dev->of_node) {
+#define QRTR_INSTANCE_MASK	0x0000FFFF
+#define QRTR_INSTANCE_SHIFT	0
+
+		u32 instance;
+
+		ret = of_property_read_u32(mhi_cntrl->dev->of_node,
+					   "qrtr_instance_id", &instance);
+		if (!ret) {
+			MHI_CNTRL_LOG("QRTR instance ID is 0x%x\n", instance);
+			instance &= QRTR_INSTANCE_MASK;
+			mhi_write_reg_field(mhi_cntrl, mhi_cntrl->bhi,
+					    BHI_ERRDBG2, QRTR_INSTANCE_MASK,
+					    QRTR_INSTANCE_SHIFT, instance);
+		}
+	}
+
 	if (ret) {
 		MHI_CNTRL_ERR("MHI did not load SBL/EDL image, ret:%d\n", ret);
 		goto fw_load_error_release;
