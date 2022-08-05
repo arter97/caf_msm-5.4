@@ -4466,7 +4466,7 @@ static int dwc3_msm_interconnect_vote_populate(struct dwc3_msm *mdwc)
 	count = of_property_count_strings(mdwc->dev->of_node,
 						"interconnect-names");
 	if (count < 0) {
-		dev_err(mdwc->dev, "No interconnects found.\n");
+		dev_dbg(mdwc->dev, "No interconnects found.\n");
 		return -EINVAL;
 	}
 
@@ -4775,7 +4775,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 
 	if (of_property_read_u32(node, "qcom,dwc-usb3-msm-tx-fifo-size",
 				 &mdwc->tx_fifo_size))
-		dev_err(&pdev->dev,
+		dev_dbg(&pdev->dev,
 			"unable to read platform data tx fifo size\n");
 
 	ret = of_property_read_u32(node, "qcom,num-gsi-evt-buffs",
@@ -4846,7 +4846,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 
 	ret = dwc3_msm_interconnect_vote_populate(mdwc);
 	if (ret)
-		dev_err(&pdev->dev, "Dynamic voting failed\n");
+		dev_dbg(&pdev->dev, "Dynamic voting failed\n");
 
 	/* use default as nominal bus voting */
 	mdwc->default_bus_vote = BUS_VOTE_NOMINAL;
