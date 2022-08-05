@@ -2084,7 +2084,7 @@ static int spi_geni_probe(struct platform_device *pdev)
 		ret = geni_se_resources_init(rsc, SPI_CORE2X_VOTE,
 					(DEFAULT_SE_CLK * DEFAULT_BUS_WIDTH));
 		if (ret) {
-			dev_err(&pdev->dev, "Error geni_se_resources_init\n");
+			dev_dbg(&pdev->dev, "Error geni_se_resources_init\n");
 			goto spi_geni_probe_err;
 		}
 
