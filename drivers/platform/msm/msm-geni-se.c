@@ -1888,7 +1888,7 @@ static int geni_se_probe(struct platform_device *pdev)
 	ret = of_property_read_u32(dev->of_node, "qcom,msm-bus,num-paths",
 					&geni_se_dev->num_paths);
 	if (ret) {
-		dev_err(dev, "%s: ICC entry missing in DT node\n", __func__);
+		dev_dbg(dev, "%s: ICC entry missing in DT node\n", __func__);
 	} else {
 		geni_se_dev->vectors = get_icc_paths(pdev, geni_se_dev);
 		if (geni_se_dev->vectors == NULL) {
