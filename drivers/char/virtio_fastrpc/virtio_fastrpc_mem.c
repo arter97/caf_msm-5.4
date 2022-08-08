@@ -217,7 +217,8 @@ int fastrpc_mmap_remove(struct fastrpc_file *fl, uintptr_t va,
 
 	hlist_for_each_entry_safe(map, n, &fl->maps, hn) {
 		if (map->raddr == va &&
-			map->raddr + map->len == va + len) {
+			map->raddr + map->len == va + len &&
+			map->refs == 1) {
 			match = map;
 			hlist_del_init(&map->hn);
 			break;
@@ -227,7 +228,7 @@ int fastrpc_mmap_remove(struct fastrpc_file *fl, uintptr_t va,
 		*ppmap = match;
 		return 0;
 	}
-	return -ENOTTY;
+	return -ETOOMANYREFS;
 }
 
 void fastrpc_mmap_free(struct fastrpc_file *fl,
