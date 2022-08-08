@@ -95,6 +95,7 @@ struct fastrpc_file {
 	struct fastrpc_apps *apps;
 	struct dentry *debugfs_file;
 	struct mutex map_mutex;
+	struct mutex internal_map_mutex;
 	/* Identifies the device (MINOR_NUM_DEV / MINOR_NUM_SECURE_DEV) */
 	int dev_minor;
 	char *debug_buf;

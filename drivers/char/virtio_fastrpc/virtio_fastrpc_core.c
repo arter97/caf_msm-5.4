@@ -279,6 +279,7 @@ struct fastrpc_file *fastrpc_file_alloc(void)
 	fl->domain = -1;
 	fl->cid = -1;
 	fl->dsp_proc_init = 0;
+	mutex_init(&fl->internal_map_mutex);
 	mutex_init(&fl->map_mutex);
 	return fl;
 }
@@ -483,6 +484,7 @@ int fastrpc_file_free(struct fastrpc_file *fl)
 	mutex_unlock(&fl->map_mutex);
 
 	mutex_destroy(&fl->map_mutex);
+	mutex_destroy(&fl->internal_map_mutex);
 	kfree(fl);
 	return 0;
 }
@@ -1330,9 +1332,9 @@ int fastrpc_internal_munmap(struct fastrpc_file *fl,
 		dev_err(me->dev, "%s: user application %s trying to unmap without initialization\n",
 			 __func__, current->comm);
 		err = -EBADR;
-		goto bail;
+		return err;
 	}
-
+	mutex_lock(&fl->internal_map_mutex);
 	spin_lock(&fl->hlock);
 	hlist_for_each_entry_safe(rbuf, n, &fl->remote_bufs, hn_rem) {
 		if (rbuf->raddr && (rbuf->flags == ADSP_MMAP_ADD_PAGES)) {
@@ -1350,6 +1352,7 @@ int fastrpc_internal_munmap(struct fastrpc_file *fl,
 		if (err)
 			goto bail;
 		fastrpc_buf_free(rbuf, 0);
+		mutex_unlock(&fl->internal_map_mutex);
 		return err;
 	}
 
@@ -1373,6 +1376,7 @@ bail:
 		fastrpc_mmap_add(fl, map);
 		mutex_unlock(&fl->map_mutex);
 	}
+	mutex_unlock(&fl->internal_map_mutex);
 	return err;
 }
 
@@ -1388,8 +1392,9 @@ int fastrpc_internal_munmap_fd(struct fastrpc_file *fl,
 		dev_err(me->dev, "%s: user application %s trying to unmap without initialization\n",
 			__func__, current->comm);
 		err = -EBADR;
-		goto bail;
+		return err;
 	}
+	mutex_lock(&fl->internal_map_mutex);
 	mutex_lock(&fl->map_mutex);
 	if (fastrpc_mmap_find(fl, ud->fd, ud->va, ud->len, 0, 0, &map)) {
 		dev_err(me->dev, "mapping not found to unmap fd 0x%x, va 0x%lx, len 0x%x\n",
@@ -1402,6 +1407,7 @@ int fastrpc_internal_munmap_fd(struct fastrpc_file *fl,
 		fastrpc_mmap_free(fl, map, 0);
 	mutex_unlock(&fl->map_mutex);
 bail:
+	mutex_unlock(&fl->internal_map_mutex);
 	return err;
 }
 
@@ -1486,8 +1492,9 @@ int fastrpc_internal_mmap(struct fastrpc_file *fl,
 		dev_err(me->dev, "%s: user application %s trying to map without initialization\n",
 			__func__, current->comm);
 		err = -EBADR;
-		goto bail;
+		return err;
 	}
+	mutex_lock(&fl->internal_map_mutex);
 	if (ud->flags == ADSP_MMAP_ADD_PAGES) {
 		if (ud->vaddrin) {
 			err = -EINVAL;
@@ -1536,6 +1543,7 @@ int fastrpc_internal_mmap(struct fastrpc_file *fl,
 		fastrpc_mmap_free(fl, map, 0);
 		mutex_unlock(&fl->map_mutex);
 	}
+	mutex_unlock(&fl->internal_map_mutex);
 	return err;
 }
 
