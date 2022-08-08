@@ -20,6 +20,18 @@ static const char * const lemans_gcc_parent_names_usb_sec[] = {
 	"bi_tcxo",
 };
 
+static const char * const lemans_gcc_parent_names_pcie_0[] = {
+	"pcie_0_pipe_clk",
+	"gcc_pcie_mbist_pll_test_se_clk_src",
+	"bi_tcxo",
+};
+
+static const char * const lemans_gcc_parent_names_pcie_1[] = {
+	"pcie_1_pipe_clk",
+	"gcc_pcie_mbist_pll_test_se_clk_src",
+	"bi_tcxo",
+};
+
 static const struct virtio_clk_init_data lemans_gcc_virtio_clocks[] = {
 	[GCC_QUPV3_WRAP0_S0_CLK] = {.name = "gcc_qupv3_wrap0_s0_clk",},
 	[GCC_QUPV3_WRAP0_S1_CLK] = {.name = "gcc_qupv3_wrap0_s1_clk",},
@@ -83,6 +95,35 @@ static const struct virtio_clk_init_data lemans_gcc_virtio_clocks[] = {
 	[GCC_AGGRE_USB2_PRIM_AXI_CLK] = {.name = "gcc_aggre_usb2_prim_axi_clk",},
 	[GCC_USB20_MOCK_UTMI_CLK] = {.name = "gcc_usb20_mock_utmi_clk",},
 	[GCC_USB20_SLEEP_CLK] = {.name = "gcc_usb20_sleep_clk",},
+	[GCC_PCIE_0_PIPE_CLK] = {.name = "gcc_pcie_0_pipe_clk",},
+	[GCC_PCIE_0_AUX_CLK] = {.name = "gcc_pcie_0_aux_clk",},
+	[GCC_PCIE_0_CFG_AHB_CLK] = {.name = "gcc_pcie_0_cfg_ahb_clk",},
+	[GCC_PCIE_0_MSTR_AXI_CLK] = {.name = "gcc_pcie_0_mstr_axi_clk",},
+	[GCC_PCIE_0_SLV_AXI_CLK] = {.name = "gcc_pcie_0_slv_axi_clk",},
+	[GCC_PCIE_CLKREF_EN] = {.name = "gcc_pcie_clkref_en",},
+	[GCC_PCIE_0_SLV_Q2A_AXI_CLK] = {.name = "gcc_pcie_0_slv_q2a_axi_clk",},
+	[GCC_PCIE_0_PHY_RCHNG_CLK] = {.name = "gcc_pcie_0_phy_rchng_clk",},
+	[GCC_PCIE_0_PHY_AUX_CLK] = {.name = "gcc_pcie_0_phy_aux_clk",},
+	[GCC_PCIE_0_PIPEDIV2_CLK] = {.name = "gcc_pcie_0_pipediv2_clk",},
+	[GCC_PCIE_0_PIPE_CLK_SRC] = {
+				.name = "gcc_pcie_0_pipe_clk_src",
+				.parent_names = lemans_gcc_parent_names_pcie_0,
+				.num_parents = ARRAY_SIZE(lemans_gcc_parent_names_pcie_0),
+				},
+	[GCC_PCIE_1_PIPE_CLK] = {.name = "gcc_pcie_1_pipe_clk",},
+	[GCC_PCIE_1_AUX_CLK] = {.name = "gcc_pcie_1_aux_clk",},
+	[GCC_PCIE_1_CFG_AHB_CLK] = {.name = "gcc_pcie_1_cfg_ahb_clk",},
+	[GCC_PCIE_1_MSTR_AXI_CLK] = {.name = "gcc_pcie_1_mstr_axi_clk",},
+	[GCC_PCIE_1_SLV_AXI_CLK] = {.name = "gcc_pcie_1_slv_axi_clk",},
+	[GCC_PCIE_1_SLV_Q2A_AXI_CLK] = {.name = "gcc_pcie_1_slv_q2a_axi_clk",},
+	[GCC_PCIE_1_PHY_RCHNG_CLK] = {.name = "gcc_pcie_1_phy_rchng_clk",},
+	[GCC_PCIE_1_PHY_AUX_CLK] = {.name = "gcc_pcie_1_phy_aux_clk",},
+	[GCC_PCIE_1_PIPEDIV2_CLK] = {.name = "gcc_pcie_1_pipediv2_clk",},
+	[GCC_PCIE_1_PIPE_CLK_SRC] = {
+				.name = "gcc_pcie_1_pipe_clk_src",
+				.parent_names = lemans_gcc_parent_names_pcie_1,
+				.num_parents = ARRAY_SIZE(lemans_gcc_parent_names_pcie_1),
+				},
 };
 
 static const char * const lemans_gcc_virtio_resets[] = {
@@ -96,6 +137,10 @@ static const char * const lemans_gcc_virtio_resets[] = {
 	[GCC_USB3PHY_PHY_SEC_BCR] = "gcc_usb3phy_phy_sec_bcr",
 	[GCC_USB3_PHY_TERT_BCR] = "gcc_usb3_tert_bcr",
 	[GCC_USB20_PRIM_BCR] = "gcc_usb20_master_clk",
+	[GCC_PCIE_0_BCR] = "gcc_pcie_0_bcr",
+	[GCC_PCIE_0_PHY_BCR] = "gcc_pcie_0_phy_bcr",
+	[GCC_PCIE_1_BCR] = "gcc_pcie_1_bcr",
+	[GCC_PCIE_1_PHY_BCR] = "gcc_pcie_1_phy_bcr",
 };
 
 const struct clk_virtio_desc clk_virtio_lemans_gcc = {
