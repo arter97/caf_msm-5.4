@@ -247,7 +247,7 @@ static int vhost_hab_open(struct inode *inode, struct file *f)
 	int num_pchan = 0;
 	bool vh_pchan_found;
 	int i, j = 0;
-	int ret;
+	int ret = 0;
 
 	vh_dev = kmalloc(sizeof(*vh_dev), GFP_KERNEL);
 	if (!vh_dev)
@@ -284,6 +284,7 @@ static int vhost_hab_open(struct inode *inode, struct file *f)
 		if (!vh_pchan_found) {
 			pr_err("no vh_pchan is available for mmid %d\n",
 				habdev->id);
+			ret = -ENODEV;
 			goto err;
 		}
 	}

@@ -111,11 +111,21 @@ static struct vq_pchan *get_virtio_pchan(struct virtio_hab *vhab,
 /* vq event callback - send/out buf returns */
 static void virthab_recv_txq(struct virtqueue *vq)
 {
-	struct virtio_hab *vh = get_vh(vq->vdev);
-	struct vq_pchan *vpc = get_virtio_pchan(vh, vq);
+	struct virtio_hab *vh = NULL;
+	struct vq_pchan *vpc = NULL;
 	struct vh_buf_header *hd = NULL;
 	unsigned long flags;
 	unsigned int len;
+
+	vh = get_vh(vq->vdev);
+	if (NULL != vh) {
+		vpc = get_virtio_pchan(vh, vq);
+	}
+
+	if (vh == NULL || vpc == NULL) {
+		pr_err("virt hab recv txq vh or vpc is null\n");
+		return;
+	}
 
 	spin_lock_irqsave(&vpc->lock[HAB_PCHAN_TX_VQ], flags);
 	if (vpc->pchan_ready) {
@@ -176,14 +186,26 @@ static void virthab_recv_txq(struct virtqueue *vq)
 static void virthab_recv_rxq(unsigned long p)
 {
 	struct virtqueue *vq = (struct virtqueue *)p;
-	struct virtio_hab *vh = get_vh(vq->vdev);
-	struct vq_pchan *vpc = get_virtio_pchan(vh, vq);
+	struct virtio_hab *vh = NULL;
+	struct vq_pchan *vpc = NULL;
 	char *inbuf;
 	unsigned int len;
-	struct physical_channel *pchan = vpc->pchan;
+	struct physical_channel *pchan = NULL;
 	struct scatterlist sg[1];
 	int rc;
 	struct vh_buf_header *hd = NULL;
+
+	vh = get_vh(vq->vdev);
+	if (NULL != vh) {
+		vpc = get_virtio_pchan(vh, vq);
+	}
+
+	if (vh == NULL || vpc == NULL) {
+		pr_err("virt hab recv rxq vh or vpc is null\n");
+		return;
+	}
+
+	pchan = vpc->pchan;
 
 	if (vq != vpc->vq[HAB_PCHAN_RX_VQ])
 		pr_err("%s failed to match rxq %pK expecting %pK\n",
@@ -252,8 +274,18 @@ static void virthab_recv_rxq(unsigned long p)
 
 static void virthab_recv_rxq_task(struct virtqueue *vq)
 {
-	struct virtio_hab *vh = get_vh(vq->vdev);
-	struct vq_pchan *vpc = get_virtio_pchan(vh, vq);
+	struct virtio_hab *vh = NULL;
+	struct vq_pchan *vpc = NULL;
+
+	vh = get_vh(vq->vdev);
+	if (NULL != vh) {
+		vpc = get_virtio_pchan(vh, vq);
+	}
+
+	if (vh == NULL || vpc == NULL) {
+		pr_err("virt hab recv rxq task vh or vpc is null\n");
+		return;
+	}
 
 	tasklet_schedule(&vpc->task);
 }
