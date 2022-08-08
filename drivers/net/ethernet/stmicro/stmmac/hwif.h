@@ -278,6 +278,7 @@ struct stmmac_safety_stats;
 struct stmmac_tc_entry;
 struct stmmac_pps_cfg;
 struct stmmac_rss;
+struct vlan_filter_info;
 
 /* Helpers to program the MAC core */
 struct stmmac_ops {
@@ -375,6 +376,8 @@ struct stmmac_ops {
 				bool en, bool udp, bool sa, bool inv,
 				u32 match);
 	void (*set_arp_offload)(struct mac_device_info *hw, bool en, u32 addr);
+		/* Enable the VLAN MAC configuration for DMA Queue*/
+	void (*qcom_set_vlan)(struct vlan_filter_info *vlan, void __iomem *ioaddr);
 };
 
 #define stmmac_core_init(__priv, __args...) \
