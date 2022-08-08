@@ -78,25 +78,6 @@ int ethqos_init_regulators(struct qcom_ethqos *ethqos)
 	}
 
 	if (of_property_read_bool(ethqos->pdev->dev.of_node,
-				  "vreg_rgmii-supply")) {
-		ethqos->reg_rgmii =
-		devm_regulator_get(&ethqos->pdev->dev, EMAC_VREG_RGMII_NAME);
-		if (IS_ERR(ethqos->reg_rgmii)) {
-			ETHQOSERR("Can not get <%s>\n", EMAC_VREG_RGMII_NAME);
-			return PTR_ERR(ethqos->reg_rgmii);
-		}
-
-		ret = regulator_enable(ethqos->reg_rgmii);
-		if (ret) {
-			ETHQOSERR("Can not enable <%s>\n",
-				  EMAC_VREG_RGMII_NAME);
-			goto reg_error;
-		}
-
-		ETHQOSDBG("Enabled <%s>\n", EMAC_VREG_RGMII_NAME);
-	}
-
-	if (of_property_read_bool(ethqos->pdev->dev.of_node,
 				  "vreg_emac_phy-supply")) {
 		ethqos->reg_emac_phy =
 		devm_regulator_get(&ethqos->pdev->dev, EMAC_VREG_EMAC_PHY_NAME);
@@ -161,6 +142,26 @@ int ethqos_init_regulators(struct qcom_ethqos *ethqos)
 		ETHQOSDBG("Enabled <%s>\n", EMAC_VREG_RGMII_IO_PADS_NAME);
 	}
 
+	if (of_property_read_bool(ethqos->pdev->dev.of_node,
+				  "vreg_rgmii-supply") && (2500000 ==
+		   regulator_get_voltage(ethqos->reg_rgmii_io_pads))) {
+		ethqos->reg_rgmii =
+		devm_regulator_get(&ethqos->pdev->dev, EMAC_VREG_RGMII_NAME);
+		if (IS_ERR(ethqos->reg_rgmii)) {
+			ETHQOSERR("Can not get <%s>\n", EMAC_VREG_RGMII_NAME);
+			return PTR_ERR(ethqos->reg_rgmii);
+		}
+
+		ret = regulator_enable(ethqos->reg_rgmii);
+		if (ret) {
+			ETHQOSERR("Can not enable <%s>\n",
+				  EMAC_VREG_RGMII_NAME);
+			goto reg_error;
+		}
+
+		ETHQOSDBG("Enabled <%s>\n", EMAC_VREG_RGMII_NAME);
+	}
+
 	return ret;
 
 reg_error:
@@ -220,8 +221,7 @@ static int ethqos_init_pinctrl(struct device *dev, struct qcom_ethqos *ethqos)
 
 	num_names = of_property_count_strings(dev->of_node, "pinctrl-names");
 	if (num_names < 0) {
-		dev_err(dev, "Cannot parse pinctrl-names: %d\n",
-			num_names);
+		dev_err(dev, "Cannot parse pinctrl-names: %d\n", num_names);
 		return num_names;
 	}
 
