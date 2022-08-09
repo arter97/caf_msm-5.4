@@ -196,8 +196,7 @@ static int get_key_from_ta(void)
 	if (!ret) {
 		memcpy(params->key_blob, rsp->wrapkey_rsp.wrapped_key_buffer,
 			rsp->wrapkey_rsp.wrapped_key_size);
-		memcpy(key, rsp->wrapkey_rsp.key_buffer,
-			rsp->wrapkey_rsp.key_size);
+		memcpy(key, rsp->wrapkey_rsp.key_buffer, AES256_KEY_SIZE);
 	}
 	return ret;
 }
