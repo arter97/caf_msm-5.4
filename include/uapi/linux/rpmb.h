@@ -14,6 +14,7 @@
  * @RPMB_TYPE_EMMC  : eMMC (JESD84-B50.1)
  * @RPMB_TYPE_UFS   : UFS (JESD220)
  * @RPMB_TYPE_NVME  : NVM Express Revision 1.3a
+ * @RPMB_TYPE_VIRTIO: Virtio device
  * @RPMB_TYPE_SIM   : Simulation device.
  * @RPMB_TYPE_MAX   : upper sentinel
  */
@@ -22,6 +23,7 @@ enum rpmb_type {
 	RPMB_TYPE_EMMC,
 	RPMB_TYPE_UFS,
 	RPMB_TYPE_NVME,
+	RPMB_TYPE_VIRTIO,
 
 	RPMB_TYPE_SIM = 0x0100,
 	RPMB_TYPE_MAX = RPMB_TYPE_SIM | RPMB_TYPE_NVME,
