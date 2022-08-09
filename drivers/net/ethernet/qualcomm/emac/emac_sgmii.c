@@ -307,6 +307,11 @@ int emac_sgmii_irq_clear(struct emac_adapter *adpt, u32 irq_bits)
 		emac_err(adpt,
 			 "error: failed clear SGMII irq: status:0x%x bits:0x%x\n",
 			 status, irq_bits);
+		/* Finalize clearing procedure */
+		writel_relaxed(0, sgmii->base + EMAC_SGMII_PHY_IRQ_CMD);
+		writel_relaxed(0, sgmii->base + EMAC_SGMII_PHY_INTERRUPT_CLEAR);
+		/* Ensure that clearing procedure finalization is written to HW */
+		wmb();
 		return -EIO;
 	}
 
