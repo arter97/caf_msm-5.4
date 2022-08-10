@@ -1287,8 +1287,10 @@ static irqreturn_t raydium_ts_interrupt(int irq, void *dev_id)
 	} else {
 		if (!work_pending(&g_raydium_ts->work)) {
 			/* Clear interrupts*/
-			result = queue_work(g_raydium_ts->workqueue,
-					    &g_raydium_ts->work);
+			if (g_raydium_ts->workqueue) {
+				result = queue_work(g_raydium_ts->workqueue,
+						&g_raydium_ts->work);
+			}
 
 			if (!result) {
 				/*queue_work fail*/
@@ -2394,7 +2396,7 @@ exit_check_functionality_failed:
 
 void raydium_ts_shutdown(struct i2c_client *client)
 {
-
+	LOGD(LOG_INFO, "[touch] %s: start\n", __func__);
 #if defined(CONFIG_FB)
 	raydium_unregister_notifier();
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
@@ -2420,17 +2422,21 @@ void raydium_ts_shutdown(struct i2c_client *client)
 		gpio_free(g_raydium_ts->irq_gpio);
 
 	cancel_work_sync(&g_raydium_ts->work);
-	destroy_workqueue(g_raydium_ts->workqueue);
+	if (g_raydium_ts->workqueue) {
+		destroy_workqueue(g_raydium_ts->workqueue);
+		g_raydium_ts->workqueue = NULL;
+	}
 
 	raydium_enable_regulator(g_raydium_ts, false);
 	raydium_get_regulator(g_raydium_ts, false);
 
 	i2c_set_clientdata(client, NULL);
+	LOGD(LOG_INFO, "[touch] %s: done\n", __func__);
 }
 
 static int raydium_ts_remove(struct i2c_client *client)
 {
-
+	LOGD(LOG_INFO, "[touch] %s: start\n", __func__);
 #if defined(CONFIG_FB)
 	raydium_unregister_notifier();
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
@@ -2456,12 +2462,16 @@ static int raydium_ts_remove(struct i2c_client *client)
 		gpio_free(g_raydium_ts->irq_gpio);
 
 	cancel_work_sync(&g_raydium_ts->work);
-	destroy_workqueue(g_raydium_ts->workqueue);
+	if (g_raydium_ts->workqueue) {
+		destroy_workqueue(g_raydium_ts->workqueue);
+		g_raydium_ts->workqueue = NULL;
+	}
 
 	raydium_enable_regulator(g_raydium_ts, false);
 	raydium_get_regulator(g_raydium_ts, false);
 
 	i2c_set_clientdata(client, NULL);
+	LOGD(LOG_INFO, "[touch] %s: done\n", __func__);
 	return 0;
 }
 
