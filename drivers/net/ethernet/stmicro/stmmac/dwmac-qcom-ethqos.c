@@ -28,6 +28,8 @@
 #include <asm-generic/io.h>
 #include <linux/kthread.h>
 #include <linux/io-64-nonatomic-hi-lo.h>
+#include <linux/if_vlan.h>
+
 #include "stmmac.h"
 #include "stmmac_platform.h"
 #include "dwmac-qcom-ethqos.h"
@@ -106,6 +108,7 @@ static struct ethqos_emac_driver_data emac_por_data = {
 	.num_por = ARRAY_SIZE(emac_por),
 };
 
+static unsigned char config_dev_addr[ETH_ALEN] = {0};
 static void qcom_ethqos_read_iomacro_por_values(struct qcom_ethqos *ethqos)
 {
 	int i;
@@ -125,13 +128,28 @@ u16 dwmac_qcom_select_queue(struct net_device *dev,
 			    struct net_device *sb_dev)
 {
 	u16 txqueue_select = ALL_OTHER_TRAFFIC_TX_CHANNEL;
-	unsigned int eth_type, priority;
+	unsigned int eth_type, priority, vlan_id;
 	struct stmmac_priv *priv = netdev_priv(dev);
 
 	/* Retrieve ETH type */
 	eth_type = dwmac_qcom_get_eth_type(skb->data);
 
-	if (eth_type == ETH_P_TSN) {
+	if (pethqos->cv2x_mode == CV2X_MODE_AP) {
+		if (skb_vlan_tag_present(skb)) {
+			vlan_id = skb_vlan_tag_get_id(skb);
+			if (vlan_id == pethqos->cv2x_vlan.vlan_id)
+				txqueue_select = CV2X_TAG_TX_CHANNEL;
+			else if (vlan_id == pethqos->qoe_vlan.vlan_id)
+				txqueue_select = QMI_TAG_TX_CHANNEL;
+			else
+				txqueue_select =
+				ALL_OTHER_TX_TRAFFIC_IPA_DISABLED;
+		} else {
+			txqueue_select = ALL_OTHER_TX_TRAFFIC_IPA_DISABLED;
+		}
+	} else if (pethqos->cv2x_mode == CV2X_MODE_MDM) {
+		txqueue_select = ALL_OTHER_TRAFFIC_TX_CHANNEL;
+	} else if (eth_type == ETH_P_TSN) {
 		/* Read VLAN priority field from skb->data */
 		priority = dwmac_qcom_get_vlan_ucp(skb->data);
 
@@ -148,9 +166,6 @@ u16 dwmac_qcom_select_queue(struct net_device *dev,
 		if (priv->tx_queue[txqueue_select].skip_sw)
 			txqueue_select = ALL_OTHER_TRAFFIC_TX_CHANNEL;
 	}
-	if (priv->tx_queue[txqueue_select].skip_sw)
-		netdev_err(priv->dev, "TX Chan %d is not valid for SW path\n",
-			   txqueue_select);
 
 	ETHQOSDBG("tx_queue %d\n", txqueue_select);
 	return txqueue_select;
@@ -3526,6 +3541,7 @@ static ssize_t ethqos_write_dev_emac(struct file *file,
 	struct qcom_ethqos *ethqos = pethqos;
 	struct stmmac_priv *priv = qcom_ethqos_get_priv(pethqos);
 	struct vlan_filter_info vlan_filter_info;
+	char mac_str[30] = {0};
 	char vlan_str[30] = {0};
 	char *prefix = NULL;
 	u32 err;
@@ -3562,6 +3578,45 @@ static ssize_t ethqos_write_dev_emac(struct file *file,
 			err = kstrtouint(prefix + 1, 0, &number);
 			if (!err)
 				ethqos->qoe_vlan.vlan_id = number;
+		}
+	}
+
+	if (strnstr(vlan_str, "Cv2X", strlen(vlan_str))) {
+		ETHQOSDBG("Cv2X supported mode is %u\n", ethqos->cv2x_mode);
+		ethqos->cv2x_vlan.available = true;
+		vlan_filter_info.vlan_id = ethqos->cv2x_vlan.vlan_id;
+		vlan_filter_info.rx_queue = ethqos->cv2x_vlan.rx_queue;
+		vlan_filter_info.vlan_offset = ethqos->cv2x_vlan.vlan_offset;
+		priv->hw->mac->qcom_set_vlan(&vlan_filter_info, priv->ioaddr);
+	}
+
+	if (strnstr(vlan_str, "cvlanid=", strlen(vlan_str))) {
+		prefix = strnchr(vlan_str, strlen(vlan_str), '=');
+		ETHQOSDBG("Cv2X vlanid data written is %s\n", prefix + 1);
+		if (prefix) {
+			err = kstrtouint(prefix + 1, 0, &number);
+			if (!err)
+				ethqos->cv2x_vlan.vlan_id = number;
+		}
+	}
+
+	if (strnstr(in_buf, "cmac_id=", strlen(in_buf))) {
+		prefix = strnchr(in_buf, strlen(in_buf), '=');
+		if (prefix) {
+			memcpy(mac_str, (char *)prefix + 1, 30);
+
+			if (!mac_pton(mac_str, config_dev_addr)) {
+				ETHQOSERR("Invalid mac addr in /dev/emac\n");
+				return count;
+			}
+
+			if (!is_valid_ether_addr(config_dev_addr)) {
+				ETHQOSERR("Invalid/Multcast mac addr found\n");
+				return count;
+			}
+
+			ether_addr_copy(dev_addr, config_dev_addr);
+			memcpy(ethqos->cv2x_dev_addr, dev_addr, ETH_ALEN);
 		}
 	}
 
@@ -3659,6 +3714,35 @@ alloc_chrdev1_region_fail:
 		return ret;
 }
 
+static void ethqos_get_cv2x_dt(struct qcom_ethqos *ethqos,
+			       struct device_node *np)
+{
+	int res;
+
+	res = of_property_read_u32(np, "qcom,cv2x_mode", &ethqos->cv2x_mode);
+	if (res) {
+		ETHQOSDBG("cv2x_mode not in dtsi\n");
+		ethqos->cv2x_mode = CV2X_MODE_DISABLE;
+	}
+
+	if (ethqos->cv2x_mode != CV2X_MODE_DISABLE) {
+		res = of_property_read_u32(np, "qcom,cv2x-queue",
+					   &ethqos->cv2x_vlan.rx_queue);
+		if (res) {
+			ETHQOSERR("cv2x-queue not in dtsi for cv2x_mode %u\n",
+				  ethqos->cv2x_mode);
+			ethqos->cv2x_vlan.rx_queue = CV2X_TAG_TX_CHANNEL;
+		}
+
+		res = of_property_read_u32(np, "qcom,cv2x-vlan-offset",
+					   &ethqos->cv2x_vlan.vlan_offset);
+		if (res) {
+			ETHQOSERR("cv2x-vlan-offset not in dtsi\n");
+			ethqos->cv2x_vlan.vlan_offset = 1;
+		}
+	}
+}
+
 static int _qcom_ethqos_probe(void *arg)
 {
 	struct platform_device *pdev = (struct platform_device *)arg;
@@ -3667,7 +3751,7 @@ static int _qcom_ethqos_probe(void *arg)
 	struct stmmac_resources stmmac_res;
 	struct qcom_ethqos *ethqos = NULL;
 	struct resource *res = NULL;
-	int ret;
+	int ret, i;
 	struct net_device *ndev;
 	struct stmmac_priv *priv;
 
@@ -3729,6 +3813,7 @@ static int _qcom_ethqos_probe(void *arg)
 	ethqos_init_gpio(ethqos);
 
 	ethqos_get_qoe_dt(ethqos, np);
+	ethqos_get_cv2x_dt(ethqos, np);
 
 	plat_dat = stmmac_probe_config_dt(pdev, &stmmac_res.mac);
 	if (IS_ERR(plat_dat)) {
@@ -3736,6 +3821,14 @@ static int _qcom_ethqos_probe(void *arg)
 		return PTR_ERR(plat_dat);
 	}
 
+	if (ethqos->cv2x_mode == CV2X_MODE_MDM ||
+	    ethqos->cv2x_mode == CV2X_MODE_AP) {
+		for (i = 0; i < plat_dat->rx_queues_to_use; i++) {
+			if (plat_dat->rx_queues_cfg[i].pkt_route ==
+			    PACKET_AVCPQ)
+				plat_dat->rx_queues_cfg[i].pkt_route = 0;
+		}
+	}
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "rgmii");
 	ethqos->rgmii_base = devm_ioremap_resource(&pdev->dev, res);
 	if (IS_ERR(ethqos->rgmii_base)) {
@@ -3931,7 +4024,11 @@ ethqos_emac_mem_base(ethqos);
 		ethqos_set_early_eth_param(priv, ethqos);
 	}
 
-	if (ethqos->qoe_mode) {
+	if (ethqos->cv2x_mode)
+		for (i = 0; i < plat_dat->rx_queues_to_use; i++)
+			priv->rx_queue[i].en_fep = true;
+
+	if (ethqos->qoe_mode || ethqos->cv2x_mode) {
 		ethqos_create_emac_device_node(&ethqos->emac_dev_t,
 					       &ethqos->emac_cdev,
 					       &ethqos->emac_class,
