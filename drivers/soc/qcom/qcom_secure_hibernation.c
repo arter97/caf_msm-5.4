@@ -196,8 +196,7 @@ static int get_key_from_ta(void)
 	if (!ret) {
 		memcpy(params->key_blob, rsp->wrapkey_rsp.wrapped_key_buffer,
 			rsp->wrapkey_rsp.wrapped_key_size);
-		memcpy(key, rsp->wrapkey_rsp.key_buffer,
-			rsp->wrapkey_rsp.key_size);
+		memcpy(key, rsp->wrapkey_rsp.key_buffer, AES256_KEY_SIZE);
 	}
 	return ret;
 }
@@ -226,14 +225,13 @@ static int init_ta_and_set_key(void)
 	}
 
 	ret = get_key_from_ta();
-	if (ret) {
+	if (ret)
 		pr_err("set_key returned %d\n", ret);
-		goto err;
-	}
 
-	return 0;
-err:
-	qseecom_shutdown_app(&app_handle);
+	ret = qseecom_shutdown_app(&app_handle);
+	if (ret)
+		pr_err("qseecom_shutdown_app failed: %d\n", ret);
+
 	return ret;
 }
 
@@ -347,7 +345,6 @@ int init_aes_encrypt(void)
 	params->authsize = AUTH_SIZE;
 	return 0;
 err_auth:
-	qseecom_shutdown_app(&app_handle);
 	memset(params->key_blob, 0, WRAPPED_KEY_SIZE);
 	memset(key, 0, AES256_KEY_SIZE);
 	crypto_free_aead(tfm);
