@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -552,9 +553,13 @@ static int ipa_connect_channels(struct gsi_data_port *d_port)
 			GSI_EP_OP_GET_CH_INFO);
 
 	log_event_dbg("%s: USB GSI IN OPS Completed", __func__);
-	in_params->client =
-		(gsi->prot_id != IPA_USB_DIAG) ? IPA_CLIENT_USB_CONS :
-						IPA_CLIENT_USB_DPL_CONS;
+
+	if (gsi->prot_id != IPA_USB_DIAG)
+		in_params->client = (gsi->prot_id != IPA_USB_RMNET_CV2X) ?
+			IPA_CLIENT_USB_CONS : IPA_CLIENT_USB2_CONS;
+	else
+		in_params->client = IPA_CLIENT_USB_DPL_CONS;
+
 	in_params->ipa_ep_cfg.mode.mode = IPA_BASIC;
 	in_params->teth_prot = gsi->prot_id;
 	in_params->gevntcount_low_addr =
@@ -609,7 +614,8 @@ static int ipa_connect_channels(struct gsi_data_port *d_port)
 		usb_gsi_ep_op(d_port->out_ep, (void *)&gsi_channel_info,
 				GSI_EP_OP_GET_CH_INFO);
 		log_event_dbg("%s: USB GSI OUT OPS Completed", __func__);
-		out_params->client = IPA_CLIENT_USB_PROD;
+		out_params->client = (gsi->prot_id != IPA_USB_RMNET_CV2X)
+			? IPA_CLIENT_USB_PROD : IPA_CLIENT_USB2_PROD;
 		out_params->ipa_ep_cfg.mode.mode = IPA_BASIC;
 		out_params->teth_prot = gsi->prot_id;
 		out_params->gevntcount_low_addr =
@@ -1604,7 +1610,8 @@ static long gsi_ctrl_dev_ioctl(struct file *fp, unsigned int cmd,
 	case QTI_CTRL_GET_LINE_STATE:
 	case GSI_MBIM_GPS_USB_STATUS:
 		val = atomic_read(&gsi->connected);
-		if (gsi->prot_id == IPA_USB_RMNET)
+		if (gsi->prot_id == IPA_USB_RMNET ||
+				gsi->prot_id == IPA_USB_RMNET_CV2X)
 			val = gsi->rmnet_dtr_status;
 
 		ret = copy_to_user((void __user *)arg, &val, sizeof(val));
@@ -1823,6 +1830,8 @@ static int gsi_function_ctrl_port_init(struct f_gsi *gsi)
 
 	if (gsi->prot_id == IPA_USB_RMNET)
 		strlcat(gsi->c_port.name, GSI_RMNET_CTRL_NAME, sz);
+	else if (gsi->prot_id == IPA_USB_RMNET_CV2X)
+		strlcat(gsi->c_port.name, GSI_RMNET_V2X_CTRL_NAME, sz);
 	else if (gsi->prot_id == IPA_USB_MBIM)
 		strlcat(gsi->c_port.name, GSI_MBIM_CTRL_NAME, sz);
 	else if (gsi->prot_id == IPA_USB_DIAG)
@@ -2250,8 +2259,12 @@ invalid:
 static void gsi_ctrl_cmd_complete(struct usb_ep *ep, struct usb_request *req)
 {
 	struct f_gsi *gsi = req->context;
-	struct usb_composite_dev *cdev = gsi->function.config->cdev;
+	struct usb_composite_dev *cdev;
 
+	if (!gsi->function.config)
+		return;
+
+	cdev = gsi->function.config->cdev;
 	gsi_ctrl_send_cpkt_tomodem(gsi, req->buf, req->actual);
 	cdev->setup_pending = false;
 }
@@ -2391,7 +2404,8 @@ gsi_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 	case ((USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE) << 8)
 			| USB_CDC_REQ_SET_CONTROL_LINE_STATE:
 		line_state = (w_value & GSI_CTRL_DTR ? true : false);
-		if (gsi->prot_id == IPA_USB_RMNET)
+		if (gsi->prot_id == IPA_USB_RMNET ||
+				gsi->prot_id == IPA_USB_RMNET_CV2X)
 			gsi->rmnet_dtr_status = line_state;
 		log_event_dbg("%s: USB_CDC_REQ_SET_CONTROL_LINE_STATE DTR:%d\n",
 						__func__, line_state);
@@ -2496,6 +2510,7 @@ static int gsi_get_alt(struct usb_function *f, unsigned int intf)
 	/* RNDIS, RMNET and DPL only support alt 0*/
 	if (intf == gsi->ctrl_id || gsi->prot_id == IPA_USB_RNDIS ||
 			gsi->prot_id == IPA_USB_RMNET ||
+			gsi->prot_id == IPA_USB_RMNET_CV2X ||
 			gsi->prot_id == IPA_USB_DIAG)
 		return 0;
 	else if (intf == gsi->data_id)
@@ -2515,7 +2530,8 @@ static int gsi_set_alt(struct usb_function *f, unsigned int intf,
 	log_event_dbg("intf=%u, alt=%u", intf, alt);
 
 	/* Control interface has only altsetting 0 */
-	if (intf == gsi->ctrl_id || gsi->prot_id == IPA_USB_RMNET) {
+	if (intf == gsi->ctrl_id || gsi->prot_id == IPA_USB_RMNET ||
+			gsi->prot_id == IPA_USB_RMNET_CV2X) {
 		if (alt != 0)
 			goto fail;
 
@@ -2551,6 +2567,7 @@ static int gsi_set_alt(struct usb_function *f, unsigned int intf,
 		/* for rndis and rmnet alt is always 0 update alt accordingly */
 		if (gsi->prot_id == IPA_USB_RNDIS ||
 				gsi->prot_id == IPA_USB_RMNET ||
+				gsi->prot_id == IPA_USB_RMNET_CV2X ||
 				gsi->prot_id == IPA_USB_DIAG)
 				alt = 1;
 
@@ -2565,7 +2582,7 @@ static int gsi_set_alt(struct usb_function *f, unsigned int intf,
 				MBIM_NTB_DEFAULT_IN_SIZE;
 		if (alt == 1) {
 			if (gsi->d_port.in_ep) {
-				if (gsi->prot_id == IPA_USB_DIAG)
+				if (gsi->prot_id <= IPA_USB_RMNET_CV2X)
 					gsi->d_port.in_request.ep_intr_num = 3;
 				else
 					gsi->d_port.in_request.ep_intr_num = 2;
@@ -2652,7 +2669,8 @@ static void gsi_disable(struct usb_function *f)
 	if (gsi->prot_id == IPA_USB_RNDIS)
 		rndis_uninit(gsi->params);
 
-	if (gsi->prot_id == IPA_USB_RMNET)
+	if (gsi->prot_id == IPA_USB_RMNET ||
+		gsi->prot_id == IPA_USB_RMNET_CV2X)
 		gsi->rmnet_dtr_status = false;
 
 	/* Disable Control Path */
@@ -2899,7 +2917,7 @@ static int gsi_update_function_bind_params(struct f_gsi *gsi,
 		info->data_nop_desc->bInterfaceNumber = gsi->data_id;
 
 	/* allocate instance-specific endpoints */
-	if (info->fs_in_desc) {
+	if (info->fs_in_desc && gsi->prot_id <= IPA_USB_RMNET_CV2X) {
 		ep = usb_ep_autoconfig_by_name(cdev->gadget,
 				info->fs_in_desc, info->in_epname);
 		if (!ep)
@@ -2909,7 +2927,7 @@ static int gsi_update_function_bind_params(struct f_gsi *gsi,
 		ep->driver_data = cdev;	/* claim */
 	}
 
-	if (info->fs_out_desc) {
+	if (info->fs_out_desc && gsi->prot_id <= IPA_USB_RMNET_CV2X) {
 		ep = usb_ep_autoconfig_by_name(cdev->gadget,
 				info->fs_out_desc, info->out_epname);
 		if (!ep)
@@ -3051,6 +3069,7 @@ static int gsi_bind(struct usb_configuration *c, struct usb_function *f)
 
 
 	if (gsi->prot_id == IPA_USB_RMNET ||
+		gsi->prot_id == IPA_USB_RMNET_CV2X ||
 		gsi->prot_id == IPA_USB_DIAG)
 		gsi->ctrl_id = -ENODEV;
 	else {
@@ -3256,6 +3275,7 @@ static int gsi_bind(struct usb_configuration *c, struct usb_function *f)
 		}
 		break;
 	case IPA_USB_RMNET:
+	case IPA_USB_RMNET_CV2X:
 		info.string_defs = rmnet_gsi_string_defs;
 		info.data_desc = &rmnet_gsi_interface_desc;
 		info.data_str_idx = 0;
@@ -3490,6 +3510,7 @@ static int gsi_bind_config(struct f_gsi *gsi)
 		gsi->function.strings = ecm_gsi_strings;
 		break;
 	case IPA_USB_RMNET:
+	case IPA_USB_RMNET_CV2X:
 		gsi->function.name = "rmnet";
 		gsi->function.strings = rmnet_gsi_strings;
 		break;
@@ -4058,6 +4079,7 @@ static int usb_gsi_uevent(struct device *dev, struct kobj_uevent_env *env)
 
 	switch (gsi->prot_id) {
 	case IPA_USB_RMNET:
+	case IPA_USB_RMNET_CV2X:
 		str = gsi->rmnet_dtr_status ? "connected" : "disconnected";
 		break;
 	case IPA_USB_MBIM:

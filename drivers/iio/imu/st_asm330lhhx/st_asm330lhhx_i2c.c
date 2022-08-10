@@ -1,12 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * STMicroelectronics st_asm330lhhx i2c driver
  *
- * Copyright 2019 STMicroelectronics Inc.
+ * Copyright 2021 STMicroelectronics Inc.
  *
- * Lorenzo Bianconi <lorenzo.bianconi@st.com>
  * Tesi Mario <mario.tesi@st.com>
- *
- * Licensed under the GPL-2.
  */
 
 #include <linux/kernel.h>
@@ -27,9 +25,11 @@ static int st_asm330lhhx_i2c_probe(struct i2c_client *client,
 {
 	struct regmap *regmap;
 
-	regmap = devm_regmap_init_i2c(client, &st_asm330lhhx_i2c_regmap_config);
+	regmap = devm_regmap_init_i2c(client,
+				      &st_asm330lhhx_i2c_regmap_config);
 	if (IS_ERR(regmap)) {
-		dev_err(&client->dev, "Failed to register i2c regmap %d\n",
+		dev_err(&client->dev,
+			"Failed to register i2c regmap %d\n",
 			(int)PTR_ERR(regmap));
 		return PTR_ERR(regmap);
 	}
@@ -56,6 +56,11 @@ static const struct i2c_device_id st_asm330lhhx_i2c_id_table[] = {
 };
 MODULE_DEVICE_TABLE(i2c, st_asm330lhhx_i2c_id_table);
 
+static void st_asm330lhhx_i2c_shutdown(struct i2c_client *client)
+{
+	st_asm330lhhx_shutdown(&client->dev);
+}
+
 static struct i2c_driver st_asm330lhhx_driver = {
 	.driver = {
 		.name = "st_asm330lhhx_i2c",
@@ -65,6 +70,7 @@ static struct i2c_driver st_asm330lhhx_driver = {
 	.probe = st_asm330lhhx_i2c_probe,
 	.remove = st_asm330lhhx_i2c_remove,
 	.id_table = st_asm330lhhx_i2c_id_table,
+	.shutdown = st_asm330lhhx_i2c_shutdown,
 };
 module_i2c_driver(st_asm330lhhx_driver);
 
