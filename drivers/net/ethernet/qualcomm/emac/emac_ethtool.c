@@ -130,8 +130,10 @@ static int emac_set_settings(struct net_device *netdev,
 			phydev->advertising &= ~ADVERTISED_Autoneg;
 
 		emac_mac_down(adpt, EMAC_HW_CTRL_RESET_MAC);
+		emac_phy_down(adpt);
 		ret = phy->ops.link_setup_no_ephy(adpt);
 		emac_mac_up(adpt);
+		emac_phy_up(adpt);
 	}
 
 done:

@@ -307,6 +307,11 @@ int emac_sgmii_irq_clear(struct emac_adapter *adpt, u32 irq_bits)
 		emac_err(adpt,
 			 "error: failed clear SGMII irq: status:0x%x bits:0x%x\n",
 			 status, irq_bits);
+		/* Finalize clearing procedure */
+		writel_relaxed(0, sgmii->base + EMAC_SGMII_PHY_IRQ_CMD);
+		writel_relaxed(0, sgmii->base + EMAC_SGMII_PHY_INTERRUPT_CLEAR);
+		/* Ensure that clearing procedure finalization is written to HW */
+		wmb();
 		return -EIO;
 	}
 
@@ -423,6 +428,9 @@ irqreturn_t emac_sgmii_isr(int _irq, void *data)
 	emac_dbg(adpt, intr, "receive sgmii interrupt\n");
 
 	do {
+		if (TEST_FLAG(adpt, ADPT_STATE_DOWN))
+			break;
+
 		status = readl_relaxed(sgmii->base +
 				       EMAC_SGMII_PHY_INTERRUPT_STATUS) &
 				       SGMII_ISR_MASK;
@@ -435,14 +443,16 @@ irqreturn_t emac_sgmii_isr(int _irq, void *data)
 				emac_task_schedule(adpt);
 		}
 
-		if (status & SGMII_ISR_AN_MASK)
+		if (!TEST_FLAG(adpt, ADPT_STATE_DOWN) && (status & SGMII_ISR_AN_MASK))
 			emac_check_lsc(adpt);
 
-		if (emac_sgmii_irq_clear(adpt, status) != 0) {
-			/* reset */
-			SET_FLAG(adpt, ADPT_TASK_REINIT_REQ);
-			emac_task_schedule(adpt);
-			break;
+		if (!TEST_FLAG(adpt, ADPT_STATE_DOWN)) {
+			if (emac_sgmii_irq_clear(adpt, status) != 0) {
+				/* reset */
+				SET_FLAG(adpt, ADPT_TASK_REINIT_REQ);
+				emac_task_schedule(adpt);
+				break;
+			}
 		}
 	} while (1);
 
