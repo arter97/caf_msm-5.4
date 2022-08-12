@@ -283,7 +283,7 @@ static void setup_dload_mode_support(void)
 	emergency_dload_mode_addr = map_prop_mem(EDL_MODE_PROP);
 
 	store_kaslr_offset();
-#ifdef CONFIG_HIBERNATION
+#if defined(CONFIG_RANDOMIZE_BASE) && defined(CONFIG_HIBERNATION)
 	register_syscore_ops(&msm_poweroff_syscore_ops);
 #endif
 
