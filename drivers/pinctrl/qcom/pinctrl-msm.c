@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013, Sony Mobile Communications AB.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -789,16 +790,16 @@ static void msm_gpio_irq_mask(struct irq_data *d)
 	irq_hw_number_t dir_conn_irq = 0;
 	u32 val;
 
-	if (d->parent_data) {
-		if (is_gpio_dual_edge(d, &dir_conn_irq)) {
-			dir_conn_data = irq_get_irq_data(dir_conn_irq);
-			if (!dir_conn_data)
-				return;
+	if (is_gpio_dual_edge(d, &dir_conn_irq)) {
+		dir_conn_data = irq_get_irq_data(dir_conn_irq);
+		if (!dir_conn_data)
+			return;
 
-			dir_conn_data->chip->irq_mask(dir_conn_data);
-		}
-		irq_chip_mask_parent(d);
+		dir_conn_data->chip->irq_mask(dir_conn_data);
 	}
+
+	if (d->parent_data)
+		irq_chip_mask_parent(d);
 
 	if (test_bit(d->hwirq, pctrl->skip_wake_irqs))
 		return;
@@ -849,16 +850,16 @@ static void msm_gpio_irq_clear_unmask(struct irq_data *d, bool status_clear)
 	unsigned long flags;
 	u32 val;
 
-	if (d->parent_data) {
-		if (is_gpio_dual_edge(d, &dir_conn_irq)) {
-			dir_conn_data = irq_get_irq_data(dir_conn_irq);
-			if (!dir_conn_data)
-				return;
+	if (is_gpio_dual_edge(d, &dir_conn_irq)) {
+		dir_conn_data = irq_get_irq_data(dir_conn_irq);
+		if (!dir_conn_data)
+			return;
 
-			dir_conn_data->chip->irq_unmask(dir_conn_data);
-		}
-		irq_chip_unmask_parent(d);
+		dir_conn_data->chip->irq_unmask(dir_conn_data);
 	}
+
+	if (d->parent_data)
+		irq_chip_unmask_parent(d);
 
 	if (test_bit(d->hwirq, pctrl->skip_wake_irqs))
 		return;
