@@ -84,13 +84,6 @@ enum emac_clk_rate {
 #define EMAC_LINK_SPEED_100_FULL        0x0008
 #define EMAC_LINK_SPEED_1GB_FULL        0x0020
 
-#define EMAC_LINK_SPEED_DEFAULT (\
-		EMAC_LINK_SPEED_10_HALF  |\
-		EMAC_LINK_SPEED_10_FULL  |\
-		EMAC_LINK_SPEED_100_HALF |\
-		EMAC_LINK_SPEED_100_FULL |\
-		EMAC_LINK_SPEED_1GB_FULL)
-
 #define EMAC_MAX_SETUP_LNK_CYCLE        100
 
 /* Wake On Lan */
@@ -756,6 +749,8 @@ void emac_update_hw_stats(struct emac_adapter *adpt);
 int emac_resize_rings(struct net_device *netdev);
 int emac_mac_up(struct emac_adapter *adpt);
 void emac_mac_down(struct emac_adapter *adpt, u32 ctrl);
+void emac_phy_down(struct emac_adapter *adpt);
+void emac_phy_up(struct emac_adapter *adpt);
 int emac_clk_set_rate(struct emac_adapter *adpt, enum emac_clk_id id,
 		      enum emac_clk_rate rate);
 void emac_task_schedule(struct emac_adapter *adpt);
