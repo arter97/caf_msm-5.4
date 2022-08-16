@@ -1740,7 +1740,8 @@ static struct platform_driver crypto_qti_ice_driver = {
 		.of_match_table = crypto_qti_ice_match,
 	},
 };
-module_platform_driver(crypto_qti_ice_driver);
+early_module_platform_driver(crypto_qti_ice_driver, EARLY_SUBSYS_1,
+EARLY_INIT_LEVEL3);
 #endif //CONFIG_QTI_CRYPTO_FDE
 
 MODULE_LICENSE("GPL v2");
