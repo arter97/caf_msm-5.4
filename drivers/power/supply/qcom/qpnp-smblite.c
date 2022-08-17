@@ -1730,11 +1730,15 @@ static void smblite_free_interrupts(struct smb_charger *chg)
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(smblite_irqs); i++)
-		if (smblite_irqs[i].irq > 0)
+		if (smblite_irqs[i].irq > 0) {
 			devm_free_irq(chg->dev, smblite_irqs[i].irq, smblite_irqs[i].irq_data);
+			smblite_irqs[i].irq = 0;
+		}
 
-	if (chg->usb_id_irq > 0 && chg->usb_id_gpio > 0)
+	if (chg->usb_id_irq > 0 && chg->usb_id_gpio > 0) {
 		devm_free_irq(chg->dev, chg->usb_id_irq, chg);
+		chg->usb_id_irq = 0;
+	}
 }
 
 #if defined(CONFIG_DEBUG_FS)
