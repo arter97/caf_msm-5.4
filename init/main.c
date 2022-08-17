@@ -1109,8 +1109,10 @@ static void mark_readonly(void)
 		 * flushed so that we don't hit false positives looking for
 		 * insecure pages which are W+X.
 		 */
+		#ifdef CONFIG_BLK_DEV_INITRD
 		if (initrd_start)
 			rcu_barrier();
+		#endif
 		mark_rodata_ro();
 		rodata_test();
 	} else
