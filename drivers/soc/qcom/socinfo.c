@@ -59,6 +59,7 @@ enum {
 	HW_PLATFORM_ATP = 33,
 	HW_PLATFORM_IDP = 34,
 	HW_PLATFORM_WDP = 36,
+	HW_PLATFORM_QAM = 37,
 	HW_PLATFORM_INVALID
 };
 
@@ -80,6 +81,7 @@ static const char * const hw_platform[] = {
 	[HW_PLATFORM_STP] = "STP",
 	[HW_PLATFORM_SBC] = "SBC",
 	[HW_PLATFORM_ADP] = "ADP",
+	[HW_PLATFORM_QAM] = "QAM",
 	[HW_PLATFORM_HDK] = "HDK",
 	[HW_PLATFORM_IOT] = "IOT",
 	[HW_PLATFORM_ATP] = "ATP",
@@ -674,6 +676,7 @@ static const struct soc_id soc_id[] = {
 	{ 312, "APQ8096SG" },
 	{ 352, "QCS405" },
 	{ 356, "KONA" },
+	{ 455, "KONA" },
 	{ 362, "SA8155" },
 	{ 367, "SA8155P" },
 	{ 522, "SA8155P-IOT" },
@@ -681,6 +684,7 @@ static const struct soc_id soc_id[] = {
 	{ 384, "SA6155"},
 	{ 401, "QCS610"},
 	{ 405, "SA8195P" },
+	{ 406, "QCS410"},
 	{ 415, "LAHAINA" },
 	{ 439, "LAHAINAP" },
 	{ 449, "SC_DIREWOLF"},
@@ -694,6 +698,7 @@ static const struct soc_id soc_id[] = {
 	{ 450, "SHIMA" },
 	{ 454, "HOLI" },
 	{ 507, "BLAIR" },
+	{ 578, "BLAIR-LITE" },
 	{ 486, "MONACO" },
 	{ 517, "MONACOP" },
 	{ 458, "SDXLEMUR" },

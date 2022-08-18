@@ -105,6 +105,7 @@ obj-$(CONFIG_SM_DEBUGCC_HOLI) += debugcc-holi.o
 obj-$(CONFIG_SM_DEBUGCC_SCUBA) += debugcc-scuba.o
 obj-$(CONFIG_SM_DEBUGCC_SHIMA) += debugcc-shima.o
 obj-$(CONFIG_SM_DEBUGCC_YUPIK) += debugcc-yupik.o
+obj-$(CONFIG_SM_DEBUGCC_KONA) += debugcc-kona.o
 obj-$(CONFIG_SM_DISPCC_6150) += dispcc-sm6150.o
 obj-$(CONFIG_SM_DISPCC_8150) += dispcc-sm8150.o
 obj-$(CONFIG_SM_DISPCC_BENGAL) += dispcc-bengal.o
@@ -145,4 +146,6 @@ obj-$(CONFIG_SPMI_PMIC_CLKDIV) += clk-spmi-pmic-div.o
 obj-$(CONFIG_KPSS_XCC) += kpss-xcc.o
 obj-$(CONFIG_QCOM_HFPLL) += hfpll.o
 obj-$(CONFIG_KRAITCC) += krait-cc.o
-obj-$(CONFIG_VIRTIO_CLK) += virtio_clk.o virtio_clk_sm8150.o virtio_clk_sm6150.o virtio_clk_sa8195p.o virtio_clk_direwolf.o
+obj-$(CONFIG_VIRTIO_CLK) += virtio_clk.o virtio_clk_sm8150.o virtio_clk_sm6150.o \
+			virtio_clk_sa8195p.o virtio_clk_direwolf.o \
+			virtio_clk_lemans.o

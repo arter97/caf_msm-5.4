@@ -35,7 +35,8 @@
 #define MM_VID_START	500
 #define MM_VID		501
 #define MM_VID_2	502
-#define MM_VID_END	503
+#define MM_VID_3	503
+#define MM_VID_END	504
 
 #define MM_MISC_START	600
 #define MM_MISC		601

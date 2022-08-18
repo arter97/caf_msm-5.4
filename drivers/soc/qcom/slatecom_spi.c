@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2017-2022, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
 #define pr_fmt(msg) "slatecom: %s: " msg, __func__
@@ -75,6 +75,10 @@
 #define SPI_FREQ_40MHZ	40000000
 
 #define MAX_RETRY 3
+
+#define SLATE_WAKEUP_INTR_RECEIVED					\
+	((g_slave_status_auto_clear_reg & OK_TO_SLEEP_CLEARED) &&	\
+	 (g_slav_status_reg & SLAVE_STATUS_READY))
 
 /* Define IPC Logging Macros */
 #define LOG_PAGES_CNT 2
@@ -243,6 +247,11 @@ int slatecom_set_spi_state(enum slatecom_spi_state state)
 			SLATECOM_INFO("Waiting to set state busy....\n");
 			msleep(100);
 		}
+		/* After PIL seq, clear preceding state. As rmproc
+		 * reloaded, it is unaware of previous context.
+		 */
+		atomic_set(&ok_to_sleep, 0);
+		atomic_set(&slate_is_runtime_suspend, 0);
 	}
 	spi_state = state;
 	SLATECOM_INFO("state = %d\n", state);
@@ -784,7 +793,7 @@ static int slatecom_resume_l(void *handle)
 	}
 
 complete:
-	SLATECOM_ERR("slatecom resume completed\n");
+	SLATECOM_INFO("slatecom resume completed\n");
 	atomic_set(&state, SLATECOM_STATE_ACTIVE);
 	atomic_set(&slate_is_spi_active, 1);
 
@@ -1634,7 +1643,7 @@ static int slatecom_pm_prepare(struct device *dev)
 	atomic_set(&slate_is_runtime_suspend, 0);
 
 	SLATECOM_INFO("reg write status: %d\n", ret);
-	return ret;
+	return (SLATE_WAKEUP_INTR_RECEIVED) ? -ECANCELED : 0;
 }
 
 static irqreturn_t slate_irq_tasklet_hndlr_during_suspend(int irq, void *device)
@@ -1648,7 +1657,7 @@ static int slatecom_pm_suspend(struct device *dev)
 	struct slate_spi_priv *slate_spi = spi_get_drvdata(s_dev);
 	int ret = 0;
 
-	SLATECOM_ERR("entry\n");
+	SLATECOM_INFO("entry\n");
 
 	if (!(g_slav_status_reg & BIT(31))) {
 		SLATECOM_ERR("Slate boot is not complete, skip SPI suspend\n");
@@ -1672,7 +1681,7 @@ static int slatecom_pm_suspend(struct device *dev)
 	ret = request_threaded_irq(slate_irq, NULL, slate_irq_tasklet_hndlr_during_suspend,
 		IRQF_TRIGGER_RISING | IRQF_ONESHOT, "qcom-slate_spi", slate_spi);
 
-	SLATECOM_ERR("suspended\n");
+	SLATECOM_INFO("suspended\n");
 	return (atomic_read(&slate_is_spi_active)) ? -ECANCELED : 0;
 }
 
@@ -1683,7 +1692,7 @@ static int slatecom_pm_resume(struct device *dev)
 	struct slate_spi_priv *spi =
 		container_of(slate_com_drv, struct slate_spi_priv, lhandle);
 
-	SLATECOM_ERR("entry\n");
+	SLATECOM_INFO("entry\n");
 	free_irq(slate_irq, spi);
 	ret = request_threaded_irq(slate_irq, NULL, slate_irq_tasklet_hndlr,
 		IRQF_TRIGGER_HIGH | IRQF_ONESHOT, "qcom-slate_spi", spi);
@@ -1709,7 +1718,7 @@ static int slatecom_pm_resume(struct device *dev)
 		atomic_set(&slate_is_spi_active, 1);
 		atomic_set(&slate_is_runtime_suspend, 0);
 		ret = slatecom_resume_l(&clnt_handle);
-		SLATECOM_ERR("Slatecom resumed with : %d\n", ret);
+		SLATECOM_INFO("Slatecom resumed with : %d\n", ret);
 		mutex_unlock(&slate_task_mutex);
 
 		return ret;
@@ -1719,7 +1728,7 @@ static int slatecom_pm_resume(struct device *dev)
 static void slatecom_pm_complete(struct device *dev)
 {
 	/* resume if state is still SLATECOM_STATE_SUSPEND_PREPARE*/
-	SLATECOM_ERR("entry\n");
+	SLATECOM_INFO("entry\n");
 	if (atomic_read(&state) == SLATECOM_STATE_SUSPEND_PREPARE) {
 		slatecom_pm_resume(dev);
 	}
@@ -1733,7 +1742,7 @@ static int slatecom_pm_runtime_suspend(struct device *dev)
 	struct slate_spi_priv *slate_spi = spi_get_drvdata(s_dev);
 	int ret = 0;
 
-	SLATECOM_ERR("entry\n");
+	SLATECOM_INFO("entry\n");
 	clnt_handle.slate_spi = slate_spi;
 
 	if (atomic_read(&state) == SLATECOM_STATE_RUNTIME_SUSPEND)
@@ -1766,7 +1775,7 @@ static int slatecom_pm_runtime_resume(struct device *dev)
 	struct slate_spi_priv *spi =
 		container_of(slate_com_drv, struct slate_spi_priv, lhandle);
 
-	SLATECOM_ERR("entry\n");
+	SLATECOM_INFO("entry\n");
 	clnt_handle.slate_spi = spi;
 
 	if (atomic_read(&spi->irq_lock) == 1) {
@@ -1780,7 +1789,7 @@ static int slatecom_pm_runtime_resume(struct device *dev)
 	atomic_set(&slate_is_spi_active, 1);
 	atomic_set(&slate_is_runtime_suspend, 0);
 	ret = slatecom_resume_l(&clnt_handle);
-	SLATECOM_ERR("Slatecom Runtime resumed with : %d\n", ret);
+	SLATECOM_INFO("Slatecom Runtime resumed with : %d\n", ret);
 	mutex_unlock(&slate_task_mutex);
 	return ret;
 }

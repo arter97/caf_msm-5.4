@@ -217,7 +217,8 @@ int fastrpc_mmap_remove(struct fastrpc_file *fl, uintptr_t va,
 
 	hlist_for_each_entry_safe(map, n, &fl->maps, hn) {
 		if (map->raddr == va &&
-			map->raddr + map->len == va + len) {
+			map->raddr + map->len == va + len &&
+			map->refs == 1) {
 			match = map;
 			hlist_del_init(&map->hn);
 			break;
@@ -227,7 +228,7 @@ int fastrpc_mmap_remove(struct fastrpc_file *fl, uintptr_t va,
 		*ppmap = match;
 		return 0;
 	}
-	return -ENOTTY;
+	return -ETOOMANYREFS;
 }
 
 void fastrpc_mmap_free(struct fastrpc_file *fl,
@@ -302,7 +303,6 @@ int fastrpc_mmap_create(struct fastrpc_file *fl, int fd,
 	struct fastrpc_apps *me = fl->apps;
 	struct fastrpc_mmap *map = NULL;
 	int err = 0, sgl_index = 0;
-	unsigned long flags;
 	struct scatterlist *sgl = NULL;
 
 	if (!fastrpc_mmap_find(fl, fd, va, len, mflags, 1, ppmap))
@@ -330,7 +330,7 @@ int fastrpc_mmap_create(struct fastrpc_file *fl, int fd,
 			dev_err(me->dev, "can't get dma buf fd %d\n", fd);
 			goto bail;
 		}
-		VERIFY(err, !dma_buf_get_flags(map->buf, &flags));
+		VERIFY(err, !dma_buf_get_flags(map->buf, &map->dma_flags));
 		if (err) {
 			dev_err(me->dev, "can't get dma buf flags %d\n", fd);
 			goto bail;
@@ -343,7 +343,7 @@ int fastrpc_mmap_create(struct fastrpc_file *fl, int fd,
 			goto bail;
 		}
 
-		if (!(flags & ION_FLAG_CACHED))
+		if (!(map->dma_flags & ION_FLAG_CACHED))
 			map->attach->dma_map_attrs |= DMA_ATTR_SKIP_CPU_SYNC;
 		VERIFY(err, !IS_ERR_OR_NULL(map->table =
 					dma_buf_map_attachment(map->attach,

@@ -26,112 +26,16 @@
 #include <linux/rtnetlink.h>
 #include <asm-generic/io.h>
 #include <linux/kthread.h>
+#include <linux/io-64-nonatomic-hi-lo.h>
 #include "stmmac.h"
 #include "stmmac_platform.h"
 #include "dwmac-qcom-ethqos.h"
 #include "stmmac_ptp.h"
-
-#define RGMII_IO_MACRO_DEBUG1		0x20
-#define EMAC_SYSTEM_LOW_POWER_DEBUG	0x28
-
-/* RGMII_IO_MACRO_CONFIG fields */
-#define RGMII_CONFIG_FUNC_CLK_EN		BIT(30)
-#define RGMII_CONFIG_POS_NEG_DATA_SEL		BIT(23)
-#define RGMII_CONFIG_GPIO_CFG_RX_INT		GENMASK(21, 20)
-#define RGMII_CONFIG_GPIO_CFG_TX_INT		GENMASK(19, 17)
-#define RGMII_CONFIG_MAX_SPD_PRG_9		GENMASK(16, 8)
-#define RGMII_CONFIG_MAX_SPD_PRG_2		GENMASK(7, 6)
-#define RGMII_CONFIG_INTF_SEL			GENMASK(5, 4)
-#define RGMII_CONFIG_BYPASS_TX_ID_EN		BIT(3)
-#define RGMII_CONFIG_LOOPBACK_EN		BIT(2)
-#define RGMII_CONFIG_PROG_SWAP			BIT(1)
-#define RGMII_CONFIG_DDR_MODE			BIT(0)
-
-/*RGMII DLL CONFIG*/
-#define HSR_DLL_CONFIG					0x000B642C
-#define HSR_DLL_CONFIG_2					0xA001
-#define HSR_MACRO_CONFIG_2					0x01
-#define HSR_DLL_TEST_CTRL					0x1400000
-#define HSR_DDR_CONFIG					0x80040868
-#define HSR_SDCC_USR_CTRL					0x2C010800
-#define MACRO_CONFIG_2_MASK				GENMASK(24, 17)
-#define	DLL_CONFIG_2_MASK				GENMASK(22, 0)
-#define HSR_SDCC_DLL_TEST_CTRL				0x1800000
-#define DDR_CONFIG_PRG_RCLK_DLY			        115
-#define DLL_BYPASS					BIT(30)
-
-/* SDCC_HC_REG_DLL_CONFIG fields */
-#define SDCC_DLL_CONFIG_DLL_RST			BIT(30)
-#define SDCC_DLL_CONFIG_PDN			BIT(29)
-#define SDCC_DLL_CONFIG_MCLK_FREQ		GENMASK(26, 24)
-#define SDCC_DLL_CONFIG_CDR_SELEXT		GENMASK(23, 20)
-#define SDCC_DLL_CONFIG_CDR_EXT_EN		BIT(19)
-#define SDCC_DLL_CONFIG_CK_OUT_EN		BIT(18)
-#define SDCC_DLL_CONFIG_CDR_EN			BIT(17)
-#define SDCC_DLL_CONFIG_DLL_EN			BIT(16)
-#define SDCC_DLL_MCLK_GATING_EN			BIT(5)
-#define SDCC_DLL_CDR_FINE_PHASE			GENMASK(3, 2)
-
-/* SDCC_HC_REG_DDR_CONFIG fields */
-#define SDCC_DDR_CONFIG_PRG_DLY_EN		BIT(31)
-#define SDCC_DDR_CONFIG_EXT_PRG_RCLK_DLY	GENMASK(26, 21)
-#define SDCC_DDR_CONFIG_EXT_PRG_RCLK_DLY_CODE	GENMASK(29, 27)
-#define SDCC_DDR_CONFIG_EXT_PRG_RCLK_DLY_EN	BIT(30)
-#define SDCC_DDR_CONFIG_PRG_RCLK_DLY		GENMASK(8, 0)
-#define SDCC_DDR_CONFIG_TCXO_CYCLES_DLY_LINE    GENMASK(20, 12)
-#define SDCC_DDR_CONFIG_TCXO_CYCLES_CNT		GENMASK(11, 9)
-
-/* SDCC_HC_REG_DLL_CONFIG2 fields */
-#define SDCC_DLL_CONFIG2_DLL_CLOCK_DIS		BIT(21)
-#define SDCC_DLL_CONFIG2_MCLK_FREQ_CALC		GENMASK(17, 10)
-#define SDCC_DLL_CONFIG2_DDR_TRAFFIC_INIT_SEL	GENMASK(3, 2)
-#define SDCC_DLL_CONFIG2_DDR_TRAFFIC_INIT_SW	BIT(1)
-#define SDCC_DLL_CONFIG2_DDR_CAL_EN		BIT(0)
-
-/* SDC4_STATUS bits */
-#define SDC4_STATUS_DLL_LOCK			BIT(7)
-
-/* RGMII_IO_MACRO_CONFIG2 fields */
-#define RGMII_CONFIG2_RSVD_CONFIG15		GENMASK(31, 17)
-#define RGMII_CONFIG2_RGMII_CLK_SEL_CFG		BIT(16)
-#define RGMII_CONFIG2_TX_TO_RX_LOOPBACK_EN	BIT(13)
-#define RGMII_CONFIG2_CLK_DIVIDE_SEL		BIT(12)
-#define RGMII_CONFIG2_RX_PROG_SWAP		BIT(7)
-#define RGMII_CONFIG2_DATA_DIVIDE_CLK_SEL	BIT(6)
-#define RGMII_CONFIG2_TX_CLK_PHASE_SHIFT_EN	BIT(5)
-
-#define EMAC_I0_EMAC_CORE_HW_VERSION_RGOFFADDR 0x00000070
-#define EMAC_HW_v2_3_2_RG 0x20030002
-
-#define MII_BUSY 0x00000001
-#define MII_WRITE 0x00000002
-
-/* GMAC4 defines */
-#define MII_GMAC4_GOC_SHIFT		2
-#define MII_GMAC4_WRITE			BIT(MII_GMAC4_GOC_SHIFT)
-#define MII_GMAC4_READ			(3 << MII_GMAC4_GOC_SHIFT)
-
-#define MII_BUSY 0x00000001
-#define MII_WRITE 0x00000002
-
-#define DWC_ETH_QOS_PHY_INTR_STATUS     0x0013
-
-#define LINK_UP 1
-#define LINK_DOWN 0
-
-#define LINK_DOWN_STATE 0x800
-#define LINK_UP_STATE 0x400
-
-#define MICREL_PHY_ID PHY_ID_KSZ9031
-#define DWC_ETH_QOS_MICREL_PHY_INTCS 0x1b
-#define DWC_ETH_QOS_MICREL_PHY_CTL 0x1f
-#define DWC_ETH_QOS_MICREL_INTR_LEVEL 0x4000
-#define DWC_ETH_QOS_BASIC_STATUS     0x0001
-#define LINK_STATE_MASK 0x4
-#define AUTONEG_STATE_MASK 0x20
-#define MICREL_LINK_UP_INTR_STATUS BIT(0)
+#include "dwmac-qcom-ipa-offload.h"
 
 void *ipc_emac_log_ctxt;
+void __iomem *tlmm_rgmii_pull_ctl1_base;
+void __iomem *tlmm_rgmii_rx_ctr_base;
 
 static struct emac_emb_smmu_cb_ctx emac_emb_smmu_ctx = {0};
 struct plat_stmmacenet_data *plat_dat;
@@ -198,6 +102,7 @@ u16 dwmac_qcom_select_queue(struct net_device *dev,
 {
 	u16 txqueue_select = ALL_OTHER_TRAFFIC_TX_CHANNEL;
 	unsigned int eth_type, priority;
+	struct stmmac_priv *priv = netdev_priv(dev);
 
 	/* Retrieve ETH type */
 	eth_type = dwmac_qcom_get_eth_type(skb->data);
@@ -216,7 +121,12 @@ u16 dwmac_qcom_select_queue(struct net_device *dev,
 	} else {
 		/* VLAN tagged IP packet or any other non vlan packets (PTP)*/
 		txqueue_select = ALL_OTHER_TX_TRAFFIC_IPA_DISABLED;
+		if (priv->tx_queue[txqueue_select].skip_sw)
+			txqueue_select = ALL_OTHER_TRAFFIC_TX_CHANNEL;
 	}
+	if (priv->tx_queue[txqueue_select].skip_sw)
+		netdev_err(priv->dev, "TX Chan %d is not valid for SW path\n",
+			   txqueue_select);
 
 	ETHQOSDBG("tx_queue %d\n", txqueue_select);
 	return txqueue_select;
@@ -1802,6 +1712,14 @@ static void read_rgmii_io_macro_node_setting(struct device_node *np_hw, struct q
 		ethqos->io_macro.ipv6_wq = 0;
 	}
 
+	ret = of_property_read_u32(np_hw,
+				   "rgmii-tx-drv",
+				   &ethqos->io_macro.rgmii_tx_drv);
+	if (ret) {
+		ETHQOSDBG("default rgmii_tx_drv\n");
+		ethqos->io_macro.rgmii_tx_drv = 0;
+	}
+
 }
 
 static void qcom_ethqos_bringup_iface(struct work_struct *work)
@@ -2166,6 +2084,21 @@ static int ethqos_cleanup_debugfs(struct qcom_ethqos *ethqos)
 	return 0;
 }
 
+static void ethqos_emac_mem_base(struct qcom_ethqos *ethqos)
+{
+	struct resource *resource = NULL;
+	int ret = 0;
+
+	resource = platform_get_resource(ethqos->pdev, IORESOURCE_MEM, 0);
+	if (!resource) {
+		ETHQOSERR("get emac-base resource failed\n");
+		ret = -ENODEV;
+		return;
+	}
+	ethqos->emac_mem_base = resource->start;
+	ethqos->emac_mem_size = resource_size(resource);
+}
+
 static u32 l3mdev_fib_table1(const struct net_device *dev)
 {
 	return RT_TABLE_LOCAL;
@@ -2182,6 +2115,8 @@ static inline u32 qcom_ethqos_rgmii_io_macro_num_of_regs(u32 emac_hw_version)
 		return 27;
 	case EMAC_HW_v2_3_0:
 		return 28;
+	case EMAC_HW_v2_3_2:
+		return 29;
 	case EMAC_HW_NONE:
 	default:
 		return 0;
@@ -2253,6 +2188,259 @@ static int qcom_ethqos_panic_notifier(struct notifier_block *this,
 static struct notifier_block qcom_ethqos_panic_blk = {
 	.notifier_call  = qcom_ethqos_panic_notifier,
 };
+
+static int ethqos_update_rgmii_tx_drv_strength(struct qcom_ethqos *ethqos)
+{
+	int ret = 0;
+	struct resource *resource = NULL;
+	struct platform_device *pdev = ethqos->pdev;
+	struct net_device *dev = platform_get_drvdata(pdev);
+	u32 tlmm_central_base = 0;
+	u32 tlmm_central_size = 0;
+	unsigned long reg_rgmii_io_pads_voltage = 0;
+	size_t size = 4;
+
+	resource =
+	 platform_get_resource_byname(ethqos->pdev, IORESOURCE_MEM, "tlmm-central-base");
+
+	if (!resource) {
+		ETHQOSINFO("Resource tlmm-central-base not found\n");
+		goto err_out_rgmii_rx_ctr;
+	}
+
+	tlmm_central_base = resource->start;
+	tlmm_central_size = resource_size(resource);
+	ETHQOSDBG("tlmm_central_base = 0x%x, size = 0x%x\n",
+		  tlmm_central_base, tlmm_central_size);
+
+	tlmm_rgmii_pull_ctl1_base = ioremap(tlmm_central_base +
+					    TLMM_RGMII_HDRV_PULL_CTL1_ADDRESS_OFFSET,
+					    size);
+	if (!tlmm_rgmii_pull_ctl1_base) {
+		ETHQOSERR("cannot map tlmm_rgmii_pull_ctl1_base reg memory, aborting\n");
+		ret = -EIO;
+		goto err_out_rgmii_ctl1;
+	}
+
+	tlmm_rgmii_rx_ctr_base = ioremap(tlmm_central_base +
+					 TLMM_RGMII_RX_HV_MODE_CTL_ADDRESS_OFFSET,
+					 size);
+	if (!tlmm_rgmii_rx_ctr_base) {
+		ETHQOSERR("cannot map tlmm_rgmii_rx_ctr_base reg memory, aborting\n");
+		ret = -EIO;
+		goto err_out_rgmii_rx_ctr;
+	}
+
+	ETHQOSDBG("tlmm_rgmii_pull_ctl1_base = %#lx , tlmm_rgmii_rx_ctr_base= %lx\n",
+		  tlmm_rgmii_pull_ctl1_base, tlmm_rgmii_rx_ctr_base);
+
+	reg_rgmii_io_pads_voltage =
+	regulator_get_voltage(ethqos->reg_rgmii_io_pads);
+
+	ETHQOSINFO("IOMACRO pads voltage: %u uV\n", reg_rgmii_io_pads_voltage);
+
+	switch (reg_rgmii_io_pads_voltage) {
+	case 1500000:
+	case 1800000: {
+		switch (ethqos->emac_ver) {
+		case EMAC_HW_v2_0_0:
+		case EMAC_HW_v2_2_0:
+		case EMAC_HW_v2_3_2: {
+		TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_WR(TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_16MA,
+						     TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_16MA,
+						     TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_16MA);
+						     TLMM_RGMII_RX_HV_MODE_CTL_RGWR(0x0);
+		}
+		break;
+		default:
+		break;
+		}
+	}
+	break;
+	case 2500000: {
+		switch (ethqos->emac_ver) {
+		case EMAC_HW_v2_0_0:
+		case EMAC_HW_v2_2_0:
+		if (ethqos->always_on_phy)
+			TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_WR(TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_16MA,
+							     TLMM_RGMII_HDRV_PL_CTL1_TX_HDRV_14MA,
+							     TLMM_RGMII_HDRV_PL_CTL1_TX_HDRV_14MA);
+		else if ((dev->phydev) && (dev->phydev->phy_id == ATH8035_PHY_ID))
+			TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_WR(TLMM_RGMII_HDRV_PL_CTL1_TX_HDRV_14MA,
+							     TLMM_RGMII_HDRV_PL_CTL1_TX_HDRV_14MA,
+							     TLMM_RGMII_HDRV_PL_CTL1_TX_HDRV_14MA);
+		break;
+		default:
+		break;
+		}
+	}
+	break;
+	default:
+	break;
+	}
+
+err_out_rgmii_rx_ctr:
+	if (tlmm_rgmii_rx_ctr_base)
+		iounmap(tlmm_rgmii_rx_ctr_base);
+
+err_out_rgmii_ctl1:
+	if (tlmm_rgmii_pull_ctl1_base)
+		iounmap(tlmm_rgmii_pull_ctl1_base);
+
+	return ret;
+}
+
+bool qcom_ethqos_ipa_enabled(void)
+{
+#ifdef CONFIG_ETH_IPA_OFFLOAD
+	return pethqos->ipa_enabled;
+#endif
+	return false;
+}
+
+void qcom_ethqos_serdes_init(struct qcom_ethqos *ethqos, int speed)
+{
+	int retry = 500;
+	unsigned int val;
+
+	/****************MODULE: SGMII_PHY_SGMII_PCS**********************************/
+	writel_relaxed(0x01, ethqos->sgmii_base + QSERDES_PCS_SW_RESET);
+	writel_relaxed(0x01, ethqos->sgmii_base + QSERDES_PCS_POWER_DOWN_CONTROL);
+
+	/***************** MODULE: QSERDES_COM_SGMII_QMP_PLL*********/
+	writel_relaxed(0x0F, ethqos->sgmii_base + QSERDES_COM_PLL_IVCO);
+	writel_relaxed(0x06, ethqos->sgmii_base + QSERDES_COM_CP_CTRL_MODE0);
+	writel_relaxed(0x16, ethqos->sgmii_base + QSERDES_COM_PLL_RCTRL_MODE0);
+	writel_relaxed(0x36, ethqos->sgmii_base + QSERDES_COM_PLL_CCTRL_MODE0);
+	writel_relaxed(0x1A, ethqos->sgmii_base + QSERDES_COM_SYSCLK_EN_SEL);
+	writel_relaxed(0x0A, ethqos->sgmii_base + QSERDES_COM_LOCK_CMP1_MODE0);
+	writel_relaxed(0x1A, ethqos->sgmii_base + QSERDES_COM_LOCK_CMP2_MODE0);
+	writel_relaxed(0x82, ethqos->sgmii_base + QSERDES_COM_DEC_START_MODE0);
+	writel_relaxed(0x55, ethqos->sgmii_base + QSERDES_COM_DIV_FRAC_START1_MODE0);
+	writel_relaxed(0x55, ethqos->sgmii_base + QSERDES_COM_DIV_FRAC_START2_MODE0);
+	writel_relaxed(0x03, ethqos->sgmii_base + QSERDES_COM_DIV_FRAC_START3_MODE0);
+	writel_relaxed(0x24, ethqos->sgmii_base + QSERDES_COM_VCO_TUNE1_MODE0);
+
+	writel_relaxed(0x02, ethqos->sgmii_base + QSERDES_COM_VCO_TUNE2_MODE0);
+	writel_relaxed(0x00, ethqos->sgmii_base + QSERDES_COM_VCO_TUNE_INITVAL2);
+	writel_relaxed(0x04, ethqos->sgmii_base + QSERDES_COM_HSCLK_SEL);
+	writel_relaxed(0x00, ethqos->sgmii_base + QSERDES_COM_HSCLK_HS_SWITCH_SEL);
+	writel_relaxed(0x0A, ethqos->sgmii_base + QSERDES_COM_CORECLK_DIV_MODE0);
+	writel_relaxed(0x00, ethqos->sgmii_base + QSERDES_COM_CORE_CLK_EN);
+	writel_relaxed(0xB9, ethqos->sgmii_base + QSERDES_COM_BIN_VCOCAL_CMP_CODE1_MODE0);
+	writel_relaxed(0x1E, ethqos->sgmii_base + QSERDES_COM_BIN_VCOCAL_CMP_CODE2_MODE0);
+	writel_relaxed(0x11, ethqos->sgmii_base + QSERDES_COM_BIN_VCOCAL_HSCLK_SEL);
+
+	/******************MODULE: QSERDES_TX0_SGMII_QMP_TX***********************/
+	writel_relaxed(0x05, ethqos->sgmii_base + QSERDES_TX_TX_BAND);
+	writel_relaxed(0x0A, ethqos->sgmii_base + QSERDES_TX_SLEW_CNTL);
+	writel_relaxed(0x09, ethqos->sgmii_base + QSERDES_TX_RES_CODE_LANE_OFFSET_TX);
+	writel_relaxed(0x09, ethqos->sgmii_base + QSERDES_TX_RES_CODE_LANE_OFFSET_RX);
+	writel_relaxed(0x05, ethqos->sgmii_base + QSERDES_TX_LANE_MODE_1);
+	writel_relaxed(0x00, ethqos->sgmii_base + QSERDES_TX_LANE_MODE_3);
+	writel_relaxed(0x12, ethqos->sgmii_base + QSERDES_TX_RCV_DETECT_LVL_2);
+	writel_relaxed(0x0C, ethqos->sgmii_base + QSERDES_TX_TRAN_DRVR_EMP_EN);
+
+	/*****************MODULE: QSERDES_RX0_SGMII_QMP_RX*******************/
+	writel_relaxed(0x0A, ethqos->sgmii_base + QSERDES_RX_UCDR_FO_GAIN);
+	writel_relaxed(0x06, ethqos->sgmii_base + QSERDES_RX_UCDR_SO_GAIN);
+	writel_relaxed(0x0A, ethqos->sgmii_base + QSERDES_RX_UCDR_FASTLOCK_FO_GAIN);
+	writel_relaxed(0x7F, ethqos->sgmii_base + QSERDES_RX_UCDR_SO_SATURATION_AND_ENABLE);
+	writel_relaxed(0x00, ethqos->sgmii_base + QSERDES_RX_UCDR_FASTLOCK_COUNT_LOW);
+	writel_relaxed(0x01, ethqos->sgmii_base + QSERDES_RX_UCDR_FASTLOCK_COUNT_HIGH);
+	writel_relaxed(0x81, ethqos->sgmii_base + QSERDES_RX_UCDR_PI_CONTROLS);
+	writel_relaxed(0x80, ethqos->sgmii_base + QSERDES_RX_UCDR_PI_CTRL2);
+	writel_relaxed(0x04, ethqos->sgmii_base + QSERDES_RX_RX_TERM_BW);
+	writel_relaxed(0x08, ethqos->sgmii_base + QSERDES_RX_VGA_CAL_CNTRL2);
+	writel_relaxed(0x0F, ethqos->sgmii_base + QSERDES_RX_GM_CAL);
+	writel_relaxed(0x04, ethqos->sgmii_base + QSERDES_RX_RX_EQU_ADAPTOR_CNTRL1);
+	writel_relaxed(0x00, ethqos->sgmii_base + QSERDES_RX_RX_EQU_ADAPTOR_CNTRL2);
+	writel_relaxed(0x4A, ethqos->sgmii_base + QSERDES_RX_RX_EQU_ADAPTOR_CNTRL3);
+	writel_relaxed(0x0A, ethqos->sgmii_base + QSERDES_RX_RX_EQU_ADAPTOR_CNTRL4);
+	writel_relaxed(0x80, ethqos->sgmii_base + QSERDES_RX_RX_IDAC_TSETTLE_LOW);
+	writel_relaxed(0x01, ethqos->sgmii_base + QSERDES_RX_RX_IDAC_TSETTLE_HIGH);
+	writel_relaxed(0x20, ethqos->sgmii_base + QSERDES_RX_RX_IDAC_MEASURE_TIME);
+	writel_relaxed(0x17, ethqos->sgmii_base + QSERDES_RX_RX_EQ_OFFSET_ADAPTOR_CNTRL1);
+	writel_relaxed(0x00, ethqos->sgmii_base + QSERDES_RX_RX_OFFSET_ADAPTOR_CNTRL2);
+	writel_relaxed(0x0F, ethqos->sgmii_base + QSERDES_RX_SIGDET_CNTRL);
+	writel_relaxed(0x1E, ethqos->sgmii_base + QSERDES_RX_SIGDET_DEGLITCH_CNTRL);
+	writel_relaxed(0x05, ethqos->sgmii_base + QSERDES_RX_RX_BAND);
+	writel_relaxed(0xE0, ethqos->sgmii_base + QSERDES_RX_RX_MODE_00_LOW);
+	writel_relaxed(0xC8, ethqos->sgmii_base + QSERDES_RX_RX_MODE_00_HIGH);
+	writel_relaxed(0xC8, ethqos->sgmii_base + QSERDES_RX_RX_MODE_00_HIGH2);
+	writel_relaxed(0x09, ethqos->sgmii_base + QSERDES_RX_RX_MODE_00_HIGH3);
+	writel_relaxed(0xB1, ethqos->sgmii_base + QSERDES_RX_RX_MODE_00_HIGH4);
+	writel_relaxed(0xE0, ethqos->sgmii_base + QSERDES_RX_RX_MODE_01_LOW);
+	writel_relaxed(0xC8, ethqos->sgmii_base + QSERDES_RX_RX_MODE_01_HIGH);
+	writel_relaxed(0xC8, ethqos->sgmii_base + QSERDES_RX_RX_MODE_01_HIGH2);
+	writel_relaxed(0x09, ethqos->sgmii_base + QSERDES_RX_RX_MODE_01_HIGH3);
+	writel_relaxed(0xB1, ethqos->sgmii_base + QSERDES_RX_RX_MODE_01_HIGH4);
+	writel_relaxed(0xE0, ethqos->sgmii_base + QSERDES_RX_RX_MODE_10_LOW);
+	writel_relaxed(0xC8, ethqos->sgmii_base + QSERDES_RX_RX_MODE_10_HIGH);
+	writel_relaxed(0xC8, ethqos->sgmii_base + QSERDES_RX_RX_MODE_10_HIGH2);
+	writel_relaxed(0x3B, ethqos->sgmii_base + QSERDES_RX_RX_MODE_10_HIGH3);
+	writel_relaxed(0xB7, ethqos->sgmii_base + QSERDES_RX_RX_MODE_10_HIGH4);
+	writel_relaxed(0x0C, ethqos->sgmii_base + QSERDES_RX_DCC_CTRL1);
+
+	/****************MODULE: SGMII_PHY_SGMII_PCS**********************************/
+	writel_relaxed(0x0C, ethqos->sgmii_base + QSERDES_PCS_LINE_RESET_TIME);
+	writel_relaxed(0x1F, ethqos->sgmii_base + QSERDES_PCS_TX_LARGE_AMP_DRV_LVL);
+	writel_relaxed(0x03, ethqos->sgmii_base + QSERDES_PCS_TX_SMALL_AMP_DRV_LVL);
+	writel_relaxed(0x83, ethqos->sgmii_base + QSERDES_PCS_TX_MID_TERM_CTRL1);
+	writel_relaxed(0x08, ethqos->sgmii_base + QSERDES_PCS_TX_MID_TERM_CTRL2);
+	writel_relaxed(0x0C, ethqos->sgmii_base + QSERDES_PCS_SGMII_MISC_CTRL8);
+	writel_relaxed(0x00, ethqos->sgmii_base + QSERDES_PCS_SW_RESET);
+	msleep(50);
+	writel_relaxed(0x01, ethqos->sgmii_base + QSERDES_PCS_PHY_START);
+	msleep(50);
+
+	do {
+		val = readl_relaxed(ethqos->sgmii_base + QSERDES_COM_C_READY_STATUS);
+		val &= BIT(0);
+		if (val)
+			break;
+		usleep_range(1000, 1500);
+		retry--;
+	} while (retry > 0);
+	if (!retry)
+		ETHQOSERR("QSERDES_COM_C_READY_STATUS timedout with retry = %d\n", retry);
+
+	retry = 500;
+	do {
+		val = readl_relaxed(ethqos->sgmii_base + QSERDES_PCS_PCS_READY_STATUS);
+		val &= BIT(0);
+		if (val)
+			break;
+		usleep_range(1000, 1500);
+		retry--;
+	} while (retry > 0);
+	if (!retry)
+		ETHQOSERR("PCS_READY timedout with retry = %d\n", retry);
+
+	retry = 500;
+	do {
+		val = readl_relaxed(ethqos->sgmii_base + QSERDES_PCS_PCS_READY_STATUS);
+		val &= BIT(7);
+		if (val)
+			break;
+		usleep_range(1000, 1500);
+		retry--;
+	} while (retry > 0);
+	if (!retry)
+		ETHQOSERR("SGMIIPHY_READY timedout with retry = %d\n", retry);
+
+	retry = 5000;
+	do {
+		val = readl_relaxed(ethqos->sgmii_base + QSERDES_COM_CMN_STATUS);
+		val &= BIT(1);
+		if (val)
+			break;
+		usleep_range(1000, 1500);
+		retry--;
+	} while (retry > 0);
+	if (!retry)
+		ETHQOSERR("PLL Lock Status timedout with retry = %d\n", retry);
+}
 
 static int _qcom_ethqos_probe(void *arg)
 {
@@ -2435,15 +2623,26 @@ static int _qcom_ethqos_probe(void *arg)
 		}
 	}
 
+	ethqos->ioaddr = (&stmmac_res)->addr;
+	if (ethqos->io_macro.rgmii_tx_drv)
+		ethqos_update_rgmii_tx_drv_strength(ethqos);
+
 	ret = stmmac_dvr_probe(&pdev->dev, plat_dat, &stmmac_res);
 	if (ret)
 		goto err_clk;
 
+ethqos_emac_mem_base(ethqos);
 	pethqos = ethqos;
 	ethqos_create_debugfs(ethqos);
 
 	ndev = dev_get_drvdata(&ethqos->pdev->dev);
 	priv = netdev_priv(ndev);
+
+#ifdef CONFIG_ETH_IPA_OFFLOAD
+	ethqos->ipa_enabled = true;
+	priv->rx_queue[IPA_DMA_RX_CH].skip_sw = true;
+	priv->tx_queue[IPA_DMA_TX_CH].skip_sw = true;
+#endif
 
 	rgmii_dump(ethqos);
 
@@ -2604,6 +2803,17 @@ static int qcom_ethqos_suspend(struct device *dev)
 	ret = stmmac_suspend(dev);
 	qcom_ethqos_phy_suspend_clks(ethqos);
 
+	/* Suspend the PHY TXC clock. */
+	if (ethqos->rgmii_txc_suspend_state) {
+		/* Remove TXC clock source from Phy.*/
+		ret = pinctrl_select_state(ethqos->pinctrl,
+					   ethqos->rgmii_txc_suspend_state);
+	if (ret)
+		ETHQOSERR("Unable to set rgmii_txc_suspend_state state, err = %d\n", ret);
+	else
+		ETHQOSINFO("Set rgmii_txc_suspend_state succeed\n");
+	}
+
 	priv->boot_kpi = false;
 	ETHQOSDBG(" ret = %d\n", ret);
 	return ret;
@@ -2629,6 +2839,17 @@ static int qcom_ethqos_resume(struct device *dev)
 	if (!ndev || !netif_running(ndev)) {
 		ETHQOSERR(" Resume not possible\n");
 		return -EINVAL;
+	}
+
+	/* Resume the PhY TXC clock. */
+	if (ethqos->rgmii_txc_resume_state) {
+		/* Enable TXC clock source from Phy.*/
+		ret = pinctrl_select_state(ethqos->pinctrl,
+					   ethqos->rgmii_txc_resume_state);
+		if (ret)
+			ETHQOSERR("Unable to set rgmii_rxc_resume_state state, err = %d\n", ret);
+		else
+			ETHQOSINFO("Set rgmii_rxc_resume_state succeed\n");
 	}
 
 	qcom_ethqos_phy_resume_clks(ethqos);

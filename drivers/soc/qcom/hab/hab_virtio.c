@@ -583,7 +583,7 @@ static void taken_range_calc(uint32_t mmid_start, int mmid_range,
 	for (i = 0; i < hab_driver.ndevices; i++) {
 		if (mmid_start == hab_driver.devp[i].id) {
 			*taken_start = mmid_start;
-			*taken_end = hab_driver.devp[i + mmid_range].id;
+			*taken_end = hab_driver.devp[i + mmid_range - 1].id;
 			pr_info("taken range %d %d\n", *taken_start, *taken_end);
 		}
 	}
@@ -623,7 +623,7 @@ static int virthab_probe(struct virtio_device *vdev)
 		pr_info("virtio has feature missing\n");
 		return -ENODEV;
 	}
-	pr_info("virtio has feature %llX virtio devid %X vid %d empty %d\n",
+	pr_info("virtio has feature %llX virtio devid %d vid %X empty %d\n",
 		vdev->features, vdev->id.device, vdev->id.vendor,
 		list_empty(&vhab_list));
 
@@ -643,6 +643,18 @@ static int virthab_probe(struct virtio_device *vdev)
 	} else if (vdev->id.device == 91) {
 		mmid_start = MM_AUD_1;
 		mmid_range = 4;
+	} else if (vdev->id.device == 92) {
+		mmid_start = MM_CAM_1;
+		mmid_range = 2;
+	} else if (vdev->id.device == 93) {
+		mmid_start = MM_DISP_1;
+		mmid_range = 5;
+	} else if (vdev->id.device == 94) {
+		mmid_start = MM_GFX;
+		mmid_range = 1;
+	} else if (vdev->id.device == 95) {
+		mmid_start = MM_VID;
+		mmid_range = 2;
 	} else {
 		pr_err("unknown virtio device is detected %d\n",
 			vdev->id.device);
@@ -778,6 +790,10 @@ static struct virtio_device_id id_table[] = {
 	{ 89, VIRTIO_DEV_ANY_ID }, /* virtio-bufferq only */
 	{ 90, VIRTIO_DEV_ANY_ID }, /* virtio-misc */
 	{ 91, VIRTIO_DEV_ANY_ID }, /* virtio-audio */
+	{ 92, VIRTIO_DEV_ANY_ID }, /* virtio-camera */
+	{ 93, VIRTIO_DEV_ANY_ID }, /* virtio-display */
+	{ 94, VIRTIO_DEV_ANY_ID }, /* virtio-graphics */
+	{ 95, VIRTIO_DEV_ANY_ID }, /* virtio-video */
 	{ 0 },
 };
 
