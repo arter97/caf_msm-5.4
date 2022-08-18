@@ -2054,7 +2054,7 @@ u32 mtl_rx_int;
  * @queue: TX queue index
  * Description: it reclaims the transmit resources after transmission completes.
  */
-static int stmmac_tx_clean(struct stmmac_priv *priv, int budget, u32 queue)
+int stmmac_tx_clean(struct stmmac_priv *priv, int budget, u32 queue)
 {
 	struct stmmac_tx_queue *tx_q = &priv->tx_queue[queue];
 	unsigned int bytes_compl = 0, pkts_compl = 0;
@@ -2178,7 +2178,7 @@ if (priv->dev->stats.tx_packets == 1)
  * Description: it cleans the descriptors and restarts the transmission
  * in case of transmission errors.
  */
-static void stmmac_tx_err(struct stmmac_priv *priv, u32 chan)
+void stmmac_tx_err(struct stmmac_priv *priv, u32 chan)
 {
 	struct stmmac_tx_queue *tx_q = &priv->tx_queue[chan];
 	int i;
@@ -2268,11 +2268,17 @@ static int stmmac_napi_check(struct stmmac_priv *priv, u32 chan)
 			}
 		}
 	}
+	if (status == RBU_ERR)
+		if (priv->plat->handle_mac_err)
+			priv->plat->handle_mac_err(priv, RBU_ERR, chan);
 
 	if (!priv->tx_queue[chan].skip_sw) {
 		if ((status & handle_tx) && chan < priv->plat->tx_queues_to_use)
 			napi_schedule_irqoff(&ch->tx_napi);
 	}
+	if (status == tx_hard_error)
+		if (priv->plat->handle_mac_err)
+			priv->plat->handle_mac_err(priv, FBE_ERR, chan);
 
 	return status;
 }
@@ -3436,6 +3442,8 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 			netdev_err(priv->dev,
 				   "%s: Tx Ring full when queue awake\n",
 				   __func__);
+			if (priv->plat->handle_mac_err)
+				priv->plat->handle_mac_err(priv, TDU_ERR, queue);
 		}
 		return NETDEV_TX_BUSY;
 	}
@@ -3773,7 +3781,7 @@ static int stmmac_rx(struct stmmac_priv *priv, int limit, u32 queue)
 		struct stmmac_rx_buffer *buf;
 		struct dma_desc *np, *p;
 		unsigned int sec_len;
-		int entry;
+		int entry, err_status = -1;
 		u32 hash;
 
 		if (!count && rx_q->state_saved) {
@@ -3801,8 +3809,8 @@ read_again:
 			p = rx_q->dma_rx + entry;
 
 		/* read the status of the incoming frame */
-		status = stmmac_rx_status(priv, &priv->dev->stats,
-				&priv->xstats, p);
+		status = stmmac_rx_status_err(priv, &priv->dev->stats,
+					      &priv->xstats, p, &err_status);
 		/* check if managed by the DMA otherwise go ahead */
 		if (unlikely(status & dma_own))
 			break;
@@ -3827,8 +3835,11 @@ read_again:
 			error = 1;
 			if (!(status & ctxt_desc) && !priv->hwts_rx_en)
 				priv->dev->stats.rx_errors++;
+			if (err_status >= 0 && err_status <= MAC_ERR_CNT) {
+				if (priv->plat->handle_mac_err)
+					priv->plat->handle_mac_err(priv, err_status, queue);
+			}
 		}
-
 		if (unlikely(error && (status & rx_not_ls)))
 			goto read_again;
 		if (unlikely(error)) {
@@ -4762,6 +4773,7 @@ int stmmac_dvr_probe(struct device *device,
 	struct stmmac_priv *priv;
 	u32 queue, rxq, maxq;
 	int i, ret = 0;
+	int rec_ret = 0;
 
 	ndev = devm_alloc_etherdev_mqs(device, sizeof(struct stmmac_priv),
 				       MTL_MAX_TX_QUEUES, MTL_MAX_RX_QUEUES);
@@ -4957,11 +4969,18 @@ int stmmac_dvr_probe(struct device *device,
 	    priv->hw->pcs != STMMAC_PCS_RGMII  &&
 	    priv->hw->pcs != STMMAC_PCS_TBI &&
 	    priv->hw->pcs != STMMAC_PCS_RTBI) {
+		i = 0;
 		/* MDIO bus Registration */
-		ret = stmmac_mdio_register(ndev);
+		do {
+			ret = stmmac_mdio_register(ndev);
+			if (ret < 0 && priv->plat->handle_mac_err)
+				rec_ret = priv->plat->handle_mac_err(priv, PHY_DET_ERR, 0);
+			i++;
+		} while (i < 10 && ret < 0);
+
 		if (ret < 0) {
 			dev_err(priv->device,
-				"%s: MDIO bus (id: %d) registration failed",
+				"%s: MDIO bus (id: %d) registration failed\n",
 				__func__, priv->plat->bus_id);
 			goto error_mdio_register;
 		}

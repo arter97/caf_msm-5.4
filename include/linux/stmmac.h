@@ -206,6 +206,7 @@ struct plat_stmmacenet_data {
 	bool early_eth;
 	struct emac_emb_smmu_cb_ctx stmmac_emb_smmu_ctx;
 	bool phy_intr_en_extn_stm;
+	int (*handle_mac_err)(void *priv, int type, int chan);
 	int (*handle_prv_ioctl)(struct net_device *dev, struct ifreq *ifr,
 				int cmd);
 	void (*request_phy_wol)(void *plat);
