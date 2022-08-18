@@ -4449,8 +4449,10 @@ static int smblite_lib_create_votables(struct smb_charger *chg)
 
 static void smblite_lib_destroy_votables(struct smb_charger *chg)
 {
-	if (chg->usb_icl_votable)
-		destroy_votable(chg->usb_icl_votable);
+	if (chg->temp_change_irq_disable_votable)
+		destroy_votable(chg->temp_change_irq_disable_votable);
+	if (chg->icl_irq_disable_votable)
+		destroy_votable(chg->icl_irq_disable_votable);
 	if (chg->awake_votable)
 		destroy_votable(chg->awake_votable);
 	if (chg->chg_disable_votable)
