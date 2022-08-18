@@ -779,6 +779,7 @@ IRQCHIP_DECLARE(pdc_sm8150, "qcom,sm8150-pdc", qcom_pdc_init);
 IRQCHIP_DECLARE(pdc_yupik, "qcom,yupik-pdc", qcom_pdc_init);
 IRQCHIP_DECLARE(pdc_sdxlemur, "qcom,sdxlemur-pdc", qcom_pdc_init);
 IRQCHIP_DECLARE(pdc_sa515m, "qcom,sa515m-pdc", qcom_pdc_init);
+IRQCHIP_DECLARE(pdc_sa415m, "qcom,sa415m-pdc", qcom_pdc_init);
 IRQCHIP_DECLARE(pdc_kona, "qcom,kona-pdc", qcom_pdc_init);
 IRQCHIP_DECLARE(pdc_lemans, "qcom,lemans-pdc", qcom_pdc_init);
 #endif
