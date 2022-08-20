@@ -37,4 +37,4 @@ out:
 	printk(KERN_WARNING "Failed to create a rootfs\n");
 	return err;
 }
-rootfs_initcall(default_rootfs);
+subsys_initcall(default_rootfs);
