@@ -513,6 +513,13 @@ static void gi2c_gsi_rx_cb(void *ptr)
 	struct msm_gpi_dma_async_tx_cb_param *rx_cb = ptr;
 	struct geni_i2c_dev *gi2c = rx_cb->userdata;
 
+	if (gi2c->cur == NULL) {
+		GENI_SE_ERR(gi2c->ipcl, true, gi2c->dev,
+			"%s: Error: unexpected callback\n", __func__);
+		WARN_ON(1);
+		return;
+	}
+
 	if (gi2c->cur->flags & I2C_M_RD) {
 		gi2c_gsi_cb_err(rx_cb, "RX");
 		complete(&gi2c->xfer);
@@ -991,8 +998,11 @@ static int geni_i2c_gsi_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 			if ((geni_ios & 0x3) != 0x3) { //SCL:b'1, SDA:b'0
 				GENI_SE_DBG(gi2c->ipcl, true, gi2c->dev,
 					"%s: IO lines not in good state\n", __func__);
-				gi2c->prev_cancel_pending = true;
-				goto geni_i2c_gsi_cancel_pending;
+					/* doing pending cancel only rtl based SE's */
+					if (gi2c->is_i2c_rtl_based) {
+						gi2c->prev_cancel_pending = true;
+						goto geni_i2c_gsi_cancel_pending;
+					}
 			}
 		}
 geni_i2c_err_prep_sg:
@@ -1200,8 +1210,11 @@ static int geni_i2c_xfer(struct i2c_adapter *adap,
 			if ((geni_ios & 0x3) != 0x3) { //SCL:b'1, SDA:b'0
 				GENI_SE_DBG(gi2c->ipcl, true, gi2c->dev,
 					"%s: IO lines not in good state\n", __func__);
-				gi2c->prev_cancel_pending = true;
-				goto geni_i2c_txn_ret;
+				/* doing pending cancel only rtl based SE's */
+				if (gi2c->is_i2c_rtl_based) {
+					gi2c->prev_cancel_pending = true;
+					goto geni_i2c_txn_ret;
+				}
 			}
 		}
 
