@@ -1178,6 +1178,8 @@ struct dwc3_scratchpad_array {
  * @wait_linkstate: waitqueue for waiting LINK to move into required state
  * @remote_wakeup_work: use to perform remote wakeup from this context
  * @force_gen1: use to force gen1 speed on gen2 controller
+ * @active_highbw_isoc: if true, high bandwidth isochronous endpoint is active.
+ * @ignore_statusirq: if true, ignore irq triggered for status stage.
  */
 struct dwc3 {
 	struct work_struct	drd_work;
@@ -1437,6 +1439,8 @@ struct dwc3 {
 	bool			is_remote_wakeup_enabled;
 	wait_queue_head_t	wait_linkstate;
 	struct work_struct	remote_wakeup_work;
+	bool			active_highbw_isoc;
+	bool			ignore_statusirq;
 };
 
 #define INCRX_BURST_MODE 0
