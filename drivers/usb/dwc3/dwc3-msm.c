@@ -4381,6 +4381,10 @@ static ssize_t speed_store(struct device *dev, struct device_attribute *attr,
 	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
 	enum usb_device_speed req_speed = USB_SPEED_UNKNOWN;
 
+	/* no speed change in host mode */
+	if (!test_bit(ID, &mdwc->inputs))
+		return -EPERM;
+
 	/* DEVSPD can only have values SS(0x4), HS(0x0) and FS(0x1).
 	 * per 3.20a data book. Allow only these settings. Note that,
 	 * xhci does not support full-speed only mode.
@@ -4937,7 +4941,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 
 	}
 	for (i = 0; i < USB_MAX_IRQ; i++) {
-		mdwc->wakeup_irq[i].irq = platform_get_irq_byname(pdev,
+		mdwc->wakeup_irq[i].irq = platform_get_irq_byname_optional(pdev,
 					usb_irq_info[i].name);
 		/* pwr_evnt_irq is mandatory for cores allowing SSPHY suspend */
 		if (mdwc->wakeup_irq[i].irq < 0) {

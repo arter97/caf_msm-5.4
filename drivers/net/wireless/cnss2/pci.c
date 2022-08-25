@@ -4101,15 +4101,27 @@ int cnss_pci_alloc_fw_mem(struct cnss_pci_data *pci_priv)
 
 	for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
 		if (!fw_mem[i].va && fw_mem[i].size) {
+retry:
 			fw_mem[i].va =
 				dma_alloc_attrs(dev, fw_mem[i].size,
 						&fw_mem[i].pa, GFP_KERNEL,
 						fw_mem[i].attrs);
 
 			if (!fw_mem[i].va) {
+				if ((fw_mem[i].attrs &
+				    DMA_ATTR_FORCE_CONTIGUOUS)) {
+					fw_mem[i].attrs &=
+					    ~DMA_ATTR_FORCE_CONTIGUOUS;
+
+					cnss_pr_dbg("Fallback to non-contiguous memory for FW, Mem type: %u\n",
+						    fw_mem[i].type);
+					goto retry;
+				}
+
 				cnss_pr_err("Failed to allocate memory for FW, size: 0x%zx, type: %u\n",
 					    fw_mem[i].size, fw_mem[i].type);
-				BUG();
+				CNSS_ASSERT(0);
+				return -ENOMEM;
 			}
 		}
 	}
@@ -5231,17 +5243,21 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 
 	mhi_dump_sfr(pci_priv->mhi_ctrl);
 
-	cnss_pr_dbg("Collect remote heap dump segment\n");
-
 	for (i = 0, j = 0; i < plat_priv->fw_mem_seg_len; i++) {
 		if (fw_mem[i].type == CNSS_MEM_TYPE_DDR) {
-			cnss_pci_add_dump_seg(pci_priv, dump_seg,
-					      CNSS_FW_REMOTE_HEAP, j,
-					      fw_mem[i].va, fw_mem[i].pa,
-					      fw_mem[i].size);
-			dump_seg++;
-			dump_data->nentries++;
-			j++;
+			if (fw_mem[i].attrs & DMA_ATTR_FORCE_CONTIGUOUS) {
+				cnss_pr_dbg("Collect remote heap dump segment\n");
+				cnss_pci_add_dump_seg(pci_priv, dump_seg,
+						      CNSS_FW_REMOTE_HEAP, j,
+						      fw_mem[i].va,
+						      fw_mem[i].pa,
+						      fw_mem[i].size);
+				dump_seg++;
+				dump_data->nentries++;
+				j++;
+			} else {
+				cnss_pr_dbg("Skip remote heap dumps as it is non-contiguous\n");
+			}
 		}
 	}
 
@@ -5286,7 +5302,8 @@ void cnss_pci_clear_dump_info(struct cnss_pci_data *pci_priv)
 	}
 
 	for (i = 0, j = 0; i < plat_priv->fw_mem_seg_len; i++) {
-		if (fw_mem[i].type == CNSS_MEM_TYPE_DDR) {
+		if (fw_mem[i].type == CNSS_MEM_TYPE_DDR &&
+		    (fw_mem[i].attrs & DMA_ATTR_FORCE_CONTIGUOUS)) {
 			cnss_pci_remove_dump_seg(pci_priv, dump_seg,
 						 CNSS_FW_REMOTE_HEAP, j,
 						 fw_mem[i].va, fw_mem[i].pa,
@@ -5720,13 +5737,18 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	struct mhi_controller *mhi_ctrl;
 
+	ret = cnss_qmi_init(plat_priv);
+	if (ret)
+		return -EINVAL;
+
 	if (pci_priv->device_id == QCA6174_DEVICE_ID)
 		return 0;
 
 	mhi_ctrl = mhi_alloc_controller(0);
 	if (!mhi_ctrl) {
 		cnss_pr_err("Invalid MHI controller context\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto deinit_qmi;
 	}
 
 	pci_priv->mhi_ctrl = mhi_ctrl;
@@ -5803,7 +5825,8 @@ destroy_ipc:
 	kfree(mhi_ctrl->irq);
 free_mhi_ctrl:
 	mhi_free_controller(mhi_ctrl);
-
+deinit_qmi:
+	cnss_qmi_deinit(plat_priv);
 	return ret;
 }
 
@@ -5818,6 +5841,7 @@ static void cnss_pci_unregister_mhi(struct cnss_pci_data *pci_priv)
 	cnss_pci_mhi_ipc_logging_deinit(pci_priv);
 	kfree(mhi_ctrl->irq);
 	mhi_free_controller(mhi_ctrl);
+	cnss_qmi_deinit(pci_priv->plat_priv);
 }
 
 static void cnss_pci_config_regs(struct cnss_pci_data *pci_priv)
@@ -6110,6 +6134,53 @@ static int cnss_pci_get_dev_cfg_node(struct cnss_plat_data *plat_priv)
 	return -EINVAL;
 }
 
+#ifdef CONFIG_CNSS2_CONDITIONAL_POWEROFF
+static bool cnss_should_suspend_pwroff(struct pci_dev *pci_dev)
+{
+	bool suspend_pwroff;
+
+	switch (pci_dev->device) {
+	case QCA6390_DEVICE_ID:
+	case QCA6490_DEVICE_ID:
+		suspend_pwroff = false;
+		break;
+	default:
+		suspend_pwroff = true;
+	}
+
+	return suspend_pwroff;
+}
+#else
+static bool cnss_should_suspend_pwroff(struct pci_dev *pci_dev)
+{
+	return true;
+}
+#endif
+
+static void cnss_pci_suspend_pwroff(struct pci_dev *pci_dev)
+{
+	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(pci_dev);
+	int rc_num = pci_dev->bus->domain_nr;
+	struct cnss_plat_data *plat_priv = cnss_get_plat_priv_by_rc_num(rc_num);
+	int ret = 0;
+	bool suspend_pwroff = cnss_should_suspend_pwroff(pci_dev);
+
+	if (suspend_pwroff) {
+		ret = cnss_suspend_pci_link(pci_priv);
+		if (ret)
+			cnss_pr_err("Failed to suspend PCI link, err = %d\n",
+				    ret);
+
+		if (pci_dev->device == QCA6390_DEVICE_ID)
+			cnss_disable_redundant_vreg(plat_priv);
+
+		cnss_power_off_device(plat_priv);
+	} else {
+		cnss_pr_dbg("bus suspend and dev power off disabled for [%x]\n",
+			    pci_dev->device);
+	}
+}
+
 static int cnss_pci_probe(struct pci_dev *pci_dev,
 			  const struct pci_device_id *id)
 {
@@ -6231,15 +6302,7 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	if (cnss_is_dual_wlan_enabled() && !plat_priv->enumerate_done)
 		return 0;
 
-	ret = cnss_suspend_pci_link(pci_priv);
-	if (ret)
-		cnss_pr_err("Failed to suspend PCI link, err = %d\n", ret);
-
-	if (pci_dev->device == QCA6390_DEVICE_ID)
-		cnss_disable_redundant_vreg(plat_priv);
-
-	cnss_power_off_device(plat_priv);
-
+	cnss_pci_suspend_pwroff(pci_dev);
 	return 0;
 
 unreg_mhi:
