@@ -4016,6 +4016,7 @@ static void stmmac_tx_timeout(struct net_device *dev)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
 
+	priv->plat->read_status_registers(priv);
 	stmmac_global_err(priv);
 }
 
