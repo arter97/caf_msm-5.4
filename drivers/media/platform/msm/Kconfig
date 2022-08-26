@@ -2,4 +2,6 @@
 
 source "drivers/media/platform/msm/synx/Kconfig"
 source "drivers/media/platform/msm/cvp/Kconfig"
+source "drivers/media/platform/msm/cvp2.0/Kconfig"
 source "drivers/media/platform/msm/npu/Kconfig"
+source "drivers/media/platform/msm/npu_v2/Kconfig"

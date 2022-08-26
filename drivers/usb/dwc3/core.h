@@ -742,6 +742,7 @@ struct dwc3_ep_events {
  * @desc: usb_endpoint_descriptor pointer
  * @dwc: pointer to DWC controller
  * @saved_state: ep state saved during hibernation
+ * @missed_isoc_packets: counter for missed packets sent
  * @flags: endpoint flags (wedged, stalled, ...)
  * @number: endpoint number (1 - 15)
  * @type: set to bmAttributes & USB_ENDPOINT_XFERTYPE_MASK
@@ -775,6 +776,7 @@ struct dwc3_ep {
 	struct dwc3		*dwc;
 
 	u32			saved_state;
+	u32			missed_isoc_packets;
 	unsigned		flags;
 #define DWC3_EP_ENABLED		BIT(0)
 #define DWC3_EP_STALL		BIT(1)
@@ -1176,6 +1178,8 @@ struct dwc3_scratchpad_array {
  * @wait_linkstate: waitqueue for waiting LINK to move into required state
  * @remote_wakeup_work: use to perform remote wakeup from this context
  * @force_gen1: use to force gen1 speed on gen2 controller
+ * @active_highbw_isoc: if true, high bandwidth isochronous endpoint is active.
+ * @ignore_statusirq: if true, ignore irq triggered for status stage.
  */
 struct dwc3 {
 	struct work_struct	drd_work;
@@ -1328,6 +1332,7 @@ struct dwc3 {
 	u8			rx_max_burst_prd;
 	u8			tx_thr_num_pkt_prd;
 	u8			tx_max_burst_prd;
+	u8			clear_stall_protocol;
 
 	const char		*hsphy_interface;
 
@@ -1434,6 +1439,8 @@ struct dwc3 {
 	bool			is_remote_wakeup_enabled;
 	wait_queue_head_t	wait_linkstate;
 	struct work_struct	remote_wakeup_work;
+	bool			active_highbw_isoc;
+	bool			ignore_statusirq;
 };
 
 #define INCRX_BURST_MODE 0

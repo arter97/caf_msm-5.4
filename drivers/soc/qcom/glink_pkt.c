@@ -18,6 +18,7 @@
 #include <linux/fs.h>
 #include <linux/uaccess.h>
 #include <linux/termios.h>
+#include <linux/string.h>
 
 /* Define IPC Logging Macros */
 #define GLINK_PKT_IPC_LOG_PAGE_CNT 2
@@ -156,6 +157,11 @@ static int glink_pkt_rpdev_cb(struct rpmsg_device *rpdev, void *buf, int len,
 	struct glink_pkt_device *gpdev = dev_get_drvdata(&rpdev->dev);
 	unsigned long flags;
 	struct sk_buff *skb;
+
+	if (!gpdev) {
+		GLINK_PKT_ERR("channel is in reset\n");
+		return -ENETRESET;
+	}
 
 	skb = alloc_skb(len, GFP_ATOMIC);
 	if (!skb)
@@ -296,12 +302,13 @@ static int glink_pkt_release(struct inode *inode, struct file *file)
 		wake_up_interruptible(&gpdev->readq);
 		gpdev->sig_change = false;
 		spin_unlock_irqrestore(&gpdev->queue_lock, flags);
+
+		if (gpdev->drv_registered && gpdev->enable_ch_close) {
+			unregister_rpmsg_driver(&gpdev->drv);
+			gpdev->drv_registered = 0;
+		}
 	}
 
-	if (gpdev->drv_registered && gpdev->enable_ch_close) {
-		unregister_rpmsg_driver(&gpdev->drv);
-		gpdev->drv_registered = 0;
-	}
 	put_device(dev);
 
 	return 0;
@@ -435,7 +442,7 @@ static ssize_t glink_pkt_write(struct file *file,
 	}
 
 	GLINK_PKT_INFO("begin to %s buffer_size %zu\n", gpdev->ch_name, count);
-	kbuf = memdup_user(buf, count);
+	kbuf = vmemdup_user(buf, count);
 	if (IS_ERR(kbuf))
 		return PTR_ERR(kbuf);
 
@@ -458,7 +465,7 @@ unlock_ch:
 	mutex_unlock(&gpdev->lock);
 
 free_kbuf:
-	kfree(kbuf);
+	kvfree(kbuf);
 	GLINK_PKT_INFO("finish to %s ret %d\n", gpdev->ch_name, ret);
 	return ret < 0 ? ret : count;
 }
@@ -689,6 +696,10 @@ error:
 static void glink_pkt_release_device(struct device *dev)
 {
 	struct glink_pkt_device *gpdev = dev_to_gpdev(dev);
+
+	GLINK_PKT_INFO("for %s by %s:%d ref_cnt[%d]\n",
+		       gpdev->ch_name, current->comm,
+		       task_pid_nr(current), refcount_read(&gpdev->refcount));
 
 	ida_simple_remove(&glink_pkt_minor_ida, MINOR(gpdev->dev.devt));
 	cdev_del(&gpdev->cdev);

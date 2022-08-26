@@ -866,6 +866,11 @@ static void dwc3_ep0_inspect_setup(struct dwc3 *dwc,
 	if (!dwc->gadget_driver)
 		goto out;
 
+	if (dwc->ignore_statusirq) {
+		dwc->ignore_statusirq = false;
+		return;
+	}
+
 	trace_dwc3_ctrl_req(ctrl);
 
 	len = le16_to_cpu(ctrl->wLength);
@@ -1149,6 +1154,7 @@ void dwc3_ep0_send_delayed_status(struct dwc3 *dwc)
 	unsigned int direction = !dwc->ep0_expect_in;
 
 	dwc->delayed_status = false;
+	dwc->clear_stall_protocol = 0;
 
 	if (dwc->ep0state != EP0_STATUS_PHASE)
 		return;
@@ -1188,6 +1194,28 @@ void dwc3_ep0_end_control_data(struct dwc3 *dwc, struct dwc3_ep *dep)
 	dep->flags &= ~DWC3_EP_TRANSFER_STARTED;
 out:
 	dep->resource_index = 0;
+}
+
+static void dwc3_check_ep0_status_complete(struct dwc3 *dwc)
+{
+	struct dwc3_trb		*trb;
+	int			count;
+	union dwc3_event	event;
+
+	trb = dwc->ep0_trb;
+
+	for (count = 0; count < 10; count++) {
+		if (!(trb->ctrl & DWC3_TRB_CTRL_HWO))
+			break;
+		udelay(10);
+	}
+
+	if (trb->ctrl & DWC3_TRB_CTRL_HWO)
+		return;
+
+	event.raw = 0xc040; /* Populate dummy xfer complete event for ep0 */
+	dwc3_ep0_xfer_complete(dwc, &event.depevt);
+	dwc->ignore_statusirq = true;
 }
 
 static void dwc3_ep0_xfernotready(struct dwc3 *dwc,
@@ -1252,6 +1280,10 @@ static void dwc3_ep0_xfernotready(struct dwc3 *dwc,
 		}
 
 		dwc3_ep0_do_control_status(dwc, event);
+		if (dwc->active_highbw_isoc) {
+			dbg_event(0x00, "POLL STATUSCOMPLETION", 0);
+			dwc3_check_ep0_status_complete(dwc);
+		}
 	}
 }
 

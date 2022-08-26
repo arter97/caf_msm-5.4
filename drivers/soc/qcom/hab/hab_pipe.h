@@ -33,11 +33,11 @@ struct hab_pipe_endpoint {
 	struct {
 		uint32_t wr_count;
 		uint32_t index;
-		struct hab_shared_buf *sh_buf;
+		struct hab_shared_buf *legacy_sh_buf;
 	} tx_info;
 	struct {
 		uint32_t index;
-		struct hab_shared_buf *sh_buf;
+		struct hab_shared_buf *legacy_sh_buf;
 	} rx_info;
 };
 
@@ -48,7 +48,7 @@ struct hab_pipe {
 	/* Legacy debugging metadata, replaced by dbg_itms from qvm_channel */
 	struct hab_shared_buf *legacy_buf_a; /* top TX, bottom RX */
 	struct hab_shared_buf *legacy_buf_b; /* top RX, bottom TX */
-	size_t total_size;
+	size_t legacy_total_size;
 
 	unsigned char buf_base[];
 };
