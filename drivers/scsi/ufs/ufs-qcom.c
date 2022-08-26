@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/acpi.h>
@@ -3759,6 +3760,26 @@ static int ufs_qcom_init_sysfs(struct ufs_hba *hba)
 }
 
 /**
+ * ufs_qcom_is_bootdevice_ufs - check UFS is bootdevice
+ * @dev: pointer to device handle
+ *
+ * Returns true if successful
+ * Returns false otherwise
+ */
+static int ufs_qcom_is_bootdevice_ufs(struct device *dev)
+{
+	struct device_node *np = dev->of_node;
+
+	if (!of_property_read_bool(np, "secondary-storage") &&
+	    of_property_read_bool(np, "non-removable") &&
+	     strlen(android_boot_dev) &&
+	      strcmp(android_boot_dev, dev_name(dev)))
+		return false;
+
+	return true;
+}
+
+/**
  * ufs_qcom_probe - probe routine of the driver
  * @pdev: pointer to Platform device handle
  *
@@ -3782,10 +3803,12 @@ static int ufs_qcom_probe(struct platform_device *pdev)
 	 * Hence, check for the connected device early-on & don't turn-off
 	 * the regulators.
 	 */
-	if (of_property_read_bool(np, "non-removable") &&
-	    strlen(android_boot_dev) &&
-	    strcmp(android_boot_dev, dev_name(dev)))
-		return -ENODEV;
+	if (!ufs_qcom_is_bootdevice_ufs(dev)) {
+		/* Overwrite pm with NULL to avoid PM calls. */
+		dev->driver->pm = NULL;
+		dev_err(dev, "%s UFS is not boot dev.\n", __func__);
+		return 0;
+	}
 
 	/*
 	 * Check whether primary UFS boot device is probed using
@@ -3813,11 +3836,21 @@ static int ufs_qcom_probe(struct platform_device *pdev)
  */
 static int ufs_qcom_remove(struct platform_device *pdev)
 {
-	struct ufs_hba *hba =  platform_get_drvdata(pdev);
-	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
-	struct ufs_qcom_qos_req *r = host->ufs_qos;
-	struct qos_cpu_group *qcg = r->qcg;
+	struct ufs_hba *hba;
+	struct ufs_qcom_host *host;
+	struct ufs_qcom_qos_req *r;
+	struct qos_cpu_group *qcg;
 	int i;
+
+	hba =  platform_get_drvdata(pdev);
+	if (hba == NULL) {
+		dev_info(&pdev->dev, "UFS is not boot dev.\n");
+		return 0;
+	}
+
+	host = ufshcd_get_variant(hba);
+	r = host->ufs_qos;
+	qcg = r->qcg;
 
 	pm_runtime_get_sync(&(pdev)->dev);
 	for (i = 0; i < r->num_groups; i++, qcg++)
@@ -3840,6 +3873,18 @@ static const struct acpi_device_id ufs_qcom_acpi_match[] = {
 MODULE_DEVICE_TABLE(acpi, ufs_qcom_acpi_match);
 #endif
 
+void ufs_qcom_shutdown(struct platform_device *pdev)
+{
+	struct ufs_hba *hba;
+
+	hba =  platform_get_drvdata(pdev);
+	if (hba == NULL) {
+		dev_info(&pdev->dev, "UFS is not boot dev.\n");
+		return;
+	}
+	return ufshcd_pltfrm_shutdown(pdev);
+}
+
 static const struct dev_pm_ops ufs_qcom_pm_ops = {
 	.suspend	= ufshcd_pltfrm_suspend,
 	.resume		= ufshcd_pltfrm_resume,
@@ -3856,7 +3901,7 @@ static const struct dev_pm_ops ufs_qcom_pm_ops = {
 static struct platform_driver ufs_qcom_pltform = {
 	.probe	= ufs_qcom_probe,
 	.remove	= ufs_qcom_remove,
-	.shutdown = ufshcd_pltfrm_shutdown,
+	.shutdown = ufs_qcom_shutdown,
 	.driver	= {
 		.name	= "ufshcd-qcom",
 		.pm	= &ufs_qcom_pm_ops,
