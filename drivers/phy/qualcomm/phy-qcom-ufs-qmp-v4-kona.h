@@ -1,10 +1,11 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
-#ifndef UFS_QCOM_PHY_QMP_V4_H_
-#define UFS_QCOM_PHY_QMP_V4_H_
+#ifndef UFS_QCOM_PHY_QMP_V4_KONA_H_
+#define UFS_QCOM_PHY_QMP_V4_KONA_H_
 
 #include "phy-qcom-ufs-i.h"
 
@@ -13,6 +14,8 @@
 #define COM_SIZE	0x1C0
 #define PHY_BASE	0xC00
 #define PHY_SIZE	0x200
+#define PCS2_BASE	0x200
+#define PCS2_SIZE	0x40
 #define TX_BASE(n)	(0x400 + (0x400 * n))
 #define TX_SIZE		0x16C
 #define RX_BASE(n)	(0x600 + (0x400 * n))
