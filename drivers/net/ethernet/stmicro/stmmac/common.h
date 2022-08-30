@@ -290,6 +290,7 @@ enum dma_irq_status {
 	tx_hard_error_bump_tc = 0x2,
 	handle_rx = 0x4,
 	handle_tx = 0x8,
+	rbu_err = 0x10,
 };
 
 /* EEE and LPI defines */
@@ -482,4 +483,17 @@ extern const struct stmmac_mode_ops ring_mode_ops;
 extern const struct stmmac_mode_ops chain_mode_ops;
 extern const struct stmmac_desc_ops dwmac4_desc_ops;
 
+enum mac_err_type {
+	PHY_RW_ERR = 0,
+	PHY_DET_ERR,
+	CRC_ERR,
+	RECEIVE_ERR,
+	OVERFLOW_ERR,
+	FBE_ERR,
+	RBU_ERR,
+	TDU_ERR,
+	DRIBBLE_ERR,
+	WDT_ERR,
+	MAC_ERR_CNT,
+};
 #endif /* __COMMON_H__ */

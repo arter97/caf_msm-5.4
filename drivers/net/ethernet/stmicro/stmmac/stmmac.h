@@ -26,6 +26,8 @@
 #include <soc/qcom/boot_stats.h>
 #endif
 
+extern bool phy_intr_en;
+
 struct stmmac_resources {
 	void __iomem *addr;
 	const char *mac;
@@ -270,6 +272,8 @@ int stmmac_dvr_remove(struct device *dev);
 int stmmac_dvr_probe(struct device *device,
 		     struct plat_stmmacenet_data *plat_dat,
 		     struct stmmac_resources *res);
+void stmmac_tx_err(struct stmmac_priv *priv, u32 chan);
+int stmmac_tx_clean(struct stmmac_priv *priv, int budget, u32 queue);
 void stmmac_disable_eee_mode(struct stmmac_priv *priv);
 bool stmmac_eee_init(struct stmmac_priv *priv);
 void stmmac_mac2mac_adjust_link(int speed, struct stmmac_priv *priv);
