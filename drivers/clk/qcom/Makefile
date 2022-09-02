@@ -89,6 +89,7 @@ obj-$(CONFIG_SDW_GPUCC_MONACO) += gpucc-monaco.o
 obj-$(CONFIG_SDX_DEBUGCC_55) += debugcc-sdx55.o
 obj-$(CONFIG_SDX_DEBUGCC_LEMUR) += debugcc-sdxlemur.o
 obj-$(CONFIG_SDX_DEBUGCC_NIGHTJAR) += debugcc-sdxnightjar.o
+obj-$(CONFIG_SDX_DEBUGCC_POORWILLS) += debugcc-sdxpoorwills.o
 obj-$(CONFIG_SDX_GCC_55) += gcc-sdx55.o
 obj-$(CONFIG_SDX_GCC_LEMUR) += gcc-sdxlemur.o
 obj-$(CONFIG_SDX_GCC_NIGHTJAR) += gcc-sdxnightjar.o
