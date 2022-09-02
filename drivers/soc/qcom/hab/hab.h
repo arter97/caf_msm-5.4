@@ -64,6 +64,7 @@ enum hab_payload_type {
 #define DEVICE_EXT1_NAME "hab_ext1"
 
 #define HABCFG_MMID_NUM        26
+#define HAB_MMID_ALL_AREA      0
 
 /* make sure concascaded name is less than this value */
 #define MAX_VMID_NAME_SIZE 30
