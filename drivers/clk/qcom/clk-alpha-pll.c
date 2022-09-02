@@ -1407,6 +1407,9 @@ static int clk_trion_pll_prepare(struct clk_hw *hw)
 	if (regval & TRION_PCAL_DONE)
 		return ret;
 
+	if (clk_trion_pll_is_enabled(hw))
+		return ret;
+
 	ret = clk_trion_pll_enable(hw);
 	if (ret)
 		return ret;
