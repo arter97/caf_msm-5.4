@@ -3,9 +3,9 @@
  * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
-#include "phy-qcom-ufs-qmp-v4-waipio.h"
+#include "phy-qcom-ufs-qmp-v4-kona.h"
 
-#define UFS_PHY_NAME "ufs_phy_qmp_v4_waipio"
+#define UFS_PHY_NAME "ufs_phy_qmp_v4_kona"
 
 static inline void ufs_qcom_phy_qmp_v4_start_serdes(struct ufs_qcom_phy *phy);
 static int ufs_qcom_phy_qmp_v4_is_pcs_ready(struct ufs_qcom_phy *phy_common);
@@ -275,8 +275,6 @@ static int ufs_qcom_phy_qmp_v4_probe(struct platform_device *pdev)
 	struct ufs_qcom_phy_qmp_v4 *phy;
 	int err = 0;
 
-	pr_err("AAAAA: WAIPIO PHY LOADED\n");
-
 	phy = devm_kzalloc(dev, sizeof(*phy), GFP_KERNEL);
 	if (!phy) {
 		err = -ENOMEM;
@@ -303,7 +301,7 @@ out:
 }
 
 static const struct of_device_id ufs_qcom_phy_qmp_v4_of_match[] = {
-	{.compatible = "qcom,ufs-phy-qmp-v4-waipio"},
+	{.compatible = "qcom,ufs-phy-qmp-v4-kona"},
 	{},
 };
 MODULE_DEVICE_TABLE(of, ufs_qcom_phy_qmp_v4_of_match);
@@ -312,11 +310,11 @@ static struct platform_driver ufs_qcom_phy_qmp_v4_driver = {
 	.probe = ufs_qcom_phy_qmp_v4_probe,
 	.driver = {
 		.of_match_table = ufs_qcom_phy_qmp_v4_of_match,
-		.name = "ufs_qcom_phy_qmp_v4_waipio",
+		.name = "ufs_qcom_phy_qmp_v4_kona",
 	},
 };
 
 module_platform_driver(ufs_qcom_phy_qmp_v4_driver);
 
-MODULE_DESCRIPTION("Universal Flash Storage (UFS) QCOM PHY QMP v4 WAIPIO");
+MODULE_DESCRIPTION("Universal Flash Storage (UFS) QCOM PHY QMP v4 KONA");
 MODULE_LICENSE("GPL v2");
