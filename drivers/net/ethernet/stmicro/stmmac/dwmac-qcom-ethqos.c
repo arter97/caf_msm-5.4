@@ -30,6 +30,8 @@
 #include "stmmac_platform.h"
 #include "dwmac-qcom-ethqos.h"
 #include "stmmac_ptp.h"
+#include "dwmac4.h"
+#include "dwmac4_dma.h"
 
 #define RGMII_IO_MACRO_DEBUG1		0x20
 #define EMAC_SYSTEM_LOW_POWER_DEBUG	0x28
@@ -2286,6 +2288,43 @@ static struct notifier_block qcom_ethqos_panic_blk = {
 	.notifier_call  = qcom_ethqos_panic_notifier,
 };
 
+static void ethqos_read_status_registers(void *priv_dat)
+{
+	unsigned int i, value = 0;
+	struct stmmac_priv *priv;
+	priv = priv_dat;
+
+	value = readl(priv->ioaddr + DMA_STATUS);
+	ETHQOSERR("DMA_STATUS = %d\n", value);
+	value = readl(priv->ioaddr + DMA_DEBUG_STATUS_0);
+	ETHQOSERR("DMA_DEBUG_STATUS_0 = %d\n", value);
+	value = readl(priv->ioaddr + DMA_DEBUG_STATUS_1);
+	ETHQOSERR("DMA_DEBUG_STATUS_1 = %d\n", value);
+	value = readl(priv->ioaddr + GMAC_CONFIG);
+	ETHQOSERR("MAC_Configuration = %d\n", value);
+	value = readl(priv->ioaddr + GMAC_INT_STATUS);
+	ETHQOSERR("MAC_interrupt_Status = %d\n", value);
+	value = readl(priv->ioaddr + 0xb8);
+	ETHQOSERR("MAC_Rx_Tx_Status = %d\n", value);
+	value = readl(priv->ioaddr + GMAC_DEBUG);
+	ETHQOSERR("MAC_Debug = %d\n", value);
+	value = readl(priv->ioaddr + 0xc08);
+	ETHQOSERR("MTL_Debug_CTL = %d\n", value);
+	value = readl(priv->ioaddr + 0xc0c);
+	ETHQOSERR("MTL_Debug_Status = %d\n", value);
+	value = readl(priv->ioaddr + MTL_INT_STATUS);
+	ETHQOSERR("MTL_INT_STATUS = %d\n", value);
+
+	for(i = 0; i < 4; i++) {
+		value = readl(priv->ioaddr + DMA_CHAN_CUR_TX_DESC(i));
+		ETHQOSERR("DMA CHANNEL%d current TX desc = %d\n", i, value);
+		value = readl(priv->ioaddr + DMA_CHAN_CUR_TX_BUF_ADDR(i));
+		ETHQOSERR("DMA CHANNEL%d current TX buf addr = %d\n", i, value);
+		value = readl(priv->ioaddr + DMA_CHAN_STATUS(i));
+		ETHQOSERR("DMA CHANNEL%d status = %d\n", i, value);
+	}
+}
+
 static int qcom_ethqos_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
@@ -2400,6 +2439,7 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	plat_dat->phy_intr_enable = ethqos_phy_intr_enable;
 	plat_dat->phy_irq_enable = ethqos_phy_irq_enable;
 	plat_dat->phy_irq_disable = ethqos_phy_irq_disable;
+	plat_dat->read_status_registers = ethqos_read_status_registers;
 
 	/* Get rgmii interface speed for mac2c from device tree */
 	if (of_property_read_u32(np, "mac2mac-rgmii-speed",
