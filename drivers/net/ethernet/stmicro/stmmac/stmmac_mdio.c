@@ -384,7 +384,7 @@ int stmmac_mdio_register(struct net_device *ndev)
 	for (addr = 0; addr < max_addr; addr++) {
 		struct phy_device *phydev = mdiobus_get_phy(new_bus, addr);
 
-		if (!phydev)
+		if (!phydev || phydev->phy_id == 0xffff || phydev->phy_id == 0)
 			continue;
 
 		/*

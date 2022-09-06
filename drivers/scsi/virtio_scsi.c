@@ -29,12 +29,19 @@
 #include <scsi/scsi_devinfo.h>
 #include <linux/seqlock.h>
 #include <linux/blk-mq-virtio.h>
-
+#ifdef CONFIG_QTI_CRYPTO_VIRTUALIZATION
+#include <linux/bio-crypt-ctx.h>
+#include "virtio_scsi_qti_crypto.h"
+#endif
 #include "sd.h"
 
 #define VIRTIO_SCSI_MEMPOOL_SZ 64
 #define VIRTIO_SCSI_EVENT_LEN 8
 #define VIRTIO_SCSI_VQ_BASE 2
+
+#ifdef CONFIG_QTI_CRYPTO_VIRTUALIZATION
+#define VIRTIO_SCSI_F_MULTIVISOR_FBE 63
+#endif
 
 /* Command queue element */
 struct virtio_scsi_cmd {
@@ -43,6 +50,9 @@ struct virtio_scsi_cmd {
 	union {
 		struct virtio_scsi_cmd_req       cmd;
 		struct virtio_scsi_cmd_req_pi    cmd_pi;
+#ifdef CONFIG_QTI_CRYPTO_VIRTUALIZATION
+		struct virtio_scsi_cmd_req_fbe   cmd_fbe;
+#endif
 		struct virtio_scsi_ctrl_tmf_req  tmf;
 		struct virtio_scsi_ctrl_an_req   an;
 	} req;
@@ -410,7 +420,6 @@ static int __virtscsi_add_cmd(struct virtqueue *vq,
 	struct scatterlist *sgs[6], req, resp;
 	struct sg_table *out, *in;
 	unsigned out_num = 0, in_num = 0;
-
 	out = in = NULL;
 
 	if (sc && sc->sc_data_direction != DMA_NONE) {
@@ -503,6 +512,32 @@ static void virtio_scsi_init_hdr(struct virtio_device *vdev,
 	cmd->crn = 0;
 }
 
+#ifdef CONFIG_QTI_CRYPTO_VIRTUALIZATION
+static void virtio_scsi_init_hdr_fbe(struct virtio_device *vdev,
+				     struct virtio_scsi_cmd_req_fbe *cmd_fbe,
+				     struct scsi_cmnd *sc)
+{
+	struct request *req = sc->request;
+	struct bio_crypt_ctx *bc;
+
+	virtio_scsi_init_hdr(vdev, (struct virtio_scsi_cmd_req *)cmd_fbe, sc);
+
+	/* whether or not the request needs inline crypto operations*/
+	if (!bio_crypt_should_process(req)) {
+		/* ice is not activated */
+		cmd_fbe->keyinfo.ice_info.activate = false;
+	} else {
+		bc = req->bio->bi_crypt_context;
+		/* ice is activated - successful flow */
+		cmd_fbe->keyinfo.ice_info.activate = true;
+		/* ice slot to be used */
+		cmd_fbe->keyinfo.ice_info.ice_slot = bc->bc_keyslot;
+		/* data unit number i.e. iv value */
+		cmd_fbe->keyinfo.ice_info.dun = bc->bc_dun[0];
+	}
+}
+#endif
+
 #ifdef CONFIG_BLK_DEV_INTEGRITY
 static void virtio_scsi_init_hdr_pi(struct virtio_device *vdev,
 				    struct virtio_scsi_cmd_req_pi *cmd_pi,
@@ -560,7 +595,29 @@ static int virtscsi_queuecommand(struct Scsi_Host *shost,
 	cmd->sc = sc;
 
 	BUG_ON(sc->cmd_len > VIRTIO_SCSI_CDB_SIZE);
-
+#ifdef CONFIG_QTI_CRYPTO_VIRTUALIZATION
+	/* Alternately send either extended request to support FBE (File
+	 * Based Encryption) or standard requests.
+	 */
+	if (virtio_has_feature(vscsi->vdev, VIRTIO_SCSI_F_MULTIVISOR_FBE)) {
+		virtio_scsi_init_hdr_fbe(vscsi->vdev, &cmd->req.cmd_fbe, sc);
+		memcpy(cmd->req.cmd_fbe.cdb, sc->cmnd, sc->cmd_len);
+		req_size = sizeof(cmd->req.cmd_fbe);
+	} else {
+#ifdef CONFIG_BLK_DEV_INTEGRITY
+		if (virtio_has_feature(vscsi->vdev, VIRTIO_SCSI_F_T10_PI)) {
+			virtio_scsi_init_hdr_pi(vscsi->vdev, &cmd->req.cmd_pi, sc);
+			memcpy(cmd->req.cmd_pi.cdb, sc->cmnd, sc->cmd_len);
+			req_size = sizeof(cmd->req.cmd_pi);
+		} else
+#endif
+		{
+			virtio_scsi_init_hdr(vscsi->vdev, &cmd->req.cmd, sc);
+			memcpy(cmd->req.cmd.cdb, sc->cmnd, sc->cmd_len);
+			req_size = sizeof(cmd->req.cmd);
+		}
+	}
+#else
 #ifdef CONFIG_BLK_DEV_INTEGRITY
 	if (virtio_has_feature(vscsi->vdev, VIRTIO_SCSI_F_T10_PI)) {
 		virtio_scsi_init_hdr_pi(vscsi->vdev, &cmd->req.cmd_pi, sc);
@@ -573,7 +630,7 @@ static int virtscsi_queuecommand(struct Scsi_Host *shost,
 		memcpy(cmd->req.cmd.cdb, sc->cmnd, sc->cmd_len);
 		req_size = sizeof(cmd->req.cmd);
 	}
-
+#endif /*CONFIG_QTI_CRYPTO_VIRTUALIZATION*/
 	kick = (sc->flags & SCMD_LAST) != 0;
 	ret = virtscsi_add_cmd(req_vq, cmd, req_size, sizeof(cmd->resp.cmd), kick);
 	if (ret == -EIO) {
@@ -725,6 +782,31 @@ static enum blk_eh_timer_return virtscsi_eh_timed_out(struct scsi_cmnd *scmnd)
 	return BLK_EH_RESET_TIMER;
 }
 
+#ifdef CONFIG_QTI_CRYPTO_VIRTUALIZATION
+/**
+ * virtscsi_slave_configure - adjust SCSI device configurations
+ * @sdev: pointer to SCSI device
+ */
+static int virtscsi_slave_configure(struct scsi_device *sdev)
+{
+	struct request_queue *q = sdev->request_queue;
+
+	virtscsi_crypto_qti_setup_rq_keyslot_manager(q);
+	return 0;
+}
+
+/**
+ * ufshcd_slave_destroy - remove SCSI device configurations
+ * @sdev: pointer to SCSI device
+ */
+static void virtscsi_slave_destroy(struct scsi_device *sdev)
+{
+	struct request_queue *q = sdev->request_queue;
+
+	virtscsi_crypto_qti_destroy_rq_keyslot_manager(q);
+}
+#endif
+
 static struct scsi_host_template virtscsi_host_template = {
 	.module = THIS_MODULE,
 	.name = "Virtio SCSI HBA",
@@ -743,6 +825,10 @@ static struct scsi_host_template virtscsi_host_template = {
 	.map_queues = virtscsi_map_queues,
 	.track_queue_depth = 1,
 	.force_blk_mq = 1,
+#ifdef CONFIG_QTI_CRYPTO_VIRTUALIZATION
+	.slave_configure = virtscsi_slave_configure,
+	.slave_destroy = virtscsi_slave_destroy,
+#endif
 };
 
 #define virtscsi_config_get(vdev, fld) \
@@ -842,7 +928,14 @@ static int virtscsi_probe(struct virtio_device *vdev)
 			__func__);
 		return -EINVAL;
 	}
-
+#ifdef CONFIG_QTI_CRYPTO_VIRTUALIZATION
+	if (virtio_has_feature(vdev, VIRTIO_SCSI_F_MULTIVISOR_FBE)) {
+		/* Initilaize supported crypto capabilities*/
+		err = virtscsi_init_crypto_qti_spec();
+		if (err)
+			return err;
+	}
+#endif
 	/* We need to know how many queues before we allocate. */
 	num_queues = virtscsi_config_get(vdev, num_queues) ? : 1;
 	num_queues = min_t(unsigned int, nr_cpu_ids, num_queues);
@@ -961,6 +1054,9 @@ static unsigned int features[] = {
 	VIRTIO_SCSI_F_CHANGE,
 #ifdef CONFIG_BLK_DEV_INTEGRITY
 	VIRTIO_SCSI_F_T10_PI,
+#endif
+#ifdef CONFIG_QTI_CRYPTO_VIRTUALIZATION
+	VIRTIO_SCSI_F_MULTIVISOR_FBE,
 #endif
 };
 

@@ -41,13 +41,10 @@ struct kobject *kobj_ref;
 static ktime_t start_time;
 static struct wakeup_source *notify_ws;
 const static char *adsp_subsys = "adsp";
+const static char *cdsp_subsys = "cdsp";
 const static char *mdsp_subsys = "modem";
 static int ignore_ssr;
 static uint32_t WAIT_TIME_MS = 200;
-
-#ifdef CONFIG_DEEPSLEEP
-struct suspend_stats stats;
-#endif
 
 enum power_states {
 	ACTIVE,
@@ -66,6 +63,7 @@ enum power_states current_state = ACTIVE;
 enum ssr_domain_info {
 	SSR_DOMAIN_MODEM,
 	SSR_DOMAIN_ADSP,
+	SSR_DOMAIN_CDSP,
 	SSR_DOMAIN_MAX,
 };
 
@@ -79,6 +77,7 @@ struct service_info {
 static char *ssr_domains[] = {
 	"modem",
 	"adsp",
+	"cdsp",
 };
 
 struct ps_event {
@@ -189,7 +188,7 @@ static int powerstate_pm_notifier(struct notifier_block *nb, unsigned long event
 
 		if (mem_sleep_current == PM_SUSPEND_MEM) {
 				pr_info("Deep Sleep exit\n");
-				/*Take Wakeup Source*/
+				/* Take Wakeup Source */
 				__pm_stay_awake(notify_ws);
 				pse.event = EXIT_DEEP_SLEEP;
 				send_uevent(&pse);
@@ -205,7 +204,7 @@ static int powerstate_pm_notifier(struct notifier_block *nb, unsigned long event
 		pr_debug("PM_HIBERNATION_PREPARE\n");
 
 		pr_info("Hibernate entry\n");
-		/*Swap Partition & Drop Caches*/
+		/* Swap Partition & Drop Caches */
 		pse.event = PREPARE_FOR_HIBERNATION;
 		send_uevent(&pse);
 
@@ -315,14 +314,13 @@ static long ps_ioctl(struct file *filp, unsigned int ui_power_state_cmd, unsigne
 #ifdef CONFIG_DEEPSLEEP
 		if (mem_sleep_current == PM_SUSPEND_MEM) {
 			mem_sleep_current = PM_SUSPEND_TO_IDLE;
-			/*Release Wakeup Source*/
+			/* Release Wakeup Source */
 			__pm_relax(notify_ws);
 		}
 #endif
 		current_state = ACTIVE;
 		break;
 
-#ifdef CONFIG_DEEPSLEEP
 	case ENTER_DEEPSLEEP:
 		pr_debug("Enter Deep Sleep %s\n", __func__);
 		/* Set /sys/power/mem_sleep to deep */
@@ -330,17 +328,15 @@ static long ps_ioctl(struct file *filp, unsigned int ui_power_state_cmd, unsigne
 
 		ret = start_timer();
 		if (ret < 0) {
-			/*Take Wakeup Source*/
+			/* Take Wakeup Source */
 			pr_debug("Start Timer completed\n");
 		}
 		break;
-#endif
 
-#ifdef CONFIG_HIBERNATION
 	case ENTER_HIBERNATE:
 		pr_debug("Enter Hibernate %s\n", __func__);
 		break;
-#endif
+
 	case MODEM_SUSPEND:
 		pr_debug("Modem Subsys Suspend %s\n", __func__);
 		if (copy_from_user(&ui_obj_msg, (void __user *)arg,
@@ -349,7 +345,7 @@ static long ps_ioctl(struct file *filp, unsigned int ui_power_state_cmd, unsigne
 			ret = -EFAULT;
 		}
 
-		/*To Modem subsys*/
+		/* To Modem subsys */
 		ret = subsys_suspend(mdsp_subsys, &ui_obj_msg);
 		if (ret != 0)
 			pr_err("Modem subsys suspend failure\n");
@@ -362,10 +358,23 @@ static long ps_ioctl(struct file *filp, unsigned int ui_power_state_cmd, unsigne
 			ret = -EFAULT;
 		}
 
-		/*To ADSP subsys*/
+		/* To ADSP subsys */
 		ret = subsys_suspend(adsp_subsys, &ui_obj_msg);
 		if (ret != 0)
 			pr_err("ADSP subsys suspend failure\n");
+		break;
+	case CDSP_SUSPEND:
+		pr_debug("CDSP Subsys Suspend %s\n", __func__);
+		if (copy_from_user(&ui_obj_msg, (void __user *)arg,
+					sizeof(ui_obj_msg))) {
+			pr_err("The copy from user failed - cdsp suspend\n");
+			ret = -EFAULT;
+		}
+
+		/* To CDSP subsys */
+		ret = subsys_suspend(cdsp_subsys, &ui_obj_msg);
+		if (ret != 0)
+			pr_err("CDSP subsys suspend failure\n");
 		break;
 	case MODEM_EXIT:
 		pr_debug("Modem Subsys Suspend Exit %s\n", __func__);
@@ -375,7 +384,7 @@ static long ps_ioctl(struct file *filp, unsigned int ui_power_state_cmd, unsigne
 			ret = -EFAULT;
 		}
 
-		/*To Modem subsys*/
+		/* To Modem subsys */
 		ret = subsys_resume(mdsp_subsys, &ui_obj_msg);
 		if (ret != 0) {
 			pr_err("MDSP subsys exit failure\n");
@@ -390,11 +399,26 @@ static long ps_ioctl(struct file *filp, unsigned int ui_power_state_cmd, unsigne
 			ret = -EFAULT;
 		}
 
-		/*To ADSP subsys*/
+		/* To ADSP subsys */
 		ret = subsys_resume(adsp_subsys, &ui_obj_msg);
 		if (ret != 0) {
 			pr_err("ADSP subsys exit failure\n");
 			ret = subsystem_restart(adsp_subsys);
+		}
+		break;
+	case CDSP_EXIT:
+		pr_debug("CDSP Subsys Suspend Exit %s\n", __func__);
+		if (copy_from_user(&ui_obj_msg, (void __user *)arg,
+					sizeof(ui_obj_msg))) {
+			pr_err("The copy from user failed - cdsp suspend exit\n");
+			ret = -EFAULT;
+		}
+
+		/* To CDSP subsys */
+		ret = subsys_resume(cdsp_subsys, &ui_obj_msg);
+		if (ret != 0) {
+			pr_err("CDSP subsys exit failure\n");
+			ret = subsystem_restart(cdsp_subsys);
 		}
 		break;
 	default:
@@ -457,7 +481,7 @@ static int __init init_power_state_func(void)
 		pr_err("%s: Failed to Register ps_driver\n", __func__);
 
 	kobj_ref = kobject_create_and_add("power_state", kernel_kobj);
-	/*Creating sysfs file for power_state*/
+	/* Creating sysfs file for power_state */
 	if (sysfs_create_file(kobj_ref, &power_state_attr.attr)) {
 		pr_err("Cannot create sysfs file\n");
 		kobject_put(kobj_ref);
@@ -491,14 +515,14 @@ static int ssr_modem_cb(struct notifier_block *this, unsigned long opcode, void 
 
 	switch (opcode) {
 	case SUBSYS_BEFORE_SHUTDOWN:
-		pr_info("MODEM_BEFORE_SHUTDOWN\n");
+		pr_debug("MODEM_BEFORE_SHUTDOWN\n");
 		if (ignore_ssr != 1) {
 			modeme.event = MDSP_BEFORE_POWERDOWN;
 			send_uevent(&modeme);
 		}
 		break;
 	case SUBSYS_AFTER_POWERUP:
-		pr_info("MODEM_AFTER_POWERUP\n");
+		pr_debug("MODEM_AFTER_POWERUP\n");
 		if (ignore_ssr != 1) {
 			modeme.event = MDSP_AFTER_POWERUP;
 			send_uevent(&modeme);
@@ -517,14 +541,14 @@ static int ssr_adsp_cb(struct notifier_block *this, unsigned long opcode, void *
 
 	switch (opcode) {
 	case SUBSYS_BEFORE_SHUTDOWN:
-		pr_info("ADSP_BEFORE_SHUTDOWN\n");
+		pr_debug("ADSP_BEFORE_SHUTDOWN\n");
 		if (ignore_ssr != 1) {
 			adspe.event = ADSP_BEFORE_POWERDOWN;
 			send_uevent(&adspe);
 		}
 		break;
 	case SUBSYS_AFTER_POWERUP:
-		pr_info("ADSP_AFTER_POWERUP\n");
+		pr_debug("ADSP_AFTER_POWERUP\n");
 		if (ignore_ssr != 1) {
 			adspe.event = ADSP_AFTER_POWERUP;
 			send_uevent(&adspe);
@@ -532,6 +556,32 @@ static int ssr_adsp_cb(struct notifier_block *this, unsigned long opcode, void *
 		break;
 	default:
 		pr_debug("Default ADSP SSR\n");
+		break;
+	}
+	return NOTIFY_DONE;
+}
+
+static int ssr_cdsp_cb(struct notifier_block *this, unsigned long opcode, void *data)
+{
+	struct ps_event cdspe;
+
+	switch (opcode) {
+	case SUBSYS_BEFORE_SHUTDOWN:
+		pr_debug("CDSP_BEFORE_SHUTDOWN\n");
+		if (ignore_ssr != 1) {
+			cdspe.event = CDSP_BEFORE_POWERDOWN;
+			send_uevent(&cdspe);
+		}
+		break;
+	case SUBSYS_AFTER_POWERUP:
+		pr_debug("CDSP_AFTER_POWERUP\n");
+		if (ignore_ssr != 1) {
+			cdspe.event = CDSP_AFTER_POWERUP;
+			send_uevent(&cdspe);
+		}
+		break;
+	default:
+		pr_debug("Default CDSP SSR\n");
 		break;
 	}
 	return NOTIFY_DONE;
@@ -547,7 +597,12 @@ static struct notifier_block ssr_adsp_nb = {
 	.priority = 0,
 };
 
-static struct service_info service_data[2] = {
+static struct notifier_block ssr_cdsp_nb = {
+	.notifier_call = ssr_cdsp_cb,
+	.priority = 0,
+};
+
+static struct service_info service_data[3] = {
 	{
 		.name = "SSR_MODEM",
 		.domain_id = SSR_DOMAIN_MODEM,
@@ -558,6 +613,12 @@ static struct service_info service_data[2] = {
 		.name = "SSR_ADSP",
 		.domain_id = SSR_DOMAIN_ADSP,
 		.nb = &ssr_adsp_nb,
+		.handle = NULL,
+	},
+	{
+		.name = "SSR_CDSP",
+		.domain_id = SSR_DOMAIN_CDSP,
+		.nb = &ssr_cdsp_nb,
 		.handle = NULL,
 	},
 };
