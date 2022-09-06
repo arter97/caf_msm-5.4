@@ -67,7 +67,8 @@ static struct page **fastrpc_alloc_pages(unsigned int count, gfp_t gfp)
 	return pages;
 }
 
-static struct page **fastrpc_alloc_buffer(struct fastrpc_buf *buf, gfp_t gfp)
+static struct page **fastrpc_alloc_buffer(struct fastrpc_buf *buf,
+		gfp_t gfp, pgprot_t prot)
 {
 	struct page **pages;
 	unsigned int count = PAGE_ALIGN(buf->size) >> PAGE_SHIFT;
@@ -81,8 +82,7 @@ static struct page **fastrpc_alloc_buffer(struct fastrpc_buf *buf, gfp_t gfp)
 		goto out_free_pages;
 
 	if (!(buf->dma_attr & DMA_ATTR_NO_KERNEL_MAPPING)) {
-		buf->va = vmap(pages, count, VM_USERMAP,
-				pgprot_noncached(PAGE_KERNEL));
+		buf->va = vmap(pages, count, VM_MAP, prot);
 		if (!buf->va)
 			goto out_free_sg;
 	}
@@ -133,7 +133,7 @@ void fastrpc_buf_free(struct fastrpc_buf *buf, int cache)
 
 int fastrpc_buf_alloc(struct fastrpc_file *fl, size_t size,
 				unsigned long dma_attr, uint32_t rflags,
-				int remote, struct fastrpc_buf **obuf)
+				int remote, pgprot_t prot, struct fastrpc_buf **obuf)
 {
 	struct fastrpc_apps *me = fl->apps;
 	struct fastrpc_buf *buf = NULL, *fr = NULL;
@@ -170,7 +170,7 @@ int fastrpc_buf_alloc(struct fastrpc_file *fl, size_t size,
 	buf->flags = rflags;
 	buf->raddr = 0;
 	buf->remote = 0;
-	buf->pages = fastrpc_alloc_buffer(buf, GFP_KERNEL);
+	buf->pages = fastrpc_alloc_buffer(buf, GFP_KERNEL, prot);
 	if (IS_ERR_OR_NULL(buf->pages)) {
 		err = -ENOMEM;
 		dev_err(me->dev,
@@ -217,7 +217,8 @@ int fastrpc_mmap_remove(struct fastrpc_file *fl, uintptr_t va,
 
 	hlist_for_each_entry_safe(map, n, &fl->maps, hn) {
 		if (map->raddr == va &&
-			map->raddr + map->len == va + len) {
+			map->raddr + map->len == va + len &&
+			map->refs == 1) {
 			match = map;
 			hlist_del_init(&map->hn);
 			break;
@@ -227,7 +228,7 @@ int fastrpc_mmap_remove(struct fastrpc_file *fl, uintptr_t va,
 		*ppmap = match;
 		return 0;
 	}
-	return -ENOTTY;
+	return -ETOOMANYREFS;
 }
 
 void fastrpc_mmap_free(struct fastrpc_file *fl,
@@ -302,7 +303,6 @@ int fastrpc_mmap_create(struct fastrpc_file *fl, int fd,
 	struct fastrpc_apps *me = fl->apps;
 	struct fastrpc_mmap *map = NULL;
 	int err = 0, sgl_index = 0;
-	unsigned long flags;
 	struct scatterlist *sgl = NULL;
 
 	if (!fastrpc_mmap_find(fl, fd, va, len, mflags, 1, ppmap))
@@ -330,7 +330,7 @@ int fastrpc_mmap_create(struct fastrpc_file *fl, int fd,
 			dev_err(me->dev, "can't get dma buf fd %d\n", fd);
 			goto bail;
 		}
-		VERIFY(err, !dma_buf_get_flags(map->buf, &flags));
+		VERIFY(err, !dma_buf_get_flags(map->buf, &map->dma_flags));
 		if (err) {
 			dev_err(me->dev, "can't get dma buf flags %d\n", fd);
 			goto bail;
@@ -343,7 +343,7 @@ int fastrpc_mmap_create(struct fastrpc_file *fl, int fd,
 			goto bail;
 		}
 
-		if (!(flags & ION_FLAG_CACHED))
+		if (!(map->dma_flags & ION_FLAG_CACHED))
 			map->attach->dma_map_attrs |= DMA_ATTR_SKIP_CPU_SYNC;
 		VERIFY(err, !IS_ERR_OR_NULL(map->table =
 					dma_buf_map_attachment(map->attach,
