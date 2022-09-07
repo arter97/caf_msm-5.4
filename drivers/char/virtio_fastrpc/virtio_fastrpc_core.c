@@ -1283,16 +1283,14 @@ int fastrpc_init_process(struct fastrpc_file *fl,
 	struct fastrpc_ioctl_init *init = &uproc->init;
 
 	switch (init->flags) {
-	case FASTRPC_INIT_ATTACH:
-	case FASTRPC_INIT_ATTACH_SENSORS:
-		fl->pd = GUEST_OS;
-		break;
 	case FASTRPC_INIT_CREATE:
 		fl->pd = DYNAMIC_PD;
 		break;
 	case FASTRPC_INIT_CREATE_STATIC:
-		fl->pd = STATIC_PD;
-		break;
+	case FASTRPC_INIT_ATTACH:
+	case FASTRPC_INIT_ATTACH_SENSORS:
+		err = -ECONNREFUSED;
+		goto bail;
 	default:
 		return -ENOTTY;
 	}
