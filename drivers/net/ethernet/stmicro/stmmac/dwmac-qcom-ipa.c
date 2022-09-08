@@ -1054,6 +1054,8 @@ static void ntn_ipa_notify_cb(void *priv, enum ipa_dp_evt_type evt,
 			skb->protocol = htons(ETH_P_IP);
 			iph = (struct iphdr *)skb->data;
 		} else {
+			if (ethqos->current_loopback > DISABLE_LOOPBACK)
+				swap_ip_port(skb, ETH_P_IP);
 			skb->protocol = eth_type_trans(skb, skb->dev);
 			iph = (struct iphdr *)(skb_mac_header(skb) + ETH_HLEN);
 		}
