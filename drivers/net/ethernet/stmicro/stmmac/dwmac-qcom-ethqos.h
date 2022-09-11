@@ -220,6 +220,10 @@ do  {\
 #define MAC_CONFIGURATION 0x0
 #define MAC_LM BIT(12)
 
+#define EMAC_QUEUE_0 0
+#define EMAC_CHANNEL_0 0
+#define EMAC_CHANNEL_1 1
+
 #define TLMM_BASE_RGMII_CTRL1 (tlmm_rgmii_pull_ctl1_base)
 #define TLMM_BASE_RX_CTR (tlmm_rgmii_rx_ctr_base)
 

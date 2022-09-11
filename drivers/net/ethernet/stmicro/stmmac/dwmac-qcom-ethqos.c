@@ -2564,6 +2564,14 @@ static void setup_config_registers(struct qcom_ethqos *ethqos,
 	priv->dev->phydev->speed = speed;
 	priv->speed  = speed;
 
+	if (mode > DISABLE_LOOPBACK && pethqos->ipa_enabled)
+		priv->hw->mac->map_mtl_to_dma(priv->hw, EMAC_QUEUE_0,
+					      EMAC_CHANNEL_1);
+
+	else
+		priv->hw->mac->map_mtl_to_dma(priv->hw, EMAC_QUEUE_0,
+					      EMAC_CHANNEL_0);
+
 	if (priv->dev->phydev->speed != SPEED_UNKNOWN)
 		ethqos_fix_mac_speed(ethqos, speed);
 

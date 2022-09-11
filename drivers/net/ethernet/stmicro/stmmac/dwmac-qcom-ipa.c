@@ -1968,6 +1968,9 @@ static int ethqos_ipa_offload_resume(struct qcom_ethqos *ethqos)
 {
 	int ret = 1;
 	struct ipa_perf_profile profile;
+	struct platform_device *pdev = ethqos->pdev;
+	struct net_device *dev = platform_get_drvdata(pdev);
+	struct stmmac_priv *priv = netdev_priv(dev);
 
 	ETHQOSDBG("Enter\n");
 
@@ -2002,6 +2005,12 @@ static int ethqos_ipa_offload_resume(struct qcom_ethqos *ethqos)
 	ethqos_init_offload(ethqos);
 	if (ret) {
 		ETHQOSERR("Offload channel Init Failed\n");
+		return ret;
+	}
+	if (priv->current_loopback > 0) {
+		priv->hw->mac->map_mtl_to_dma(priv->hw, EMAC_QUEUE_0,
+					      EMAC_CHANNEL_1);
+		ETHQOSINFO("Mapped queue 0 to channel 1 again\n");
 		return ret;
 	}
 
