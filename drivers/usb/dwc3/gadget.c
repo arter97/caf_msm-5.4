@@ -3012,8 +3012,8 @@ static const struct usb_gadget_ops dwc3_gadget_ops = {
 
 /* -------------------------------------------------------------------------- */
 
-#define NUM_GSI_OUT_EPS	1
-#define NUM_GSI_IN_EPS	2
+#define NUM_GSI_OUT_EPS(dwc)	(dwc->num_gsi_eps / 2)
+#define NUM_GSI_IN_EPS(dwc)	((dwc->num_gsi_eps + 1) / 2)
 
 static int dwc3_gadget_init_control_endpoint(struct dwc3_ep *dep)
 {
@@ -3119,18 +3119,18 @@ static int dwc3_gadget_init_endpoints(struct dwc3 *dwc, u8 total)
 		dep = dwc->eps[epnum];
 		/* Reserve EPs at the end for GSI */
 		if (!dep->direction && num >
-				out_count - NUM_GSI_OUT_EPS - 1) {
+				out_count - NUM_GSI_OUT_EPS(dwc) - 1) {
 			/* Allocation of TRBs are handled by GSI EP ops. */
 			dwc3_free_trb_pool(dep);
-			idx = num - (out_count - NUM_GSI_OUT_EPS - 1);
+			idx = num - (out_count - NUM_GSI_OUT_EPS(dwc) - 1);
 			snprintf(dep->name, sizeof(dep->name), "gsi-epout%d",
 					idx);
 			dep->gsi = true;
 		} else if (dep->direction && num >
-				in_count - NUM_GSI_IN_EPS - 1) {
+				in_count - NUM_GSI_IN_EPS(dwc) - 1) {
 			/* Allocation of TRBs are handled by GSI EP ops. */
 			dwc3_free_trb_pool(dep);
-			idx = num - (in_count - NUM_GSI_IN_EPS - 1);
+			idx = num - (in_count - NUM_GSI_IN_EPS(dwc) - 1);
 			snprintf(dep->name, sizeof(dep->name), "gsi-epin%d",
 					idx);
 			dep->gsi = true;
