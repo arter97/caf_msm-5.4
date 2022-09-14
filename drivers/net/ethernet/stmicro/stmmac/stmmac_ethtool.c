@@ -701,8 +701,14 @@ static void stmmac_get_wol(struct net_device *dev, struct ethtool_wolinfo *wol)
 static int stmmac_set_wol(struct net_device *dev, struct ethtool_wolinfo *wol)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
+	struct qcom_ethqos *ethqos = priv->plat->bsp_priv;
 	u32 support = WAKE_MAGIC | WAKE_UCAST;
 	int ret = 0;
+
+	if (ethqos->phy_state == PHY_IS_OFF) {
+		ETHQOSINFO("Phy is in off state Wol set not possible\n");
+		return -EOPNOTSUPP;
+	}
 
 	if (!priv->phydev) {
 		pr_err("%s: %s: PHY is not registered\n",
