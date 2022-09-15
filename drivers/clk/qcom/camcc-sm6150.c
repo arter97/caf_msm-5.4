@@ -436,7 +436,7 @@ static struct clk_rcg2 cam_cc_csi0phytimer_clk_src = {
 		.rate_max = (unsigned long[VDD_NUM]) {
 			[VDD_LOWER] = 100000000,
 			[VDD_LOW] = 200000000,
-			[VDD_NOMINAL] = 269333333},
+			[VDD_LOW_L1] = 269333333},
 	},
 };
 
@@ -459,7 +459,7 @@ static struct clk_rcg2 cam_cc_csi1phytimer_clk_src = {
 		.rate_max = (unsigned long[VDD_NUM]) {
 			[VDD_LOWER] = 100000000,
 			[VDD_LOW] = 200000000,
-			[VDD_NOMINAL] = 269333333},
+			[VDD_LOW_L1] = 269333333},
 	},
 };
 
@@ -482,7 +482,7 @@ static struct clk_rcg2 cam_cc_csi2phytimer_clk_src = {
 		.rate_max = (unsigned long[VDD_NUM]) {
 			[VDD_LOWER] = 100000000,
 			[VDD_LOW] = 200000000,
-			[VDD_NOMINAL] = 269333333},
+			[VDD_LOW_L1] = 269333333},
 	},
 };
 

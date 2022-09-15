@@ -1610,6 +1610,37 @@ err:
 	return ret;
 }
 
+#ifdef CONFIG_DEEPSLEEP
+static int cti_suspend(struct device *dev)
+{
+	struct cti_drvdata *drvdata = dev_get_drvdata(dev);
+
+	coresight_cti_reset(&drvdata->cti);
+
+	return 0;
+}
+#endif
+
+#ifdef CONFIG_HIBERNATION
+static int cti_freeze(struct device *dev)
+{
+	struct cti_drvdata *drvdata = dev_get_drvdata(dev);
+
+	coresight_cti_reset(&drvdata->cti);
+
+	return 0;
+}
+#endif
+
+static const struct dev_pm_ops cti_dev_pm_ops = {
+#ifdef CONFIG_DEEPSLEEP
+	.suspend = cti_suspend,
+#endif
+#ifdef CONFIG_HIBERNATION
+	.freeze  = cti_freeze,
+#endif
+};
+
 static struct amba_id cti_ids[] = {
 	{
 		.id     = 0x0003b966,
@@ -1623,6 +1654,7 @@ static struct amba_driver cti_driver = {
 	.drv = {
 		.name   = "coresight-cti",
 		.owner	= THIS_MODULE,
+		.pm     = &cti_dev_pm_ops,
 		.suppress_bind_attrs = true,
 	},
 	.probe          = cti_probe,

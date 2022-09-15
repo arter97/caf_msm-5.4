@@ -177,7 +177,7 @@ static int inv_mpu_probe(struct spi_device *spi)
 	&& !defined(CONFIG_INV_MPU_IIO_IAM20680)
 	st->i2c_dis = BIT_I2C_IF_DIS;
 #endif
-	st->bus_type = BUS_SPI;
+	st->bus_type = BUS_IIO_SPI;
 	spi_set_drvdata(spi, indio_dev);
 	indio_dev->dev.parent = &spi->dev;
 	indio_dev->name = id->name;
@@ -258,11 +258,9 @@ static int inv_mpu_probe(struct spi_device *spi)
 	}
 	init_waitqueue_head(&st->wait_queue);
 	st->resume_state = true;
-#ifdef CONFIG_HAS_WAKELOCK
-	wake_lock_init(&st->wake_lock, WAKE_LOCK_SUSPEND, "inv_mpu");
-#else
-	wakeup_source_init(&st->wake_lock, "inv_mpu");
-#endif
+
+	st->inv_wl = wakeup_source_register(st->dev, "inv_mpu");
+
 	dev_info(st->dev, "%s ma-kernel-%s is ready to go!\n",
 	         indio_dev->name, INVENSENSE_DRIVER_VERSION);
 
@@ -398,7 +396,6 @@ static struct spi_driver inv_mpu_driver = {
 	.shutdown = inv_mpu_shutdown,
 	.id_table = inv_mpu_id,
 	.driver = {
-		.owner = THIS_MODULE,
 		.name = "inv-mpu-iio-spi",
 		.pm = &inv_mpu_spi_pmops,
 	},

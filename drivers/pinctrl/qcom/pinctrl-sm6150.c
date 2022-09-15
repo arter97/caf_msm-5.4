@@ -1571,7 +1571,7 @@ static const struct msm_pingroup sm6150_groups[] = {
 
 #ifdef CONFIG_ARCH_SM6150
 static const int sm6150_reserved_gpios[] = {
-	6, 7, 8, 9, -1
+	0, 1, 2, 3, 6, 7, 8, 9, -1
 };
 #endif
 
