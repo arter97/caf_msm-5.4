@@ -44,19 +44,22 @@ enum ssr_power_option {
 static void ssr_sel_power_case(struct ssr_client_hook *ssr_hook,
 					u32 powercase)
 {
+	if (!ssr_hook) {
+		pr_err("No valid MHI controller registered\n");
+		return;
+	}
+
 	switch (powercase) {
 	case PCIE_POWER_OFF:
 		SSR_DBG("SSR_debug:Processing PCIe Link turn off\n");
-		(ssr_info.ssr_hook)->ssr_link_power_off(
-				(ssr_info.ssr_hook)->priv,
-				SSR_HOOK_MDM_CRASH);
+		ssr_hook->ssr_link_power_off(ssr_hook->priv,
+						SSR_HOOK_MDM_CRASH);
 		SSR_DBG("SSR_debug:PCIe Link turned off\n");
 		break;
 	case PCIE_POWER_ON:
 		SSR_DBG("SSR_debug:Processing PCIe turn on\n");
-		(ssr_info.ssr_hook)->ssr_link_power_on(
-				(ssr_info.ssr_hook)->priv,
-				SSR_HOOK_MDM_CRASH);
+		ssr_hook->ssr_link_power_on(ssr_hook->priv,
+						SSR_HOOK_MDM_CRASH);
 		SSR_DBG("SSR_debug:PCIe Link turned on\n");
 		break;
 	default:
@@ -90,6 +93,9 @@ static ssize_t ssr_power_store(struct device *dev,
 		SSR_DBG("SSR_debug: POWER_CASE:%d POWER_STATUS:%d\n",
 				powercase, ssr_info.power_status);
 		atomic_inc(&ssr_info.power_status);
+	} else {
+		pr_err("SSR_debug: Wrong option selected\n");
+		return count;
 	}
 
 	ssr_sel_power_case(ssr_info.ssr_hook, powercase);
@@ -109,7 +115,7 @@ static const struct attribute_group mhi_ssr_group = {
 int mhi_ssr_init(struct ssr_client_hook *client_hook)
 {
 	int ret;
-	struct mhi_controller *mhi_cntrl;
+	struct mhi_controller *mhi_cntrl = NULL;
 
 	if (IS_ERR_OR_NULL(client_hook))
 		return -EINVAL;
