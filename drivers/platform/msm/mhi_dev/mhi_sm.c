@@ -492,11 +492,12 @@ static int mhi_sm_prepare_resume(void)
 									res);
 				goto exit;
 			}
-
-			res = mhi_pcie_config_db_routing(mhi_sm_ctx->mhi_dev);
-			if (res) {
-				MHI_SM_ERR("Error configuring db routing\n");
-				goto exit;
+			if (mhi_sm_ctx->mhi_dev->use_hw_channel) {
+				res = mhi_pcie_config_db_routing(mhi_sm_ctx->mhi_dev);
+				if (res) {
+					MHI_SM_ERR("Error configuring db routing\n");
+					goto exit;
+				}
 			}
 		}
 		break;
