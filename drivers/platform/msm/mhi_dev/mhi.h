@@ -323,9 +323,9 @@ struct mhi_meminfo {
 
 struct mhi_addr {
 	uint64_t	host_pa;
-	size_t	device_pa;
-	size_t	device_va;
-	size_t		size;
+	u64		device_pa;
+	u64		device_va;
+	u64		size;
 	dma_addr_t	phy_addr;
 	void		*virt_addr;
 	bool		use_ipa_dma;
@@ -593,7 +593,7 @@ struct mhi_dev {
 	atomic_t			mhi_dev_wake;
 	atomic_t			re_init_done;
 	struct mutex			mhi_write_test;
-	u32				device_local_pa_base;
+	u64				device_local_pa_base;
 	u32				mhi_ep_msi_num;
 	u32				mhi_version;
 	void				*dma_cache;

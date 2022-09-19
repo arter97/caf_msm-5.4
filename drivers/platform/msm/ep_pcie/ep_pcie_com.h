@@ -135,6 +135,7 @@
 #define PCIE20_IATU_O_LAR(n)           (PCIE20_IATU_BASE(n) + 0x10)
 #define PCIE20_IATU_O_LTAR(n)          (PCIE20_IATU_BASE(n) + 0x14)
 #define PCIE20_IATU_O_UTAR(n)          (PCIE20_IATU_BASE(n) + 0x18)
+#define PCIE20_IATU_O_ULAR(n)          (PCIE20_IATU_BASE(n) + 0x20)
 
 #define PCIE20_IATU_I_CTRL1(n)         (PCIE20_IATU_BASE(n) + 0x100)
 #define PCIE20_IATU_I_CTRL2(n)         (PCIE20_IATU_BASE(n) + 0x104)
