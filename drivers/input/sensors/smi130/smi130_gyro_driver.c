@@ -2089,28 +2089,13 @@ static int smi_gyro_probe(struct i2c_client *client, const struct i2c_device_id 
 	register_early_suspend(&client_data->early_suspend_handler);
 #endif
 #if defined(SMI130_GYRO_ENABLE_INT1) || defined(SMI130_GYRO_ENABLE_INT2)
-	client_data->gpio_pin = of_get_named_gpio_flags(
-		client->dev.of_node,
-		"smi130_gyro,gpio_irq", 0, NULL);
-	PDEBUG("smi130_gyro qpio number:%d\n", client_data->gpio_pin);
-	err = gpio_request_one(client_data->gpio_pin,
-				GPIOF_IN, "bm160_interrupt");
-	if (err < 0) {
-		PDEBUG("requestgpio  failed\n");
-		client_data->gpio_pin = 0;
-	}
-	if (client_data->gpio_pin != 0) {
-		err = gpio_direction_input(client_data->gpio_pin);
-		if (err < 0) {
-			PDEBUG("request failed\n");
-		}
-		client_data->IRQ = gpio_to_irq(client_data->gpio_pin);
-		err = request_threaded_irq(client_data->IRQ,
-				smi_gyro_irq_handler, smi130_gyro_irq_work_func,
-				IRQF_TRIGGER_RISING, SENSOR_NAME, client_data);
-		if (err < 0)
-			PDEBUG("request handle failed\n");
-	}
+	client_data->IRQ = client->irq;
+	PINFO("client_data->IRQ = %d", client_data->IRQ);
+	err = request_threaded_irq(client_data->IRQ,
+			smi_gyro_irq_handler, smi130_gyro_irq_work_func,
+			IRQF_TRIGGER_RISING, SENSOR_NAME, client_data);
+	if (err < 0)
+		PINFO("request handle failed\n");
 #endif
 
 	err = smi130_gyro_early_buff_init(client_data);

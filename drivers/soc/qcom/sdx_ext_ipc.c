@@ -455,6 +455,7 @@ static const struct dev_pm_ops sdx_ext_ipc_pm_ops = {
 
 static const struct of_device_id sdx_ext_ipc_of_match[] = {
 	{ .compatible = "qcom,sdx-ext-ipc"},
+	{ .compatible = "qcom,sa515m-ccard"},
 	{},
 };
 

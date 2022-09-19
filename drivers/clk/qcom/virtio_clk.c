@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "%s: " fmt, __func__
@@ -485,6 +486,7 @@ static const struct virtio_cc_map clk_virtio_map_table[] = {
 	{ .cc_name = "sm6150-scc", .desc = &clk_virtio_sm6150_scc, },
 	{ .cc_name = "sa8195p-gcc", .desc = &clk_virtio_sa8195p_gcc, },
 	{ .cc_name = "direwolf-gcc", .desc = &clk_virtio_direwolf_gcc, },
+	{ .cc_name = "lemans-gcc", .desc = &clk_virtio_lemans_gcc, },
 	{ }
 };
 

@@ -440,20 +440,17 @@ void msm_mpm_enter_sleep(struct cpumask *cpumask)
 	struct irq_chip *irq_chip;
 	struct irq_data *irq_data;
 
-
 	for (i = 0; i < QCOM_MPM_REG_WIDTH; i++)
 		msm_mpm_write(MPM_REG_STATUS, i, 0);
 
 	msm_mpm_send_interrupt();
-
 
 	irq_data = irq_get_irq_data(msm_mpm_dev_data.ipc_irq);
 	if (!irq_data)
 		return;
 
 	irq_chip = irq_data->chip;
-
-	if (!irq_data)
+	if (!irq_chip)
 		return;
 
 	if (cpumask && irq_chip->irq_set_affinity)

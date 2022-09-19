@@ -48,6 +48,9 @@
 
 #define CMDBATCH_EOF       0x00000100
 
+/* ibDescs stored in indirect buffer */
+#define CMDBATCH_INDIRECT   0x00000200
+
 /* Max retry count of waiting for free space of doorbell queue. */
 #define HGSL_QFREE_MAX_RETRY_COUNT     (500)
 #define GLB_DB_SRC_ISSUEIB_IRQ_ID_0    TCSR_SRC_IRQ_ID_0
@@ -96,6 +99,9 @@ enum HGSL_DBQ_METADATA_COMMAND_INFO {
 #define HGSL_DBQ_WRITE_INDEX_OFFSET_IN_DWORD (0x0)
 #define HGSL_DBQ_READ_INDEX_OFFSET_IN_DWORD  (0x1)
 
+#define HGSL_DBQ_IBDESC_SHORT_WAIT_MSEC (5)
+#define HGSL_DBQ_IBDESC_LONG_WAIT_MSEC (30000)
+
 enum HGSL_DBQ_METADATA_COOPERATIVE_RESET_INFO {
 	HGSL_DBQ_HOST_TO_GVM_HARDRESET_REQ,
 	HGSL_DBQ_GVM_TO_HOST_HARDRESET_DISPATCH_IN_BUSY,
@@ -108,6 +114,18 @@ enum HGSL_DBQ_METADATA_CONTEXT_OFFSET_INFO {
 	HGSL_DBQ_METADATA_CTXT_TOTAL_ENTITY_NUM,
 };
 
+enum HGSL_DBQ_IBDESC_REQUEST_TYPE {
+	HGSL_DBQ_IBDESC_REQUEST_ACQUIRE,
+	HGSL_DBQ_IBDESC_REQUEST_RELEASE,
+};
+
+enum HGSL_DBQ_IBDESC_WAIT_TYPE {
+	/* If caller can retry, use short wait */
+	HGSL_DBQ_IBDESC_SHORT_WAIT,
+	/* If caller not capable of retrying, use long wait */
+	HGSL_DBQ_IBDESC_LONG_WAIT,
+};
+
 /* DBQ structure
  *   IBs storage | reserved | w.idx/r.idx | ctxt.info | hard reset |
  * 0             1K         1.5K          2K          3.5K         |
@@ -117,6 +135,7 @@ enum HGSL_DBQ_METADATA_CONTEXT_OFFSET_INFO {
 #define HGSL_DBQ_HFI_Q_INDEX_BASE_OFFSET_IN_DWORD            (1536 >> 2)
 #define HGSL_DBQ_CONTEXT_INFO_BASE_OFFSET_IN_DWORD           (2048 >> 2)
 #define HGSL_DBQ_COOPERATIVE_RESET_INFO_BASE_OFFSET_IN_DWORD (3584 >> 2)
+#define HGSL_DBQ_IBDESC_BASE_OFFSET_IN_DWORD                 (4096 >> 2)
 
 
 static inline bool _timestamp_retired(struct hgsl_context *ctxt,
@@ -132,6 +151,13 @@ static void db_set_busy_state(void *dbq_base, int in_busy);
 static struct hgsl_context *hgsl_get_context(struct qcom_hgsl *hgsl,
 				uint32_t context_id);
 static void hgsl_put_context(struct hgsl_context *ctxt);
+
+static bool dbq_check_ibdesc_state(struct qcom_hgsl *hgsl, struct hgsl_context *ctxt,
+		uint32_t request_type);
+
+static int dbq_wait_free_ibdesc(struct qcom_hgsl *hgsl,
+		struct hgsl_context *context, uint32_t request_type,
+		uint32_t wait_type);
 
 static uint32_t hgsl_dbq_get_state_info(uint32_t *va_base, uint32_t command,
 				uint32_t ctxt_id, uint32_t offset)
@@ -199,6 +225,8 @@ static void hgsl_dbq_set_state_info(uint32_t *va_base, uint32_t command,
 
 /* HFI command define. */
 #define HTOF_MSG_ISSUE_CMD 130
+
+#define HFI_HEADER_CMD_SIZE_MAX (255)
 
 #define MSG_ISSUE_INF_SZ()	(sizeof(struct hgsl_db_cmds) >> 2)
 #define MSG_ISSUE_IBS_SZ(numIB) \
@@ -631,7 +659,7 @@ static int hgsl_db_issue_cmd(struct hgsl_priv  *priv,
 			struct hgsl_fw_ib_desc ib_descs[],
 			uint64_t user_profile_gpuaddr)
 {
-	int ret;
+	int ret = 0;
 	uint32_t msg_dwords;
 	uint32_t msg_buf_sz;
 	struct hgsl_db_cmds *cmds;
@@ -640,16 +668,30 @@ static int hgsl_db_issue_cmd(struct hgsl_priv  *priv,
 	struct db_msg_id db_msg_id;
 	struct doorbell_queue *dbq = ctxt->dbq;
 	struct qcom_hgsl  *hgsl = priv->dev;
+	bool is_batch_ibdesc = false;
+	uint8_t *dst;
 
 	db_msg_id.msg_id = HTOF_MSG_ISSUE_CMD;
 	db_msg_id.seq_no = atomic_inc_return(&dbq->seq_num);
 
+	if ((num_ibs > (UINT_MAX / (sizeof(struct hgsl_fw_ib_desc) >> 2))) ||
+		(MSG_ISSUE_INF_SZ() > (UINT_MAX - MSG_ISSUE_IBS_SZ(num_ibs))))
+		return -EINVAL;
+
 	msg_dwords = MSG_ISSUE_INF_SZ() + MSG_ISSUE_IBS_SZ(num_ibs);
 	msg_buf_sz = ALIGN(msg_dwords, 4) << 2;
 
-	if (msg_buf_sz > dbq->data.dwords) {
-		dev_err(hgsl->dev, "number of IBs exceed\n");
-		return -EINVAL;
+	if (msg_buf_sz > dbq->data.dwords ||
+			(msg_dwords > HFI_HEADER_CMD_SIZE_MAX)) {
+		if ((MSG_ISSUE_IBS_SZ(num_ibs) << 2) <= dbq->ibdesc_max_size) {
+			msg_dwords = MSG_ISSUE_INF_SZ();
+			msg_buf_sz = ALIGN(msg_dwords, 4) << 2;
+			is_batch_ibdesc = true;
+			LOGI("Number of IBs exceed. Proceeding with CMDBATCH_IBDESC");
+		} else {
+			dev_err(hgsl->dev, "number of IBs exceed\n");
+			return -EINVAL;
+		}
 	}
 
 	ret = hgsl_db_next_timestamp(ctxt, timestamp);
@@ -668,7 +710,29 @@ static int hgsl_db_issue_cmd(struct hgsl_priv  *priv,
 	cmds->cmd_flags = gmu_cmd_flags;
 	cmds->timestamp = *timestamp;
 	cmds->user_profile_gpuaddr = user_profile_gpuaddr;
-	memcpy(cmds->ib_descs, ib_descs, sizeof(ib_descs[0]) * num_ibs);
+	if (!is_batch_ibdesc) {
+		memcpy(cmds->ib_descs, ib_descs, sizeof(ib_descs[0]) * num_ibs);
+	} else {
+		mutex_lock(&dbq->lock);
+		/* wait for the buffer */
+		ret = dbq_wait_free_ibdesc(hgsl, ctxt,
+				HGSL_DBQ_IBDESC_REQUEST_ACQUIRE,
+				HGSL_DBQ_IBDESC_SHORT_WAIT);
+		if (ret) {
+			mutex_unlock(&dbq->lock);
+			goto err;
+		}
+		dbq->ibdesc_priv.buf_inuse = true;
+		dbq->ibdesc_priv.context_id = ctxt->context_id;
+		dbq->ibdesc_priv.timestamp = *timestamp;
+		cmds->cmd_flags = gmu_cmd_flags | CMDBATCH_INDIRECT;
+		cmds->ib_desc_gmuaddr = dbq->gmuaddr +
+					(HGSL_DBQ_IBDESC_BASE_OFFSET_IN_DWORD << 2);
+		dst = (uint8_t *)dbq->vbase +
+					(HGSL_DBQ_IBDESC_BASE_OFFSET_IN_DWORD << 2);
+		memcpy(dst, ib_descs, sizeof(ib_descs[0]) * num_ibs);
+		mutex_unlock(&dbq->lock);
+	}
 
 	req.msg_has_response = 0;
 	req.msg_has_ret_packet = 0;
@@ -690,6 +754,7 @@ static int hgsl_db_issue_cmd(struct hgsl_priv  *priv,
 	if (ret == 0)
 		ctxt->queued_ts = *timestamp;
 
+err:
 	hgsl_free(cmds);
 	return ret;
 }
@@ -971,6 +1036,8 @@ static int hgsl_dbq_init(struct qcom_hgsl *hgsl,
 	dbq->state = DB_STATE_Q_FAULT;
 	dbq->dma = dma_buf;
 	dbq->dbq_idx = dbq_idx;
+	dbq->gmuaddr = hgsl->dbq_info[dbq_idx].gmuaddr;
+	dbq->ibdesc_max_size = hgsl->dbq_info[dbq_idx].ibdesc_max_size;
 	atomic_set(&dbq->seq_num, 0);
 
 	dma_buf_begin_cpu_access(dbq->dma, DMA_BIDIRECTIONAL);
@@ -1251,6 +1318,77 @@ out:
 	return ret;
 }
 
+static bool dbq_check_ibdesc_state(struct qcom_hgsl *hgsl,
+	struct hgsl_context *ctxt, uint32_t request_type)
+{
+	struct doorbell_queue *dbq = ctxt->dbq;
+	bool wait_required = false;
+
+	if (dbq == NULL || !dbq->ibdesc_priv.buf_inuse)
+		return wait_required;
+
+	if (request_type == HGSL_DBQ_IBDESC_REQUEST_RELEASE) {
+		if (ctxt->context_id == dbq->ibdesc_priv.context_id)
+			wait_required = true;
+	} else if (request_type == HGSL_DBQ_IBDESC_REQUEST_ACQUIRE)
+		wait_required = true;
+
+	return wait_required;
+}
+
+static int dbq_wait_free_ibdesc(struct qcom_hgsl *hgsl,
+		struct hgsl_context *context, uint32_t request_type,
+		uint32_t wait_type)
+{
+	struct hgsl_context *ctxt = NULL;
+	struct doorbell_queue *dbq = context->dbq;
+	signed long start;
+	bool expired = false;
+	int timeout = 0;
+	int ret = 0;
+
+	if (!dbq_check_ibdesc_state(hgsl, context, request_type))
+		return 0;
+
+	ctxt = hgsl_get_context(hgsl, dbq->ibdesc_priv.context_id);
+	if (!ctxt) {
+		LOGE("Invalid context id %d\n", dbq->ibdesc_priv.context_id);
+		return -EINVAL;
+	}
+
+	if (wait_type == HGSL_DBQ_IBDESC_SHORT_WAIT)
+		timeout = msecs_to_jiffies(HGSL_DBQ_IBDESC_SHORT_WAIT_MSEC);
+	else if (wait_type == HGSL_DBQ_IBDESC_LONG_WAIT)
+		timeout = msecs_to_jiffies(HGSL_DBQ_IBDESC_LONG_WAIT_MSEC);
+
+	start = jiffies;
+	do {
+		ret = hgsl_check_shadow_timestamp(ctxt, GSL_TIMESTAMP_RETIRED,
+					dbq->ibdesc_priv.timestamp, &expired);
+		if (ret || expired)
+			break;
+		mutex_unlock(&dbq->lock);
+		if (msleep_interruptible(1))
+			ret = -EINTR;
+		mutex_lock(&dbq->lock);
+		if (ret == -EINTR)
+			break;
+	} while ((jiffies - start) < timeout);
+
+	if (expired)
+		dbq->ibdesc_priv.buf_inuse = false;
+	else {
+		if (ret && ret != -EINTR && ret != -EAGAIN)
+			LOGE("Wait to free ibdesc failed %d", ret);
+		if (!ret)
+			ret = -EAGAIN;
+	}
+
+	hgsl_put_context(ctxt);
+
+	return ret;
+}
+
 static int hgsl_ctxt_create_dbq(struct hgsl_priv *priv,
 	struct hgsl_hab_channel_t *hab_channel,
 	struct hgsl_context *ctxt)
@@ -1284,11 +1422,12 @@ static int hgsl_ctxt_create_dbq(struct hgsl_priv *priv,
 
 static int hgsl_ctxt_destroy(struct hgsl_priv *priv,
 	struct hgsl_hab_channel_t *hab_channel,
-	uint32_t context_id, uint32_t *rval)
+	uint32_t context_id, uint32_t *rval, bool can_retry)
 {
 	struct hgsl_context *ctxt = NULL;
 	int ret;
 	bool put_channel = false;
+	struct doorbell_queue *dbq = NULL;
 
 
 	if (!hab_channel) {
@@ -1299,6 +1438,30 @@ static int hgsl_ctxt_destroy(struct hgsl_priv *priv,
 		}
 		put_channel = true;
 	}
+
+	ctxt = hgsl_get_context(priv->dev, context_id);
+	if (!ctxt) {
+		LOGE("Invalid context id %d\n", context_id);
+		ret = -EINVAL;
+		goto out;
+	}
+
+	dbq = ctxt->dbq;
+	if (dbq != NULL) {
+		mutex_lock(&dbq->lock);
+		/* if ibdesc is held by the context, release it here */
+		ret = dbq_wait_free_ibdesc(priv->dev, ctxt,
+				HGSL_DBQ_IBDESC_REQUEST_RELEASE,
+				HGSL_DBQ_IBDESC_LONG_WAIT);
+		if (ret && !can_retry)
+			dbq->ibdesc_priv.buf_inuse = false;
+		mutex_unlock(&dbq->lock);
+		if (ret && can_retry) {
+			hgsl_put_context(ctxt);
+			goto out;
+		}
+	}
+	hgsl_put_context(ctxt);
 
 	ctxt = hgsl_remove_context(priv, context_id);
 	if (!ctxt) {
@@ -1434,7 +1597,7 @@ out:
 	LOGD("%d", params.ctxthandle);
 	if (ret) {
 		if (ctxt_created)
-			hgsl_ctxt_destroy(priv, hab_channel, params.ctxthandle, NULL);
+			hgsl_ctxt_destroy(priv, hab_channel, params.ctxthandle, NULL, false);
 		else if (ctxt && (params.ctxthandle < HGSL_CONTEXT_NUM)) {
 			_unmap_shadow(ctxt);
 			hgsl_hyp_put_shadowts_mem(hab_channel, &ctxt->shadow_ts_node);
@@ -1467,7 +1630,7 @@ static int hgsl_ioctl_ctxt_destroy(struct file *filep, unsigned long arg)
 		goto out;
 	}
 
-	ret = hgsl_ctxt_destroy(priv, hab_channel, params.ctxthandle, &params.rval);
+	ret = hgsl_ctxt_destroy(priv, hab_channel, params.ctxthandle, &params.rval, true);
 
 	if (ret == 0) {
 		if (copy_to_user(USRPTR(arg), &params, sizeof(params)))
@@ -2765,7 +2928,7 @@ static int _hgsl_release(struct hgsl_priv *priv)
 			(hgsl->contexts[i] != NULL) &&
 			(priv == hgsl->contexts[i]->priv)) {
 			read_unlock(&hgsl->ctxt_lock);
-			hgsl_ctxt_destroy(priv, NULL, i, NULL);
+			hgsl_ctxt_destroy(priv, NULL, i, NULL, false);
 			read_lock(&hgsl->ctxt_lock);
 		}
 	}
