@@ -485,17 +485,22 @@ static int mhi_sm_prepare_resume(void)
 			goto exit;
 		}
 		if (mhi_sm_ctx->mhi_dev->use_ipa) {
-			/*  Retrieve MHI configuration*/
-			res = mhi_dev_config_outbound_iatu(mhi_sm_ctx->mhi_dev);
-			if (res) {
-				MHI_SM_ERR("Fail to configure iATU, ret: %d\n",
-									res);
-				goto exit;
-			}
 			if (mhi_sm_ctx->mhi_dev->use_hw_channel) {
-				res = mhi_pcie_config_db_routing(mhi_sm_ctx->mhi_dev);
+				/*  Retrieve MHI configuration*/
+				res = mhi_dev_config_outbound_iatu(
+						mhi_sm_ctx->mhi_dev);
 				if (res) {
-					MHI_SM_ERR("Error configuring db routing\n");
+					MHI_SM_ERR(
+					"Fail to configure iATU, ret: %d\n",
+									res);
+					goto exit;
+				}
+
+				res = mhi_pcie_config_db_routing(
+						mhi_sm_ctx->mhi_dev);
+				if (res) {
+					MHI_SM_ERR(
+					"Error configuring db routing\n");
 					goto exit;
 				}
 			}
@@ -532,10 +537,16 @@ static int mhi_sm_prepare_resume(void)
 	}
 
 	if (mhi_sm_ctx->mhi_dev->use_ipa) {
+		/*
+		 * As HW Channels as optional, in usecases where HW
+		 * channels are disabled, we don't call mhi_hwc_init.
+		 * In such cases IPA struct elements are not updated with
+		 * right parameters and hence return error on state update.
+		 * Hence we can ignore the M0 update here.
+		 */
 		res = ipa_mhi_update_mstate(IPA_MHI_STATE_M0);
 		if (res) {
-			MHI_SM_ERR("Failed updating MHI state to M0, %d", res);
-			goto exit;
+			MHI_SM_ERR("Failed updating MHI state to M0- Ignore, %d", res);
 		}
 	}
 

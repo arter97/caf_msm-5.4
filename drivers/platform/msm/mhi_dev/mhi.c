@@ -3826,6 +3826,7 @@ static void mhi_dev_enable(struct work_struct *work)
 			return;
 		}
 	}
+	mhi_enable_int();
 
 	if (mhi_ctx->config_iatu || mhi_ctx->mhi_int) {
 		mhi_ctx->mhi_int_en = true;
@@ -4029,7 +4030,7 @@ static int get_device_tree_data(struct platform_device *pdev)
 				"qcom,mhi-config-iatu");
 
 	if (mhi_ctx->config_iatu) {
-		rc = of_property_read_u32((&pdev->dev)->of_node,
+		rc = of_property_read_u64((&pdev->dev)->of_node,
 				"qcom,mhi-local-pa-base",
 				&mhi_ctx->device_local_pa_base);
 		if (rc) {
