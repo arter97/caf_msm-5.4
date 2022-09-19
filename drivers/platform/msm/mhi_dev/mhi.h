@@ -643,6 +643,9 @@ struct mhi_dev {
 	struct dma_chan			*tx_dma_chan;
 	struct dma_chan			*rx_dma_chan;
 
+	/* Use HW Accelerated Channels for data transfer */
+	bool				use_hw_channel;
+
 	int (*device_to_host)(uint64_t dst_pa, void *src, uint32_t len,
 				struct mhi_dev *mhi, struct mhi_req *req);
 

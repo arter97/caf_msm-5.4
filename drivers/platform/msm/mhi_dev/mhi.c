@@ -3819,10 +3819,12 @@ static void mhi_dev_enable(struct work_struct *work)
 		return;
 	}
 
-	rc = mhi_hwc_init(mhi_ctx);
-	if (rc) {
-		pr_err("error during hwc_init\n");
-		return;
+	if (mhi_ctx->use_hw_channel) {
+		rc = mhi_hwc_init(mhi_ctx);
+		if (rc) {
+			pr_err("error during hwc_init\n");
+			return;
+		}
 	}
 
 	if (mhi_ctx->config_iatu || mhi_ctx->mhi_int) {
@@ -3967,26 +3969,31 @@ static int get_device_tree_data(struct platform_device *pdev)
 
 	mhi->use_ipa = of_property_read_bool((&pdev->dev)->of_node,
 				"qcom,use-ipa-software-channel");
-	if (mhi->use_ipa) {
-		res_mem = platform_get_resource_byname(pdev,
-				IORESOURCE_MEM, "ipa_uc_mbox_crdb");
-		if (!res_mem) {
-			pr_err("Request IPA_UC_MBOX CRDB physical region failed\n");
-			rc = -EINVAL;
-			goto err;
+
+	mhi->use_hw_channel = of_property_read_bool((&pdev->dev)->of_node,
+				"qcom,use-hw-channel");
+	if (mhi->use_hw_channel) {
+		if (mhi->use_ipa) {
+			res_mem = platform_get_resource_byname(pdev,
+					IORESOURCE_MEM, "ipa_uc_mbox_crdb");
+			if (!res_mem) {
+				pr_err("Request IPA_UC_MBOX CRDB physical region failed\n");
+				rc = -EINVAL;
+				goto err;
+			}
+
+			mhi->ipa_uc_mbox_crdb = res_mem->start;
+
+			res_mem = platform_get_resource_byname(pdev,
+					IORESOURCE_MEM, "ipa_uc_mbox_erdb");
+			if (!res_mem) {
+				pr_err("Request IPA_UC_MBOX ERDB physical region failed\n");
+				rc = -EINVAL;
+				goto err;
+			}
+
+			mhi->ipa_uc_mbox_erdb = res_mem->start;
 		}
-
-		mhi->ipa_uc_mbox_crdb = res_mem->start;
-
-		res_mem = platform_get_resource_byname(pdev,
-				IORESOURCE_MEM, "ipa_uc_mbox_erdb");
-		if (!res_mem) {
-			pr_err("Request IPA_UC_MBOX ERDB physical region failed\n");
-			rc = -EINVAL;
-			goto err;
-		}
-
-		mhi->ipa_uc_mbox_erdb = res_mem->start;
 	}
 
 	mhi_ctx = mhi;
