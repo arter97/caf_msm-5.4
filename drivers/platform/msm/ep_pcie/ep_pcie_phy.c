@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2015-2018, 2019-2020, The Linux Foundation. All rights reserved.*/
+/* Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.*/
 
 /*
  * MSM PCIe PHY endpoint mode
@@ -29,6 +30,11 @@ void ep_pcie_phy_init(struct ep_pcie_dev_t *dev)
 	case 6:
 		EP_PCIE_DBG(dev,
 			"PCIe V%d: PHY V%d: Initializing 7nm QMP phy - 100MHz\n",
+			dev->rev, dev->phy_rev);
+		break;
+	case 7:
+		EP_PCIE_DBG(dev,
+			"PCIe V%d: PHY V%d: Initializing 5nm QMP phy - 100MHz\n",
 			dev->rev, dev->phy_rev);
 		break;
 	default:
