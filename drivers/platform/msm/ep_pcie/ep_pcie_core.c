@@ -52,6 +52,7 @@ static int ep_pcie_debug_keep_resource;
 static u32 ep_pcie_bar0_address;
 static bool m2_enabled;
 static u32 clkreq_irq;
+static bool iatu_once = true;
 
 struct ep_pcie_dev_t ep_pcie_dev = {0};
 
@@ -676,7 +677,7 @@ static void ep_pcie_core_init(struct ep_pcie_dev_t *dev, bool configured)
 		u32 dbi_lo = dbi->start;
 
 		ep_pcie_write_reg(dev->parf + PCIE20_PARF_SLV_ADDR_MSB_CTRL,
-					0, BIT(0));
+					0, BIT(1));
 		ep_pcie_write_reg(dev->parf, PCIE20_PARF_SLV_ADDR_SPACE_SIZE_HI,
 					0x200);
 		ep_pcie_write_reg(dev->parf, PCIE20_PARF_SLV_ADDR_SPACE_SIZE,
@@ -948,18 +949,37 @@ static void ep_pcie_config_outbound_iatu_entry(struct ep_pcie_dev_t *dev,
 		dev->rev, region, lower, limit, tgt_lower, tgt_upper);
 
 	if (dev->phy_rev >= 6) {
-		ep_pcie_write_reg(dev->iatu, PCIE20_IATU_O_CTRL1(region),
-					0x0);
-		ep_pcie_write_reg(dev->iatu, PCIE20_IATU_O_LBAR(region),
-					lower);
-		ep_pcie_write_reg(dev->iatu, PCIE20_IATU_O_UBAR(region),
-					upper);
-		ep_pcie_write_reg(dev->iatu, PCIE20_IATU_O_LAR(region),
-					limit);
-		ep_pcie_write_reg(dev->iatu, PCIE20_IATU_O_LTAR(region),
-					tgt_lower);
-		ep_pcie_write_reg(dev->iatu, PCIE20_IATU_O_UTAR(region),
-					tgt_upper);
+		if (iatu_once) {
+			iatu_once = false;
+			ep_pcie_write_reg(dev->iatu, PCIE20_IATU_O_CTRL1(region),
+						0x2000);
+			ep_pcie_write_reg(dev->iatu, PCIE20_IATU_O_LBAR(region),
+						0x20000000);
+			ep_pcie_write_reg(dev->iatu, PCIE20_IATU_O_UBAR(region),
+						0x4);
+			ep_pcie_write_reg(dev->iatu, PCIE20_IATU_O_LAR(region),
+						0x5fffffff);
+			ep_pcie_write_reg(dev->iatu, PCIE20_IATU_O_LTAR(region),
+						0x20000000);
+			ep_pcie_write_reg(dev->iatu, PCIE20_IATU_O_UTAR(region),
+						0);
+			 ep_pcie_write_reg(dev->iatu, PCIE20_IATU_O_ULAR(region),
+						0x4);
+		 } else {
+			ep_pcie_write_reg(dev->iatu, PCIE20_IATU_O_CTRL1(region),
+						0x0);
+			ep_pcie_write_reg(dev->iatu, PCIE20_IATU_O_LBAR(region),
+						lower);
+			ep_pcie_write_reg(dev->iatu, PCIE20_IATU_O_UBAR(region),
+						upper);
+			ep_pcie_write_reg(dev->iatu, PCIE20_IATU_O_LAR(region),
+						limit);
+			ep_pcie_write_reg(dev->iatu, PCIE20_IATU_O_LTAR(region),
+						tgt_lower);
+			ep_pcie_write_reg(dev->iatu, PCIE20_IATU_O_UTAR(region),
+						tgt_upper);
+		}
+
 		/* Set DMA Bypass bit for eDMA */
 		if (dev->pcie_edma)
 			ep_pcie_write_mask(dev->iatu +
@@ -2869,15 +2889,15 @@ enum ep_pcie_link_status ep_pcie_core_get_linkstatus(void)
 int ep_pcie_core_config_outbound_iatu(struct ep_pcie_iatu entries[],
 				u32 num_entries)
 {
-	u32 data_start = 0;
-	u32 data_end = 0;
-	u32 data_tgt_lower = 0;
-	u32 data_tgt_upper = 0;
-	u32 ctrl_start = 0;
-	u32 ctrl_end = 0;
-	u32 ctrl_tgt_lower = 0;
-	u32 ctrl_tgt_upper = 0;
-	u32 upper = 0;
+	u64 data_start = 0;
+	u64 data_end = 0;
+	u64 data_tgt_lower = 0;
+	u64 data_tgt_upper = 0;
+	u64 ctrl_start = 0;
+	u64 ctrl_end = 0;
+	u64 ctrl_tgt_lower = 0;
+	u64 ctrl_tgt_upper = 0;
+	u64 upper = 0;
 	bool once = true;
 
 	if (ep_pcie_dev.active_config) {
@@ -2910,7 +2930,7 @@ int ep_pcie_core_config_outbound_iatu(struct ep_pcie_iatu entries[],
 	}
 
 	EP_PCIE_DBG(&ep_pcie_dev,
-		"PCIe V%d: data_start:0x%x; data_end:0x%x; data_tgt_lower:0x%x; data_tgt_upper:0x%x; ctrl_start:0x%x; ctrl_end:0x%x; ctrl_tgt_lower:0x%x; ctrl_tgt_upper:0x%x\n",
+		"PCIe V%d: data_start:0x%llx; data_end:0x%llx; data_tgt_lower:0x%llx; data_tgt_upper:0x%llx; ctrl_start:0x%llx; ctrl_end:0x%llx; ctrl_tgt_lower:0x%llx; ctrl_tgt_upper:0x%llx\n",
 		ep_pcie_dev.rev, data_start, data_end, data_tgt_lower,
 		data_tgt_upper, ctrl_start, ctrl_end, ctrl_tgt_lower,
 		ctrl_tgt_upper);
@@ -3000,13 +3020,8 @@ int ep_pcie_core_get_msi_config(struct ep_pcie_msi_config *cfg)
 					msi->start, 0, msi->end,
 					lower, upper);
 
-		if (ep_pcie_dev.active_config || ep_pcie_dev.pcie_edma) {
-			cfg->lower = lower;
-			cfg->upper = upper;
-		} else {
-			cfg->lower = msi->start + (lower & 0xfff);
-			cfg->upper = 0;
-		}
+		cfg->lower = lower;
+		cfg->upper = upper;
 		cfg->data = data;
 		cfg->msg_num = (cap >> 20) & 0x7;
 		if ((lower != ep_pcie_dev.msi_cfg.lower)
@@ -3034,8 +3049,7 @@ int ep_pcie_core_get_msi_config(struct ep_pcie_msi_config *cfg)
 		 * bit set by default. Setup another ATU region to clear
 		 * the RO bit for MSIs triggered via IPA DMA.
 		 */
-		if (ep_pcie_dev.active_config &&
-				!ep_pcie_dev.conf_ipa_msi_iatu) {
+		if (!ep_pcie_dev.conf_ipa_msi_iatu) {
 			ep_pcie_config_outbound_iatu_entry(&ep_pcie_dev,
 				EP_PCIE_OATU_INDEX_IPA_MSI,
 				lower, 0,
