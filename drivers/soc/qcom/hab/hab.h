@@ -59,6 +59,8 @@ enum hab_payload_type {
 #define DEVICE_XVM1_NAME "hab_xvm1"
 #define DEVICE_XVM2_NAME "hab_xvm2"
 #define DEVICE_XVM3_NAME "hab_xvm3"
+#define DEVICE_VNW1_NAME "hab_vnw1"
+#define DEVICE_EXT1_NAME "hab_ext1"
 
 #define HABCFG_MMID_NUM        26
 
@@ -249,7 +251,7 @@ struct hab_device {
 	uint32_t id;
 	struct list_head pchannels;
 	int pchan_cnt;
-	spinlock_t pchan_lock;
+	rwlock_t pchan_lock;
 	struct list_head openq_list; /* received */
 	spinlock_t openlock;
 	wait_queue_head_t openq;
