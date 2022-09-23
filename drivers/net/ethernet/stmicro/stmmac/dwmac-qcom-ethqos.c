@@ -2904,6 +2904,7 @@ static const struct file_operations fops_mac_rec = {
 	.llseek = default_llseek,
 };
 
+#ifdef CONFIG_DEBUG_FS
 static int ethqos_create_debugfs(struct qcom_ethqos        *ethqos)
 {
 	static struct dentry *phy_reg_dump;
@@ -2985,6 +2986,7 @@ static int ethqos_cleanup_debugfs(struct qcom_ethqos *ethqos)
 	ETHQOSDBG("debugfs Deleted Successfully");
 	return 0;
 }
+#endif
 
 static void ethqos_emac_mem_base(struct qcom_ethqos *ethqos)
 {
@@ -3717,8 +3719,9 @@ static int _qcom_ethqos_probe(void *arg)
 
 ethqos_emac_mem_base(ethqos);
 	pethqos = ethqos;
+#ifdef CONFIG_DEBUG_FS
 	ethqos_create_debugfs(ethqos);
-
+#endif
 	ndev = dev_get_drvdata(&ethqos->pdev->dev);
 	priv = netdev_priv(ndev);
 
@@ -3853,7 +3856,9 @@ static int qcom_ethqos_remove(struct platform_device *pdev)
 	if (ethqos->io_macro.pps_remove)
 		ethqos_remove_pps_dev(ethqos);
 
+#ifdef CONFIG_DEBUG_FS
 	ethqos_cleanup_debugfs(ethqos);
+#endif
 	ethqos_free_gpios(ethqos);
 	emac_emb_smmu_exit();
 	ethqos_disable_regulators(ethqos);
