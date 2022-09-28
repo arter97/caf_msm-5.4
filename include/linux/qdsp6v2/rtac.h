@@ -9,6 +9,8 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __RTAC_H__
@@ -21,7 +23,7 @@
 #define RTAC_CVS		1
 #define RTAC_VOICE_MODES	2
 
-#define RTAC_MAX_ACTIVE_DEVICES		4
+#define RTAC_MAX_ACTIVE_DEVICES		6
 #define RTAC_MAX_ACTIVE_POPP		8
 
 #define DEFAULT_APP_TYPE	0x00011130
@@ -95,4 +97,5 @@ int rtac_clear_mapping(uint32_t cal_type);
 bool rtac_make_afe_callback(uint32_t *payload, u32 payload_size);
 void rtac_set_afe_handle(void *handle);
 void get_rtac_adm_data(struct rtac_adm *adm_data);
+void rtac_update_afe_topology(u32 port_id);
 #endif

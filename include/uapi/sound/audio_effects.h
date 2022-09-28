@@ -9,6 +9,9 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _AUDIO_EFFECTS_H
@@ -159,8 +162,12 @@
 #define PBE_ENABLE_PARAM_LEN		1
 #define PBE_CONFIG_PARAM_LEN		28
 
+/* Command Payload length and size for Non-IID commands */
 #define COMMAND_PAYLOAD_LEN	3
 #define COMMAND_PAYLOAD_SZ	(COMMAND_PAYLOAD_LEN * sizeof(uint32_t))
+/* Command Payload length and size for IID commands */
+#define COMMAND_IID_PAYLOAD_LEN	4
+#define COMMAND_IID_PAYLOAD_SZ	(COMMAND_IID_PAYLOAD_LEN * sizeof(uint32_t))
 #define MAX_INBAND_PARAM_SZ	4096
 #define Q27_UNITY		(1 << 27)
 #define Q8_UNITY		(1 << 8)
