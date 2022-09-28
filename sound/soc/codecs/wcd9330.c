@@ -8,7 +8,10 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- */
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+*/
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/firmware.h>
@@ -695,7 +698,7 @@ int tomtom_enable_qfuse_sensing(struct snd_soc_codec *codec)
 	 */
 	usleep_range(5000, 5500);
 	if ((snd_soc_read(codec, TOMTOM_A_QFUSE_STATUS) & (0x03)) != 0x03)
-		WARN(1, "%s: Qfuse sense is not complete\n", __func__);
+		pr_debug("%s: Qfuse sense is not complete\n", __func__);
 
 	if (tomtom->wcd_ext_clk)
 		tomtom_codec_mclk_enable(codec, false, false);
