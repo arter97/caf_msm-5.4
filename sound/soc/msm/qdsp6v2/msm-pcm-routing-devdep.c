@@ -8,8 +8,13 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
+#include <linux/kernel.h>
+#include <linux/platform_device.h>
 #include <linux/err.h>
 #include <linux/module.h>
 #include <sound/hwdep.h>
@@ -38,6 +43,7 @@ static int msm_pcm_routing_hwdep_ioctl(struct snd_hwdep *hw, struct file *file,
 {
 	int ret = 0;
 	void __user *argp = (void __user *)arg;
+
 	pr_debug("%s:cmd %x\n", __func__, cmd);
 	switch (cmd) {
 	case SNDRV_DEVDEP_DAP_IOCTL_SET_PARAM:
@@ -72,6 +78,7 @@ static int msm_pcm_routing_hwdep_compat_ioctl(struct snd_hwdep *hw,
 {
 	int ret = 0;
 	void __user *argp = (void __user *)arg;
+
 	pr_debug("%s:cmd %x\n", __func__, cmd);
 	switch (cmd) {
 	case SNDRV_DEVDEP_DAP_IOCTL_SET_PARAM32:
@@ -103,11 +110,11 @@ int msm_pcm_routing_hwdep_new(struct snd_soc_pcm_runtime *runtime,
 
 	if (dai_link->be_id < 0 ||
 		dai_link->be_id >= MSM_BACKEND_DAI_MAX) {
-		pr_err("%s:be_id %d invalid index\n",
+		pr_err("%s:BE id %d invalid index\n",
 			__func__, dai_link->be_id);
 		return -EINVAL;
 	}
-	pr_debug("%s be_id %d\n", __func__, dai_link->be_id);
+	pr_debug("%s BE id %d\n", __func__, dai_link->be_id);
 	rc = snd_hwdep_new(runtime->card->snd_card,
 			   msm_bedais[dai_link->be_id].name,
 			   dai_link->be_id, &hwdep);
@@ -116,7 +123,7 @@ int msm_pcm_routing_hwdep_new(struct snd_soc_pcm_runtime *runtime,
 			__func__, msm_bedais[dai_link->be_id].name);
 		return rc;
 	}
-	if (IS_ERR_VALUE(rc)) {
+	if (rc < 0) {
 		pr_err("%s: hwdep intf failed to create %s rc %d\n", __func__,
 			msm_bedais[dai_link->be_id].name, rc);
 		return rc;

@@ -14,13 +14,16 @@
  * See the GNU General Public License for more details.
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, you can find it at http://www.fsf.org.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _MSM_PCM_H
 #define _MSM_PCM_H
 #include <sound/apr_audio-v2.h>
 #include <sound/q6asm-v2.h>
-
+#include "msm-pcm-routing-v2.h"
 
 
 /* Support unconventional sample rates 12000, 24000 as well */
@@ -31,9 +34,9 @@ extern int copy_count;
 
 struct buffer {
 	void *data;
-	unsigned size;
-	unsigned used;
-	unsigned addr;
+	unsigned int size;
+	unsigned int used;
+	unsigned int addr;
 };
 
 struct buffer_rec {
@@ -105,10 +108,11 @@ struct msm_audio {
 	int mmap_flag;
 	atomic_t pending_buffer;
 	bool set_channel_map;
-	char channel_map[8];
+	char channel_map[PCM_FORMAT_MAX_NUM_CHANNEL_V8];
 	int cmd_interrupt;
 	bool meta_data_mode;
 	uint32_t volume;
+	bool compress_enable;
 	/* array of frame info */
 	struct msm_audio_in_frame_info in_frame_info[CAPTURE_MAX_NUM_PERIODS];
 };
@@ -123,9 +127,16 @@ struct output_meta_data_st {
 
 struct msm_plat_data {
 	int perf_mode;
-	int perf_mode_set;
 	struct snd_pcm *pcm;
+	struct msm_pcm_ch_map *ch_map[MSM_FRONTEND_DAI_MAX];
+	struct snd_pcm *pcm_device[MSM_FRONTEND_DAI_MM_SIZE];
+	struct msm_pcm_channel_mixer *chmixer_pspd[MSM_FRONTEND_DAI_MM_SIZE][2];
 	struct mutex lock;
+};
+
+struct msm_pcm_ch_map {
+	bool set_ch_map;
+	char channel_map[PCM_FORMAT_MAX_NUM_CHANNEL];
 };
 
 #endif /*_MSM_PCM_H*/
