@@ -3385,6 +3385,13 @@ static int cnss_probe(struct platform_device *plat_dev)
 			    ret);
 
 	cnss_get_rc_qrtr(plat_priv);
+	ret = of_property_read_string(plat_priv->plat_dev->dev.of_node,
+				      "wlan2_antenna", &plat_priv->wlan2_antenna);
+	if (ret)
+		cnss_pr_dbg("wlan2_antenna item missing, err = %d\n", ret);
+
+	if (plat_priv->wlan2_antenna)
+		cnss_pr_dbg("wlan2_antenna %s\n", plat_priv->wlan2_antenna);
 
 	plat_priv->is_converged_dt = cnss_is_converged_dt(plat_priv);
 	plat_priv->dev_node = plat_priv->plat_dev->dev.of_node;
