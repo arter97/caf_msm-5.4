@@ -248,6 +248,7 @@ struct stmmac_priv {
 	bool phy_irq_enabled;
 
 	int phy_intr_wol_irq;
+	bool en_wol;
 };
 
 enum stmmac_state {

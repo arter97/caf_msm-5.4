@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (c) 2018-19 Linaro Limited
 /* Copyright (c) 2021, The Linux Foundation. All rights reserved. */
+/*Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.*/
 
 #include <linux/delay.h>
 #include <linux/module.h>
@@ -1718,57 +1719,42 @@ void qcom_ethqos_request_phy_wol(void *plat_n)
 {
 	struct plat_stmmacenet_data *plat = plat_n;
 	struct qcom_ethqos *ethqos;
-	struct platform_device *pdev;
-	struct net_device *ndev;
+	struct stmmac_priv *priv;
+	int ret = 0;
 
 	if (!plat)
 		return;
 
 	ethqos = plat->bsp_priv;
+	priv = qcom_ethqos_get_priv(ethqos);
 
-	pdev = ethqos->pdev;
-	ndev = platform_get_drvdata(pdev);
+	if (!priv || !priv->en_wol)
+		return;
 
-	ethqos->phy_wol_supported = 0;
-	ethqos->phy_wol_wolopts = 0;
 	/* Check if phydev is valid*/
 	/* Check and enable Wake-on-LAN functionality in PHY*/
-
-	if (ndev->phydev) {
+	if (priv->phydev) {
 		struct ethtool_wolinfo wol = {.cmd = ETHTOOL_GWOL};
+		phy_ethtool_get_wol(priv->phydev, &wol);
 
-		wol.supported = 0;
-		wol.wolopts = 0;
-		ETHQOSINFO("phydev addr: 0x%pK\n", ndev->phydev);
-		phy_ethtool_get_wol(ndev->phydev, &wol);
-		ethqos->phy_wol_supported = wol.supported;
-		ETHQOSINFO("Get WoL[0x%x] in %s\n", wol.supported,
-			   ndev->phydev->drv->name);
+		wol.cmd = ETHTOOL_SWOL;
+		wol.wolopts = wol.supported;
+		ret = phy_ethtool_set_wol(priv->phydev, &wol);
 
-	/* Try to enable supported Wake-on-LAN features in PHY*/
-		if (wol.supported) {
-			device_set_wakeup_capable(&ethqos->pdev->dev, 1);
-
-			wol.cmd = ETHTOOL_SWOL;
-			wol.wolopts = wol.supported;
-
-			if (!phy_ethtool_set_wol(ndev->phydev, &wol)) {
-				ethqos->phy_wol_wolopts = wol.wolopts;
-
-				enable_irq_wake(ethqos->phy_intr);
-				device_set_wakeup_enable(&ethqos->pdev->dev, 1);
-
-				ETHQOSINFO("Enabled WoL[0x%x] in %s\n",
-					   wol.wolopts,
-					   ndev->phydev->drv->name);
-			} else {
-				ETHQOSINFO("Disabled WoL[0x%x] in %s\n",
-					   wol.wolopts,
-					   ndev->phydev->drv->name);
-			}
-		} else {
-			ETHQOSINFO("WoL Not Supported\n");
+		if (ret) {
+			ETHQOSERR("set wol in PHY failed\n");
+			return;
 		}
+
+		if (ret == EOPNOTSUPP) {
+			ETHQOSERR("WOL not supported\n");
+			return;
+		}
+
+		device_set_wakeup_capable(priv->device, 1);
+
+		enable_irq_wake(ethqos->phy_intr);
+		device_set_wakeup_enable(&ethqos->pdev->dev, 1);
 	}
 }
 
@@ -3744,6 +3730,8 @@ ethqos_emac_mem_base(ethqos);
 						 &ethqos->avb_class_b_class,
 						 AVB_CLASS_B_POLL_DEV_NODE);
 	}
+
+	priv->en_wol = of_property_read_bool(np, "enable-wol");
 
 	qcom_ethqos_read_iomacro_por_values(ethqos);
 
