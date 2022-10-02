@@ -2354,7 +2354,7 @@ static ssize_t phy_off_config(struct file *file, const char __user *user_buffer,
 	if (config == DISABLE_PHY_IMMEDIATELY) {
 		ethqos->current_phy_mode = DISABLE_PHY_IMMEDIATELY;
 	//make phy off
-		if (ethqos->current_loopback == ENABLE_PHY_LOOPBACK) {
+		if (priv->current_loopback == ENABLE_PHY_LOOPBACK) {
 			/* If Phy loopback is enabled
 			 *  Disabled It before phy off
 			 */
@@ -2622,7 +2622,7 @@ static ssize_t loopback_handling_config(struct file *file, const char __user *us
 		ETHQOSERR("Invalid config =%d\n", config);
 		return -EINVAL;
 	}
-	if ((config == ENABLE_PHY_LOOPBACK  || ethqos->current_loopback ==
+	if ((config == ENABLE_PHY_LOOPBACK  || priv->current_loopback ==
 			ENABLE_PHY_LOOPBACK) &&
 			ethqos->current_phy_mode == DISABLE_PHY_IMMEDIATELY) {
 		ETHQOSERR("Can't enabled/disable ");
@@ -2638,7 +2638,7 @@ static ssize_t loopback_handling_config(struct file *file, const char __user *us
 			return -EINVAL;
 	}
 
-	if (config == ethqos->current_loopback) {
+	if (config == priv->current_loopback) {
 		switch (config) {
 		case DISABLE_LOOPBACK:
 			ETHQOSINFO("Loopback is already disabled\n");
@@ -2660,23 +2660,23 @@ static ssize_t loopback_handling_config(struct file *file, const char __user *us
 	}
 	/*If request to enable loopback & some other loopback already enabled*/
 	if (config != DISABLE_LOOPBACK &&
-	    ethqos->current_loopback > DISABLE_LOOPBACK) {
+	    priv->current_loopback > DISABLE_LOOPBACK) {
 		ETHQOSINFO("Loopback is already enabled\n");
-		print_loopback_detail(ethqos->current_loopback);
+		print_loopback_detail(priv->current_loopback);
 		return -EINVAL;
 	}
 	ETHQOSINFO("enable loopback = %d with link speed = %d backup now\n",
 		   config, speed);
 
 	/*Backup speed & duplex before Enabling Loopback */
-	if (ethqos->current_loopback == DISABLE_LOOPBACK &&
+	if (priv->current_loopback == DISABLE_LOOPBACK &&
 	    config > DISABLE_LOOPBACK) {
 		/*Backup old speed & duplex*/
 		ethqos->backup_speed = priv->speed;
 		ethqos->backup_duplex = priv->dev->phydev->duplex;
 	}
 	/*Backup BMCR before Enabling Phy LoopbackLoopback */
-	if (ethqos->current_loopback == DISABLE_LOOPBACK &&
+	if (priv->current_loopback == DISABLE_LOOPBACK &&
 	    config == ENABLE_PHY_LOOPBACK)
 		ethqos->bmcr_backup = ethqos_mdio_read(priv,
 						       priv->plat->phy_addr,
@@ -2691,11 +2691,11 @@ static ssize_t loopback_handling_config(struct file *file, const char __user *us
 	switch (config) {
 	case DISABLE_LOOPBACK:
 		ETHQOSINFO("Request to Disable Loopback\n");
-		if (ethqos->current_loopback == ENABLE_IO_MACRO_LOOPBACK)
+		if (priv->current_loopback == ENABLE_IO_MACRO_LOOPBACK)
 			ethqos_rgmii_io_macro_loopback(ethqos, 0);
-		else if (ethqos->current_loopback == ENABLE_MAC_LOOPBACK)
+		else if (priv->current_loopback == ENABLE_MAC_LOOPBACK)
 			ethqos_mac_loopback(ethqos, 0);
-		else if (ethqos->current_loopback == ENABLE_PHY_LOOPBACK)
+		else if (priv->current_loopback == ENABLE_PHY_LOOPBACK)
 			phy_digital_loopback_config(ethqos,
 						    ethqos->backup_speed, 0);
 		break;
@@ -2717,7 +2717,7 @@ static ssize_t loopback_handling_config(struct file *file, const char __user *us
 		break;
 	}
 
-	ethqos->current_loopback = config;
+	priv->current_loopback = config;
 	kfree(in_buf);
 	return count;
 }
@@ -2728,6 +2728,9 @@ static ssize_t read_loopback_config(struct file *file,
 {
 	unsigned int len = 0, buf_len = 2000;
 	struct qcom_ethqos *ethqos = file->private_data;
+	struct platform_device *pdev;
+	struct net_device *dev;
+	struct stmmac_priv *priv;
 	char *buf;
 	ssize_t ret_cnt;
 
@@ -2735,20 +2738,24 @@ static ssize_t read_loopback_config(struct file *file,
 		ETHQOSERR("NULL Pointer\n");
 		return -EINVAL;
 	}
+	pdev = ethqos->pdev;
+	dev = platform_get_drvdata(pdev);
+	priv = netdev_priv(dev);
+
 	buf = kzalloc(buf_len, GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
 
-	if (ethqos->current_loopback == DISABLE_LOOPBACK)
+	if (priv->current_loopback == DISABLE_LOOPBACK)
 		len += scnprintf(buf + len, buf_len - len,
 				 "Loopback is Disabled\n");
-	else if (ethqos->current_loopback == ENABLE_IO_MACRO_LOOPBACK)
+	else if (priv->current_loopback == ENABLE_IO_MACRO_LOOPBACK)
 		len += scnprintf(buf + len, buf_len - len,
 				 "Current Loopback is IO MACRO LOOPBACK\n");
-	else if (ethqos->current_loopback == ENABLE_MAC_LOOPBACK)
+	else if (priv->current_loopback == ENABLE_MAC_LOOPBACK)
 		len += scnprintf(buf + len, buf_len - len,
 				 "Current Loopback is MAC LOOPBACK\n");
-	else if (ethqos->current_loopback == ENABLE_PHY_LOOPBACK)
+	else if (priv->current_loopback == ENABLE_PHY_LOOPBACK)
 		len += scnprintf(buf + len, buf_len - len,
 				 "Current Loopback is PHY LOOPBACK\n");
 	else
