@@ -451,6 +451,7 @@ struct extcon_nb {
 	int			idx;
 	struct notifier_block	vbus_nb;
 	struct notifier_block	id_nb;
+	struct notifier_block	dp_nb;
 };
 
 /* Input bits to state machine (mdwc->inputs) */
@@ -4306,6 +4307,31 @@ static int dwc3_msm_vbus_notifier(struct notifier_block *nb,
 	return NOTIFY_DONE;
 }
 
+static void dwc3_msm_clear_dp_only_params(struct dwc3_msm *mdwc);
+
+static int dwc3_msm_dp_notifier(struct notifier_block *nb, unsigned long event, void *ptr)
+{
+	struct extcon_dev *edev = ptr;
+	struct extcon_nb *enb = container_of(nb, struct extcon_nb, dp_nb);
+	struct dwc3_msm *mdwc = enb->mdwc;
+	union extcon_property_value val;
+
+	if (event) {
+		dwc3_msm_clear_ssphy_flags(mdwc, PHY_LANE_A | PHY_LANE_B);
+		extcon_get_property(mdwc->extcon[mdwc->polarity_idx].edev, EXTCON_USB_HOST,
+				EXTCON_PROP_USB_TYPEC_POLARITY, &val);
+		mdwc->ss_phy[0]->flags |= val.intval ? PHY_LANE_B : PHY_LANE_A;
+
+		extcon_get_property(edev, EXTCON_USB_HOST, EXTCON_PROP_USB_SS, &val);
+
+		dwc3_msm_release_ss_lane(mdwc->dev, val.intval);
+	} else {
+		dwc3_msm_clear_dp_only_params(mdwc);
+	}
+
+	return NOTIFY_DONE;
+}
+
 static int dwc3_msm_extcon_register(struct dwc3_msm *mdwc)
 {
 	struct device_node *node = mdwc->dev->of_node;
@@ -4365,6 +4391,9 @@ static int dwc3_msm_extcon_register(struct dwc3_msm *mdwc)
 						&mdwc->extcon[idx].id_nb);
 		if (!ret)
 			check_id_state = true;
+
+		mdwc->extcon[idx].dp_nb.notifier_call = dwc3_msm_dp_notifier;
+		extcon_register_notifier(edev, EXTCON_DISP_DP, &mdwc->extcon[idx].dp_nb);
 
 		/* Update initial VBUS/ID state */
 		if (check_vbus_state && extcon_get_state(edev, EXTCON_USB))
@@ -4859,6 +4888,15 @@ static void dwc3_start_stop_device(struct dwc3_msm *mdwc, bool start)
 		dbg_log_string("device mode restarted");
 	else
 		dbg_log_string("stop_device_mode completed");
+}
+
+static void dwc3_msm_clear_dp_only_params(struct dwc3_msm *mdwc)
+{
+	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
+
+	dwc->maximum_speed = USB_SPEED_UNKNOWN;
+
+	usb_redriver_notify_disconnect(mdwc->redriver);
 }
 
 static void dwc3_msm_set_dp_only_params(struct dwc3_msm *mdwc)
