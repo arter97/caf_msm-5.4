@@ -6019,6 +6019,53 @@ static int cnss_pci_get_dev_cfg_node(struct cnss_plat_data *plat_priv)
 	return -EINVAL;
 }
 
+#ifdef CONFIG_CNSS2_CONDITIONAL_POWEROFF
+static bool cnss_should_suspend_pwroff(struct pci_dev *pci_dev)
+{
+	bool suspend_pwroff;
+
+	switch (pci_dev->device) {
+	case QCA6390_DEVICE_ID:
+	case QCA6490_DEVICE_ID:
+		suspend_pwroff = false;
+		break;
+	default:
+		suspend_pwroff = true;
+	}
+
+	return suspend_pwroff;
+}
+#else
+static bool cnss_should_suspend_pwroff(struct pci_dev *pci_dev)
+{
+	return true;
+}
+#endif
+
+static void cnss_pci_suspend_pwroff(struct pci_dev *pci_dev)
+{
+	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(pci_dev);
+	int rc_num = pci_dev->bus->domain_nr;
+	struct cnss_plat_data *plat_priv = cnss_get_plat_priv_by_rc_num(rc_num);
+	int ret = 0;
+	bool suspend_pwroff = cnss_should_suspend_pwroff(pci_dev);
+
+	if (suspend_pwroff) {
+		ret = cnss_suspend_pci_link(pci_priv);
+		if (ret)
+			cnss_pr_err("Failed to suspend PCI link, err = %d\n",
+				    ret);
+
+		if (pci_dev->device == QCA6390_DEVICE_ID)
+			cnss_disable_redundant_vreg(plat_priv);
+
+		cnss_power_off_device(plat_priv);
+	} else {
+		cnss_pr_dbg("bus suspend and dev power off disabled for [%x]\n",
+			    pci_dev->device);
+	}
+}
+
 static int cnss_pci_probe(struct pci_dev *pci_dev,
 			  const struct pci_device_id *id)
 {
@@ -6134,15 +6181,7 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	if (cnss_is_dual_wlan_enabled() && !plat_priv->enumerate_done)
 		return 0;
 
-	ret = cnss_suspend_pci_link(pci_priv);
-	if (ret)
-		cnss_pr_err("Failed to suspend PCI link, err = %d\n", ret);
-
-	if (pci_dev->device == QCA6390_DEVICE_ID)
-		cnss_disable_redundant_vreg(plat_priv);
-
-	cnss_power_off_device(plat_priv);
-
+	cnss_pci_suspend_pwroff(pci_dev);
 	return 0;
 
 unreg_mhi:
