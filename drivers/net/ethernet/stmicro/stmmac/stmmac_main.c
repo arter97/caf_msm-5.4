@@ -2183,6 +2183,13 @@ void stmmac_tx_err(struct stmmac_priv *priv, u32 chan)
 	struct stmmac_tx_queue *tx_q = &priv->tx_queue[chan];
 	int i;
 
+	if (tx_q->skip_sw) {
+		ethqos_ipa_offload_event_handler(priv, EV_DEV_CLOSE);
+		ethqos_ipa_offload_event_handler(priv, EV_DEV_OPEN);
+		priv->dev->stats.tx_errors++;
+		return;
+	}
+
 	netif_tx_stop_queue(netdev_get_tx_queue(priv->dev, chan));
 
 	stmmac_stop_tx_dma(priv, chan);
