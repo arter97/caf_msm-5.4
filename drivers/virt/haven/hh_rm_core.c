@@ -48,7 +48,6 @@ struct hh_rm_connection {
 
 	u8 num_fragments;
 	u8 fragments_received;
-	void *current_recv_buff;
 };
 
 static struct task_struct *hh_rm_drv_recv_task;
