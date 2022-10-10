@@ -1106,8 +1106,8 @@ int pt_devtree_clean_pdata(struct device *adap_dev)
 
 	pdata = dev_get_platdata(adap_dev);
 	set_pdata_ptr(pdata);
+	free_core_pdata(pdata->core_pdata);
 	for_each_child_of_node(adap_dev->of_node, core_node) {
-		free_core_pdata(pdata->core_pdata);
 		of_node_put(core_node);
 		for_each_child_of_node(core_node, dev_node) {
 			rc = get_device_type(dev_node, &type);

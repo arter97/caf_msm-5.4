@@ -893,6 +893,7 @@ struct msm_pcie_dev_t {
 	struct mutex drv_pc_lock;
 
 	bool drv_supported;
+	bool nogdsc_retention;
 
 	void (*rumi_init)(struct msm_pcie_dev_t *pcie_dev);
 
@@ -3230,12 +3231,14 @@ static int msm_pcie_clk_init(struct msm_pcie_dev_t *dev)
 
 	PCIE_DBG(dev, "RC%d: entry\n", dev->rc_idx);
 
-	rc = regulator_enable(dev->gdsc);
+	if (!regulator_is_enabled(dev->gdsc)) {
+		rc = regulator_enable(dev->gdsc);
 
-	if (rc) {
-		PCIE_ERR(dev, "PCIe: fail to enable GDSC for RC%d (%s)\n",
-			dev->rc_idx, dev->pdev->name);
-		return rc;
+		if (rc) {
+			PCIE_ERR(dev, "PCIe:fail to enable GDSC for RC%d (%s)\n",
+				dev->rc_idx, dev->pdev->name);
+			return rc;
+		}
 	}
 
 	/* switch pipe clock source after gdsc is turned on */
@@ -3373,7 +3376,8 @@ static void msm_pcie_clk_deinit(struct msm_pcie_dev_t *dev)
 	if (dev->pipe_clk_mux && dev->ref_clk_src)
 		clk_set_parent(dev->pipe_clk_mux, dev->ref_clk_src);
 
-	regulator_disable(dev->gdsc);
+	if (!dev->nogdsc_retention)
+		regulator_disable(dev->gdsc);
 
 	PCIE_DBG(dev, "RC%d: exit\n", dev->rc_idx);
 }
@@ -6393,6 +6397,11 @@ static int msm_pcie_probe(struct platform_device *pdev)
 				pcie_dev->rc_idx, ret);
 	}
 
+	pcie_dev->nogdsc_retention = of_property_read_bool(of_node,
+					"qcom,nogdsc-retention");
+	PCIE_DBG(pcie_dev, "GDSC retention is %s supported\n",
+		pcie_dev->nogdsc_retention ? "not" : "");
+
 	msm_pcie_i2c_ctrl_init(pcie_dev);
 
 	msm_pcie_sysfs_init(pcie_dev);
@@ -7574,7 +7583,7 @@ static int msm_pcie_drv_send_rpmsg(struct msm_pcie_dev_t *pcie_dev,
 				   struct msm_pcie_drv_msg *msg)
 {
 	struct msm_pcie_drv_info *drv_info = pcie_dev->drv_info;
-	int ret;
+	int ret, re_try = 5; /* sleep 5 ms per re-try */
 	struct rpmsg_device *rpdev;
 
 	mutex_lock(&pcie_drv.rpmsg_lock);
@@ -7595,8 +7604,15 @@ static int msm_pcie_drv_send_rpmsg(struct msm_pcie_dev_t *pcie_dev,
 	PCIE_DBG(pcie_dev, "PCIe: RC%d: DRV: sending rpmsg: command: 0x%x\n",
 		pcie_dev->rc_idx, msg->pkt.dword[0]);
 
+retry:
 	ret = rpmsg_trysend(rpdev->ept, msg, sizeof(*msg));
 	if (ret) {
+		if (ret == -EBUSY && re_try) {
+			usleep_range(5000, 5001);
+			re_try--;
+			goto retry;
+		}
+
 		PCIE_ERR(pcie_dev,
 			 "PCIe: RC%d: DRV: failed to send rpmsg, ret:%d\n",
 			pcie_dev->rc_idx, ret);

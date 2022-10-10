@@ -18,6 +18,7 @@
 #include <linux/fs.h>
 #include <linux/uaccess.h>
 #include <linux/termios.h>
+#include <linux/string.h>
 
 /* Define IPC Logging Macros */
 #define GLINK_PKT_IPC_LOG_PAGE_CNT 2
@@ -301,12 +302,13 @@ static int glink_pkt_release(struct inode *inode, struct file *file)
 		wake_up_interruptible(&gpdev->readq);
 		gpdev->sig_change = false;
 		spin_unlock_irqrestore(&gpdev->queue_lock, flags);
+
+		if (gpdev->drv_registered && gpdev->enable_ch_close) {
+			unregister_rpmsg_driver(&gpdev->drv);
+			gpdev->drv_registered = 0;
+		}
 	}
 
-	if (gpdev->drv_registered && gpdev->enable_ch_close) {
-		unregister_rpmsg_driver(&gpdev->drv);
-		gpdev->drv_registered = 0;
-	}
 	put_device(dev);
 
 	return 0;
@@ -440,7 +442,7 @@ static ssize_t glink_pkt_write(struct file *file,
 	}
 
 	GLINK_PKT_INFO("begin to %s buffer_size %zu\n", gpdev->ch_name, count);
-	kbuf = memdup_user(buf, count);
+	kbuf = vmemdup_user(buf, count);
 	if (IS_ERR(kbuf))
 		return PTR_ERR(kbuf);
 
@@ -463,7 +465,7 @@ unlock_ch:
 	mutex_unlock(&gpdev->lock);
 
 free_kbuf:
-	kfree(kbuf);
+	kvfree(kbuf);
 	GLINK_PKT_INFO("finish to %s ret %d\n", gpdev->ch_name, ret);
 	return ret < 0 ? ret : count;
 }
