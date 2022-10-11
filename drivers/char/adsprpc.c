@@ -651,7 +651,7 @@ struct fastrpc_file {
 	/* Flag to indicate ram dump collection status*/
 	bool is_ramdump_pend;
 	/* Flag to indicate dynamic process creation status*/
-	bool in_process_create;
+	enum fastrpc_process_create_state dsp_process_state;
 };
 
 static struct fastrpc_apps gfa;
@@ -3725,13 +3725,13 @@ static int fastrpc_init_create_dynamic_process(struct fastrpc_file *fl,
 	} inbuf;
 
 	spin_lock(&fl->hlock);
-	if (fl->in_process_create) {
+	if (fl->dsp_process_state) {
 		err = -EALREADY;
 		ADSPRPC_ERR("Already in create dynamic process\n");
 		spin_unlock(&fl->hlock);
 		return err;
 	}
-	fl->in_process_create = true;
+	fl->dsp_process_state = PROCESS_CREATE_IS_INPROGRESS;
 	spin_unlock(&fl->hlock);
 	inbuf.pgid = fl->tgid;
 	inbuf.namelen = strlen(current->comm) + 1;
@@ -3886,9 +3886,11 @@ bail:
 		fastrpc_mmap_free(file, 0);
 		mutex_unlock(&fl->map_mutex);
 	}
-	if (err) {
+
 		spin_lock(&fl->hlock);
 		locked = 1;
+	if (err) {
+		fl->dsp_process_state = PROCESS_CREATE_DEFAULT;
 		if (!IS_ERR_OR_NULL(fl->init_mem)) {
 			init_mem = fl->init_mem;
 			fl->init_mem = NULL;
@@ -3896,14 +3898,13 @@ bail:
 			locked = 0;
 			fastrpc_buf_free(init_mem, 0);
 		}
+	} else {
+		fl->dsp_process_state = PROCESS_CREATE_SUCCESS;
+	}
 		if (locked) {
 			spin_unlock(&fl->hlock);
 			locked = 0;
-		}
 	}
-	spin_lock(&fl->hlock);
-	fl->in_process_create = false;
-	spin_unlock(&fl->hlock);
 	return err;
 }
 
@@ -5330,7 +5331,7 @@ skip_dump_wait:
 	spin_lock(&fl->apps->hlock);
 	hlist_del_init(&fl->hn);
 	fl->is_ramdump_pend = false;
-	fl->in_process_create = false;
+	fl->dsp_process_state = PROCESS_CREATE_DEFAULT;
 	spin_unlock(&fl->apps->hlock);
 	kfree(fl->debug_buf);
 	kfree(fl->gidlist.gids);
@@ -5748,7 +5749,7 @@ static int fastrpc_device_open(struct inode *inode, struct file *filp)
 	fl->qos_request = 0;
 	fl->dsp_proc_init = 0;
 	fl->is_ramdump_pend = false;
-	fl->in_process_create = false;
+	fl->dsp_process_state = PROCESS_CREATE_DEFAULT;
 	init_completion(&fl->work);
 	fl->file_close = FASTRPC_PROCESS_DEFAULT_STATE;
 	filp->private_data = fl;
