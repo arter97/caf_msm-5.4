@@ -969,14 +969,6 @@
 		qcom,fragmented-data;
 	};
 
-	qcom,ipc_router_usb_xprt {
-		compatible = "qcom,ipc-router-usb-xprt";
-		qcom,ch-name = "IPC";
-		qcom,xprt-remote = "apps";
-		qcom,xprt-linkid = <2>;
-		qcom,xprt-version = <1>;
-	};
-
 	spmi_bus: qcom,spmi@200f000 {
 		compatible = "qcom,spmi-pmic-arb";
 		reg = <0x200f000 0x1000>,
