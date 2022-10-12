@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013, Sony Mobile Communications AB.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -662,6 +663,8 @@ static int msm_gpio_init_valid_mask(struct gpio_chip *gc,
 	int ret;
 	unsigned int len, i;
 	const int *reserved = pctrl->soc->reserved_gpios;
+	struct property *prop;
+	const __be32 *p;
 	u16 *tmp;
 
 	/* Driver provided reserved list overrides DT and ACPI */
@@ -676,6 +679,17 @@ static int msm_gpio_init_valid_mask(struct gpio_chip *gc,
 		}
 
 		return 0;
+	}
+
+	if (of_property_count_u32_elems(pctrl->dev->of_node, "qcom,gpios-reserved") > 0) {
+		bitmap_fill(valid_mask, ngpios);
+		of_property_for_each_u32(pctrl->dev->of_node, "qcom,gpios-reserved", prop, p, i) {
+			if (i >= ngpios) {
+				dev_err(pctrl->dev, "invalid list of reserved GPIOs\n");
+				return -EINVAL;
+			}
+			clear_bit(i, valid_mask);
+		}
 	}
 
 	/* The number of GPIOs in the ACPI tables */
@@ -789,16 +803,16 @@ static void msm_gpio_irq_mask(struct irq_data *d)
 	irq_hw_number_t dir_conn_irq = 0;
 	u32 val;
 
-	if (d->parent_data) {
-		if (is_gpio_dual_edge(d, &dir_conn_irq)) {
-			dir_conn_data = irq_get_irq_data(dir_conn_irq);
-			if (!dir_conn_data)
-				return;
+	if (is_gpio_dual_edge(d, &dir_conn_irq)) {
+		dir_conn_data = irq_get_irq_data(dir_conn_irq);
+		if (!dir_conn_data)
+			return;
 
-			dir_conn_data->chip->irq_mask(dir_conn_data);
-		}
-		irq_chip_mask_parent(d);
+		dir_conn_data->chip->irq_mask(dir_conn_data);
 	}
+
+	if (d->parent_data)
+		irq_chip_mask_parent(d);
 
 	if (test_bit(d->hwirq, pctrl->skip_wake_irqs))
 		return;
@@ -849,16 +863,16 @@ static void msm_gpio_irq_clear_unmask(struct irq_data *d, bool status_clear)
 	unsigned long flags;
 	u32 val;
 
-	if (d->parent_data) {
-		if (is_gpio_dual_edge(d, &dir_conn_irq)) {
-			dir_conn_data = irq_get_irq_data(dir_conn_irq);
-			if (!dir_conn_data)
-				return;
+	if (is_gpio_dual_edge(d, &dir_conn_irq)) {
+		dir_conn_data = irq_get_irq_data(dir_conn_irq);
+		if (!dir_conn_data)
+			return;
 
-			dir_conn_data->chip->irq_unmask(dir_conn_data);
-		}
-		irq_chip_unmask_parent(d);
+		dir_conn_data->chip->irq_unmask(dir_conn_data);
 	}
+
+	if (d->parent_data)
+		irq_chip_unmask_parent(d);
 
 	if (test_bit(d->hwirq, pctrl->skip_wake_irqs))
 		return;
@@ -1410,10 +1424,18 @@ static int msm_gpio_wakeirq(struct gpio_chip *gc,
 
 static bool msm_gpio_needs_valid_mask(struct msm_pinctrl *pctrl)
 {
+	bool have_reserved, have_gpios;
+
 	if (pctrl->soc->reserved_gpios)
 		return true;
 
-	return device_property_count_u16(pctrl->dev, "gpios") > 0;
+	have_reserved = of_property_count_u32_elems(pctrl->dev->of_node, "qcom,gpios-reserved") > 0;
+	have_gpios = device_property_count_u16(pctrl->dev, "gpios") > 0;
+
+	if (have_reserved && have_gpios)
+		dev_warn(pctrl->dev, "qcom,gpios-reserved and gpios are both defined. Only one should be used.\n");
+
+	return have_reserved || have_gpios;
 }
 
 static int msm_gpio_init(struct msm_pinctrl *pctrl)

@@ -2259,8 +2259,12 @@ invalid:
 static void gsi_ctrl_cmd_complete(struct usb_ep *ep, struct usb_request *req)
 {
 	struct f_gsi *gsi = req->context;
-	struct usb_composite_dev *cdev = gsi->function.config->cdev;
+	struct usb_composite_dev *cdev;
 
+	if (!gsi->function.config)
+		return;
+
+	cdev = gsi->function.config->cdev;
 	gsi_ctrl_send_cpkt_tomodem(gsi, req->buf, req->actual);
 	cdev->setup_pending = false;
 }
@@ -2577,15 +2581,13 @@ static int gsi_set_alt(struct usb_function *f, unsigned int intf,
 			gsi->d_port.ntb_info.ntb_input_size =
 				MBIM_NTB_DEFAULT_IN_SIZE;
 		if (alt == 1) {
-			if (gsi->d_port.in_ep) {
-				if (gsi->prot_id <= IPA_USB_RMNET_CV2X)
-					gsi->d_port.in_request.ep_intr_num = 3;
-				else
-					gsi->d_port.in_request.ep_intr_num = 2;
-			}
+			if (gsi->d_port.in_ep)
+				usb_gsi_ep_op(gsi->d_port.in_ep, &gsi->d_port.in_request,
+						GSI_DYNAMIC_EP_INTR_CALC);
 
 			if (gsi->d_port.out_ep)
-				gsi->d_port.out_request.ep_intr_num = 1;
+				usb_gsi_ep_op(gsi->d_port.out_ep, &gsi->d_port.out_request,
+						GSI_DYNAMIC_EP_INTR_CALC);
 
 			gsi->d_port.gadget = cdev->gadget;
 			gsi->d_port.cdev = cdev;

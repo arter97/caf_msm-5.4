@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/compat.h>
 #include <linux/eventfd.h>
@@ -77,7 +78,6 @@ struct vhost_hab_stat_work {
 	int pchan_count;
 };
 
-#define HAB_MMID_ALL_AREA 0
 struct vhost_hab { /* global */
 	dev_t major;
 	struct class *class;
