@@ -3890,7 +3890,7 @@ static int qcom_ethqos_suspend(struct device *dev)
 		ETHQOSDBG("Suspend Exit enable IRQ\n");
 		return 0;
 	}
-	if (!ndev || !netif_running(ndev))
+	if (!ndev)
 		return -EINVAL;
 	priv = netdev_priv(ndev);
 	plat = priv->plat;
@@ -3948,7 +3948,7 @@ static int qcom_ethqos_resume(struct device *dev)
 
 	ndev = dev_get_drvdata(dev);
 
-	if (!ndev || !netif_running(ndev)) {
+	if (!ndev) {
 		ETHQOSERR(" Resume not possible\n");
 		return -EINVAL;
 	}
