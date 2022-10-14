@@ -104,7 +104,7 @@ struct msm_ipc_router_usb_xprt_config {
 };
 
 static struct msm_ipc_router_usb_xprt_config usb_xprt_cfg[] = {
-	{"ipc_bridge", "ipc_rtr_ipc_bridge1", 1, 2, 3},
+	{"ipc_bridge", "apps_IPCRTR", 1, 2, 3},
 };
 
 #define MODULE_NAME "ipc_router_usb_xprt"
