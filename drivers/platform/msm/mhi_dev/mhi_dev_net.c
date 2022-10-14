@@ -711,10 +711,7 @@ int mhi_dev_net_interface_init(void)
 	mhi_net_ipc_log = ipc_log_context_create(MHI_NET_IPC_PAGES,
 						"mhi-net", 0);
 	if (!mhi_net_ipc_log) {
-		mhi_dev_net_log(MHI_DBG,
-				"Failed to create IPC logging for mhi_dev_net\n");
-		kfree(mhi_net_client);
-		return -ENOMEM;
+		pr_err("Failed to create IPC logging for mhi_dev_net\n");
 	}
 	mhi_net_ctxt.client_handle = mhi_net_client;
 
@@ -726,7 +723,8 @@ int mhi_dev_net_interface_init(void)
 
 	/*Process pending packet work queue*/
 	mhi_net_client->pending_pckt_wq =
-		create_singlethread_workqueue("pending_xmit_pckt_wq");
+		alloc_ordered_workqueue("%s", __WQ_LEGACY |
+			WQ_MEM_RECLAIM | WQ_HIGHPRI, "pending_xmit_pckt_wq");
 	INIT_WORK(&mhi_net_client->xmit_work,
 			mhi_dev_net_process_queue_packets);
 
