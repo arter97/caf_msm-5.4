@@ -524,6 +524,23 @@ static long vhost_hab_reset_owner(struct vhost_hab_dev *vh_dev)
 {
 	long err;
 	struct vhost_umem *umem;
+	struct vhost_hab_pchannel *vh_pchan;
+	int vmid = HABCFG_VMID_INVALID;
+
+	vh_pchan = list_first_entry(&vh_dev->vh_pchan_list,
+				struct vhost_hab_pchannel,
+				node);
+
+	if (vh_pchan)
+		vmid = vh_pchan->pchan->dom_id;
+
+	if (HABCFG_VMID_INVALID != vmid)
+		hab_vchans_empty_wait(vmid);
+	else {
+		pr_err("hab pchannel dom_id is invalid\n");
+		err = -EINVAL;
+		goto out;
+	}
 
 	mutex_lock(&vh_dev->dev.mutex);
 	err = vhost_dev_check_owner(&vh_dev->dev);
@@ -540,6 +557,7 @@ static long vhost_hab_reset_owner(struct vhost_hab_dev *vh_dev)
 	vhost_dev_reset_owner(&vh_dev->dev, umem);
 done:
 	mutex_unlock(&vh_dev->dev.mutex);
+out:
 	return err;
 }
 
