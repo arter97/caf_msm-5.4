@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #define pr_fmt(msg) "power_state:" msg
 
@@ -187,11 +188,11 @@ static int powerstate_pm_notifier(struct notifier_block *nb, unsigned long event
 		pr_debug("PM_POST_SUSPEND\n");
 
 		if (mem_sleep_current == PM_SUSPEND_MEM) {
-				pr_info("Deep Sleep exit\n");
-				/* Take Wakeup Source */
-				__pm_stay_awake(notify_ws);
-				pse.event = EXIT_DEEP_SLEEP;
-				send_uevent(&pse);
+			pr_info("Deep Sleep exit\n");
+			/* Take Wakeup Source */
+			__pm_stay_awake(notify_ws);
+			pse.event = EXIT_DEEP_SLEEP;
+			send_uevent(&pse);
 		} else {
 			pr_debug("RBSC Resume\n");
 		}
@@ -307,7 +308,6 @@ static long ps_ioctl(struct file *filp, unsigned int ui_power_state_cmd, unsigne
 		pr_debug("Inside LPM_ACTIVE %s\n", __func__);
 		if (copy_from_user(&ui_obj_msg, (void __user *)arg,
 					sizeof(ui_obj_msg))) {
-			pr_err("The copy from user failed - lpm active mode\n");
 			ui_obj_msg = 200;
 		}
 		WAIT_TIME_MS = ui_obj_msg;
@@ -319,10 +319,11 @@ static long ps_ioctl(struct file *filp, unsigned int ui_power_state_cmd, unsigne
 		}
 #endif
 		current_state = ACTIVE;
+		pr_debug("State Changed to ACTIVE %s\n");
 		break;
 
 	case ENTER_DEEPSLEEP:
-		pr_debug("Enter Deep Sleep %s\n", __func__);
+		pr_info("Configure Deep Sleep\n");
 		/* Set /sys/power/mem_sleep to deep */
 		mem_sleep_current = PM_SUSPEND_MEM;
 
@@ -331,6 +332,7 @@ static long ps_ioctl(struct file *filp, unsigned int ui_power_state_cmd, unsigne
 			/* Take Wakeup Source */
 			pr_debug("Start Timer completed\n");
 		}
+		pr_info("Configure Deep Sleep Complete\n");
 		break;
 
 	case ENTER_HIBERNATE:
@@ -338,7 +340,7 @@ static long ps_ioctl(struct file *filp, unsigned int ui_power_state_cmd, unsigne
 		break;
 
 	case MODEM_SUSPEND:
-		pr_debug("Modem Subsys Suspend %s\n", __func__);
+		pr_info("Initiating Modem Shutdown\n");
 		if (copy_from_user(&ui_obj_msg, (void __user *)arg,
 					sizeof(ui_obj_msg))) {
 			pr_err("The copy from user failed - modem suspend\n");
@@ -349,9 +351,11 @@ static long ps_ioctl(struct file *filp, unsigned int ui_power_state_cmd, unsigne
 		ret = subsys_suspend(mdsp_subsys, &ui_obj_msg);
 		if (ret != 0)
 			pr_err("Modem subsys suspend failure\n");
+		else
+			pr_info("Modem Shutdown Complete\n");
 		break;
 	case ADSP_SUSPEND:
-		pr_debug("ADSP Subsys Suspend %s\n", __func__);
+		pr_info("Initiating ADSP Shutdown\n");
 		if (copy_from_user(&ui_obj_msg, (void __user *)arg,
 					sizeof(ui_obj_msg))) {
 			pr_err("The copy from user failed - adsp suspend\n");
@@ -362,6 +366,8 @@ static long ps_ioctl(struct file *filp, unsigned int ui_power_state_cmd, unsigne
 		ret = subsys_suspend(adsp_subsys, &ui_obj_msg);
 		if (ret != 0)
 			pr_err("ADSP subsys suspend failure\n");
+		else
+			pr_info("ADSP Shutdown Complete\n");
 		break;
 	case CDSP_SUSPEND:
 		pr_debug("CDSP Subsys Suspend %s\n", __func__);
@@ -377,7 +383,7 @@ static long ps_ioctl(struct file *filp, unsigned int ui_power_state_cmd, unsigne
 			pr_err("CDSP subsys suspend failure\n");
 		break;
 	case MODEM_EXIT:
-		pr_debug("Modem Subsys Suspend Exit %s\n", __func__);
+		pr_info("Loading Modem Subsystem\n");
 		if (copy_from_user(&ui_obj_msg, (void __user *)arg,
 					sizeof(ui_obj_msg))) {
 			pr_err("The copy from user failed - modem suspend exit\n");
@@ -389,10 +395,11 @@ static long ps_ioctl(struct file *filp, unsigned int ui_power_state_cmd, unsigne
 		if (ret != 0) {
 			pr_err("MDSP subsys exit failure\n");
 			ret = subsystem_restart(mdsp_subsys);
-		}
+		} else
+			pr_info("Modem Successfully Brought up\n");
 		break;
 	case ADSP_EXIT:
-		pr_debug("ADSP Subsys Suspend Exit %s\n", __func__);
+		pr_info("Loading ADSP Subsystem\n");
 		if (copy_from_user(&ui_obj_msg, (void __user *)arg,
 					sizeof(ui_obj_msg))) {
 			pr_err("The copy from user failed - adsp suspend exit\n");
@@ -404,7 +411,8 @@ static long ps_ioctl(struct file *filp, unsigned int ui_power_state_cmd, unsigne
 		if (ret != 0) {
 			pr_err("ADSP subsys exit failure\n");
 			ret = subsystem_restart(adsp_subsys);
-		}
+		} else
+			pr_info("ADSP Successfully Brought up\n");
 		break;
 	case CDSP_EXIT:
 		pr_debug("CDSP Subsys Suspend Exit %s\n", __func__);

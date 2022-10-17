@@ -529,7 +529,8 @@ static int ipc_bind(struct usb_configuration *c, struct usb_function *f)
 			goto fail;
 	}
 
-	if (gadget_is_superspeed(c->cdev->gadget)) {
+	if (gadget_is_superspeed(c->cdev->gadget) ||
+		gadget_is_superspeed_plus(c->cdev->gadget)) {
 		ss_bulk_in_desc.bEndpointAddress =
 				fs_bulk_in_desc.bEndpointAddress;
 		ss_bulk_out_desc.bEndpointAddress =
@@ -539,6 +540,7 @@ static int ipc_bind(struct usb_configuration *c, struct usb_function *f)
 		f->ss_descriptors = usb_copy_descriptors(ss_ipc_desc);
 		if (!f->ss_descriptors)
 			goto fail;
+		f->ssp_descriptors = f->ss_descriptors;
 	}
 
 	return 0;
@@ -565,6 +567,8 @@ static void ipc_unbind(struct usb_configuration *c, struct usb_function *f)
 	struct ipc_context *ctxt = func_to_ipc(f);
 
 	pr_debug("%s: start unbinding\nclear_desc\n", __func__);
+	if (gadget_is_superspeed_plus(c->cdev->gadget))
+		usb_free_descriptors(f->ssp_descriptors);
 	if (gadget_is_superspeed(c->cdev->gadget))
 		usb_free_descriptors(f->ss_descriptors);
 	if (gadget_is_dualspeed(c->cdev->gadget))

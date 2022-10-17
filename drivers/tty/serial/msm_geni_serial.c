@@ -3109,12 +3109,15 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 				IPC_LOG_MSG(msm_port->ipc_log_misc,
 					"%s:GSI DMA-Tx ch\n", __func__);
 				msm_geni_serial_stop_tx(uport);
-				geni_se_iommu_unmap_buf(tx_dev,
-							&msm_port->tx_dma,
-							msm_port->xmit_size,
-							DMA_TO_DEVICE);
-				IPC_LOG_MSG(msm_port->ipc_log_misc,
-					"%s:Unmap buf done\n", __func__);
+				if (msm_port->tx_dma) {
+					geni_se_iommu_unmap_buf(tx_dev,
+								&msm_port->tx_dma,
+								msm_port->xmit_size,
+								DMA_TO_DEVICE);
+					msm_port->tx_dma = (dma_addr_t)NULL;
+					IPC_LOG_MSG(msm_port->ipc_log_misc,
+						    "%s:Unmap buf done\n", __func__);
+				}
 			}
 		} else {
 			msm_geni_serial_stop_tx(uport);
