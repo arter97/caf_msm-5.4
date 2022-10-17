@@ -159,8 +159,9 @@ static void _destroy_boot_marker(const char *name)
 {
 	struct boot_marker *marker;
 	struct boot_marker *temp_addr;
+	unsigned long flags;
 
-	spin_lock(&boot_marker_list.slock);
+	spin_lock_irqsave(&boot_marker_list.slock, flags);
 	list_for_each_entry_safe(marker, temp_addr, &boot_marker_list.list,
 			list) {
 		if (strnstr(marker->marker_name, name,
@@ -171,7 +172,7 @@ static void _destroy_boot_marker(const char *name)
 			kfree(marker);
 		}
 	}
-	spin_unlock(&boot_marker_list.slock);
+	spin_unlock_irqrestore(&boot_marker_list.slock, flags);
 }
 
 /*
@@ -209,6 +210,7 @@ static void _create_boot_marker(const char *name,
 	struct boot_marker *new_boot_marker;
 	struct boot_marker *marker;
 	unsigned int sum;
+	unsigned long flags;
 
 	if (num_markers >= MAX_NUM_MARKERS) {
 		pr_err("boot_stats: Cannot create marker %s. Limit exceeded!\n",
@@ -237,10 +239,10 @@ static void _create_boot_marker(const char *name,
 	new_boot_marker->timer_value = timer_value;
 	sum = calculate_marker_charsum(new_boot_marker->marker_name);
 
-	spin_lock(&boot_marker_list.slock);
+	spin_lock_irqsave(&boot_marker_list.slock, flags);
 	list_add_tail(&(new_boot_marker->list), &(boot_marker_list.list));
 	hash_add(marker_htable, &new_boot_marker->hash, sum);
-	spin_unlock(&boot_marker_list.slock);
+	spin_unlock_irqrestore(&boot_marker_list.slock, flags);
 	num_markers++;
 }
 
@@ -248,8 +250,9 @@ static void boot_marker_cleanup(void)
 {
 	struct boot_marker *marker;
 	struct boot_marker *temp_addr;
+	unsigned long flags;
 
-	spin_lock(&boot_marker_list.slock);
+	spin_lock_irqsave(&boot_marker_list.slock, flags);
 	list_for_each_entry_safe(marker, temp_addr, &boot_marker_list.list,
 			list) {
 		num_markers--;
@@ -257,7 +260,7 @@ static void boot_marker_cleanup(void)
 		list_del(&marker->list);
 		kfree(marker);
 	}
-	spin_unlock(&boot_marker_list.slock);
+	spin_unlock_irqrestore(&boot_marker_list.slock, flags);
 }
 
 void destroy_marker(const char *name)
@@ -314,6 +317,7 @@ static ssize_t bootkpi_reader(struct file *fp, struct kobject *obj,
 	static char *kpi_buf;
 	static int temp;
 	int ret = 0;
+	unsigned long flags;
 
 	if (!kpi_buf) {
 		kpi_buf = kmalloc(BOOTKPI_BUF_SIZE, GFP_KERNEL);
@@ -322,7 +326,7 @@ static ssize_t bootkpi_reader(struct file *fp, struct kobject *obj,
 	}
 
 	if (!temp) {
-		spin_lock(&boot_marker_list.slock);
+		spin_lock_irqsave(&boot_marker_list.slock, flags);
 		list_for_each_entry(marker, &boot_marker_list.list, list) {
 			WARN_ON((BOOTKPI_BUF_SIZE - temp) <= 0);
 
@@ -347,7 +351,7 @@ static ssize_t bootkpi_reader(struct file *fp, struct kobject *obj,
 
 		}
 
-		spin_unlock(&boot_marker_list.slock);
+		spin_unlock_irqrestore(&boot_marker_list.slock, flags);
 	}
 
 	if (temp - off > count)

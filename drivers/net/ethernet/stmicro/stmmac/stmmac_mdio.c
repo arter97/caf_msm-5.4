@@ -279,13 +279,14 @@ int stmmac_mdio_reset(struct mii_bus *bus)
 		reset_gpio = devm_gpiod_get_optional(priv->device,
 						     "snps,reset",
 						     GPIOD_OUT_LOW);
-		if (IS_ERR(reset_gpio))
+		if (IS_ERR(reset_gpio)) {
+			pr_err("reset_gpio_err\n");
 			return PTR_ERR(reset_gpio);
+		}
 
 		device_property_read_u32_array(priv->device,
 					       "snps,reset-delays-us",
 					       delays, ARRAY_SIZE(delays));
-
 		if (delays[0])
 			msleep(DIV_ROUND_UP(delays[0], 1000));
 
@@ -296,6 +297,7 @@ int stmmac_mdio_reset(struct mii_bus *bus)
 		gpiod_set_value_cansleep(reset_gpio, active_high ? 0 : 1);
 		if (delays[2])
 			msleep(DIV_ROUND_UP(delays[2], 1000));
+		devm_gpiod_put(priv->device, reset_gpio);
 	}
 #endif
 

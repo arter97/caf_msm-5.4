@@ -66,8 +66,8 @@ static const struct parent_map disp_cc_parent_map_0[] = {
 
 static const char * const disp_cc_parent_names_0[] = {
 	"bi_tcxo",
-	"dp_link_clk_divsel_ten",
-	"dp_vco_divided_clk_src_mux",
+	"dp_phy_pll_link_clk",
+	"dp_phy_pll_vco_div_clk",
 	"dptx1_phy_pll_link_clk",
 	"dptx1_phy_pll_vco_div_clk",
 	"dptx2_phy_pll_link_clk",

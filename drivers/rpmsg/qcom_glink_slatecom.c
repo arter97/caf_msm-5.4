@@ -272,8 +272,6 @@ struct rx_pkt {
 			struct glink_slatecom_channel, ept)
 
 static const struct rpmsg_endpoint_ops glink_endpoint_ops;
-static unsigned int glink_slatecom_wakeup_ms =
-			CONFIG_RPMSG_GLINK_SLATECOM_WAKEUP_MS;
 
 #define SLATECOM_CMD_VERSION			0
 #define SLATECOM_CMD_VERSION_ACK			1
@@ -506,6 +504,9 @@ static int glink_slatecom_tx(struct glink_slatecom *glink, void *data,
 						size_t dlen, bool wait)
 {
 	int ret = 0;
+
+	if (atomic_read(&glink->in_reset))
+		return -ENXIO;
 
 	mutex_lock(&glink->tx_lock);
 
@@ -938,8 +939,12 @@ static void glink_slatecom_send_close_req(struct glink_slatecom *glink,
 	req.param1 = cpu_to_le16(channel->lcid);
 
 	CH_INFO(channel, "\n");
-	glink_slatecom_tx(glink, &req, sizeof(req), true);
 
+	ret = glink_slatecom_tx(glink, &req, sizeof(req), true);
+	if (ret < 0) {
+		GLINK_ERR(glink, "transmit error:%d\n", ret);
+		return;
+	}
 	ret = wait_for_completion_timeout(&channel->close_ack, 2 * HZ);
 	if (!ret) {
 		GLINK_ERR(glink, "rx_close_ack timedout[%d]:[%d]\n",
@@ -2012,9 +2017,13 @@ static void __rx_worker(struct rx_pkt *rx_pkt_info)
 static void rx_worker(struct kthread_work *work)
 {
 	struct rx_pkt *rx_pkt_info;
+	struct glink_slatecom *glink;
 
 	rx_pkt_info = container_of(work, struct rx_pkt, kwork);
+	glink = rx_pkt_info->glink;
 	__rx_worker(rx_pkt_info);
+
+	__pm_relax(glink->ws);
 };
 
 static void glink_slatecom_linkup(struct glink_slatecom *glink)
@@ -2064,6 +2073,7 @@ static int glink_slatecom_cleanup(struct glink_slatecom *glink)
 	/* Release any defunct local channels, waiting for close-ack */
 	idr_for_each_entry(&glink->lcids, channel, cid) {
 		/* Wakeup threads waiting for intent*/
+		complete(&channel->close_ack);
 		complete(&channel->intent_req_comp);
 		kref_put(&channel->refcount, glink_slatecom_channel_release);
 		idr_remove(&glink->lcids, cid);
@@ -2127,7 +2137,7 @@ static void glink_slatecom_event_handler(void *handle,
 		rx_pkt_info->rx_len = data->fifo_data.to_master_fifo_used;
 		rx_pkt_info->glink = glink;
 		kthread_init_work(&rx_pkt_info->kwork, rx_worker);
-		pm_wakeup_ws_event(glink->ws, glink_slatecom_wakeup_ms, true);
+		__pm_stay_awake(glink->ws);
 		kthread_queue_work(&glink->kworker, &rx_pkt_info->kwork);
 		break;
 	case SLATECOM_EVENT_TO_SLAVE_FIFO_FREE:

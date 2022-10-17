@@ -25,8 +25,8 @@
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
 #include <soc/qcom/boot_stats.h>
 #endif
-
-extern bool phy_intr_en;
+#include <linux/icmp.h>
+#include "dwmac-qcom-ethqos.h"
 
 struct stmmac_resources {
 	void __iomem *addr;
@@ -223,6 +223,7 @@ struct stmmac_priv {
 	void __iomem *ptpaddr;
 	unsigned long active_vlans[BITS_TO_LONGS(VLAN_N_VID)];
 	bool boot_kpi;
+	int current_loopback;
 	bool early_eth_config_set;
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *dbgfs_dir;
@@ -278,6 +279,9 @@ void stmmac_disable_eee_mode(struct stmmac_priv *priv);
 bool stmmac_eee_init(struct stmmac_priv *priv);
 void stmmac_mac2mac_adjust_link(int speed, struct stmmac_priv *priv);
 bool qcom_ethqos_ipa_enabled(void);
+u16 icmp_fast_csum(u16 old_csum);
+void swap_ip_port(struct sk_buff *skb, unsigned int eth_type);
+unsigned int dwmac_qcom_get_eth_type(unsigned char *buf);
 
 #if IS_ENABLED(CONFIG_STMMAC_SELFTESTS)
 void stmmac_selftest_run(struct net_device *dev,

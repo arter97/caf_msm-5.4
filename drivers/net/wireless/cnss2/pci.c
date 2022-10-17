@@ -425,6 +425,9 @@ static struct cnss_misc_reg syspm_reg_access_seq[] = {
 #define WLAON_REG_SIZE ARRAY_SIZE(wlaon_reg_access_seq)
 #define SYSPM_REG_SIZE ARRAY_SIZE(syspm_reg_access_seq)
 
+static bool cnss_should_suspend_pwroff(struct pci_dev *pci_dev);
+static void cnss_pci_suspend_pwroff(struct pci_dev *pci_dev);
+
 #if IS_ENABLED(CONFIG_PCI_MSM)
 /**
  * _cnss_pci_enumerate() - Enumerate PCIe endpoints
@@ -3429,7 +3432,8 @@ out:
 static int cnss_pci_suspend(struct device *dev)
 {
 	int ret = 0;
-	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(to_pci_dev(dev));
+	struct pci_dev *pci_dev = to_pci_dev(dev);
+	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(pci_dev);
 	struct cnss_plat_data *plat_priv;
 
 	if (!pci_priv)
@@ -3441,6 +3445,29 @@ static int cnss_pci_suspend(struct device *dev)
 
 	if (!cnss_is_device_powered_on(plat_priv))
 		goto out;
+
+	/* No mhi state bit set if only finish pcie enumeration,
+	 * so test_bit is not applicable to check if it is INIT state.
+	 */
+	if (pci_priv->mhi_state == CNSS_MHI_INIT) {
+		bool suspend = cnss_should_suspend_pwroff(pci_dev);
+
+		/* Do PCI link suspend and power off in the LPM case
+		 * if chipset didn't do that after pcie enumeration.
+		 */
+		if (!suspend) {
+			ret = cnss_suspend_pci_link(pci_priv);
+			if (ret)
+				cnss_pr_err("Failed to suspend PCI link, err = %d\n",
+					    ret);
+
+			if (pci_dev->device == QCA6390_DEVICE_ID)
+				cnss_disable_redundant_vreg(plat_priv);
+
+			cnss_power_off_device(plat_priv);
+			goto out;
+		}
+	}
 
 	if (!test_bit(DISABLE_DRV, &plat_priv->ctrl_params.quirks) &&
 	    pci_priv->drv_supported) {
@@ -6052,11 +6079,7 @@ static int cnss_try_suspend(struct cnss_plat_data *plat_priv)
 						    true,
 						    false);
 
-			ret = cnss_suspend_pci_link(pci_priv);
-			if (ret)
-				cnss_pr_err("Failed to suspend PCI link, err = %d\n",
-					    ret);
-			cnss_power_off_device(plat_priv);
+			cnss_pci_suspend_pwroff(pci_dev);
 			break;
 		default:
 			cnss_pr_err("Unknown PCI device found: 0x%x\n",
