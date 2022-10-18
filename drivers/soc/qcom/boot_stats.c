@@ -397,7 +397,6 @@ static ssize_t bootkpi_reader(struct file *fp, struct kobject *obj,
 		size_t count)
 {
 	struct boot_marker *marker;
-	unsigned long ts_whole_num, ts_precision;
 	static char *kpi_buf;
 	static int temp;
 	int ret = 0;
