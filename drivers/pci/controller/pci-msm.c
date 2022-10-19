@@ -4368,6 +4368,8 @@ static int msm_pcie_link_train(struct msm_pcie_dev_t *dev)
 	/* Controller settings related to PCIe PHY */
 	msm_pcie_config_controller_phy(dev);
 
+	dev->target_link_speed = GEN3_SPEED;
+
 	/* configure PCIe preset */
 	msm_pcie_config_core_preset(dev);
 
