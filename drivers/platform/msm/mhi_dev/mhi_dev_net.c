@@ -728,7 +728,8 @@ int mhi_dev_net_interface_init(void)
 
 	/*Process pending packet work queue*/
 	mhi_net_client->pending_pckt_wq =
-		create_singlethread_workqueue("pending_xmit_pckt_wq");
+		alloc_ordered_workqueue("%s", __WQ_LEGACY |
+			WQ_MEM_RECLAIM | WQ_HIGHPRI, "pending_xmit_pckt_wq");
 	INIT_WORK(&mhi_net_client->xmit_work,
 			mhi_dev_net_process_queue_packets);
 
