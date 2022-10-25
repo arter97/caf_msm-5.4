@@ -1402,7 +1402,7 @@ static int fastrpc_mmap_create(struct fastrpc_file *fl, int fd,
 {
 	struct fastrpc_apps *me = &gfa;
 	struct fastrpc_session_ctx *sess;
-	struct fastrpc_apps *apps = fl->apps;
+	struct fastrpc_apps *apps = NULL;
 	int cid = -1;
 	struct fastrpc_channel_ctx *chan = NULL;
 	struct fastrpc_mmap *map = NULL;
@@ -1417,6 +1417,7 @@ static int fastrpc_mmap_create(struct fastrpc_file *fl, int fd,
 		goto bail;
 	}
 	cid = fl->cid;
+	apps = fl->apps;
 	VERIFY(err, cid >= ADSP_DOMAIN_ID && cid < NUM_CHANNELS);
 	if (err) {
 		err = -ECHRNG;
@@ -1755,11 +1756,6 @@ static int fastrpc_buf_alloc(struct fastrpc_file *fl, size_t size,
 		goto bail;
 	}
 
-	VERIFY(err, fl && fl->sctx != NULL);
-	if (err) {
-		err = -EBADR;
-		goto bail;
-	}
 	VERIFY(err, size > 0 && fl->sctx->smmu.dev);
 	if (err) {
 		err = (fl->sctx->smmu.dev == NULL) ? -ENODEV : err;
