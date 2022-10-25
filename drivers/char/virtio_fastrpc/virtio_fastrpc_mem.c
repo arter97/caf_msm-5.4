@@ -223,16 +223,20 @@ void fastrpc_mmap_add(struct fastrpc_file *fl, struct fastrpc_mmap *map)
 	}
 }
 
-int fastrpc_mmap_remove(struct fastrpc_file *fl, uintptr_t va,
-		size_t len, struct fastrpc_mmap **ppmap)
+int fastrpc_mmap_remove(struct fastrpc_file *fl, int fd,
+		uintptr_t va, size_t len, struct fastrpc_mmap **ppmap)
 {
 	struct fastrpc_mmap *match = NULL, *map;
 	struct hlist_node *n;
 
 	hlist_for_each_entry_safe(map, n, &fl->maps, hn) {
-		if (map->raddr == va &&
-			map->raddr + map->len == va + len &&
-			map->refs == 1) {
+		if ((fd < 0 || map->fd == fd) && map->raddr == va &&
+				map->raddr + map->len == va + len &&
+				(map->refs == 1 ||
+				 (map->refs == 2 &&
+				  map->attr & FASTRPC_ATTR_KEEP_MAP))) {
+			if (map->attr & FASTRPC_ATTR_KEEP_MAP)
+				map->refs--;
 			match = map;
 			hlist_del_init(&map->hn);
 			break;
