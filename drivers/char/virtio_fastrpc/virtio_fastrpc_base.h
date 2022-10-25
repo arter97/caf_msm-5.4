@@ -56,6 +56,7 @@ struct fastrpc_apps {
 	bool has_invoke_crc;
 	bool has_mmap;
 	bool has_control;
+	bool has_mem_map;
 
 	struct device *dev;
 	struct cdev cdev;
