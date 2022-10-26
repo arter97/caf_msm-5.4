@@ -507,7 +507,7 @@ static int ctrl_cmd_new_server(struct sockaddr_qrtr *from,
 
 	/* Don't accept spoofed messages */
 	if (from->sq_node != node_id)
-		return -EINVAL;
+		return -EACCES;
 
 	srv = server_add(service, instance, node_id, port);
 	if (!srv)
@@ -736,9 +736,14 @@ static void qrtr_ns_worker(struct kthread_work *work)
 			break;
 		}
 
-		if (ret < 0)
+		if (ret < 0 && ret != -EACCES)
 			pr_err("failed while handling packet from %d:%d",
 			       sq.sq_node, sq.sq_port);
+
+		else if (ret == -EACCES)
+			NS_INFO("cmd:0x%x Spoofed message from addr[0x%x:0x%x]\n",
+				cmd, le32_to_cpu(pkt->server.node),
+				le32_to_cpu(pkt->server.port));
 	}
 
 	kfree(recv_buf);
