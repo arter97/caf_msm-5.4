@@ -47,6 +47,7 @@ enum hab_payload_type {
 #define DEVICE_GFX_NAME "hab_ogles"
 #define DEVICE_VID_NAME "hab_vid"
 #define DEVICE_VID2_NAME "hab_vid2"
+#define DEVICE_VID3_NAME "hab_vid3"
 #define DEVICE_MISC_NAME "hab_misc"
 #define DEVICE_QCPE1_NAME "hab_qcpe_vm1"
 #define DEVICE_CLK1_NAME "hab_clock_vm1"
@@ -63,6 +64,7 @@ enum hab_payload_type {
 #define DEVICE_EXT1_NAME "hab_ext1"
 
 #define HABCFG_MMID_NUM        26
+#define HAB_MMID_ALL_AREA      0
 
 /* make sure concascaded name is less than this value */
 #define MAX_VMID_NAME_SIZE 30
@@ -412,6 +414,7 @@ int hab_vchan_recv(struct uhab_context *ctx,
 		struct hab_message **msg,
 		int vcid,
 		int *rsize,
+		unsigned int timeout,
 		unsigned int flags);
 void hab_vchan_stop(struct virtual_channel *vchan);
 void hab_vchans_stop(struct physical_channel *pchan);
@@ -473,7 +476,8 @@ int habmm_imp_hyp_map_check(void *imp_ctx, struct export_desc *exp);
 
 void hab_msg_free(struct hab_message *message);
 int hab_msg_dequeue(struct virtual_channel *vchan,
-		struct hab_message **msg, int *rsize, unsigned int flags);
+		struct hab_message **msg, int *rsize, unsigned int timeout,
+		unsigned int flags);
 
 int hab_msg_recv(struct physical_channel *pchan,
 		struct hab_header *header);

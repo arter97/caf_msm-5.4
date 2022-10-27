@@ -927,6 +927,7 @@ static int stm_probe(struct amba_device *adev, const struct amba_id *id)
 		dev_info(dev,
 			 "%s : stm_register_device failed, probing deferred\n",
 			 desc.name);
+		pm_runtime_put(&adev->dev);
 		return -EPROBE_DEFER;
 	}
 
@@ -992,10 +993,24 @@ static int stm_suspend(struct device *dev)
 }
 #endif
 
+#ifdef CONFIG_HIBERNATION
+static int stm_freeze(struct device *dev)
+{
+	struct stm_drvdata *drvdata = dev_get_drvdata(dev);
+
+	coresight_disable(drvdata->csdev);
+
+	return 0;
+}
+#endif
+
 static const struct dev_pm_ops stm_dev_pm_ops = {
 	SET_RUNTIME_PM_OPS(stm_runtime_suspend, stm_runtime_resume, NULL)
 #ifdef CONFIG_DEEPSLEEP
 	.suspend = stm_suspend,
+#endif
+#ifdef CONFIG_HIBERNATION
+	.freeze  = stm_freeze,
 #endif
 };
 

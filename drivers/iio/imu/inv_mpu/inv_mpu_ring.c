@@ -26,6 +26,7 @@
 #include <linux/poll.h>
 #include <linux/math64.h>
 #include <linux/miscdevice.h>
+#include <uapi/linux/sched/types.h>
 
 #include "inv_mpu_iio.h"
 
@@ -298,6 +299,75 @@ void inv_convert_and_push_8bytes(struct inv_mpu_state *st, u16 hdr,
 	inv_push_8bytes_buffer(st, hdr, t, out);
 }
 
+#ifdef CONFIG_ENABLE_IAM_ACC_GYRO_BUFFERING
+static void store_acc_boot_sample(struct inv_mpu_state *st, u64 t,
+						s16 x, s16 y, s16 z)
+{
+	if (false == st->acc_buffer_inv_samples)
+		return;
+
+	mutex_lock(&st->acc_sensor_buff);
+	st->timestamp = t;
+	if (ktime_to_timespec(st->timestamp).tv_sec
+			<  st->max_buffer_time) {
+		if (st->acc_bufsample_cnt < INV_ACC_MAXSAMPLE) {
+			st->inv_acc_samplist[st->acc_bufsample_cnt]->xyz[0] = x;
+			st->inv_acc_samplist[st->acc_bufsample_cnt]->xyz[1] = y;
+			st->inv_acc_samplist[st->acc_bufsample_cnt]->xyz[2] = z;
+			st->inv_acc_samplist[st->acc_bufsample_cnt]->tsec =
+				ktime_to_timespec(st->timestamp).tv_sec;
+			st->inv_acc_samplist[st->acc_bufsample_cnt]->tnsec =
+				ktime_to_timespec(st->timestamp).tv_nsec;
+			st->acc_bufsample_cnt++;
+		}
+	} else {
+		dev_info(st->dev, "End of ACC buffering %d\n",
+					st->acc_bufsample_cnt);
+		st->acc_buffer_inv_samples = false;
+	}
+	mutex_unlock(&st->acc_sensor_buff);
+}
+
+static void store_gyro_boot_sample(struct inv_mpu_state *st, u64 t,
+						s16 x, s16 y, s16 z)
+{
+	if (false == st->gyro_buffer_inv_samples)
+		return;
+	mutex_lock(&st->gyro_sensor_buff);
+	st->timestamp = t;
+	if (ktime_to_timespec(st->timestamp).tv_sec
+			<  st->max_buffer_time) {
+		if (st->gyro_bufsample_cnt < INV_GYRO_MAXSAMPLE) {
+			st->inv_gyro_samplist[st->gyro_bufsample_cnt]
+				->xyz[0] = x;
+			st->inv_gyro_samplist[st->gyro_bufsample_cnt]
+				->xyz[1] = y;
+			st->inv_gyro_samplist[st->gyro_bufsample_cnt]
+				->xyz[2] = z;
+			st->inv_gyro_samplist[st->gyro_bufsample_cnt]->tsec =
+				ktime_to_timespec(st->timestamp).tv_sec;
+			st->inv_gyro_samplist[st->gyro_bufsample_cnt]->tnsec =
+				ktime_to_timespec(st->timestamp).tv_nsec;
+			st->gyro_bufsample_cnt++;
+		}
+	} else {
+		dev_info(st->dev, "End of GYRO buffering %d\n",
+					st->gyro_bufsample_cnt);
+		st->gyro_buffer_inv_samples = false;
+	}
+	mutex_unlock(&st->gyro_sensor_buff);
+}
+#else
+static void store_acc_boot_sample(struct inv_mpu_state *st, u64 t,
+						s16 x, s16 y, s16 z)
+{
+}
+static void store_gyro_boot_sample(struct inv_mpu_state *st, u64 t,
+						s16 x, s16 y, s16 z)
+{
+}
+#endif
+
 int inv_push_special_8bytes_buffer(struct inv_mpu_state *st,
 				   u16 hdr, u64 t, s16 *d)
 {
@@ -309,6 +379,7 @@ int inv_push_special_8bytes_buffer(struct inv_mpu_state *st,
 	memcpy(&buf[2], &d[0], sizeof(d[0]));
 	for (j = 0; j < 2; j++)
 		memcpy(&buf[4 + j * 2], &d[j + 1], sizeof(d[j]));
+	store_gyro_boot_sample(st, t, d[0], d[1], d[2]);
 	iio_push_to_buffers(indio_dev, buf);
 	inv_push_timestamp(indio_dev, t);
 
@@ -399,7 +470,7 @@ int inv_push_8bytes_buffer(struct inv_mpu_state *st, u16 sensor, u64 t, s16 *d)
 				for (j = 0; j < 2; j++)
 					memcpy(&buf[4 + j * 2], &d[j + 1],
 					       sizeof(d[j]));
-
+				store_acc_boot_sample(st, t, d[0], d[1], d[2]);
 				iio_push_to_buffers(indio_dev, buf);
 				inv_push_timestamp(indio_dev, t);
 				st->sensor_l[ii].counter = 0;
@@ -533,6 +604,19 @@ static irqreturn_t inv_irq_handler(int irq, void *dev_id)
 	return IRQ_WAKE_THREAD;
 }
 
+static void inv_kthread_batch_work(struct kthread_work *ws)
+{
+	struct inv_mpu_state *st =
+		container_of(ws, struct inv_mpu_state, hrtimer_work);
+	struct iio_dev *indio_dev = iio_priv_to_dev(st);
+
+	mutex_lock(&indio_dev->mlock);
+	if (inv_plat_single_write(st, REG_INT_ENABLE,
+				st->int_en | BIT_DATA_RDY_EN))
+		pr_err("kthread REG_INT_ENABLE write error\n");
+	mutex_unlock(&indio_dev->mlock);
+}
+
 #ifdef TIMER_BASED_BATCHING
 static enum hrtimer_restart inv_batch_timer_handler(struct hrtimer *timer)
 {
@@ -542,7 +626,7 @@ static enum hrtimer_restart inv_batch_timer_handler(struct hrtimer *timer)
 	if (st->chip_config.gyro_enable || st->chip_config.accel_enable) {
 		hrtimer_forward_now(&st->hr_batch_timer,
 			ns_to_ktime(st->batch_timeout));
-		schedule_work(&st->batch_work);
+		kthread_queue_work(&st->kworker, &st->hrtimer_work);
 		return HRTIMER_RESTART;
 	}
 	st->is_batch_timer_running = 0;
@@ -587,10 +671,20 @@ int inv_mpu_configure_ring(struct iio_dev *indio_dev)
 	struct iio_buffer *ring;
 
 #ifdef TIMER_BASED_BATCHING
+	struct sched_param sched_param = { .sched_priority = MAX_RT_PRIO / 2 };
 	/* configure hrtimer */
 	hrtimer_init(&st->hr_batch_timer, CLOCK_BOOTTIME, HRTIMER_MODE_REL);
 	st->hr_batch_timer.function = inv_batch_timer_handler;
-	INIT_WORK(&st->batch_work, inv_batch_work);
+
+	kthread_init_worker(&st->kworker);
+	kthread_init_work(&st->hrtimer_work, inv_kthread_batch_work);
+	st->kworker_task = kthread_run(kthread_worker_fn, &st->kworker, "iam20680");
+	if (IS_ERR(st->kworker_task)) {
+		pr_err("kworker for iam failed\n");
+		return -ENOMEM;
+	}
+
+	sched_setscheduler(st->kworker_task, SCHED_FIFO, &sched_param);
 #endif
 #ifdef KERNEL_VERSION_4_X
 	ring = devm_iio_kfifo_allocate(st->dev);

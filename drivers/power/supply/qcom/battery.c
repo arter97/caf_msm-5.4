@@ -2239,6 +2239,7 @@ void qcom_batt_deinit(void)
 	destroy_votable(chip->fv_votable);
 	destroy_votable(chip->fcc_votable);
 	destroy_votable(chip->fcc_main_votable);
+	destroy_votable(chip->usb_icl_votable);
 	wakeup_source_unregister(chip->pl_ws);
 	the_chip = NULL;
 	kfree(chip);

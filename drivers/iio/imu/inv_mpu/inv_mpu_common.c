@@ -34,7 +34,13 @@ s64 get_time_ns(void)
 
 	return timespec_to_ns(&ts);
 }
+
 #else
+static inline void get_monotonic_boottime(struct timespec *ts)
+{
+	*ts = ktime_to_timespec(ktime_get_boottime());
+}
+
 s64 get_time_ns(void)
 {
 	struct timespec ts;
@@ -48,7 +54,6 @@ s64 get_time_ns(void)
 	 */
 	return timespec_to_ns(&ts);
 }
-
 #endif
 
 #ifdef ACCEL_BIAS_TEST

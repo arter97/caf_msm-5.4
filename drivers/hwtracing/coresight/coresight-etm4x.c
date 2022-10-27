@@ -1221,9 +1221,23 @@ static int etm_suspend(struct device *dev)
 }
 #endif
 
+#ifdef CONFIG_HIBERNATION
+static int etm_freeze(struct device *dev)
+{
+	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev);
+
+	coresight_disable(drvdata->csdev);
+
+	return 0;
+}
+#endif
+
 static const struct dev_pm_ops etm_dev_pm_ops = {
 #ifdef CONFIG_DEEPSLEEP
 	.suspend = etm_suspend,
+#endif
+#ifdef CONFIG_HIBERNATION
+	.freeze  = etm_freeze,
 #endif
 };
 

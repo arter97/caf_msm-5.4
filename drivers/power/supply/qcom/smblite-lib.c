@@ -4212,8 +4212,8 @@ static void jeita_update_work(struct work_struct *work)
 		goto out;
 	}
 
-	/* if BMS is not ready, defer the work */
-	if (IS_ERR_OR_NULL(chg->iio_chan_list_qg))
+	/* if BMS is not ready and remote FG does not exist, defer the work */
+	if ((IS_ERR_OR_NULL(chg->iio_chan_list_qg)) && (!chg->is_fg_remote))
 		return;
 
 	rc = smblite_lib_get_prop_from_bms(chg,
@@ -4449,8 +4449,10 @@ static int smblite_lib_create_votables(struct smb_charger *chg)
 
 static void smblite_lib_destroy_votables(struct smb_charger *chg)
 {
-	if (chg->usb_icl_votable)
-		destroy_votable(chg->usb_icl_votable);
+	if (chg->temp_change_irq_disable_votable)
+		destroy_votable(chg->temp_change_irq_disable_votable);
+	if (chg->icl_irq_disable_votable)
+		destroy_votable(chg->icl_irq_disable_votable);
 	if (chg->awake_votable)
 		destroy_votable(chg->awake_votable);
 	if (chg->chg_disable_votable)

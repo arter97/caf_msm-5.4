@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# CVP CORE
+#
+
+menuconfig MSM_CVP_V2
+	tristate "MSM CVP2.0 driver"
+        help
+          Enable support of MSM CVP2.0 driver for
+          Qualcomm Technologies, Inc.

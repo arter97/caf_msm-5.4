@@ -97,6 +97,8 @@ int virthab_alloc(struct virtio_device *vdev, struct virtio_hab **pvh,
 int virthab_init_vqs_pre(struct virtio_hab *vh);
 
 int virthab_init_vqs_post(struct virtio_hab *vh);
+
+struct virtio_device *virthab_get_vdev(int32_t mmid);
 #else
 int virthab_queue_inbufs(struct virtio_hab *vh, int alloc)
 {
@@ -117,6 +119,11 @@ int virthab_init_vqs_pre(struct virtio_hab *vh)
 int virthab_init_vqs_post(struct virtio_hab *vh)
 {
 	return -ENODEV;
+}
+
+struct virtio_device *virthab_get_vdev(int32_t mmid)
+{
+	return NULL;
 }
 #endif
 
