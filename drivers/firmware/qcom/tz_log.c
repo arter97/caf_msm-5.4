@@ -442,6 +442,7 @@ static struct tzdbg_log_t *g_qsee_log;
 static struct tzdbg_log_v2_t *g_qsee_log_v2;
 static dma_addr_t coh_pmem;
 static uint32_t debug_rw_buf_size;
+static bool restore_from_hibernation;
 static uint32_t display_buf_size;
 static uint32_t qseelog_buf_size;
 static phys_addr_t disp_buf_paddr;
@@ -1003,6 +1004,16 @@ static int _disp_tz_log_stats(size_t count)
 	struct tzdbg_log_v2_t *log_v2_ptr;
 	struct tzdbg_log_t *log_ptr;
 
+        /* wrap and offset are initialized to zero since tz is coldboot
+	 * during restoration from hibernation.the reason to initialise
+	 * the wrap and offset to zero since it contains previous boot
+	 * values and which are invalid now.
+	 */
+	if (restore_from_hibernation) {
+		log_start.wrap = log_start.offset = 0;
+		log_start_v2.wrap = log_start_v2.offset = 0;
+		return 0;
+	}
 	log_ptr = (struct tzdbg_log_t *)((unsigned char *)tzdbg.diag_buf +
 			tzdbg.diag_buf->ring_off -
 			offsetof(struct tzdbg_log_t, log_buf));
@@ -1038,6 +1049,16 @@ static int _disp_qsee_log_stats(size_t count)
 	static struct tzdbg_log_pos_t log_start = {0};
 	static struct tzdbg_log_pos_v2_t log_start_v2 = {0};
 
+        /* wrap and offset are initialized to zero since tz is coldboot
+	 * during restoration from hibernation. The reason to initialise
+	 * the wrap and offset to zero since it contains previous values
+	 * and which are invalid now.
+	 */
+	if (restore_from_hibernation) {
+		log_start.wrap = log_start.offset = 0;
+		log_start_v2.wrap = log_start_v2.offset = 0;
+		return 0;
+	}
 	if (!tzdbg.is_enlarged_buf)
 		return _disp_log_stats(g_qsee_log, &log_start,
 			QSEE_LOG_BUF_SIZE - sizeof(struct tzdbg_log_pos_t),
@@ -1629,6 +1650,11 @@ static int tz_log_remove(struct platform_device *pdev)
 #ifdef CONFIG_PM
 static int tz_log_freeze(struct device *dev)
 {
+       /* This Boolean variable is maintained to initialise the ring buffer
+	 * log pointer to zero during restoration from hibernation
+	 */
+	restore_from_hibernation = true;
+	if (g_qsee_log)
 	dma_free_coherent(dev, QSEE_LOG_BUF_SIZE, (void *)g_qsee_log,
 				coh_pmem);
 
@@ -1637,11 +1663,22 @@ static int tz_log_freeze(struct device *dev)
 
 static int tz_log_restore(struct device *dev)
 {
+         /* ring buffer log pointer needs to be re initialized
+	 * during restoration from hibernation.
+	 */
+	if (restore_from_hibernation) {
+		_disp_tz_log_stats(0);
+		_disp_qsee_log_stats(0);
+	}
 	/* Register the log bugger at TZ during hibernation resume.
 	 * After hibernation the log buffer is with HLOS as TZ encountered
 	 * a coldboot sequence.
 	 */
 	tzdbg_register_qsee_log_buf(to_platform_device(dev));
+        /* This is set back to zero after successful restoration
+	 * from hibernation.
+	 */
+	restore_from_hibernation = false;
 
 	return 0;
 }
