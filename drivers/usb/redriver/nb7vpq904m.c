@@ -158,6 +158,8 @@ static void nb7vpq904m_dev_aux_set(struct nb7vpq904m_redriver *redriver)
 		else
 			aux_val = AUX_FLIP_VAL;
 		break;
+	default:
+		break;
 	}
 
 	nb7vpq904m_reg_set(redriver, AUX_SWITCH_REG, aux_val);
