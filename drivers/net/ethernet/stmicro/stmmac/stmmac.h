@@ -89,6 +89,7 @@ struct stmmac_rx_queue {
 		unsigned int error;
 	} state;
 	bool skip_sw;
+	bool en_fep;
 };
 
 struct stmmac_channel {

@@ -2036,6 +2036,8 @@ u32 mtl_rx_int;
 			       priv->ioaddr +
 			       (0x00000d00 + 0x2c));
 	}
+		if (priv->rx_queue[chan].en_fep)
+			priv->hw->dma->enable_rx_fep(priv->ioaddr, true, chan);
 		stmmac_set_dma_bfsize(priv, priv->ioaddr, priv->dma_buf_sz,
 				      chan);
 	}
