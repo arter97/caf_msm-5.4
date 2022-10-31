@@ -6506,7 +6506,7 @@ int qseecom_create_key_in_slot(uint8_t usage_code, uint8_t key_slot, const uint8
 	struct qseecom_create_key_req create_key_req;
 	struct qseecom_key_generate_ireq generate_key_ireq;
 	struct qseecom_key_select_ireq set_key_ireq;
-	uint32_t entries = 0;
+	int32_t entries = 0;
 	bool new_key_generated = false;
 	static struct qseecom_dev_handle local_handle = {0};
 	static struct qseecom_dev_handle *data = &local_handle;
@@ -6696,7 +6696,7 @@ static int qseecom_wipe_key(struct qseecom_dev_handle *data,
 	struct qseecom_wipe_key_req wipe_key_req;
 	struct qseecom_key_delete_ireq delete_key_ireq;
 	struct qseecom_key_select_ireq clear_key_ireq;
-	uint32_t entries = 0;
+	int32_t entries = 0;
 
 	ret = copy_from_user(&wipe_key_req, argp, sizeof(wipe_key_req));
 	if (ret) {
