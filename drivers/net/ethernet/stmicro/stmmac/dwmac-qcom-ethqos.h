@@ -995,6 +995,7 @@ struct qcom_ethqos {
 	/* SSR over ethernet parameters */
 	struct work_struct eth_ssr;
 	unsigned long action;
+	bool driver_load_fail;
 };
 
 struct pps_cfg {

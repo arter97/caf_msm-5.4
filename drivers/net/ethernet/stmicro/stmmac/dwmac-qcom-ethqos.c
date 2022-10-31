@@ -4239,15 +4239,16 @@ ethqos_emac_mem_base(ethqos);
 	}
 #endif
 
-	return ret;
+	return 0;
 
 err_clk:
 	clk_disable_unprepare(ethqos->rgmii_clk);
 
 err_mem:
+	ethqos->driver_load_fail = true;
 	stmmac_remove_config_dt(pdev, plat_dat);
 
-	return ret;
+	return 0;
 }
 
 static int qcom_ethqos_probe(struct platform_device *pdev)
@@ -4329,6 +4330,11 @@ static int qcom_ethqos_suspend(struct device *dev)
 	if (!ethqos)
 		return -ENODEV;
 
+	if (ethqos->driver_load_fail) {
+		ETHQOSINFO("driver load failed\n");
+		return 0;
+	}
+
 	ndev = dev_get_drvdata(dev);
 
 	ethqos_ipa_offload_event_handler(&allow_suspend, EV_DPM_SUSPEND);
@@ -4392,6 +4398,11 @@ static int qcom_ethqos_resume(struct device *dev)
 
 	if (!ethqos)
 		return -ENODEV;
+
+	if (ethqos->driver_load_fail) {
+		ETHQOSINFO("driver load failed\n");
+		return 0;
+	}
 
 	ndev = dev_get_drvdata(dev);
 
