@@ -784,9 +784,9 @@ enum phy_power_mode {
 #define RGMII_IO_MACRO_CONFIG_RGRD(data)\
 	((data) = (readl_relaxed((RGMII_IO_MACRO_CONFIG_RGOFFADDR))))
 
-#define RGMII_GPIO_CFG_TX_INT_MASK (unsigned long)(0x3)
+#define RGMII_GPIO_CFG_TX_INT_MASK (unsigned long)(0x7)
 
-#define RGMII_GPIO_CFG_TX_INT_WR_MASK (unsigned long)(0xfff9ffff)
+#define RGMII_GPIO_CFG_TX_INT_WR_MASK (unsigned long)(0xfff1ffff)
 
 #define RGMII_GPIO_CFG_TX_INT_UDFWR(data) do {\
 	unsigned long v;\
@@ -798,13 +798,13 @@ enum phy_power_mode {
 
 #define RGMII_GPIO_CFG_RX_INT_MASK (unsigned long)(0x3)
 
-#define RGMII_GPIO_CFG_RX_INT_WR_MASK (unsigned long)(0xffe7ffff)
+#define RGMII_GPIO_CFG_RX_INT_WR_MASK (unsigned long)(0xFFCFFFFF)
 
 #define RGMII_GPIO_CFG_RX_INT_UDFWR(data) do {\
 	unsigned long v;\
 	RGMII_IO_MACRO_CONFIG_RGRD(v);\
 	v = ((v & RGMII_GPIO_CFG_RX_INT_WR_MASK) | \
-	(((data) & RGMII_GPIO_CFG_RX_INT_MASK) << 19));\
+	(((data) & RGMII_GPIO_CFG_RX_INT_MASK) << 20));\
 	RGMII_IO_MACRO_CONFIG_RGWR(v);\
 } while (0)
 
@@ -1055,8 +1055,6 @@ u16 dwmac_qcom_select_queue(struct net_device *dev,
 #define PTP_UDP_EV_PORT 0x013F
 #define PTP_UDP_GEN_PORT 0x0140
 
-#define IPA_DMA_TX_CH 0
-#define IPA_DMA_RX_CH 0
 
 #define CV2X_TAG_TX_CHANNEL 3
 #define QMI_TAG_TX_CHANNEL 2
