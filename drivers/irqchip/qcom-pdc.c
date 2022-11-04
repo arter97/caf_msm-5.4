@@ -29,7 +29,7 @@
 
 #define PDC_IPC_LOG_SZ		2
 
-#define PDC_MAX_IRQS		168
+#define PDC_MAX_IRQS		240
 #define PDC_MAX_GPIO_IRQS	256
 
 #define MAX_ENABLE_REGS ((PDC_MAX_IRQS/32) + 1)

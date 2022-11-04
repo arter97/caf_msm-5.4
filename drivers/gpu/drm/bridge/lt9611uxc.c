@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -32,6 +33,7 @@
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_bridge.h>
 #include <linux/string.h>
+#include <drm/drm_client.h>
 
 #define CFG_HPD_INTERRUPTS BIT(0)
 #define CFG_EDID_INTERRUPTS BIT(1)
@@ -144,6 +146,7 @@ struct lt9611_timing_info {
 };
 
 static struct lt9611_timing_info lt9611_supp_timing_cfg[] = {
+	{3840, 2160, 24, 60, 4, 2}, /* 3840x2160 24bit 60Hz 4Lane 2ports */
 	{3840, 2160, 24, 30, 4, 2}, /* 3840x2160 24bit 30Hz 4Lane 2ports */
 	{1920, 1080, 24, 60, 4, 1}, /* 1080P 24bit 60Hz 4lane 1port */
 	{1920, 1080, 24, 30, 3, 1}, /* 1080P 24bit 30Hz 3lane 1port */
@@ -164,7 +167,7 @@ static void lt9611_hpd_work(struct work_struct *work)
 	struct lt9611 *pdata = container_of(work, struct lt9611, work);
 
 	if (!pdata || !pdata->connector.funcs ||
-		!pdata->connector.funcs->detect || !pdata->hpd_support)
+		!pdata->connector.funcs->detect)
 		return;
 
 	dev = pdata->connector.dev;
@@ -186,6 +189,11 @@ static void lt9611_hpd_work(struct work_struct *work)
 	envp[3] = NULL;
 	envp[4] = NULL;
 	kobject_uevent_env(&dev->primary->kdev->kobj, KOBJ_CHANGE, envp);
+
+	if (dev->mode_config.funcs->output_poll_changed)
+		dev->mode_config.funcs->output_poll_changed(dev);
+
+	drm_client_dev_hotplug(dev);
 }
 
 static struct lt9611 *bridge_to_lt9611(struct drm_bridge *bridge)
@@ -1494,11 +1502,7 @@ static void lt9611_bridge_enable(struct drm_bridge *bridge)
 
 static void lt9611_bridge_disable(struct drm_bridge *bridge)
 {
-	struct lt9611 *pdata = bridge_to_lt9611(bridge);
-
 	pr_debug("bridge disable\n");
-	lt9611_enable_vreg(pdata, false);
-	lt9611_reset(pdata, false);
 }
 
 static void lt9611_bridge_mode_set(struct drm_bridge *bridge,
@@ -1627,7 +1631,6 @@ static void lt9611_bridge_pre_enable(struct drm_bridge *bridge)
 	struct lt9611 *pdata = bridge_to_lt9611(bridge);
 
 	pr_debug("bridge pre_enable\n");
-	lt9611_enable_vreg(pdata, true);
 	lt9611_reset(pdata, true);
 }
 
@@ -1812,7 +1815,7 @@ static int lt9611_probe(struct i2c_client *client,
 	ret = lt9611_read_device_id(pdata);
 	if (ret) {
 		pr_err("failed to read chip rev\n");
-		goto err_i2c_prog;
+		goto err_sysfs_init;
 	}
 
 	i2c_set_clientdata(client, pdata);
@@ -1821,13 +1824,15 @@ static int lt9611_probe(struct i2c_client *client,
 	ret = lt9611_sysfs_init(&client->dev);
 	if (ret) {
 		pr_err("sysfs init failed\n");
-		goto err_i2c_prog;
+		goto err_sysfs_init;
 	}
 
 	chip_version = lt9611_get_version(pdata);
 	pdata->hpd_support = false;
 	if (chip_version) {
 		pr_info("LT9611 works, no need to upgrade FW\n");
+		if (chip_version >= 0x40)
+			pdata->hpd_support = true;
 	} else {
 		ret = request_firmware_nowait(THIS_MODULE, true,
 			"lt9611_fw.bin", &client->dev, GFP_KERNEL, pdata,
@@ -1835,7 +1840,7 @@ static int lt9611_probe(struct i2c_client *client,
 		if (ret) {
 			dev_err(&client->dev,
 				"Failed to invoke firmware loader: %d\n", ret);
-			goto err_i2c_prog;
+			goto err_sysfs_init;
 		} else
 			return 0;
 	}
@@ -1850,23 +1855,23 @@ static int lt9611_probe(struct i2c_client *client,
 	pdata->wq = create_singlethread_workqueue("lt9611_wk");
 	if (!pdata->wq) {
 		pr_err("Error creating lt9611 wq\n");
-		goto err_i2c_prog;
+		goto err_sysfs_init;
 	}
 	INIT_WORK(&pdata->work, lt9611_hpd_work);
 
 	pdata->irq = gpio_to_irq(pdata->irq_gpio);
 	ret = request_threaded_irq(pdata->irq, NULL, lt9611_irq_thread_handler,
-		IRQF_TRIGGER_FALLING | IRQF_ONESHOT, "lt9611_irq", pdata);
+		IRQF_TRIGGER_FALLING | IRQF_ONESHOT, "lt9611", pdata);
 	if (ret) {
 		pr_err("failed to request irq\n");
 		goto err_i2c_prog;
 	}
 
-	if (!pdata->hpd_support)
-		disable_irq(pdata->irq);
-
 	return 0;
 
+err_sysfs_init:
+	disable_irq(pdata->irq);
+	free_irq(pdata->irq, pdata);
 err_i2c_prog:
 	lt9611_gpio_configure(pdata, false);
 err_dt_supply:
@@ -1891,8 +1896,7 @@ static int lt9611_remove(struct i2c_client *client)
 
 	lt9611_sysfs_remove(&client->dev);
 
-	if (pdata->hpd_support)
-		disable_irq(pdata->irq);
+	disable_irq(pdata->irq);
 	free_irq(pdata->irq, pdata);
 
 	ret = lt9611_gpio_configure(pdata, false);

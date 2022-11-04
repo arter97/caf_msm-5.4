@@ -193,6 +193,9 @@ static struct socinfo {
 #define SMEM_IMAGE_VERSION_OEM_OFFSET 95
 #define SMEM_IMAGE_VERSION_PARTITION_APPS 10
 
+int softsku_idx;
+module_param_named(softsku_idx, softsku_idx, int, 0644);
+
 /* Version 2 */
 static uint32_t socinfo_get_raw_id(void)
 {
@@ -676,6 +679,7 @@ static const struct soc_id soc_id[] = {
 	{ 312, "APQ8096SG" },
 	{ 352, "QCS405" },
 	{ 356, "KONA" },
+	{ 455, "KONA" },
 	{ 362, "SA8155" },
 	{ 367, "SA8155P" },
 	{ 522, "SA8155P-IOT" },
@@ -719,6 +723,9 @@ static const struct soc_id soc_id[] = {
 	{ 534, "LEMANSAU_IVI_ADAS" },
 	{ 535, "LEMANSAU_ADAS" },
 	{ 418, "SA515M" },
+	{ 334, "SDX24" },
+	{ 335, "SDX24M" },
+	{ 408, "SA415M" },
 };
 
 static struct qcom_socinfo *qsocinfo;

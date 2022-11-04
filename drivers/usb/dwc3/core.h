@@ -742,6 +742,7 @@ struct dwc3_ep_events {
  * @desc: usb_endpoint_descriptor pointer
  * @dwc: pointer to DWC controller
  * @saved_state: ep state saved during hibernation
+ * @missed_isoc_packets: counter for missed packets sent
  * @flags: endpoint flags (wedged, stalled, ...)
  * @number: endpoint number (1 - 15)
  * @type: set to bmAttributes & USB_ENDPOINT_XFERTYPE_MASK
@@ -775,6 +776,7 @@ struct dwc3_ep {
 	struct dwc3		*dwc;
 
 	u32			saved_state;
+	u32			missed_isoc_packets;
 	unsigned		flags;
 #define DWC3_EP_ENABLED		BIT(0)
 #define DWC3_EP_STALL		BIT(1)
@@ -1176,6 +1178,9 @@ struct dwc3_scratchpad_array {
  * @wait_linkstate: waitqueue for waiting LINK to move into required state
  * @remote_wakeup_work: use to perform remote wakeup from this context
  * @force_gen1: use to force gen1 speed on gen2 controller
+ * @active_highbw_isoc: if true, high bandwidth isochronous endpoint is active.
+ * @ignore_statusirq: if true, ignore irq triggered for status stage.
+ * @num_gsi_eps: number of GSI based hardware accelerated endpoints
  */
 struct dwc3 {
 	struct work_struct	drd_work;
@@ -1435,6 +1440,9 @@ struct dwc3 {
 	bool			is_remote_wakeup_enabled;
 	wait_queue_head_t	wait_linkstate;
 	struct work_struct	remote_wakeup_work;
+	bool			active_highbw_isoc;
+	bool			ignore_statusirq;
+	u32			num_gsi_eps;
 };
 
 #define INCRX_BURST_MODE 0
@@ -1733,7 +1741,8 @@ enum dwc3_notify_event {
 	DWC3_CONTROLLER_NOTIFY_OTG_EVENT,
 	DWC3_CONTROLLER_SET_CURRENT_DRAW_EVENT,
 	DWC3_CONTROLLER_NOTIFY_DISABLE_UPDXFER,
-	DWC3_CONTROLLER_PULLUP,
+	DWC3_CONTROLLER_PULLUP_ENTER,
+	DWC3_CONTROLLER_PULLUP_EXIT,
 
 	/* USB GSI event buffer related notification */
 	DWC3_GSI_EVT_BUF_ALLOC,
