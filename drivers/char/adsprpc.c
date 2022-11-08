@@ -7073,15 +7073,17 @@ static int __init fastrpc_device_init(void)
 	struct fastrpc_apps *me = &gfa;
 	int err = 0, i;
 
+#ifdef CONFIG_DEBUG_FS
 	debugfs_root = debugfs_create_dir("adsprpc", NULL);
 	if (IS_ERR_OR_NULL(debugfs_root)) {
-#ifdef CONFIG_DEBUG_FS
 		pr_warn("Error: %s: %s: failed to create debugfs root dir\n",
 			current->comm, __func__);
-#endif
 		debugfs_remove_recursive(debugfs_root);
 		debugfs_root = NULL;
 	}
+#else
+	debugfs_root = NULL;
+#endif
 	memset(me, 0, sizeof(*me));
 	fastrpc_init(me);
 	me->dev = NULL;
