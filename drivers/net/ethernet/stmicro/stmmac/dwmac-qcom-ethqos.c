@@ -1423,6 +1423,11 @@ static int emac_emb_smmu_cb_probe(struct platform_device *pdev,
 
 	ETHQOSINFO("Successfully attached to IOMMU\n");
 	plat_dat->stmmac_emb_smmu_ctx = emac_emb_smmu_ctx;
+
+	if (pethqos && pethqos->early_eth_enabled) {
+		ETHQOSINFO("interface up after smmu probe\n");
+		queue_work(system_wq, &pethqos->early_eth);
+	}
 	if (emac_emb_smmu_ctx.pdev_master)
 		goto smmu_probe_done;
 
@@ -4066,7 +4071,6 @@ ethqos_emac_mem_base(ethqos);
 		INIT_WORK(&ethqos->early_eth,
 			  qcom_ethqos_bringup_iface);
 		/* Queue the work*/
-		queue_work(system_wq, &ethqos->early_eth);
 		/*Set early eth parameters*/
 		ethqos_set_early_eth_param(priv, ethqos);
 	}
