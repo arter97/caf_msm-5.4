@@ -989,6 +989,11 @@ struct qcom_ethqos {
 	u32 cv2x_mode;
 	struct ethqos_vlan_info cv2x_vlan;
 	unsigned char cv2x_dev_addr[ETH_ALEN];
+
+	struct notifier_block qti_nb;
+	/* SSR over ethernet parameters */
+	struct work_struct eth_ssr;
+	unsigned long action;
 };
 
 struct pps_cfg {

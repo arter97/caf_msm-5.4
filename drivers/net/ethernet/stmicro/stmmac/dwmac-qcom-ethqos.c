@@ -30,7 +30,7 @@
 #include <linux/io-64-nonatomic-hi-lo.h>
 #include <linux/if_vlan.h>
 #include <linux/msm_eth.h>
-
+#include <soc/qcom/sb_notification.h>
 #include "stmmac.h"
 #include "stmmac_platform.h"
 #include "dwmac-qcom-ethqos.h"
@@ -2038,6 +2038,68 @@ static void read_mac_addr_from_fuse_reg(struct device_node *np)
 				return;
 		}
 	}
+}
+
+static void qcom_ethqos_handle_ssr_workqueue(struct work_struct *work)
+{
+	struct stmmac_priv *priv = NULL;
+
+	priv = qcom_ethqos_get_priv(pethqos);
+
+	ETHQOSINFO("%s is executing action: %d\n", __func__, pethqos->action);
+
+	if (priv->hw_offload_enabled) {
+		if (pethqos->action == EVENT_REMOTE_STATUS_DOWN) {
+			ethqos_ipa_offload_event_handler(NULL, EV_IPA_SSR_DOWN);
+		} else {
+			if (pethqos->action == EVENT_REMOTE_STATUS_UP)
+				ethqos_ipa_offload_event_handler(NULL, EV_IPA_SSR_UP);
+		}
+	}
+}
+
+static int qcom_ethqos_qti_alert(struct notifier_block *nb,
+				 unsigned long action, void *dev)
+{
+	struct stmmac_priv *priv = NULL;
+
+	priv = qcom_ethqos_get_priv(pethqos);
+	if (!priv) {
+		ETHQOSERR("Unable to alert QTI of SSR status: %s\n", __func__);
+		return NOTIFY_DONE;
+	}
+
+	switch (action) {
+	case EVENT_REMOTE_STATUS_UP:
+		ETHQOSINFO("Link up\n");
+		pethqos->action = EVENT_REMOTE_STATUS_UP;
+		break;
+	case EVENT_REMOTE_STATUS_DOWN:
+		ETHQOSINFO("Link down\n");
+		pethqos->action = EVENT_REMOTE_STATUS_DOWN;
+		break;
+	default:
+		ETHQOSERR("Invalid action passed: %s, %d\n", __func__,
+			  action);
+		return NOTIFY_DONE;
+	}
+
+	INIT_WORK(&pethqos->eth_ssr, qcom_ethqos_handle_ssr_workqueue);
+	queue_work(system_wq, &pethqos->eth_ssr);
+
+	return NOTIFY_DONE;
+}
+
+static void qcom_ethqos_register_listener(void)
+{
+	int ret;
+
+	ETHQOSINFO("Registering sb notification listener: %s\n", __func__);
+
+	pethqos->qti_nb.notifier_call = qcom_ethqos_qti_alert;
+	ret = sb_register_evt_listener(&pethqos->qti_nb);
+	if (ret)
+		ETHQOSERR("sb_register_evt_listener failed at: %s\n", __func__);
 }
 
 static void ethqos_is_ipv4_NW_stack_ready(struct work_struct *work)
@@ -4084,6 +4146,9 @@ ethqos_emac_mem_base(ethqos);
 
 	if (priv->plat->mac2mac_en)
 		priv->plat->mac2mac_link = -1;
+
+	if (pethqos->cv2x_mode != CV2X_MODE_DISABLE)
+		qcom_ethqos_register_listener();
 
 	if (!qcom_ethqos_init_panic_notifier(ethqos))
 		atomic_notifier_chain_register(&panic_notifier_list,

@@ -2772,6 +2772,18 @@ void ethqos_ipa_offload_event_handler(void *data,
 	IPA_LOCK();
 
 	switch (ev) {
+	case EV_IPA_SSR_UP:
+		if (!eth_ipa_ctx.emac_dev_ready ||
+		    !eth_ipa_ctx.ipa_uc_ready)
+			break;
+			ethqos_ipa_offload_resume(eth_ipa_ctx.ethqos);
+		break;
+	case EV_IPA_SSR_DOWN:
+		if (!eth_ipa_ctx.emac_dev_ready ||
+		    !eth_ipa_ctx.ipa_uc_ready)
+			break;
+			ethqos_ipa_offload_suspend(eth_ipa_ctx.ethqos);
+		break;
 	case EV_PHY_LINK_DOWN:
 		if (!eth_ipa_ctx.emac_dev_ready ||
 		    !eth_ipa_ctx.ipa_uc_ready ||
@@ -2935,7 +2947,8 @@ void ethqos_ipa_offload_event_handler(void *data,
 	if (eth_ipa_ctx.queue_enabled[IPA_QUEUE_CV2X] &&
 	    (ev == EV_USR_SUSPEND || ev == EV_USR_RESUME ||
 	     ev == EV_DEV_CLOSE || ev == EV_DEV_OPEN ||
-	     ev == EV_PHY_LINK_DOWN || ev ==  EV_PHY_LINK_UP)) {
+	     ev == EV_PHY_LINK_DOWN || ev ==  EV_PHY_LINK_UP ||
+	     ev == EV_IPA_SSR_DOWN || ev ==  EV_IPA_SSR_UP)) {
 		if (eth_ipa_ctx.ipa_offload_conn_prev !=
 		    eth_ipa_ctx.ipa_offload_conn)
 			ETHQOSDBG("need-status-updated\n");
