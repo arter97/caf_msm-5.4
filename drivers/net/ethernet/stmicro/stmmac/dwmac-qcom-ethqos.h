@@ -190,7 +190,6 @@ do  {\
 
 /* GMAC4 defines */
 #define MII_GMAC4_GOC_SHIFT		2
-#define MII_GMAC4_WRITE			BIT(MII_GMAC4_GOC_SHIFT)
 #define MII_GMAC4_READ			(3 << MII_GMAC4_GOC_SHIFT)
 
 #define MII_BUSY 0x00000001
@@ -216,6 +215,14 @@ do  {\
 #define LINK_STATE_MASK 0x4
 #define AUTONEG_STATE_MASK 0x20
 #define MICREL_LINK_UP_INTR_STATUS BIT(0)
+
+//Mac config
+#define MAC_CONFIGURATION 0x0
+#define MAC_LM BIT(12)
+
+#define EMAC_QUEUE_0 0
+#define EMAC_CHANNEL_0 0
+#define EMAC_CHANNEL_1 1
 
 #define TLMM_BASE_RGMII_CTRL1 (tlmm_rgmii_pull_ctl1_base)
 #define TLMM_BASE_RX_CTR (tlmm_rgmii_rx_ctr_base)
@@ -735,10 +742,30 @@ static inline u32 PPSX_MASK(u32 x)
 	return GENMASK(PPS_MAXIDX(x), PPS_MINIDX(x));
 }
 
+enum current_phy_state {
+	PHY_IS_ON = 0,
+	PHY_IS_OFF,
+};
+
 enum IO_MACRO_PHY_MODE {
 		RGMII_MODE,
 		RMII_MODE,
 		MII_MODE
+};
+
+enum loopback_mode {
+	DISABLE_LOOPBACK = 0,
+	ENABLE_IO_MACRO_LOOPBACK,
+	ENABLE_MAC_LOOPBACK,
+	ENABLE_PHY_LOOPBACK
+};
+
+enum phy_power_mode {
+	DISABLE_PHY_IMMEDIATELY = 1,
+	ENABLE_PHY_IMMEDIATELY,
+	DISABLE_PHY_AT_SUSPEND_ONLY,
+	DISABLE_PHY_SUSPEND_ENABLE_RESUME,
+	DISABLE_PHY_ON_OFF,
 };
 
 #define RGMII_IO_BASE_ADDRESS ethqos->rgmii_base
@@ -780,6 +807,13 @@ enum IO_MACRO_PHY_MODE {
 	(((data) & RGMII_GPIO_CFG_RX_INT_MASK) << 19));\
 	RGMII_IO_MACRO_CONFIG_RGWR(v);\
 } while (0)
+
+struct ethqos_vlan_info {
+	u16 vlan_id;
+	u32 vlan_offset;
+	u32 rx_queue;
+	bool available;
+};
 
 struct ethqos_emac_por {
 	unsigned int offset;
@@ -876,8 +910,17 @@ struct qcom_ethqos {
 	struct cdev *avb_class_b_cdev;
 	struct class *avb_class_b_class;
 
+	dev_t emac_dev_t;
+	struct cdev *emac_cdev;
+	struct class *emac_class;
+
 	unsigned long avb_class_a_intr_cnt;
 	unsigned long avb_class_b_intr_cnt;
+
+	/* Mac recovery dev node variables*/
+	dev_t emac_rec_dev_t;
+	struct cdev *emac_rec_cdev;
+	struct class *emac_rec_class;
 
 	/* saving state for Wake-on-LAN */
 	int wolopts;
@@ -896,6 +939,18 @@ struct qcom_ethqos {
 	bool early_eth_enabled;
 	/* Key Performance Indicators */
 	bool print_kpi;
+	unsigned int emac_phy_off_suspend;
+	int loopback_speed;
+	enum phy_power_mode current_phy_mode;
+	enum current_phy_state phy_state;
+	/*Backup variable for phy loopback*/
+	int backup_duplex;
+	int backup_speed;
+	u32 bmcr_backup;
+	/*Backup variable for suspend resume*/
+	int backup_suspend_speed;
+	u32 backup_bmcr;
+	unsigned backup_autoneg:1;
 
 	struct dentry *debugfs_dir;
 
@@ -911,6 +966,20 @@ struct qcom_ethqos {
 
 	u32 emac_mem_base;
 	bool ipa_enabled;
+
+	/* Mac recovery parameters */
+	int mac_err_cnt[MAC_ERR_CNT];
+	bool mac_rec_en[MAC_ERR_CNT];
+	bool mac_rec_fail[MAC_ERR_CNT];
+	int mac_rec_cnt[MAC_ERR_CNT];
+	int mac_rec_threshold[MAC_ERR_CNT];
+	struct delayed_work tdu_rec;
+	bool tdu_scheduled;
+	int tdu_chan;
+
+	/* QMI over ethernet parameter */
+	u32 qoe_mode;
+	struct ethqos_vlan_info qoe_vlan;
 };
 
 struct pps_cfg {
@@ -980,6 +1049,8 @@ u16 dwmac_qcom_select_queue(struct net_device *dev,
 #define IPA_DMA_TX_CH 0
 #define IPA_DMA_RX_CH 0
 
+#define QMI_TAG_TX_CHANNEL 2
+
 #define VLAN_TAG_UCP_SHIFT 13
 #define CLASS_A_TRAFFIC_UCP 3
 #define CLASS_A_TRAFFIC_TX_CHANNEL 3
@@ -1021,9 +1092,15 @@ struct dwmac_qcom_avb_algorithm {
 	enum dwmac_qcom_queue_operating_mode op_mode;
 };
 
+void qcom_ethqos_request_phy_wol(void *plat_n);
+void ethqos_reset_phy_enable_interrupt(struct qcom_ethqos *ethqos);
+void  ethqos_phy_power_off(struct qcom_ethqos *ethqos);
+int ethqos_phy_power_on(struct qcom_ethqos *ethqos);
+inline unsigned int dwmac_qcom_get_eth_type(unsigned char *buf);
 void dwmac_qcom_program_avb_algorithm(struct stmmac_priv *priv,
 				      struct ifr_data_struct *req);
 unsigned int dwmac_qcom_get_plat_tx_coal_frames(struct sk_buff *skb);
 int ethqos_init_pps(void *priv);
 struct qcom_ethqos *get_pethqos(void);
+int ethqos_mdio_read(struct stmmac_priv  *priv, int phyaddr, int phyreg);
 #endif

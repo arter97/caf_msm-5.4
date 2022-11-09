@@ -700,6 +700,7 @@ static int msm_hs_remove(struct platform_device *pdev)
 	if (!msm_uport)
 		return -EINVAL;
 
+	del_timer_sync(&msm_uport->tx.tx_timeout_timer);
 	dev = msm_uport->uport.dev;
 	sysfs_remove_file(&pdev->dev.kobj, &dev_attr_clock.attr);
 	sysfs_remove_file(&pdev->dev.kobj, &dev_attr_debug_mask.attr);
@@ -3683,6 +3684,7 @@ static void msm_hs_shutdown(struct uart_port *uport)
 	if (!ret)
 		MSM_HS_WARN("Shutdown called when tx buff not empty\n");
 
+	del_timer(&msm_uport->tx.tx_timeout_timer);
 	msm_hs_resource_vote(msm_uport);
 	/* Stop remote side from sending data */
 	msm_hs_disable_flow_control(uport, false);

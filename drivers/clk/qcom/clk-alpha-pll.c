@@ -1161,6 +1161,14 @@ int clk_trion_pll_configure(struct clk_alpha_pll *pll, struct regmap *regmap,
 
 	if (trion_pll_is_enabled(pll, regmap)) {
 		pr_warn("PLL is already enabled. Skipping configuration.\n");
+
+		/*
+		 * Set the PLL_UPDATE_BYPASS bit to latch the input before continuing.
+		 */
+		regmap_update_bits(regmap, pll->offset + PLL_MODE(pll),
+				 PLL_UPDATE_BYPASS,
+				 PLL_UPDATE_BYPASS);
+
 		return 0;
 	}
 
@@ -1405,6 +1413,9 @@ static int clk_trion_pll_prepare(struct clk_hw *hw)
 	/* Return early if calibration is not needed. */
 	regmap_read(pll->clkr.regmap, PLL_STATUS(pll), &regval);
 	if (regval & TRION_PCAL_DONE)
+		return ret;
+
+	if (clk_trion_pll_is_enabled(hw))
 		return ret;
 
 	ret = clk_trion_pll_enable(hw);
