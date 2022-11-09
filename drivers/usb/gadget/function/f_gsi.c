@@ -648,6 +648,21 @@ static int ipa_connect_channels(struct gsi_data_port *d_port)
 			gsi_channel_info.depcmd_hi_addr;
 	}
 
+	/*
+	 * Set 'is_sw_path' flag to true for functions using normal EPs so that
+	 * IPA can ignore the dummy address for GEVENTCOUNT register.
+	 */
+	in_params->is_sw_path = false;
+
+	if (!d_port->in_request.ep_intr_num)
+		in_params->is_sw_path = true;
+
+	if (d_port->out_ep) {
+		out_params->is_sw_path = false;
+		if (!d_port->out_request.ep_intr_num)
+			out_params->is_sw_path = true;
+	}
+
 	/* Populate connection params */
 	conn_params->max_pkt_size =
 		(cdev->gadget->speed >= USB_SPEED_SUPER) ?
