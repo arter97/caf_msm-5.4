@@ -133,152 +133,121 @@ int hh_rm_unregister_notifier(struct notifier_block *nb)
 }
 EXPORT_SYMBOL(hh_rm_unregister_notifier);
 
-static struct hh_rm_connection *
-hh_rm_wait_for_notif_fragments(void *recv_buff, size_t recv_buff_size)
+static int hh_rm_process_notif(void *msg, size_t msg_size)
 {
-	struct hh_rm_rpc_hdr *hdr = recv_buff;
+	struct hh_rm_rpc_hdr *hdr = msg;
 	struct hh_rm_connection *connection;
+	u32 notification;
 	size_t payload_size;
+	void *payload;
 	int ret = 0;
-
-	connection = hh_rm_alloc_connection(hdr->msg_id);
-	if (IS_ERR_OR_NULL(connection))
-		return connection;
-
-	payload_size = recv_buff_size - sizeof(*hdr);
-	curr_connection = connection;
-
-	ret = hh_rm_init_connection_buff(connection, recv_buff,
-					sizeof(*hdr), payload_size);
-	if (ret < 0)
-		goto out;
-
-	if (wait_for_completion_interruptible(&connection->seq_done)) {
-		ret = -ERESTARTSYS;
-		goto out;
-	}
-
-	return connection;
-
-out:
-	kfree(connection);
-	return ERR_PTR(ret);
-}
-
-static int hh_rm_process_notif(void *recv_buff, size_t recv_buff_size)
-{
-	struct hh_rm_connection *connection = NULL;
-	struct hh_rm_rpc_hdr *hdr = recv_buff;
-	u32 notification = hdr->msg_id;
-	void *payload = NULL;
-	int ret = 0;
-
-	pr_debug("Notification received from RM-VM: %x\n", notification);
 
 	if (curr_connection) {
 		pr_err("Received new notification from RM-VM before completing last connection\n");
 		return -EINVAL;
 	}
 
-	if (recv_buff_size > sizeof(*hdr))
-		payload = recv_buff + sizeof(*hdr);
+	connection = hh_rm_alloc_connection(hdr->msg_id);
+	if (!connection)
+		return -EINVAL;
 
-	/* If the notification payload is split-up into
-	 * fragments, wait until all them arrive.
-	 */
-	if (hdr->fragments) {
-		connection = hh_rm_wait_for_notif_fragments(recv_buff,
-								recv_buff_size);
-		if (IS_ERR_OR_NULL(connection))
-			return PTR_ERR(connection);
-
-		/* In the case of fragments, the complete payload
-		 * is contained under connection->recv_buff
-		 */
-		payload = connection->recv_buff;
-		recv_buff_size = connection->recv_buff_size;
+	if (hh_rm_init_connection_buff(connection, msg, sizeof(*hdr), msg_size - sizeof(*hdr))) {
+		kfree(connection);
+		return -EINVAL;
 	}
+
+	if (hdr->fragments)
+		return PTR_ERR(connection);
+
+	payload = connection->recv_buff;
+	payload_size = connection->recv_buff_size;
+	notification = connection->msg_id;
+	pr_debug("Notification received from RM-VM: %x\n", notification);
 
 	switch (notification) {
 	case HH_RM_NOTIF_VM_STATUS:
-		if (recv_buff_size != sizeof(*hdr) +
+		if (payload_size !=
 			sizeof(struct hh_rm_notif_vm_status_payload)) {
 			pr_err("%s: Invalid size for VM_STATUS notif: %u\n",
-				__func__, recv_buff_size - sizeof(*hdr));
+				__func__, payload_size);
 			ret = -EINVAL;
 			goto err;
 		}
 		break;
 	case HH_RM_NOTIF_VM_IRQ_LENT:
-		if (recv_buff_size != sizeof(*hdr) +
+		if (payload_size !=
 			sizeof(struct hh_rm_notif_vm_irq_lent_payload)) {
 			pr_err("%s: Invalid size for VM_IRQ_LENT notif: %u\n",
-				__func__, recv_buff_size - sizeof(*hdr));
+				__func__, payload_size);
 			ret = -EINVAL;
 			goto err;
 		}
 		break;
 	case HH_RM_NOTIF_VM_IRQ_RELEASED:
-		if (recv_buff_size != sizeof(*hdr) +
+		if (payload_size !=
 			sizeof(struct hh_rm_notif_vm_irq_released_payload)) {
 			pr_err("%s: Invalid size for VM_IRQ_REL notif: %u\n",
-				__func__, recv_buff_size - sizeof(*hdr));
+				__func__, payload_size);
 			ret = -EINVAL;
 			goto err;
 		}
 		break;
 	case HH_RM_NOTIF_VM_IRQ_ACCEPTED:
-		if (recv_buff_size != sizeof(*hdr) +
+		if (payload_size !=
 			sizeof(struct hh_rm_notif_vm_irq_accepted_payload)) {
 			pr_err("%s: Invalid size for VM_IRQ_ACCEPTED notif: %u\n",
-				__func__, recv_buff_size - sizeof(*hdr));
+				__func__, payload_size);
 			ret = -EINVAL;
 			goto err;
 		}
 		break;
 	case HH_RM_NOTIF_MEM_SHARED:
-		if (recv_buff_size < sizeof(*hdr) +
+		if (payload_size <
 			sizeof(struct hh_rm_notif_mem_shared_payload)) {
 			pr_err("%s: Invalid size for MEM_SHARED notif: %u\n",
-				__func__, recv_buff_size - sizeof(*hdr));
+				__func__, payload_size);
 			ret = -EINVAL;
 			goto err;
 		}
 		break;
 	case HH_RM_NOTIF_MEM_RELEASED:
-		if (recv_buff_size != sizeof(*hdr) +
+		if (payload_size !=
 			sizeof(struct hh_rm_notif_mem_released_payload)) {
 			pr_err("%s: Invalid size for MEM_RELEASED notif: %u\n",
-				__func__, recv_buff_size - sizeof(*hdr));
+				__func__, payload_size);
 			ret = -EINVAL;
 			goto err;
 		}
 		break;
 	case HH_RM_NOTIF_MEM_ACCEPTED:
-		if (recv_buff_size != sizeof(*hdr) +
+		if (payload_size !=
 			sizeof(struct hh_rm_notif_mem_accepted_payload)) {
 			pr_err("%s: Invalid size for MEM_ACCEPTED notif: %u\n",
-				__func__, recv_buff_size - sizeof(*hdr));
+				__func__, payload_size);
 			ret = -EINVAL;
 			goto err;
 		}
 		break;
 	case HH_RM_NOTIF_VM_CONSOLE_CHARS:
-		if (recv_buff_size < sizeof(*hdr) +
+		if (payload_size >=
 			sizeof(struct hh_rm_notif_vm_console_chars)) {
 			struct hh_rm_notif_vm_console_chars *console_chars;
 			u16 num_bytes;
 
-			console_chars = recv_buff + sizeof(*hdr);
+			console_chars = payload;
 			num_bytes = console_chars->num_bytes;
 
-			if (sizeof(*hdr) + sizeof(*console_chars) + num_bytes !=
-				recv_buff_size) {
+			if (sizeof(*console_chars) + num_bytes !=
+				payload_size) {
 				pr_err("%s: Invalid size for VM_CONSOLE_CHARS notify %u\n",
-				       __func__, recv_buff_size - sizeof(*hdr));
+				       __func__, payload_size);
 				ret = -EINVAL;
 				goto err;
 			}
+		} else {
+			pr_err("%s: Invalid size for VM_CONSOLE_CHARS notify %u\n",
+				__func__, payload_size);
+			goto err;
 		}
 		break;
 	default:
@@ -292,7 +261,7 @@ static int hh_rm_process_notif(void *recv_buff, size_t recv_buff_size)
 
 err:
 	if (connection) {
-		kfree(connection->recv_buff);
+		kfree(payload);
 		kfree(connection);
 	}
 
