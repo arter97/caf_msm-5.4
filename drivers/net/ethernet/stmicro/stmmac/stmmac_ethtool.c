@@ -681,6 +681,10 @@ static void stmmac_get_strings(struct net_device *dev, u32 stringset, u8 *data)
 static void stmmac_get_wol(struct net_device *dev, struct ethtool_wolinfo *wol)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
+	struct qcom_ethqos *ethqos = priv->plat->bsp_priv;
+
+	if (ethqos->phy_state == PHY_IS_OFF)
+		return;
 
 	if (!priv->phydev) {
 		pr_err("%s: %s: PHY is not registered\n",

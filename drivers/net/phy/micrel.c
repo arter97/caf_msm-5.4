@@ -1093,6 +1093,8 @@ static void ksz9031_get_wol(struct phy_device *phydev,
 	wol->wolopts = 0;
 
 	reg_value = phy_read_mmd(phydev, 0x2, MII_KSZPHY_WOL_CTRL_REG);
+	if (reg_value == 0xFFFF)
+		return;
 	if (reg_value & MII_KSZPHY_WOL_CTRL_PME_N2)
 		wol->wolopts |= WAKE_MAGIC;
 }
