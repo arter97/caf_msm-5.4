@@ -526,7 +526,6 @@ static int fastrpc_release(struct inode *inode, struct file *file)
 	struct fastrpc_file *fl = (struct fastrpc_file *)file->private_data;
 
 	if (fl) {
-		debugfs_remove(fl->debugfs_file);
 		fastrpc_file_free(fl);
 		file->private_data = NULL;
 	}
