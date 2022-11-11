@@ -196,30 +196,42 @@ void ethqos_disable_regulators(struct qcom_ethqos *ethqos)
 void ethqos_reset_phy_enable_interrupt(struct qcom_ethqos *ethqos)
 {
 	struct stmmac_priv *priv = qcom_ethqos_get_priv(ethqos);
-	struct phy_device *phydev = priv->dev->phydev;
 
 	/* reset the phy so that it's ready */
 	if (priv->mii) {
 		ETHQOSERR("do mdio reset\n");
 		stmmac_mdio_reset(priv->mii);
 	}
-	/*Enable phy interrupt*/
-	if (phy_intr_en && phydev) {
-		ETHQOSDBG("PHY interrupt Mode enabled\n");
-		phydev->irq = PHY_IGNORE_INTERRUPT;
-		phydev->interrupts =  PHY_INTERRUPT_ENABLED;
 
-		if (phydev->drv->config_intr &&
-		    !phydev->drv->config_intr(phydev)) {
-			ETHQOSERR("config_phy_intr successful after phy on\n");
-		}
-		qcom_ethqos_request_phy_wol(priv->plat);
-	} else if (!phy_intr_en) {
-		phydev->irq = PHY_POLL;
-		ETHQOSDBG("PHY Polling Mode enabled\n");
-	} else {
-		ETHQOSERR("phydev is null , intr value=%d\n", phy_intr_en);
+	if (priv->plat->phy_intr_en_extn_stm && priv->plat->phy_intr_en) {
+		priv->phydev->irq = PHY_IGNORE_INTERRUPT;
+		priv->phydev->interrupts = PHY_INTERRUPT_ENABLED;
 	}
+
+	phylink_connect_phy(priv->phylink, priv->phydev);
+
+	if (priv->plat->phy_intr_en_extn_stm && priv->plat->phy_intr_en) {
+		if (priv->phydev->drv->ack_interrupt &&
+		    !priv->phydev->drv->ack_interrupt(priv->phydev)) {
+			pr_info(" qcom-ethqos: %s ack_interrupt successful aftre connect\n",
+				__func__);
+		} else {
+			pr_err(" qcom-ethqos: %s ack_interrupt failed aftre connect\n",
+			       __func__);
+		}
+
+		if (priv->phydev->drv &&
+		    priv->phydev->drv->config_intr &&
+		    !priv->phydev->drv->config_intr(priv->phydev)) {
+			pr_err(" qcom-ethqos: %s config_phy_intr successful aftre connect\n",
+			       __func__);
+			priv->plat->request_phy_wol(priv->plat);
+		}
+	} else {
+		pr_info("stmmac phy polling mode\n");
+		priv->phydev->irq = PHY_POLL;
+	}
+
 }
 
 int ethqos_phy_power_on(struct qcom_ethqos *ethqos)

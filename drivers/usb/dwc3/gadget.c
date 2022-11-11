@@ -2557,6 +2557,8 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 	}
 	spin_unlock_irqrestore(&dwc->lock, flags);
 
+	dwc3_notify_event(dwc, DWC3_CONTROLLER_PULLUP_ENTER, is_on);
+
 	pm_runtime_get_sync(dwc->dev);
 	dbg_event(0xFF, "Pullup gsync",
 		atomic_read(&dwc->dev->power.usage_count));
@@ -2595,8 +2597,6 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 	if (is_on)
 		dwc3_device_core_soft_reset(dwc);
 
-	dwc3_notify_event(dwc, DWC3_CONTROLLER_PULLUP, is_on);
-
 	spin_lock_irqsave(&dwc->lock, flags);
 	if (dwc->ep0state != EP0_SETUP_PHASE)
 		dbg_event(0xFF, "EP0 is not in SETUP phase\n", dwc->ep0state);
@@ -2628,6 +2628,8 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 	pm_runtime_put_autosuspend(dwc->dev);
 	dbg_event(0xFF, "Pullup put",
 		atomic_read(&dwc->dev->power.usage_count));
+	dwc3_notify_event(dwc, DWC3_CONTROLLER_PULLUP_EXIT, is_on);
+
 	return 0;
 }
 
@@ -3012,8 +3014,8 @@ static const struct usb_gadget_ops dwc3_gadget_ops = {
 
 /* -------------------------------------------------------------------------- */
 
-#define NUM_GSI_OUT_EPS	1
-#define NUM_GSI_IN_EPS	2
+#define NUM_GSI_OUT_EPS(dwc)	(dwc->num_gsi_eps / 2)
+#define NUM_GSI_IN_EPS(dwc)	((dwc->num_gsi_eps + 1) / 2)
 
 static int dwc3_gadget_init_control_endpoint(struct dwc3_ep *dep)
 {
@@ -3119,18 +3121,18 @@ static int dwc3_gadget_init_endpoints(struct dwc3 *dwc, u8 total)
 		dep = dwc->eps[epnum];
 		/* Reserve EPs at the end for GSI */
 		if (!dep->direction && num >
-				out_count - NUM_GSI_OUT_EPS - 1) {
+				out_count - NUM_GSI_OUT_EPS(dwc) - 1) {
 			/* Allocation of TRBs are handled by GSI EP ops. */
 			dwc3_free_trb_pool(dep);
-			idx = num - (out_count - NUM_GSI_OUT_EPS - 1);
+			idx = num - (out_count - NUM_GSI_OUT_EPS(dwc) - 1);
 			snprintf(dep->name, sizeof(dep->name), "gsi-epout%d",
 					idx);
 			dep->gsi = true;
 		} else if (dep->direction && num >
-				in_count - NUM_GSI_IN_EPS - 1) {
+				in_count - NUM_GSI_IN_EPS(dwc) - 1) {
 			/* Allocation of TRBs are handled by GSI EP ops. */
 			dwc3_free_trb_pool(dep);
-			idx = num - (in_count - NUM_GSI_IN_EPS - 1);
+			idx = num - (in_count - NUM_GSI_IN_EPS(dwc) - 1);
 			snprintf(dep->name, sizeof(dep->name), "gsi-epin%d",
 					idx);
 			dep->gsi = true;
@@ -3281,6 +3283,7 @@ static int dwc3_gadget_ep_cleanup_completed_request(struct dwc3_ep *dep,
 		struct dwc3_request *req, int status)
 {
 	struct dwc3 *dwc = dep->dwc;
+	int request_status;
 	int ret;
 
 	/*
@@ -3320,7 +3323,35 @@ static int dwc3_gadget_ep_cleanup_completed_request(struct dwc3_ep *dep,
 		req->needs_extra_trb = false;
 	}
 
-	dwc3_gadget_giveback(dep, req, status);
+	/*
+	 * The event status only reflects the status of the TRB with IOC set.
+	 * For the requests that don't set interrupt on completion, the driver
+	 * needs to check and return the status of the completed TRBs associated
+	 * with the request. Use the status of the last TRB of the request.
+	 */
+	if (req->request.no_interrupt) {
+		struct dwc3_trb *trb;
+
+		trb = dwc3_ep_prev_trb(dep, dep->trb_dequeue);
+		switch (DWC3_TRB_SIZE_TRBSTS(trb->size)) {
+		case DWC3_TRBSTS_MISSED_ISOC:
+			/* Isoc endpoint only */
+			request_status = -EXDEV;
+			break;
+		case DWC3_TRB_STS_XFER_IN_PROG:
+			/* Applicable when End Transfer with ForceRM=0 */
+		case DWC3_TRBSTS_SETUP_PENDING:
+			/* Control endpoint only */
+		case DWC3_TRBSTS_OK:
+		default:
+			request_status = 0;
+			break;
+		}
+	} else {
+		request_status = status;
+	}
+
+	dwc3_gadget_giveback(dep, req, request_status);
 
 out:
 	return ret;
