@@ -127,15 +127,15 @@ enum HGSL_DBQ_IBDESC_WAIT_TYPE {
 };
 
 /* DBQ structure
- *   IBs storage | reserved | w.idx/r.idx | ctxt.info | hard reset |
- * 0             1K         1.5K          2K          3.5K         |
- * |             |          |             |           |            |
+ *   IBs storage | reserved | w.idx/r.idx | ctxt.info | hard reset | batch ibs |
+ * 0             1K         1.5K          2K          5.5K         6K          |
+ * |             |          |             |           |            |           |
  */
 
 #define HGSL_DBQ_HFI_Q_INDEX_BASE_OFFSET_IN_DWORD            (1536 >> 2)
 #define HGSL_DBQ_CONTEXT_INFO_BASE_OFFSET_IN_DWORD           (2048 >> 2)
-#define HGSL_DBQ_COOPERATIVE_RESET_INFO_BASE_OFFSET_IN_DWORD (3584 >> 2)
-#define HGSL_DBQ_IBDESC_BASE_OFFSET_IN_DWORD                 (4096 >> 2)
+#define HGSL_DBQ_COOPERATIVE_RESET_INFO_BASE_OFFSET_IN_DWORD (5632 >> 2)
+#define HGSL_DBQ_IBDESC_BASE_OFFSET_IN_DWORD                 (6144 >> 2)
 
 
 static inline bool _timestamp_retired(struct hgsl_context *ctxt,

@@ -2557,6 +2557,8 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 	}
 	spin_unlock_irqrestore(&dwc->lock, flags);
 
+	dwc3_notify_event(dwc, DWC3_CONTROLLER_PULLUP_ENTER, is_on);
+
 	pm_runtime_get_sync(dwc->dev);
 	dbg_event(0xFF, "Pullup gsync",
 		atomic_read(&dwc->dev->power.usage_count));
@@ -2595,8 +2597,6 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 	if (is_on)
 		dwc3_device_core_soft_reset(dwc);
 
-	dwc3_notify_event(dwc, DWC3_CONTROLLER_PULLUP, is_on);
-
 	spin_lock_irqsave(&dwc->lock, flags);
 	if (dwc->ep0state != EP0_SETUP_PHASE)
 		dbg_event(0xFF, "EP0 is not in SETUP phase\n", dwc->ep0state);
@@ -2628,6 +2628,8 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 	pm_runtime_put_autosuspend(dwc->dev);
 	dbg_event(0xFF, "Pullup put",
 		atomic_read(&dwc->dev->power.usage_count));
+	dwc3_notify_event(dwc, DWC3_CONTROLLER_PULLUP_EXIT, is_on);
+
 	return 0;
 }
 
