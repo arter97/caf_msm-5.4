@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/compat.h>
 #include <linux/eventfd.h>
@@ -350,6 +351,7 @@ static void vhost_hab_stop(struct vhost_hab_dev *vh_dev)
 		vhost_hab_stop_vq(vh_dev,
 				vh_pchan->vqs + VHOST_HAB_PCHAN_RX_VQ);
 	}
+	vh_dev->started = 0;
 }
 
 static void vhost_hab_flush_vq(struct vhost_hab_dev *vh_dev,
@@ -522,6 +524,23 @@ static long vhost_hab_reset_owner(struct vhost_hab_dev *vh_dev)
 {
 	long err;
 	struct vhost_umem *umem;
+	struct vhost_hab_pchannel *vh_pchan;
+	int vmid = HABCFG_VMID_INVALID;
+
+	vh_pchan = list_first_entry(&vh_dev->vh_pchan_list,
+				struct vhost_hab_pchannel,
+				node);
+
+	if (vh_pchan)
+		vmid = vh_pchan->pchan->dom_id;
+
+	if (HABCFG_VMID_INVALID != vmid)
+		hab_vchans_empty_wait(vmid);
+	else {
+		pr_err("hab pchannel dom_id is invalid\n");
+		err = -EINVAL;
+		goto out;
+	}
 
 	mutex_lock(&vh_dev->dev.mutex);
 	err = vhost_dev_check_owner(&vh_dev->dev);
@@ -538,6 +557,7 @@ static long vhost_hab_reset_owner(struct vhost_hab_dev *vh_dev)
 	vhost_dev_reset_owner(&vh_dev->dev, umem);
 done:
 	mutex_unlock(&vh_dev->dev.mutex);
+out:
 	return err;
 }
 

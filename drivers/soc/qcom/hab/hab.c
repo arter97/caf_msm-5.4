@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include "hab.h"
 
@@ -475,7 +476,7 @@ struct virtual_channel *backend_listen(struct uhab_context *ctx,
 		ret = hab_open_listen(ctx, dev, &request, &recv_request,
 			HAB_HS_TIMEOUT);
 		hab_open_pending_exit(ctx, pchan, &pending_open);
-		if (ret && recv_request &&
+		if (!ret && recv_request &&
 			recv_request->type == HAB_PAYLOAD_TYPE_INIT_CANCEL) {
 			pr_err("listen cancelled vcid %x subid %d openid %d ret %d\n",
 				request.xdata.vchan_id, request.xdata.sub_id,
