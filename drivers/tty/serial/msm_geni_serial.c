@@ -3533,7 +3533,8 @@ static int msm_geni_serial_reconfigure_baud_rate(struct uart_port *uport)
 static int msm_geni_serial_config_baud_rate(struct uart_port *uport,
 					    struct ktermios *termios, unsigned int baud)
 {
-	int clk_div, ret;
+	int ret;
+	unsigned int clk_div;
 	unsigned long ser_clk_cfg = 0;
 	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
 	unsigned long clk_rate;
@@ -3564,7 +3565,7 @@ static int msm_geni_serial_config_baud_rate(struct uart_port *uport,
 	}
 
 	clk_div = DIV_ROUND_UP(clk_rate, desired_rate);
-	if (clk_div <= 0)
+	if (!clk_div)
 		return -EINVAL;
 
 	clk_freq_diff =  (desired_rate - (clk_rate / clk_div));
