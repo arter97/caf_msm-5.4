@@ -4247,6 +4247,9 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 exit_geni_serial_probe:
 	IPC_LOG_MSG(dev_port->ipc_log_misc, "%s: ret:%d\n",
 		    __func__, ret);
+	if (ret == -EPROBE_DEFER)
+		uart_line_id--;
+
 	return ret;
 }
 
