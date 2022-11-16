@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
- */
+*/
 
 #ifndef	_DWMAC_QCOM_IPA_H
 #define	_DWMAC_QCOM_IPA_H
@@ -710,7 +710,6 @@ struct ethqos_prv_ipa_data {
 
 	struct dentry *debugfs_ipa_stats;
 	struct dentry *debugfs_dma_stats;
-	struct dentry *debugfs_suspend_ipa_offload;
 	struct ethqos_ipa_stats ipa_stats[IPA_QUEUE_MAX];
 
 	struct qcom_ethqos *ethqos;
