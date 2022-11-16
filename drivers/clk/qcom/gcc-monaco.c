@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk-provider.h>
@@ -3200,6 +3201,9 @@ static int gcc_monaco_probe(struct platform_device *pdev)
 				       ARRAY_SIZE(gcc_dfs_clocks));
 	if (ret)
 		return ret;
+
+	/* Configure WAKEUP cycle for gcc_gpu_memnoc_gfx_clk */
+	regmap_update_bits(regmap, 0x3600c, 0xF00, 0xF00);
 
 	ret = register_qcom_clks_pm(pdev, false, &gcc_monaco_desc);
 	if (ret)
