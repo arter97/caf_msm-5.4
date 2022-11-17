@@ -421,6 +421,7 @@ static struct cnss_misc_reg syspm_reg_access_seq[] = {
 #define SYSPM_REG_SIZE ARRAY_SIZE(syspm_reg_access_seq)
 
 static bool cnss_should_suspend_pwroff(struct pci_dev *pci_dev);
+static void cnss_pci_suspend_pwroff(struct pci_dev *pci_dev);
 
 #if IS_ENABLED(CONFIG_PCI_MSM)
 /**
@@ -3439,7 +3440,7 @@ static int cnss_pci_suspend(struct device *dev)
 	if (pci_priv->mhi_state == CNSS_MHI_INIT) {
 		bool suspend = cnss_should_suspend_pwroff(pci_dev);
 
-		/* Do pice link susped and power off in the LPM case
+		/* Do PCI link suspend and power off in the LPM case
 		 * if chipset didn't do that after pcie enumeration.
 		 */
 		if (!suspend) {
@@ -6025,11 +6026,7 @@ static int cnss_try_suspend(struct cnss_plat_data *plat_priv)
 						    true,
 						    false);
 
-			ret = cnss_suspend_pci_link(pci_priv);
-			if (ret)
-				cnss_pr_err("Failed to suspend PCI link, err = %d\n",
-					    ret);
-			cnss_power_off_device(plat_priv);
+			cnss_pci_suspend_pwroff(pci_dev);
 			break;
 		default:
 			cnss_pr_err("Unknown PCI device found: 0x%x\n",
