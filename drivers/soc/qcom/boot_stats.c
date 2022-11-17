@@ -348,7 +348,6 @@ static void _create_boot_marker(const char *name,
 	mutex_lock(&boot_marker_list.lock);
 #endif
 	list_add_tail(&(new_boot_marker->list), &(boot_marker_list.list));
-	spin_unlock_irqrestore(&boot_marker_list.slock, flags);
 #ifdef CONFIG_SMP
 	spin_unlock_irqrestore(&boot_marker_list.slock, flags);
 #else
