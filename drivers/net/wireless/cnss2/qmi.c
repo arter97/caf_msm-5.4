@@ -474,6 +474,23 @@ int cnss_wlfw_tgt_cap_send_sync(struct cnss_plat_data *plat_priv)
 		plat_priv->board_info.board_id = resp->board_info.board_id;
 	else
 		plat_priv->board_info.board_id = 0xFF;
+
+	if (plat_priv->wlan2_antenna) {
+		cnss_pr_dbg("wlan2_antenna (%s) board_info.board_id 0x%x before update",
+			    plat_priv->wlan2_antenna, plat_priv->board_info.board_id);
+		/* "0x00", board_id = 0x8120, reuse bdwlan81.e10
+		 * "0x01", board_id = 0x8120, keep using bdwlan81.e20
+		 * "0x02", board_id = 0x8110, keep using bdwlan81.e10
+		 */
+
+		if (memcmp(plat_priv->wlan2_antenna, WLAN2_ANTENNA_NOT_CONNECTED,
+			   strlen(WLAN2_ANTENNA_NOT_CONNECTED)) == 0 &&
+		    plat_priv->board_info.board_id == 0x8120) {
+			cnss_pr_dbg("update board id");
+			plat_priv->board_info.board_id = 0x8110;
+		}
+	}
+
 	if (resp->soc_info_valid)
 		plat_priv->soc_info.soc_id = resp->soc_info.soc_id;
 	if (resp->fw_version_info_valid) {

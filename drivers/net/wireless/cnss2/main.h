@@ -60,6 +60,13 @@
 				CNSS_EVENT_UNINTERRUPTIBLE)
 #define CNSS_EVENT_SYNC_UNKILLABLE (CNSS_EVENT_SYNC | CNSS_EVENT_UNKILLABLE)
 
+/* single chip 1x1 2.4GHz + 2x2 5GHz */
+#define WLAN2_ANTENNA_NOT_CONNECTED             "0x00"
+/* single chip 2x2 2.4GHz */
+#define WLAN2_ANTENNA_CONNECTED                 "0x01"
+/* For Premium+ and Premium++ dual chipset case */
+#define WLAN2_ANTENNA_DUAL_CONNECTED            "0x02"
+
 enum cnss_dev_bus_type {
 	CNSS_BUS_NONE = -1,
 	CNSS_BUS_PCI,
@@ -520,6 +527,7 @@ struct cnss_plat_data {
 	int qrtr_node_id;
 	unsigned int wlfw_service_instance_id;
 	const char *pld_bus_ops_name;
+	const char * wlan2_antenna;
 };
 
 #ifdef CONFIG_ARCH_QCOM
