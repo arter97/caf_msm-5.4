@@ -692,7 +692,7 @@ try_again:
 	if (!powered_resume) {
 		err = mmc_send_io_op_cond(host, ocr, &rocr);
 		if (err)
-			goto err;
+			return err;
 	}
 
 	/*
@@ -701,17 +701,15 @@ try_again:
 	if (mmc_host_is_spi(host)) {
 		err = mmc_spi_set_crc(host, use_spi_crc);
 		if (err)
-			goto err;
+			return err;
 	}
 
 	/*
 	 * Allocate card structure.
 	 */
 	card = mmc_alloc_card(host, NULL);
-	if (IS_ERR(card)) {
-		err = PTR_ERR(card);
-		goto err;
-	}
+	if (IS_ERR(card))
+		return PTR_ERR(card);
 
 	if ((rocr & R4_MEMORY_PRESENT) &&
 	    mmc_sd_get_cid(host, ocr & rocr, card->raw_cid, NULL) == 0) {
@@ -719,15 +717,15 @@ try_again:
 
 		if (oldcard && (oldcard->type != MMC_TYPE_SD_COMBO ||
 		    memcmp(card->raw_cid, oldcard->raw_cid, sizeof(card->raw_cid)) != 0)) {
-			mmc_remove_card(card);
-			return -ENOENT;
+			err = -ENOENT;
+			goto mismatch;
 		}
 	} else {
 		card->type = MMC_TYPE_SDIO;
 
 		if (oldcard && oldcard->type != MMC_TYPE_SDIO) {
-			mmc_remove_card(card);
-			return -ENOENT;
+			err = -ENOENT;
+			goto mismatch;
 		}
 	}
 
@@ -788,7 +786,7 @@ try_again:
 	if (!oldcard && card->type == MMC_TYPE_SD_COMBO) {
 		err = mmc_sd_get_csd(host, card);
 		if (err)
-			return err;
+			goto remove;
 
 		mmc_decode_cid(card);
 	}
@@ -815,7 +813,12 @@ try_again:
 			mmc_set_timing(card->host, MMC_TIMING_SD_HS);
 		}
 
-		goto finish;
+		if (oldcard)
+			mmc_remove_card(card);
+		else
+			host->card = card;
+
+		return 0;
 	}
 
 #ifdef CONFIG_MMC_EMBEDDED_SDIO
@@ -849,11 +852,14 @@ try_again:
 #endif
 
 	if (oldcard) {
-		int same = (card->cis.vendor == oldcard->cis.vendor &&
-			    card->cis.device == oldcard->cis.device);
-		mmc_remove_card(card);
-		if (!same)
-			return -ENOENT;
+		if (card->cis.vendor == oldcard->cis.vendor &&
+		card->cis.device == oldcard->cis.device) {
+			mmc_remove_card(card);
+			card = oldcard;
+		} else {
+			err = -ENOENT;
+			goto mismatch;
+		}
 
 		card = oldcard;
 	}
@@ -913,16 +919,16 @@ try_again:
 		} else if (err)
 			goto remove;
 	}
-finish:
-	if (!oldcard)
-		host->card = card;
+
+	host->card = card;
 	return 0;
 
-remove:
-	if (!oldcard)
-		mmc_remove_card(card);
+mismatch:
+	pr_debug("%s: Perhaps the card was replaced\n", mmc_hostname(host));
 
-err:
+remove:
+	if (oldcard != card)
+		mmc_remove_card(card);
 	return err;
 }
 
