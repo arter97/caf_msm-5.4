@@ -735,9 +735,15 @@ out:
 }
 
 extern int __init dm_init_init(char *blkname);
+extern bool skip_prepare_namespace(void);
 
 void __init early_prepare_namespace(char *name)
 {
+	if (skip_prepare_namespace()) {
+		if (strstr(saved_root_name, "dm-0"))
+			dm_init_init(name);
+		return;
+	}
 
 	if (strstr(saved_root_name, name))
 		prepare_namespace();

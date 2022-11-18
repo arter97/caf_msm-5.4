@@ -1159,6 +1159,12 @@ static int __ref kernel_init(void *unused)
 	place_marker("M - DRIVER Kernel Boot Done");
 #endif
 
+	cpumask_setall(&cpumask);
+	if (sched_setaffinity(0, &cpumask))
+		pr_err("sched_setaffinity in %s failes\n", __func__);
+	if (sched_setscheduler(current, SCHED_NORMAL, &param))
+		pr_err("sched_setscheduler in %s failes\n", __func__);
+
 	if (ramdisk_execute_command) {
 		ret = run_init_process(ramdisk_execute_command);
 		if (!ret)
@@ -1167,11 +1173,6 @@ static int __ref kernel_init(void *unused)
 		       ramdisk_execute_command, ret);
 	}
 
-	cpumask_setall(&cpumask);
-	if (sched_setaffinity(0, &cpumask))
-		pr_err("sched_setaffinity in %s failes\n", __func__);
-	if (sched_setscheduler(current, SCHED_NORMAL, &param))
-		pr_err("sched_setscheduler in %s failes\n", __func__);
 	/* Move init over to a non-isolated CPU */
 	if (set_cpus_allowed_ptr(current, housekeeping_cpumask(HK_FLAG_DOMAIN)) < 0)
 		BUG();
@@ -1264,4 +1265,15 @@ static noinline void __init kernel_init_freeable(void)
 	 */
 
 	integrity_load_keys();
+}
+
+bool skip_prepare_namespace(void)
+{
+	if (!ramdisk_execute_command)
+		ramdisk_execute_command = "/init";
+
+	if (ksys_access((const char __user *)
+		ramdisk_execute_command, 0) != 0)
+		return false;
+	return true;
 }

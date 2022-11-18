@@ -562,6 +562,6 @@ static void __exit brd_exit(void)
 	pr_info("brd: module unloaded\n");
 }
 
-module_init(brd_init);
+subsys_initcall(brd_init);
 module_exit(brd_exit);
 
