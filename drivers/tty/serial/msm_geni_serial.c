@@ -3206,10 +3206,6 @@ static int msm_geni_serial_startup(struct uart_port *uport)
 	 */
 	mb();
 
-	/* Start rx for hs-uart without runtime pm support.*/
-	if (msm_port->pm_auto_suspend_disable)
-		start_rx_sequencer(&msm_port->uport);
-
 	/* Console usecase requires irq to be in enable state after early
 	 * console switch from probe to handle RX data. Hence enable IRQ
 	 * from starup and disable it form shutdown APIs for cosnole case.
