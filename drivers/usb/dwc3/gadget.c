@@ -228,6 +228,11 @@ int dwc3_gadget_resize_tx_fifos(struct dwc3 *dwc, struct dwc3_ep *dep)
 			&& dwc3_is_usb31(dwc))
 		mult = 6;
 
+	if ((dep->endpoint.maxburst > 6) &&
+			usb_endpoint_xfer_isoc(dep->endpoint.desc))
+		mult = 6;
+
+
 	tmp = ((max_packet + mdwidth) * mult) + mdwidth;
 	fifo_size = DIV_ROUND_UP(tmp, mdwidth);
 	dep->fifo_depth = fifo_size;
@@ -1657,6 +1662,7 @@ static int __dwc3_gadget_start_isoc(struct dwc3_ep *dep)
 	struct dwc3 *dwc = dep->dwc;
 	int ret;
 	int i;
+	u16 wraparound_bits, uf;
 
 	if (list_empty(&dep->pending_list)) {
 		dep->flags |= DWC3_EP_PENDING_REQUEST;
@@ -1673,13 +1679,36 @@ static int __dwc3_gadget_start_isoc(struct dwc3_ep *dep)
 			return dwc3_gadget_start_isoc_quirk(dep);
 	}
 
-	for (i = 0; i < DWC3_ISOC_MAX_RETRIES; i++) {
-		dep->frame_number = __dwc3_gadget_get_frame(dep->dwc) + 16;
-		dep->frame_number = DWC3_ALIGN_FRAME(dep, i + 1);
+	wraparound_bits = dep->frame_number & DWC3_FRAME_WRAP_AROUND_MASK;
+	uf = dep->frame_number & ~DWC3_FRAME_WRAP_AROUND_MASK;
 
-		ret = __dwc3_gadget_kick_transfer(dep);
-		if (ret != -EAGAIN)
-			break;
+	/* if frame wrapped-around update wrap-around bits to reflect that */
+	if (__dwc3_gadget_get_frame(dep->dwc) < uf)
+		wraparound_bits += BIT(14);
+
+	uf = __dwc3_gadget_get_frame(dep->dwc) + max_t(u32, 16, 2 * dep->interval);
+
+	/* align uf to ep interval */
+	dep->frame_number = (wraparound_bits | uf) & ~(dep->interval - 1);
+
+	ret = __dwc3_gadget_kick_transfer(dep);
+
+	if (ret == -EAGAIN) {
+		struct dwc3_gadget_ep_cmd_params params;
+		u32 cmd;
+
+		dwc3_gadget_ep_get_transfer_index(dep);
+		dep->flags |= DWC3_EP_PENDING_REQUEST;
+		cmd = DWC3_DEPCMD_ENDTRANSFER |
+			DWC3_DEPCMD_CMDIOC |
+			DWC3_DEPCMD_PARAM(dep->resource_index);
+
+		dep->resource_index = 0;
+		memset(&params, 0, sizeof(params));
+
+		ret = dwc3_send_gadget_ep_cmd(dep, cmd, &params);
+		if (!ret)
+			dep->flags |= DWC3_EP_END_TRANSFER_PENDING;
 	}
 
 	return ret;
@@ -3382,12 +3411,14 @@ static void dwc3_gadget_endpoint_transfer_in_progress(struct dwc3_ep *dep,
 
 	if (event->status & DEPEVT_STATUS_MISSED_ISOC) {
 		status = -EXDEV;
-
 		dep->missed_isoc_packets++;
 		dbg_event(dep->number, "MISSEDISOC", 0);
+	}
 
-		if (list_empty(&dep->started_list))
-			stop = true;
+	if (usb_endpoint_xfer_isoc(dep->endpoint.desc) &&
+			(list_empty(&dep->started_list))) {
+		stop = true;
+		dbg_event(dep->number, "STOPXFER", dep->frame_number);
 	}
 
 	if (dep->flags & DWC3_EP_END_TRANSFER_PENDING)

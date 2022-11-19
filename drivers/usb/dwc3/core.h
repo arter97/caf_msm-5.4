@@ -181,6 +181,9 @@
 #define DWC31_LCSR_TX_DEEMPH_3(n)	(0xd06c + ((n) * 0x80))
 #define DWC31_TX_DEEMPH_MASK	0x3ffff
 
+/* Frame/Microframe Number Mask */
+#define DWC3_FRAME_WRAP_AROUND_MASK (BIT(14) | BIT(15))
+
 /* Bit fields */
 
 /* Global SoC Bus Configuration Register 1 */
