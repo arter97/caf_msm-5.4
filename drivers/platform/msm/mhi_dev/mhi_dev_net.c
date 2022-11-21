@@ -31,8 +31,8 @@
 #define MHI_NET_DEV_NAME     "mhi_swip%d"
 #define MHI_NET_DEFAULT_MTU   8192
 #define MHI_NET_IPC_PAGES     (100)
-#define MHI_MAX_RX_REQ        (128)
-#define MHI_MAX_TX_REQ        (128)
+#define MHI_MAX_RX_REQ        (4096)
+#define MHI_MAX_TX_REQ        (4096)
 
 enum mhi_dev_net_dbg_lvl {
 	MHI_VERBOSE = 0x1,
@@ -296,6 +296,7 @@ static ssize_t mhi_dev_net_client_read(struct mhi_dev_net_client *mhi_handle)
 		req->len = MHI_NET_DEFAULT_MTU;
 		req->context = skb;
 		req->mode = DMA_ASYNC;
+		req->snd_cmpl = 0;
 		bytes_avail = mhi_dev_read_channel(req);
 
 		if (bytes_avail < 0) {
@@ -712,10 +713,7 @@ int mhi_dev_net_interface_init(void)
 	mhi_net_ipc_log = ipc_log_context_create(MHI_NET_IPC_PAGES,
 						"mhi-net", 0);
 	if (!mhi_net_ipc_log) {
-		mhi_dev_net_log(MHI_DBG,
-				"Failed to create IPC logging for mhi_dev_net\n");
-		kfree(mhi_net_client);
-		return -ENOMEM;
+		pr_err("Failed to create IPC logging for mhi_dev_net\n");
 	}
 	mhi_net_ctxt.client_handle = mhi_net_client;
 
@@ -727,7 +725,8 @@ int mhi_dev_net_interface_init(void)
 
 	/*Process pending packet work queue*/
 	mhi_net_client->pending_pckt_wq =
-		create_singlethread_workqueue("pending_xmit_pckt_wq");
+		alloc_ordered_workqueue("%s", __WQ_LEGACY |
+			WQ_MEM_RECLAIM | WQ_HIGHPRI, "pending_xmit_pckt_wq");
 	INIT_WORK(&mhi_net_client->xmit_work,
 			mhi_dev_net_process_queue_packets);
 

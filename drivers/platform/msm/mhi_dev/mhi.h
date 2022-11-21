@@ -274,8 +274,8 @@ struct mhi_config {
 #define NUM_TR_EVENTS_DEFAULT			128
 #define NUM_CMD_EVENTS_DEFAULT			20
 
-/* Set flush threshold to 80% of event buf size */
-#define MHI_CMPL_EVT_FLUSH_THRSHLD(n) ((n * 8) / 10)
+/* Set flush threshold to 60% of event buf size */
+#define MHI_CMPL_EVT_FLUSH_THRSHLD(n) ((n * 6) / 10)
 
 /* Possible ring element types */
 union mhi_dev_ring_element_type {
