@@ -16,6 +16,8 @@
 #include <linux/slab.h>
 #include <linux/smp.h>
 #include <linux/suspend.h>
+#include <linux/time64.h>
+
 #include <soc/qcom/pm.h>
 #include <soc/qcom/lpm-stats.h>
 
@@ -795,10 +797,10 @@ EXPORT_SYMBOL(lpm_stats_cpu_exit);
  */
 void lpm_stats_suspend_enter(void)
 {
-	struct timespec ts;
+	struct timespec64 ts;
 
-	getnstimeofday(&ts);
-	suspend_time_stats.enter_time = timespec_to_ns(&ts);
+	ktime_get_real_ts64(&ts);
+	suspend_time_stats.enter_time = timespec64_to_ns(&ts);
 }
 EXPORT_SYMBOL(lpm_stats_suspend_enter);
 
@@ -809,11 +811,11 @@ EXPORT_SYMBOL(lpm_stats_suspend_enter);
  */
 void lpm_stats_suspend_exit(void)
 {
-	struct timespec ts;
+	struct timespec64 ts;
 	uint64_t exit_time = 0;
 
-	getnstimeofday(&ts);
-	exit_time = timespec_to_ns(&ts) - suspend_time_stats.enter_time;
+	ktime_get_real_ts64(&ts);
+	exit_time = timespec64_to_ns(&ts) - suspend_time_stats.enter_time;
 	update_level_stats(&suspend_time_stats, exit_time, true);
 }
 EXPORT_SYMBOL(lpm_stats_suspend_exit);

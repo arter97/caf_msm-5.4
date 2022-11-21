@@ -157,6 +157,7 @@ static int smi230_acc_i2c_probe(struct i2c_client *client,
 	}
 
 	smi230_i2c_dev.accel_id = client->addr;
+	smi230_i2c_dev.irq = client->irq;
 
 	err = smi230_acc_init(&smi230_i2c_dev);
         if (err == SMI230_OK)
@@ -223,6 +224,7 @@ static int smi230_gyro_i2c_probe(struct i2c_client *client,
 	}
 
 	smi230_i2c_dev.gyro_id = client->addr;
+	smi230_i2c_dev.irq = client->irq;
 
 	err = smi230_gyro_init(&smi230_i2c_dev);
         if (err == SMI230_OK)

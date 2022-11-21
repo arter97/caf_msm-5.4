@@ -193,6 +193,77 @@ void ethqos_disable_regulators(struct qcom_ethqos *ethqos)
 	}
 }
 
+void ethqos_reset_phy_enable_interrupt(struct qcom_ethqos *ethqos)
+{
+	struct stmmac_priv *priv = qcom_ethqos_get_priv(ethqos);
+
+	/* reset the phy so that it's ready */
+	if (priv->mii) {
+		ETHQOSERR("do mdio reset\n");
+		stmmac_mdio_reset(priv->mii);
+	}
+
+	if (priv->plat->phy_intr_en_extn_stm && priv->plat->phy_intr_en) {
+		priv->phydev->irq = PHY_IGNORE_INTERRUPT;
+		priv->phydev->interrupts = PHY_INTERRUPT_ENABLED;
+	}
+
+	phylink_connect_phy(priv->phylink, priv->phydev);
+
+	if (priv->plat->phy_intr_en_extn_stm && priv->plat->phy_intr_en) {
+		if (priv->phydev->drv->ack_interrupt &&
+		    !priv->phydev->drv->ack_interrupt(priv->phydev)) {
+			pr_info(" qcom-ethqos: %s ack_interrupt successful aftre connect\n",
+				__func__);
+		} else {
+			pr_err(" qcom-ethqos: %s ack_interrupt failed aftre connect\n",
+			       __func__);
+		}
+
+		if (priv->phydev->drv &&
+		    priv->phydev->drv->config_intr &&
+		    !priv->phydev->drv->config_intr(priv->phydev)) {
+			pr_err(" qcom-ethqos: %s config_phy_intr successful aftre connect\n",
+			       __func__);
+			priv->plat->request_phy_wol(priv->plat);
+		}
+	} else {
+		pr_info("stmmac phy polling mode\n");
+		priv->phydev->irq = PHY_POLL;
+	}
+
+}
+
+int ethqos_phy_power_on(struct qcom_ethqos *ethqos)
+{
+	int ret = 0;
+
+	if (ethqos->reg_emac_phy) {
+		ret = regulator_enable(ethqos->reg_emac_phy);
+		if (ret) {
+			ETHQOSERR("Can not enable <%s>\n",
+				  EMAC_VREG_EMAC_PHY_NAME);
+			return ret;
+		}
+		ethqos->phy_state = PHY_IS_ON;
+	} else {
+		ETHQOSERR("reg_emac_phy is NULL\n");
+	}
+	return ret;
+}
+
+void  ethqos_phy_power_off(struct qcom_ethqos *ethqos)
+{
+	if (ethqos->reg_emac_phy) {
+		if (regulator_is_enabled(ethqos->reg_emac_phy)) {
+			regulator_disable(ethqos->reg_emac_phy);
+			ethqos->phy_state = PHY_IS_OFF;
+		}
+	} else {
+		ETHQOSERR("reg_emac_phy is NULL\n");
+	}
+}
+
 void ethqos_free_gpios(struct qcom_ethqos *ethqos)
 {
 	if (gpio_is_valid(ethqos->gpio_phy_intr_redirect))

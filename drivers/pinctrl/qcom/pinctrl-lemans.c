@@ -19,6 +19,7 @@
 
 #define REG_BASE 0x100000
 #define REG_SIZE 0x1000
+#define REG_DIRCONN 0xB8000
 #define PINGROUP(id, f1, f2, f3, f4, f5, f6, f7, f8, f9, wake_off, bit)	\
 	{					        \
 		.name = "gpio" #id,			\
@@ -42,6 +43,7 @@
 		.intr_cfg_reg = REG_BASE + 0x8 + REG_SIZE * id,		\
 		.intr_status_reg = REG_BASE + 0xc + REG_SIZE * id,	\
 		.intr_target_reg = REG_BASE + 0x8 + REG_SIZE * id,	\
+		.dir_conn_reg = REG_BASE + REG_DIRCONN,	\
 		.mux_bit = 2,			\
 		.pull_bit = 0,			\
 		.drv_bit = 6,			\
@@ -58,6 +60,7 @@
 		.intr_detection_width = 2,	\
 		.wake_reg = REG_BASE + wake_off,	\
 		.wake_bit = bit,		\
+		.dir_conn_en_bit = 8,		\
 	}
 
 #define SDC_QDSD_PINGROUP(pg_name, ctl, pull, drv)	\
@@ -1710,7 +1713,12 @@ static const struct msm_gpio_wakeirq_map lemans_pdc_map[] = {
 	{ 109, 203 }, { 145, 225 }, { 146, 226 },
 };
 
-static const struct msm_pinctrl_soc_data lemans_pinctrl = {
+static struct msm_dir_conn lemans_dir_conn[] = {
+	  {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0},
+	  {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0}
+};
+
+static struct msm_pinctrl_soc_data lemans_pinctrl = {
 	.pins = lemans_pins,
 	.npins = ARRAY_SIZE(lemans_pins),
 	.functions = lemans_functions,
@@ -1722,10 +1730,98 @@ static const struct msm_pinctrl_soc_data lemans_pinctrl = {
 	.nqup_regs = ARRAY_SIZE(lemans_qup_regs),
 	.wakeirq_map = lemans_pdc_map,
 	.nwakeirq_map = ARRAY_SIZE(lemans_pdc_map),
+	.dir_conn = lemans_dir_conn,
 };
+
+static int lemans_pinctrl_gpio_irq_map_probe(struct platform_device *pdev)
+{
+	int ret, n, gpio_irq_map_count;
+	struct device_node *np = pdev->dev.of_node;
+	struct msm_gpio_wakeirq_map *gpio_irq_map;
+
+	n = of_property_count_elems_of_size(np, "qcom,gpio-irq-map",
+					sizeof(u32));
+	if (n <= 0 || n % 2)
+		return -EINVAL;
+
+	gpio_irq_map_count = n / 2;
+	gpio_irq_map = devm_kcalloc(&pdev->dev, gpio_irq_map_count,
+				sizeof(*gpio_irq_map), GFP_KERNEL);
+	if (!gpio_irq_map)
+		return -ENOMEM;
+
+	for (n = 0; n < gpio_irq_map_count; n++) {
+		ret = of_property_read_u32_index(np, "qcom,gpio-irq-map",
+						n * 2 + 0,
+						&gpio_irq_map[n].gpio);
+		if (ret)
+			return ret;
+		ret = of_property_read_u32_index(np, "qcom,gpio-irq-map",
+						n * 2 + 1,
+						&gpio_irq_map[n].wakeirq);
+		if (ret)
+			return ret;
+	}
+
+	lemans_pinctrl.wakeirq_map = gpio_irq_map;
+	lemans_pinctrl.nwakeirq_map = gpio_irq_map_count;
+
+	return 0;
+}
+
+static int lemans_pinctrl_dirconn_list_probe(struct platform_device *pdev)
+{
+	int ret, n, dirconn_list_count, m;
+	struct device_node *np = pdev->dev.of_node;
+
+	n = of_property_count_elems_of_size(np, "qcom,dirconn-list",
+					sizeof(u32));
+	if (n <= 0 || n % 2)
+		return -EINVAL;
+
+	m = ARRAY_SIZE(lemans_dir_conn) - 1;
+
+	dirconn_list_count = n / 2;
+
+	for (n = 0; n < dirconn_list_count; n++) {
+		ret = of_property_read_u32_index(np, "qcom,dirconn-list",
+						n * 2 + 0,
+						&lemans_dir_conn[m].gpio);
+		if (ret)
+			return ret;
+		ret = of_property_read_u32_index(np, "qcom,dirconn-list",
+						n * 2 + 1,
+						&lemans_dir_conn[m].irq);
+		if (ret)
+			return ret;
+		m--;
+	}
+
+	return 0;
+}
 
 static int lemans_pinctrl_probe(struct platform_device *pdev)
 {
+	int len, ret;
+
+	if (of_find_property(pdev->dev.of_node, "qcom,gpio-irq-map", &len)) {
+		ret = lemans_pinctrl_gpio_irq_map_probe(pdev);
+		if (ret) {
+			dev_err(&pdev->dev,
+				"Unable to parse GPIO IRQ map\n");
+			return ret;
+		}
+	}
+
+	if (of_find_property(pdev->dev.of_node, "qcom,dirconn-list", &len)) {
+		ret = lemans_pinctrl_dirconn_list_probe(pdev);
+		if (ret) {
+			dev_err(&pdev->dev,
+				"Unable to parse Direct Connect List\n");
+			return ret;
+		}
+	}
+
 	return msm_pinctrl_probe(pdev, &lemans_pinctrl);
 }
 

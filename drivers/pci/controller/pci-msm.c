@@ -100,6 +100,11 @@
 #define PCIE20_PARF_CLKREQ_IN_VALUE (BIT(3))
 #define PCIE20_PARF_CLKREQ_IN_ENABLE (BIT(1))
 
+#define MAX_SHORT_BDF_NUM (16)
+#define PCIE20_PARF_BDF_TRANSLATE_CFG	(0x24C)
+#define PCIE20_PARF_SID_OFFSET	(0x234)
+#define PCIE20_PARF_BDF_TRANSLATE_N (0x250)
+
 #define PCIE20_ELBI_SYS_CTRL (0x04)
 #define PCIE20_ELBI_SYS_STTS (0x08)
 
@@ -893,6 +898,7 @@ struct msm_pcie_dev_t {
 	struct mutex drv_pc_lock;
 
 	bool drv_supported;
+	bool nogdsc_retention;
 
 	void (*rumi_init)(struct msm_pcie_dev_t *pcie_dev);
 
@@ -3230,12 +3236,14 @@ static int msm_pcie_clk_init(struct msm_pcie_dev_t *dev)
 
 	PCIE_DBG(dev, "RC%d: entry\n", dev->rc_idx);
 
-	rc = regulator_enable(dev->gdsc);
+	if (!regulator_is_enabled(dev->gdsc)) {
+		rc = regulator_enable(dev->gdsc);
 
-	if (rc) {
-		PCIE_ERR(dev, "PCIe: fail to enable GDSC for RC%d (%s)\n",
-			dev->rc_idx, dev->pdev->name);
-		return rc;
+		if (rc) {
+			PCIE_ERR(dev, "PCIe:fail to enable GDSC for RC%d (%s)\n",
+				dev->rc_idx, dev->pdev->name);
+			return rc;
+		}
 	}
 
 	/* switch pipe clock source after gdsc is turned on */
@@ -3373,7 +3381,8 @@ static void msm_pcie_clk_deinit(struct msm_pcie_dev_t *dev)
 	if (dev->pipe_clk_mux && dev->ref_clk_src)
 		clk_set_parent(dev->pipe_clk_mux, dev->ref_clk_src);
 
-	regulator_disable(dev->gdsc);
+	if (!dev->nogdsc_retention)
+		regulator_disable(dev->gdsc);
 
 	PCIE_DBG(dev, "RC%d: exit\n", dev->rc_idx);
 }
@@ -4914,6 +4923,35 @@ static int msm_pcie_config_device_info(struct pci_dev *pcidev, void *pdev)
 	return 0;
 }
 
+static int msm_pcie_configure_legacy_smmu(struct pci_dev *dev, void *pdev)
+{
+	struct msm_pcie_dev_t *pcie_dev = (struct msm_pcie_dev_t *)pdev;
+	u8 busnr = dev->bus->number;
+	u8 slot = PCI_SLOT(dev->devfn);
+	u8 func = PCI_FUNC(dev->devfn);
+	u32 offset, bdf;
+
+	/* Calculating  offset and bdf */
+	PCIE_DBG(pcie_dev,
+		 "PCIe: RC%d: configure PCI device %02x:%02x.%01x\n",
+		 pcie_dev->rc_idx, busnr, slot, func);
+	offset = pcie_dev->sid_info[busnr].pcie_sid * 4;
+	bdf = BDF_OFFSET(dev->bus->number, dev->devfn);
+
+	if (offset >= MAX_SHORT_BDF_NUM * 4) {
+		PCIE_INFO(pcie_dev,
+				 "PCIe: RC%d: Invalid SID offset: 0x%x. Should be less than 0x%x\n",
+				 pcie_dev->rc_idx, offset, MAX_SHORT_BDF_NUM * 4);
+		return -EINVAL;
+		}
+
+	msm_pcie_write_reg(pcie_dev->parf, PCIE20_PARF_BDF_TRANSLATE_CFG, 0);
+	msm_pcie_write_reg(pcie_dev->parf, PCIE20_PARF_SID_OFFSET, 0);
+	msm_pcie_write_reg(pcie_dev->parf, PCIE20_PARF_BDF_TRANSLATE_N + offset, bdf >> 16);
+
+	return 0;
+}
+
 static void msm_pcie_config_sid(struct msm_pcie_dev_t *dev)
 {
 	void __iomem *bdf_to_sid_base = dev->parf +
@@ -4922,6 +4960,12 @@ static void msm_pcie_config_sid(struct msm_pcie_dev_t *dev)
 
 	if (!dev->sid_info)
 		return;
+
+	if (of_property_read_bool (dev->pdev->dev.of_node, "qcom,legacy-bdf-2-sid")) {
+		if (dev->enumerated)
+			pci_walk_bus(dev->dev->bus, &msm_pcie_configure_legacy_smmu, dev);
+		return;
+	}
 
 	/* clear BDF_TO_SID_BYPASS bit to enable BDF to SID translation */
 	msm_pcie_write_mask(dev->parf + PCIE20_PARF_BDF_TO_SID_CFG, BIT(0), 0);
@@ -6393,6 +6437,11 @@ static int msm_pcie_probe(struct platform_device *pdev)
 				pcie_dev->rc_idx, ret);
 	}
 
+	pcie_dev->nogdsc_retention = of_property_read_bool(of_node,
+					"qcom,nogdsc-retention");
+	PCIE_DBG(pcie_dev, "GDSC retention is %s supported\n",
+		pcie_dev->nogdsc_retention ? "not" : "");
+
 	msm_pcie_i2c_ctrl_init(pcie_dev);
 
 	msm_pcie_sysfs_init(pcie_dev);
@@ -7574,7 +7623,7 @@ static int msm_pcie_drv_send_rpmsg(struct msm_pcie_dev_t *pcie_dev,
 				   struct msm_pcie_drv_msg *msg)
 {
 	struct msm_pcie_drv_info *drv_info = pcie_dev->drv_info;
-	int ret;
+	int ret, re_try = 5; /* sleep 5 ms per re-try */
 	struct rpmsg_device *rpdev;
 
 	mutex_lock(&pcie_drv.rpmsg_lock);
@@ -7595,8 +7644,15 @@ static int msm_pcie_drv_send_rpmsg(struct msm_pcie_dev_t *pcie_dev,
 	PCIE_DBG(pcie_dev, "PCIe: RC%d: DRV: sending rpmsg: command: 0x%x\n",
 		pcie_dev->rc_idx, msg->pkt.dword[0]);
 
+retry:
 	ret = rpmsg_trysend(rpdev->ept, msg, sizeof(*msg));
 	if (ret) {
+		if (ret == -EBUSY && re_try) {
+			usleep_range(5000, 5001);
+			re_try--;
+			goto retry;
+		}
+
 		PCIE_ERR(pcie_dev,
 			 "PCIe: RC%d: DRV: failed to send rpmsg, ret:%d\n",
 			pcie_dev->rc_idx, ret);

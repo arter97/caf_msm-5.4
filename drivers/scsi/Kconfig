@@ -1512,6 +1512,15 @@ config SCSI_VIRTIO
           This is the virtual HBA driver for virtio.  If the kernel will
           be used in a virtual machine, say Y or M.
 
+config SCSI_VIRTIO_QTI_CRYPTO
+	tristate "Vendor specific VIRTIO Crypto Engine Support"
+	depends on SCSI_VIRTIO
+	help
+	  Enable storage inline crypto engine support for guest virtual machine.
+	  Enabling this allows kernel to use crypto operations defined
+	  and implemented by QTI.
+	  Say Y or M.
+
 source "drivers/scsi/csiostor/Kconfig"
 
 source "drivers/scsi/pcmcia/Kconfig"

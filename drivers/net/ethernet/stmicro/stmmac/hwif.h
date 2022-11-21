@@ -66,6 +66,8 @@ struct stmmac_desc_ops {
 	/* Return the reception status looking at the RDES1 */
 	int (*rx_status)(void *data, struct stmmac_extra_stats *x,
 			struct dma_desc *p);
+	int (*rx_status_err)(void *data, struct stmmac_extra_stats *x,
+			     struct dma_desc *p, int *status);
 	void (*rx_extended_status)(void *data, struct stmmac_extra_stats *x,
 			struct dma_extended_desc *p);
 	/* Set tx timestamp enable bit */
@@ -125,6 +127,8 @@ struct stmmac_desc_ops {
 	stmmac_do_callback(__priv, desc, get_rx_frame_len, __args)
 #define stmmac_rx_status(__priv, __args...) \
 	stmmac_do_callback(__priv, desc, rx_status, __args)
+#define stmmac_rx_status_err(__priv, __args...) \
+		stmmac_do_callback(__priv, desc, rx_status_err, __args)
 #define stmmac_rx_extended_status(__priv, __args...) \
 	stmmac_do_void_callback(__priv, desc, rx_extended_status, __args)
 #define stmmac_enable_tx_timestamp(__priv, __args...) \
@@ -208,6 +212,7 @@ struct stmmac_dma_ops {
 	void (*qmode)(void __iomem *ioaddr, u32 channel, u8 qmode);
 	void (*set_bfsize)(void __iomem *ioaddr, int bfsize, u32 chan);
 	void (*enable_sph)(void __iomem *ioaddr, bool en, u32 chan);
+	void (*enable_rx_fep)(void __iomem *ioaddr, bool en, u32 chan);
 };
 
 #define stmmac_reset(__priv, __args...) \
@@ -274,6 +279,7 @@ struct stmmac_safety_stats;
 struct stmmac_tc_entry;
 struct stmmac_pps_cfg;
 struct stmmac_rss;
+struct vlan_filter_info;
 
 /* Helpers to program the MAC core */
 struct stmmac_ops {
@@ -371,6 +377,8 @@ struct stmmac_ops {
 				bool en, bool udp, bool sa, bool inv,
 				u32 match);
 	void (*set_arp_offload)(struct mac_device_info *hw, bool en, u32 addr);
+		/* Enable the VLAN MAC configuration for DMA Queue*/
+	void (*qcom_set_vlan)(struct vlan_filter_info *vlan, void __iomem *ioaddr);
 };
 
 #define stmmac_core_init(__priv, __args...) \

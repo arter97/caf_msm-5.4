@@ -150,6 +150,10 @@
 #define EN_HW_RECOVERY_BIT			BIT(1)
 #define SW_ERR_DRV_FREQ_BIT			BIT(0)
 
+#define HAP_CFG_ISC_CFG_REG			0x65
+#define ILIM_CC_EN_BIT				BIT(7)
+#define ILIM_CC_EN_BIT_VAL			1
+
 #define HAP_CFG_FAULT_CLR_REG			0x66
 #define SC_CLR_BIT				BIT(2)
 #define AUTO_RES_ERR_CLR_BIT			BIT(1)
@@ -180,6 +184,12 @@
 #define CAL_RC_CLK_DISABLED_VAL			0
 #define CAL_RC_CLK_AUTO_VAL			1
 #define CAL_RC_CLK_MANUAL_VAL			2
+
+#define HAP_CFG_ISC_CFG2_REG			0x77
+#define EN_SC_DET_P_HAP520_MV_BIT		BIT(6)
+#define EN_SC_DET_N_HAP520_MV_BIT		BIT(5)
+#define ISC_THRESH_HAP520_MV_MASK		GENMASK(2, 0)
+#define ISC_THRESH_HAP520_MV_140MA		0x01
 
 /* These registers are only applicable for PM5100 */
 #define HAP_CFG_HW_CONFIG_REG			0x0D
@@ -4347,20 +4357,33 @@ static int haptics_pbs_trigger_isc_config(struct haptics_chip *chip)
 }
 
 #define MAX_SWEEP_STEPS		5
-#define MAX_IMPEDANCE_MOHM	40000
-#define MIN_ISC_MA		250
 #define MIN_DUTY_MILLI_PCT	0
 #define MAX_DUTY_MILLI_PCT	100000
 #define LRA_CONFIG_REGS		3
 static u32 get_lra_impedance_capable_max(struct haptics_chip *chip)
 {
-	u32 mohms = MAX_IMPEDANCE_MOHM;
+	u32 mohms;
+	u32 max_vmax_mv, min_isc_ma;
 
-	if (chip->clamp_at_5v)
-		mohms = MAX_IMPEDANCE_MOHM / 2;
+	switch (chip->pmic_type) {
+	case PM8350B:
+		min_isc_ma = 250;
+		if (chip->clamp_at_5v)
+			max_vmax_mv = 5000;
+		else
+			max_vmax_mv = 10000;
+		break;
+	case PM5100:
+		max_vmax_mv = 5000;
+		min_isc_ma = 140;
+		break;
+	default:
+		return 0;
+	}
 
+	mohms = (max_vmax_mv * 1000) / min_isc_ma;
 	if (is_haptics_external_powered(chip))
-		mohms = (chip->hpwr_voltage_mv * 1000) / MIN_ISC_MA;
+		mohms = (chip->hpwr_voltage_mv * 1000) / min_isc_ma;
 
 	dev_dbg(chip->dev, "LRA impedance capable max: %u mohms\n", mohms);
 	return mohms;
@@ -4375,7 +4398,7 @@ static int haptics_detect_lra_impedance(struct haptics_chip *chip)
 		{ HAP_CFG_VMAX_HDRM_REG, 0x00 },
 	};
 	struct haptics_reg_info backup[LRA_CONFIG_REGS];
-	u8 val;
+	u8 val, cfg1, cfg2, reg1, reg2, mask1, mask2, val1, val2;
 	u32 duty_milli_pct, low_milli_pct, high_milli_pct;
 	u32 amplitude, lra_min_mohms, lra_max_mohms, capability_mohms;
 
@@ -4393,13 +4416,57 @@ static int haptics_detect_lra_impedance(struct haptics_chip *chip)
 			return rc;
 	}
 
-	/* Trigger PBS to config 250mA ISC setting */
-	rc = haptics_pbs_trigger_isc_config(chip);
-	if (rc < 0)
-		return rc;
+	if (chip->pmic_type == PM8350B) {
+		/* Trigger PBS to config 250mA ISC setting */
+		rc = haptics_pbs_trigger_isc_config(chip);
+		if (rc < 0)
+			return rc;
+	} else {
+		/* Config ISC_CFG settings for LRA impedance_detection */
+		switch (chip->pmic_type) {
+		case PM5100:
+			reg1 = HAP_CFG_ISC_CFG_REG;
+			mask1 = ILIM_CC_EN_BIT;
+			val1 = !ILIM_CC_EN_BIT_VAL;
+			reg2 = HAP_CFG_ISC_CFG2_REG;
+			mask2 = EN_SC_DET_P_HAP520_MV_BIT |
+				EN_SC_DET_N_HAP520_MV_BIT |
+				ISC_THRESH_HAP520_MV_MASK;
+			val2 = EN_SC_DET_P_HAP520_MV_BIT|
+				EN_SC_DET_N_HAP520_MV_BIT|
+				ISC_THRESH_HAP520_MV_140MA;
+			break;
+		default:
+			dev_err(chip->dev, "unsupported HW type: %d\n",
+					chip->pmic_type);
+			return -EOPNOTSUPP;
+		}
+
+		/* save ISC_CFG default settings */
+		rc = haptics_read(chip, chip->cfg_addr_base, reg1, &cfg1, 1);
+		if (rc < 0)
+			return rc;
+
+		rc = haptics_read(chip, chip->cfg_addr_base, reg2, &cfg2, 1);
+		if (rc < 0)
+			return rc;
+
+		/* update ISC_CFG settings for the detection */
+		rc = haptics_masked_write(chip, chip->cfg_addr_base, reg1, mask1, val1);
+		if (rc < 0)
+			return rc;
+
+		rc = haptics_masked_write(chip, chip->cfg_addr_base, reg2, mask2, val2);
+		if (rc < 0)
+			goto restore;
+	}
 
 	/* Set square drive waveform, 10V Vmax, no HDRM */
 	for (i = 0; i < LRA_CONFIG_REGS; i++) {
+		/* PM5100 has 6V Vmax so update the setting for it */
+		if (chip->pmic_type == PM5100 && lra_config[i].addr == HAP_CFG_VMAX_REG)
+			lra_config[i].val = 0x78;
+
 		rc = haptics_write(chip, chip->cfg_addr_base,
 				lra_config[i].addr, &lra_config[i].val, 1);
 		if (rc < 0)
@@ -4473,10 +4540,21 @@ restore:
 	if (rc < 0)
 		return rc;
 
-	/* Trigger PBS to restore 1500mA ISC setting */
-	rc = haptics_pbs_trigger_isc_config(chip);
-	if (rc < 0)
-		return rc;
+	if (chip->pmic_type == PM8350B) {
+		/* Trigger PBS to restore 1500mA ISC setting */
+		rc = haptics_pbs_trigger_isc_config(chip);
+		if (rc < 0)
+			return rc;
+	} else {
+		/* restore ISC_CFG settings to default */
+		rc = haptics_write(chip, chip->cfg_addr_base, reg1, &cfg1, 1);
+		if (rc < 0)
+			return rc;
+
+		rc = haptics_write(chip, chip->cfg_addr_base, reg2, &cfg2, 1);
+		if (rc < 0)
+			return rc;
+	}
 
 	/* Restore driver waveform, Vmax, HDRM settings */
 	for (i = 0; i < LRA_CONFIG_REGS; i++) {

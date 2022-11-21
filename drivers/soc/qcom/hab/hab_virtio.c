@@ -12,9 +12,33 @@
 
 #include "hab_virtio.h" /* requires hab.h */
 
+#define HAB_VIRTIO_DEVICE_ID_HAB	88
+#define HAB_VIRTIO_DEVICE_ID_BUFFERQ	89
+#define HAB_VIRTIO_DEVICE_ID_MISC	90
+#define HAB_VIRTIO_DEVICE_ID_AUDIO	91
+#define HAB_VIRTIO_DEVICE_ID_CAMERA	92
+#define HAB_VIRTIO_DEVICE_ID_DISPLAY	93
+#define HAB_VIRTIO_DEVICE_ID_GRAPHICS	94
+#define HAB_VIRTIO_DEVICE_ID_VIDEO	95
+
 /* all probed virtio_hab stored in this list */
 static struct list_head vhab_list = LIST_HEAD_INIT(vhab_list);
 static DEFINE_SPINLOCK(vh_lock);
+
+static struct virtio_device_tbl {
+	int32_t mmid;
+	__u32 device;
+	struct virtio_device *vdev;
+} vdev_tbl[] = {
+	{ HAB_MMID_ALL_AREA, HAB_VIRTIO_DEVICE_ID_HAB, NULL }, /* hab */
+	{ MM_BUFFERQ_1, HAB_VIRTIO_DEVICE_ID_BUFFERQ, NULL },
+	{ MM_MISC, HAB_VIRTIO_DEVICE_ID_MISC, NULL },
+	{ MM_AUD_1, HAB_VIRTIO_DEVICE_ID_AUDIO, NULL },
+	{ MM_CAM_1, HAB_VIRTIO_DEVICE_ID_CAMERA, NULL },
+	{ MM_DISP_1, HAB_VIRTIO_DEVICE_ID_DISPLAY, NULL },
+	{ MM_GFX, HAB_VIRTIO_DEVICE_ID_GRAPHICS, NULL },
+	{ MM_VID, HAB_VIRTIO_DEVICE_ID_VIDEO, NULL },
+};
 
 enum pool_type_t {
 	PT_OUT_SMALL = 0, /* 512 bytes */
@@ -611,6 +635,36 @@ static int virthab_pchan_avail_check(__u32 id, uint32_t mmid_start, int mmid_ran
 	return avail;
 }
 
+static void virthab_store_vdev(int32_t mmid, struct virtio_device *vdev)
+{
+	int i;
+	int sz = ARRAY_SIZE(vdev_tbl);
+
+	for (i = 0; i < sz; i++) {
+		if (vdev_tbl[i].mmid == mmid) {
+			vdev_tbl[i].vdev = vdev;
+			break;
+		}
+	}
+}
+
+struct virtio_device *virthab_get_vdev(int32_t mmid)
+{
+	int i;
+	struct virtio_device *ret = NULL;
+	int sz = ARRAY_SIZE(vdev_tbl);
+
+	for (i = 0; i < sz; i++) {
+		if (vdev_tbl[i].mmid == mmid) {
+			ret = vdev_tbl[i].vdev;
+			break;
+		}
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL(virthab_get_vdev);
+
 /* probe is called when GVM detects virtio device from devtree */
 static int virthab_probe(struct virtio_device *vdev)
 {
@@ -623,38 +677,46 @@ static int virthab_probe(struct virtio_device *vdev)
 		pr_info("virtio has feature missing\n");
 		return -ENODEV;
 	}
-	pr_info("virtio has feature %llX virtio devid %d vid %X empty %d\n",
+	pr_info("virtio has feature %llX virtio devid %X vid %d empty %d\n",
 		vdev->features, vdev->id.device, vdev->id.vendor,
 		list_empty(&vhab_list));
 
 	/* find out which virtio device is calling us.
 	 * if this is hab's own virtio device, all the pchans are available
 	 */
-	if (vdev->id.device == 88) {
+	if (vdev->id.device == HAB_VIRTIO_DEVICE_ID_HAB) {
 		/* all MMIDs are taken cannot co-exist with others */
 		mmid_start = hab_driver.devp[0].id;
 		mmid_range = hab_driver.ndevices;
-	} else if (vdev->id.device == 89) {
+		virthab_store_vdev(HAB_MMID_ALL_AREA, vdev);
+	} else if (vdev->id.device == HAB_VIRTIO_DEVICE_ID_BUFFERQ) {
 		mmid_start = MM_BUFFERQ_1;
 		mmid_range = 1;
-	} else if (vdev->id.device == 90) {
+		virthab_store_vdev(MM_BUFFERQ_1, vdev);
+	} else if (vdev->id.device == HAB_VIRTIO_DEVICE_ID_MISC) {
 		mmid_start = MM_MISC;
 		mmid_range = 1;
-	} else if (vdev->id.device == 91) {
+		virthab_store_vdev(MM_MISC, vdev);
+	} else if (vdev->id.device == HAB_VIRTIO_DEVICE_ID_AUDIO) {
 		mmid_start = MM_AUD_1;
 		mmid_range = 4;
-	} else if (vdev->id.device == 92) {
+		virthab_store_vdev(MM_AUD_1, vdev);
+	} else if (vdev->id.device == HAB_VIRTIO_DEVICE_ID_CAMERA) {
 		mmid_start = MM_CAM_1;
 		mmid_range = 2;
-	} else if (vdev->id.device == 93) {
+		virthab_store_vdev(MM_CAM_1, vdev);
+	} else if (vdev->id.device == HAB_VIRTIO_DEVICE_ID_DISPLAY) {
 		mmid_start = MM_DISP_1;
 		mmid_range = 5;
-	} else if (vdev->id.device == 94) {
+		virthab_store_vdev(MM_DISP_1, vdev);
+	} else if (vdev->id.device == HAB_VIRTIO_DEVICE_ID_GRAPHICS) {
 		mmid_start = MM_GFX;
 		mmid_range = 1;
-	} else if (vdev->id.device == 95) {
+		virthab_store_vdev(MM_GFX, vdev);
+	} else if (vdev->id.device == HAB_VIRTIO_DEVICE_ID_VIDEO) {
 		mmid_start = MM_VID;
 		mmid_range = 2;
+		virthab_store_vdev(MM_VID, vdev);
 	} else {
 		pr_err("unknown virtio device is detected %d\n",
 			vdev->id.device);
@@ -786,14 +848,14 @@ static unsigned int features[] = {
 	/* none */
 };
 static struct virtio_device_id id_table[] = {
-	{ 88, VIRTIO_DEV_ANY_ID }, /* virtio-hab with all mmids ready to use */
-	{ 89, VIRTIO_DEV_ANY_ID }, /* virtio-bufferq only */
-	{ 90, VIRTIO_DEV_ANY_ID }, /* virtio-misc */
-	{ 91, VIRTIO_DEV_ANY_ID }, /* virtio-audio */
-	{ 92, VIRTIO_DEV_ANY_ID }, /* virtio-camera */
-	{ 93, VIRTIO_DEV_ANY_ID }, /* virtio-display */
-	{ 94, VIRTIO_DEV_ANY_ID }, /* virtio-graphics */
-	{ 95, VIRTIO_DEV_ANY_ID }, /* virtio-video */
+	{ HAB_VIRTIO_DEVICE_ID_HAB, VIRTIO_DEV_ANY_ID }, /* virtio hab with all mmids */
+	{ HAB_VIRTIO_DEVICE_ID_BUFFERQ, VIRTIO_DEV_ANY_ID }, /* virtio bufferq only */
+	{ HAB_VIRTIO_DEVICE_ID_MISC, VIRTIO_DEV_ANY_ID }, /* virtio misc */
+	{ HAB_VIRTIO_DEVICE_ID_AUDIO, VIRTIO_DEV_ANY_ID }, /* virtio audio */
+	{ HAB_VIRTIO_DEVICE_ID_CAMERA, VIRTIO_DEV_ANY_ID }, /* virtio camera */
+	{ HAB_VIRTIO_DEVICE_ID_DISPLAY, VIRTIO_DEV_ANY_ID }, /* virtio display */
+	{ HAB_VIRTIO_DEVICE_ID_GRAPHICS, VIRTIO_DEV_ANY_ID }, /* virtio graphics */
+	{ HAB_VIRTIO_DEVICE_ID_VIDEO, VIRTIO_DEV_ANY_ID }, /* virtio video */
 	{ 0 },
 };
 

@@ -206,6 +206,7 @@ struct plat_stmmacenet_data {
 	bool early_eth;
 	struct emac_emb_smmu_cb_ctx stmmac_emb_smmu_ctx;
 	bool phy_intr_en_extn_stm;
+	int (*handle_mac_err)(void *priv, int type, int chan);
 	int (*handle_prv_ioctl)(struct net_device *dev, struct ifreq *ifr,
 				int cmd);
 	void (*request_phy_wol)(void *plat);
@@ -214,5 +215,7 @@ struct plat_stmmacenet_data {
 	int (*phy_intr_enable)(void *priv);
 	void (*phy_irq_enable)(void *priv);
 	void (*phy_irq_disable)(void *priv);
+	void (*rgmii_loopback_cfg)(void *priv, int loopback_en);
+	bool sph_disable;
 };
 #endif
