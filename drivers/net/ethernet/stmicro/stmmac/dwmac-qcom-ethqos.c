@@ -29,7 +29,8 @@
 #include <linux/kthread.h>
 #include <linux/io-64-nonatomic-hi-lo.h>
 #include <linux/if_vlan.h>
-
+#include <linux/msm_eth.h>
+#include <soc/qcom/sb_notification.h>
 #include "stmmac.h"
 #include "stmmac_platform.h"
 #include "dwmac-qcom-ethqos.h"
@@ -130,6 +131,7 @@ u16 dwmac_qcom_select_queue(struct net_device *dev,
 	u16 txqueue_select = ALL_OTHER_TRAFFIC_TX_CHANNEL;
 	unsigned int eth_type, priority, vlan_id;
 	struct stmmac_priv *priv = netdev_priv(dev);
+	bool ipa_enabled = pethqos->ipa_enabled;
 
 	/* Retrieve ETH type */
 	eth_type = dwmac_qcom_get_eth_type(skb->data);
@@ -167,6 +169,13 @@ u16 dwmac_qcom_select_queue(struct net_device *dev,
 			txqueue_select = ALL_OTHER_TRAFFIC_TX_CHANNEL;
 	}
 
+	/* use better macro, cannot afford function call here */
+	if (ipa_enabled && (txqueue_select == IPA_DMA_TX_CH_BE ||
+			    txqueue_select == IPA_DMA_TX_CH_CV2X)) {
+		ETHQOSERR("TX Channel [%d] is not a valid for SW path\n",
+			  txqueue_select);
+		WARN_ON(1);
+	}
 	ETHQOSDBG("tx_queue %d\n", txqueue_select);
 	return txqueue_select;
 }
@@ -2031,6 +2040,68 @@ static void read_mac_addr_from_fuse_reg(struct device_node *np)
 	}
 }
 
+static void qcom_ethqos_handle_ssr_workqueue(struct work_struct *work)
+{
+	struct stmmac_priv *priv = NULL;
+
+	priv = qcom_ethqos_get_priv(pethqos);
+
+	ETHQOSINFO("%s is executing action: %d\n", __func__, pethqos->action);
+
+	if (priv->hw_offload_enabled) {
+		if (pethqos->action == EVENT_REMOTE_STATUS_DOWN) {
+			ethqos_ipa_offload_event_handler(NULL, EV_IPA_SSR_DOWN);
+		} else {
+			if (pethqos->action == EVENT_REMOTE_STATUS_UP)
+				ethqos_ipa_offload_event_handler(NULL, EV_IPA_SSR_UP);
+		}
+	}
+}
+
+static int qcom_ethqos_qti_alert(struct notifier_block *nb,
+				 unsigned long action, void *dev)
+{
+	struct stmmac_priv *priv = NULL;
+
+	priv = qcom_ethqos_get_priv(pethqos);
+	if (!priv) {
+		ETHQOSERR("Unable to alert QTI of SSR status: %s\n", __func__);
+		return NOTIFY_DONE;
+	}
+
+	switch (action) {
+	case EVENT_REMOTE_STATUS_UP:
+		ETHQOSINFO("Link up\n");
+		pethqos->action = EVENT_REMOTE_STATUS_UP;
+		break;
+	case EVENT_REMOTE_STATUS_DOWN:
+		ETHQOSINFO("Link down\n");
+		pethqos->action = EVENT_REMOTE_STATUS_DOWN;
+		break;
+	default:
+		ETHQOSERR("Invalid action passed: %s, %d\n", __func__,
+			  action);
+		return NOTIFY_DONE;
+	}
+
+	INIT_WORK(&pethqos->eth_ssr, qcom_ethqos_handle_ssr_workqueue);
+	queue_work(system_wq, &pethqos->eth_ssr);
+
+	return NOTIFY_DONE;
+}
+
+static void qcom_ethqos_register_listener(void)
+{
+	int ret;
+
+	ETHQOSINFO("Registering sb notification listener: %s\n", __func__);
+
+	pethqos->qti_nb.notifier_call = qcom_ethqos_qti_alert;
+	ret = sb_register_evt_listener(&pethqos->qti_nb);
+	if (ret)
+		ETHQOSERR("sb_register_evt_listener failed at: %s\n", __func__);
+}
+
 static void ethqos_is_ipv4_NW_stack_ready(struct work_struct *work)
 {
 	struct delayed_work *dwork;
@@ -3524,12 +3595,22 @@ void qcom_ethqos_serdes_init(struct qcom_ethqos *ethqos, int speed)
 static ssize_t ethqos_read_dev_emac(struct file *filp, char __user *buf,
 				    size_t count, loff_t *f_pos)
 {
-	unsigned int len = 0;
-	char *temp_buf;
-	ssize_t ret_cnt = 0;
+	struct eth_msg_meta msg;
+	u8 status = 0;
 
-	ret_cnt = simple_read_from_buffer(buf, count, f_pos, temp_buf, len);
-	return ret_cnt;
+	memset(&msg, 0,  sizeof(struct eth_msg_meta));
+
+	if (pethqos && pethqos->ipa_enabled)
+		ethqos_ipa_offload_event_handler(&status, EV_QTI_GET_CONN_STATUS);
+
+	msg.msg_type = status;
+
+	ETHQOSDBG("status %02x\n", status);
+	ETHQOSDBG("msg.msg_type %02x\n", msg.msg_type);
+	ETHQOSDBG("msg.rsvd %02x\n", msg.rsvd);
+	ETHQOSDBG("msg.msg_len %d\n", msg.msg_len);
+
+	return copy_to_user(buf, &msg, sizeof(struct eth_msg_meta));
 }
 
 static ssize_t ethqos_write_dev_emac(struct file *file,
@@ -3652,10 +3733,41 @@ static void ethqos_get_qoe_dt(struct qcom_ethqos *ethqos,
 	}
 }
 
+static DECLARE_WAIT_QUEUE_HEAD(dev_emac_wait);
+#ifdef CONFIG_ETH_IPA_OFFLOAD
+void ethqos_wakeup_dev_emac_queue(void)
+{
+	ETHQOSDBG("\n");
+	wake_up_interruptible(&dev_emac_wait);
+}
+#endif
+
+static unsigned int ethqos_poll_dev_emac(struct file *file, poll_table *wait)
+{
+	int mask = 0;
+	int update = 0;
+
+	ETHQOSDBG("\n");
+
+	poll_wait(file, &dev_emac_wait, wait);
+
+	if (pethqos && pethqos->ipa_enabled && pethqos->cv2x_mode)
+		ethqos_ipa_offload_event_handler(&update, EV_QTI_CHECK_CONN_UPDATE);
+
+	if (update)
+		mask = POLLIN | POLLRDNORM;
+
+	ETHQOSDBG("mask %d\n", mask);
+
+	return mask;
+}
+
 static const struct file_operations emac_fops = {
 	.owner = THIS_MODULE,
+	.open = simple_open,
 	.read = ethqos_read_dev_emac,
 	.write = ethqos_write_dev_emac,
+	.poll = ethqos_poll_dev_emac,
 };
 
 static int ethqos_create_emac_device_node(dev_t *emac_dev_t,
@@ -3971,9 +4083,6 @@ ethqos_emac_mem_base(ethqos);
 	priv = netdev_priv(ndev);
 
 #ifdef CONFIG_ETH_IPA_OFFLOAD
-	ethqos->ipa_enabled = true;
-	priv->rx_queue[IPA_DMA_RX_CH].skip_sw = true;
-	priv->tx_queue[IPA_DMA_TX_CH].skip_sw = true;
 	ethqos_ipa_offload_event_handler(ethqos, EV_PROBE_INIT);
 #endif
 
@@ -4037,6 +4146,9 @@ ethqos_emac_mem_base(ethqos);
 
 	if (priv->plat->mac2mac_en)
 		priv->plat->mac2mac_link = -1;
+
+	if (pethqos->cv2x_mode != CV2X_MODE_DISABLE)
+		qcom_ethqos_register_listener();
 
 	if (!qcom_ethqos_init_panic_notifier(ethqos))
 		atomic_notifier_chain_register(&panic_notifier_list,
