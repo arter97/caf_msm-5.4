@@ -2699,6 +2699,10 @@ exit_rt_resume:
 
 static int spi_geni_resume(struct device *dev)
 {
+	struct spi_master *spi = get_spi_master(dev);
+	struct spi_geni_master *geni_mas = spi_master_get_devdata(spi);
+
+	geni_se_ssc_clk_enable(&geni_mas->spi_rsc, true);
 	return 0;
 }
 
@@ -2752,6 +2756,7 @@ static int spi_geni_suspend(struct device *dev)
 			ret = -EBUSY;
 		}
 	}
+	geni_se_ssc_clk_enable(&geni_mas->spi_rsc, false);
 	return ret;
 }
 #else

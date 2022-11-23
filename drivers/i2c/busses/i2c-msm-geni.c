@@ -1817,6 +1817,7 @@ static int geni_i2c_resume_early(struct device *device)
 		gi2c->is_deep_sleep = true;
 	}
 #endif
+	geni_se_ssc_clk_enable(&gi2c->i2c_rsc, true);
 	GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev, "%s\n", __func__);
 	return 0;
 }
@@ -1827,6 +1828,7 @@ static int geni_i2c_hib_resume_noirq(struct device *device)
 
 	GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev, "%s\n", __func__);
 	gi2c->se_mode = UNINITIALIZED;
+	geni_se_ssc_clk_enable(&gi2c->i2c_rsc, true);
 	return 0;
 }
 
@@ -2009,6 +2011,7 @@ static int geni_i2c_suspend_late(struct device *device)
 		pm_runtime_set_suspended(device);
 		pm_runtime_enable(device);
 	}
+	geni_se_ssc_clk_enable(&gi2c->i2c_rsc, false);
 	i2c_unlock_bus(&gi2c->adap, I2C_LOCK_SEGMENT);
 	return 0;
 }
