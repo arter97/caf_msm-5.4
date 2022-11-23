@@ -2926,6 +2926,17 @@ void ethqos_ipa_offload_event_handler(void *data,
 		if (!eth_ipa_ctx.ipa_uc_ready)
 			ethqos_ipa_uc_ready(eth_ipa_ctx.ethqos);
 
+		if (!eth_ipa_ctx.ipa_debugfs_exists &&
+		    eth_ipa_ctx.emac_dev_reset) {
+			if (!ethqos_ipa_create_debugfs(eth_ipa_ctx.ethqos)) {
+				ETHQOSERR("eMAC Debugfs created\n");
+				eth_ipa_ctx.ipa_debugfs_exists = true;
+			} else {
+				ETHQOSERR("eMAC Debugfs failed\n");
+			}
+		}
+		eth_ipa_ctx.emac_dev_reset = false;
+
 		break;
 	case EV_IPA_READY:
 		eth_ipa_ctx.ipa_ready = true;
@@ -2973,6 +2984,7 @@ void ethqos_ipa_offload_event_handler(void *data,
 
 		/* reset link down on dev close */
 		eth_ipa_ctx.ipa_offload_link_down = false;
+		eth_ipa_ctx.emac_dev_reset = true;
 		ethqos_free_ipa_queue_mem(eth_ipa_ctx.ethqos);
 
 		break;
