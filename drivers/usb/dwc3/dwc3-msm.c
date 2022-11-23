@@ -2074,10 +2074,35 @@ int usb_gsi_ep_op(struct usb_ep *ep, void *op_data, enum gsi_ep_op op)
 		 * Some targets have more number of H/w accelerated EP's
 		 * in order to support them, need to increase GSI
 		 * interrupts, this case will do the same.
+		 *
+		 * e.g If target supports 5 HW EPs
+		 *
+		 * ((dwc->num_gsi_eps - 1) - ((dwc->num_eps - 1) - dep->number))
+		 * 5 - (31 - 27) = 1
+		 *
 		 */
 		request = (struct usb_gsi_request *)op_data;
-		request->ep_intr_num =
-				(dwc->num_gsi_eps - ((dwc->num_eps - 1) - dep->number));
+
+		/*
+		 * Check if normal_eps_in_gsi_mode property is present
+		 * which indicates 1IN + 1OUT SW EPs will be used in GSI mode.
+		 * Though SW EPs will be used but the calculation
+		 * part will be same as used for HW EP interrupt no.
+		 * assignment.
+		 */
+		if (dwc->normal_eps_in_gsi_mode) {
+			request->ep_intr_num =
+				((dwc->num_gsi_eps + 2) -
+					((dwc->num_eps - 1) - dep->number));
+
+		} else {
+			request->ep_intr_num =
+				((dwc->num_gsi_eps) - ((dwc->num_eps - 1) - dep->number));
+		}
+		break;
+	case GSI_SW_EP_PATH:
+		request = (struct usb_gsi_request *)op_data;
+		request->ep_intr_num = 0;
 		break;
 	default:
 		dev_err(mdwc->dev, "%s: Invalid opcode GSI EP\n", __func__);
@@ -2086,6 +2111,23 @@ int usb_gsi_ep_op(struct usb_ep *ep, void *op_data, enum gsi_ep_op op)
 	return ret;
 }
 EXPORT_SYMBOL(usb_gsi_ep_op);
+
+/*
+ * Wrapper to check if device supports normal eps in GSI mode.
+ *
+ * @return 1 if device supports the fucntionality.
+ */
+
+bool gsi_normal_ep_support(struct usb_gadget *gadget)
+{
+	struct dwc3 *dwc = gadget_to_dwc(gadget);
+	bool ret = false;
+
+	if (dwc->normal_eps_in_gsi_mode)
+		ret = true;
+	return ret;
+}
+EXPORT_SYMBOL(gsi_normal_ep_support);
 
 /* Return true if host is supporting remote wakeup functionality. */
 bool usb_get_remote_wakeup_status(struct usb_gadget *gadget)
