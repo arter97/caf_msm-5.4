@@ -2721,6 +2721,13 @@ static ssize_t loopback_handling_config(struct file *file, const char __user *us
 		ETHQOSERR("Invalid config =%d\n", config);
 		return -EINVAL;
 	}
+
+	if (priv->current_loopback == ENABLE_PHY_LOOPBACK &&
+	    priv->plat->mac2mac_en) {
+		ETHQOSINFO("Not supported with Mac2Mac enabled\n");
+		return -EOPNOTSUPP;
+	}
+
 	if ((config == ENABLE_PHY_LOOPBACK  || priv->current_loopback ==
 			ENABLE_PHY_LOOPBACK) &&
 			ethqos->current_phy_mode == DISABLE_PHY_IMMEDIATELY) {
@@ -3018,12 +3025,14 @@ static int ethqos_create_debugfs(struct qcom_ethqos        *ethqos)
 	static struct dentry *phy_off;
 	static struct dentry *loopback_enable_mode;
 	static struct dentry *mac_rec;
+	struct stmmac_priv *priv;
 
 	if (!ethqos) {
 		ETHQOSERR("Null Param\n");
 		return -ENOMEM;
 	}
 
+	priv = qcom_ethqos_get_priv(ethqos);
 	ethqos->debugfs_dir = debugfs_create_dir("eth", NULL);
 
 	if (!ethqos->debugfs_dir || IS_ERR(ethqos->debugfs_dir)) {
@@ -3055,12 +3064,14 @@ static int ethqos_create_debugfs(struct qcom_ethqos        *ethqos)
 		goto fail;
 	}
 
-	phy_off = debugfs_create_file("phy_off", 0400,
-				      ethqos->debugfs_dir, ethqos,
-				      &fops_phy_off);
-	if (!phy_off || IS_ERR(phy_off)) {
-		ETHQOSERR("Can't create phy_off %x\n", phy_off);
-		goto fail;
+	if (!priv->plat->mac2mac_en) {
+		phy_off = debugfs_create_file("phy_off", 0400,
+					      ethqos->debugfs_dir, ethqos,
+					      &fops_phy_off);
+		if (!phy_off || IS_ERR(phy_off)) {
+			ETHQOSERR("Can't create phy_off %x\n", phy_off);
+			goto fail;
+		}
 	}
 
 	loopback_enable_mode = debugfs_create_file("loopback_enable_mode", 0400,
@@ -4104,16 +4115,18 @@ static int _qcom_ethqos_probe(void *arg)
 			emac_emb_smmu_ctx.ret = 0;
 		}
 	}
-	if (of_property_read_bool(pdev->dev.of_node,
-				  "emac-phy-off-suspend")) {
-		/* Read emac core version value from dtsi */
-		ret = of_property_read_u32(pdev->dev.of_node,
-					   "emac-phy-off-suspend",
-					   &ethqos->current_phy_mode);
-		if (ret) {
-			ETHQOSDBG(":resource emac-phy-off-suspend! ");
-			ETHQOSDBG("not in dtsi\n");
-			ethqos->current_phy_mode = 0;
+	if (!plat_dat->mac2mac_en) {
+		if (of_property_read_bool(pdev->dev.of_node,
+					  "emac-phy-off-suspend")) {
+			/* Read emac core version value from dtsi */
+			ret = of_property_read_u32(pdev->dev.of_node,
+						   "emac-phy-off-suspend",
+						   &ethqos->current_phy_mode);
+			if (ret) {
+				ETHQOSDBG(":resource emac-phy-off-suspend! ");
+				ETHQOSDBG("not in dtsi\n");
+				ethqos->current_phy_mode = 0;
+			}
 		}
 	}
 	ETHQOSINFO("emac-phy-off-suspend = %d\n",
