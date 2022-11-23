@@ -85,11 +85,13 @@ struct fastrpc_file {
 	int pd;
 	int tgid_open;	/* Process ID during device open */
 	bool untrusted_process;
+	int procattrs;
 	int file_close;
 	int dsp_proc_init;
 	struct fastrpc_apps *apps;
 	struct dentry *debugfs_file;
 	struct mutex map_mutex;
+	struct mutex internal_map_mutex;
 	/* Identifies the device (MINOR_NUM_DEV / MINOR_NUM_SECURE_DEV) */
 	int dev_minor;
 	char *debug_buf;
@@ -113,6 +115,7 @@ struct fastrpc_invoke_ctx {
 	int tgid;
 	uint32_t sc;
 	uint32_t handle;
+	uint32_t *crc;
 	struct fastrpc_perf *perf;
 	uint64_t *perf_kernel;
 	uint64_t *perf_dsp;

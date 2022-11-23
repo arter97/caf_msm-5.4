@@ -4,22 +4,29 @@
  * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
+#include <linux/ion.h>
 #include <linux/sched.h>
 #include <linux/debugfs.h>
+#include <linux/crc32.h>
 #include "virtio_fastrpc_core.h"
 #include "virtio_fastrpc_mem.h"
 #include "virtio_fastrpc_queue.h"
 
 #define M_FDLIST			16
-#define FASTRPC_DMAHANDLE_NOMAP		16
+#define M_CRCLIST			64
+#define M_DSP_PERF_LIST		12
+#define M_KERNEL_PERF_LIST (PERF_KEY_MAX)
+#define M_DSP_PERF_LIST		12
 
-#define VIRTIO_FASTRPC_CMD_OPEN		1
-#define VIRTIO_FASTRPC_CMD_CLOSE	2
-#define VIRTIO_FASTRPC_CMD_INVOKE	3
-#define VIRTIO_FASTRPC_CMD_MMAP		4
-#define VIRTIO_FASTRPC_CMD_MUNMAP	5
-#define VIRTIO_FASTRPC_CMD_CONTROL	6
-#define VIRTIO_FASTRPC_CMD_GET_DSP_INFO  7
+#define FASTRPC_DMAHANDLE_NOMAP	16
+
+#define VIRTIO_FASTRPC_CMD_OPEN			1
+#define VIRTIO_FASTRPC_CMD_CLOSE		2
+#define VIRTIO_FASTRPC_CMD_INVOKE		3
+#define VIRTIO_FASTRPC_CMD_MMAP			4
+#define VIRTIO_FASTRPC_CMD_MUNMAP		5
+#define VIRTIO_FASTRPC_CMD_CONTROL		6
+#define VIRTIO_FASTRPC_CMD_GET_DSP_INFO	7
 
 #define STATIC_PD			0
 #define DYNAMIC_PD			1
@@ -31,9 +38,6 @@
 
 #define UNSIGNED_PD_SUPPORT 1
 #define PERF_CAPABILITY   (1 << 1)
-
-#define M_KERNEL_PERF_LIST (PERF_KEY_MAX)
-#define M_DSP_PERF_LIST (12)
 
 #define PERF_END (void)0
 
@@ -70,13 +74,30 @@ enum fastrpc_perfkeys {
 	PERF_KEY_MAX = 10,
 };
 
+enum virtio_fastrpc_invoke_attr {
+	/* bit0, 1: FE/BE crc enabled, 0: FE/BE crc disabled */
+	VIRTIO_FASTRPC_INVOKE_CRC = 1 << 0,
+	VIRTIO_FASTRPC_INVOKE_PERF = 1 << 1,
+	VIRTIO_FASTRPC_INVOKE_ASYNC = 1 << 2,
+};
+
+enum fastrpc_buf_attr {
+	/* bit0, 1: ION buffer, 0: normal buffer*/
+	FASTRPC_BUF_ATTR_ION = 1 << 0,
+	/* bit1, 1: buffer data is in an intermediate buffer, 0: buffer data is in invoke message */
+	FASTRPC_BUF_ATTR_INTERNAL = 1 << 1,
+	/* bit2, 1: cached buffer, 0: uncached buffer */
+	FASTRPC_BUF_ATTR_CACHED = 1 << 2,
+};
+
 static uint32_t kernel_capabilities[FASTRPC_MAX_ATTRIBUTES -
 FASTRPC_MAX_DSP_ATTRIBUTES] = {
 	PERF_CAPABILITY	/* PERF_LOGGING_V2_SUPPORT feature is supported, unsupported = 0 */
 };
 
 struct virt_fastrpc_buf {
-	u32 type;
+	u32 attrs;
+	u32 crc;
 	u64 pv;	/* buffer virtual address */
 	u64 buf_len;	/* buffer length */
 	u64 offset;	/* buffer offset */
@@ -116,6 +137,7 @@ struct virt_invoke_msg {
 	struct virt_msg_hdr hdr;	/* virtio fastrpc message header */
 	u32 handle;			/* remote handle */
 	u32 sc;				/* scalars describing the data */
+	u32 attrs;
 	struct virt_fastrpc_buf pra[0];	/* remote arguments list */
 } __packed;
 
@@ -253,6 +275,7 @@ struct fastrpc_file *fastrpc_file_alloc(void)
 	fl->domain = -1;
 	fl->cid = -1;
 	fl->dsp_proc_init = 0;
+	mutex_init(&fl->internal_map_mutex);
 	mutex_init(&fl->map_mutex);
 	return fl;
 }
@@ -450,6 +473,7 @@ int fastrpc_file_free(struct fastrpc_file *fl)
 	mutex_unlock(&fl->map_mutex);
 
 	mutex_destroy(&fl->map_mutex);
+	mutex_destroy(&fl->internal_map_mutex);
 	kfree(fl);
 	return 0;
 }
@@ -534,6 +558,7 @@ static int context_alloc(struct fastrpc_file *fl,
 	ctx->handle = invoke->handle;
 	ctx->pid = current->pid;
 	ctx->tgid = fl->tgid;
+	ctx->crc = (uint32_t *)invokefd->crc;
 	ctx->perf_dsp = (uint64_t *)invokefd->perf_dsp;
 	ctx->perf_kernel = (uint64_t *)invokefd->perf_kernel;
 
@@ -570,6 +595,19 @@ static void context_save_interrupted(struct fastrpc_invoke_ctx *ctx)
 	spin_unlock(&ctx->fl->hlock);
 }
 
+static void calc_compare_crc(struct fastrpc_invoke_ctx *ctx, unsigned char *va,
+		int len, uint32_t *lcrc, uint32_t *rcrc)
+{
+	struct fastrpc_apps *me = ctx->fl->apps;
+
+	if (unlikely(ctx->crc)) {
+		*lcrc = crc32_be(0, va, len);
+		if (rcrc && (*rcrc != *lcrc))
+			dev_err(me->dev, "FE/BE crc is not matched 0x%x:0x%x\n",
+					*lcrc, *rcrc);
+	}
+}
+
 static int get_args(struct fastrpc_invoke_ctx *ctx)
 {
 	struct fastrpc_file *fl = ctx->fl;
@@ -583,6 +621,9 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 	struct virt_fastrpc_buf *rpra;
 	struct virt_fastrpc_dmahandle *handle;
 	uint64_t *fdlist;
+	uint32_t *crclist = NULL;
+	uint32_t *early_hint = NULL;
+	uint64_t *perf_dsp_list = NULL;
 	unsigned int *attrs = ctx->attrs;
 	struct fastrpc_mmap **maps = ctx->maps;
 	size_t copylen = 0, size = 0, handle_len = 0, metalen;
@@ -643,7 +684,8 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 
 	metalen = sizeof(*vmsg) + total * sizeof(*rpra)
 		+ handles * sizeof(struct virt_fastrpc_dmahandle)
-		+ sizeof(uint64_t) * M_FDLIST;
+		+ sizeof(uint64_t) * M_FDLIST + sizeof(uint32_t) * M_CRCLIST
+		+ sizeof(uint32_t) + sizeof(uint64_t) * M_DSP_PERF_LIST;
 	size = metalen + copylen + handle_len;
 	if (size > me->buf_size) {
 		/* if user buffer contents exceed virtio buffer limits,
@@ -669,7 +711,7 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 				ctx->desc[i].type = FASTRPC_BUF_TYPE_INTERNAL;
 				len = PAGE_ALIGN(len);
 				err = fastrpc_buf_alloc(fl, len, 0,
-						0, 0, &ctx->desc[i].buf);
+						0, 0, PAGE_KERNEL, &ctx->desc[i].buf);
 				if (err)
 					goto bail;
 				len = ctx->desc[i].buf->sgt.nents *
@@ -699,12 +741,17 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 	vmsg->hdr.result = 0xffffffff;
 	vmsg->handle = ctx->handle;
 	vmsg->sc = ctx->sc;
+	vmsg->attrs = ctx->crc ? VIRTIO_FASTRPC_INVOKE_CRC : 0;
 	rpra = (struct virt_fastrpc_buf *)vmsg->pra;
 	handle = (struct virt_fastrpc_dmahandle *)&rpra[total];
 	fdlist = (uint64_t *)&handle[handles];
-	payload = (char *)&fdlist[M_FDLIST];
+	crclist = (uint32_t *)&fdlist[M_FDLIST];
+	early_hint = (uint32_t *)&crclist[M_CRCLIST];
+	perf_dsp_list = (uint64_t *)&early_hint[1];
+	payload = (char *)&perf_dsp_list[M_DSP_PERF_LIST];
 
-	memset(fdlist, 0, sizeof(uint64_t) * M_FDLIST);
+	memset(fdlist, 0, sizeof(uint64_t) * M_FDLIST + sizeof(uint32_t) * M_CRCLIST +
+		sizeof(uint64_t) * M_DSP_PERF_LIST + sizeof(uint32_t));
 
 	PERF(ctx->fl->profile, GET_COUNTER(perf_counter, PERF_COPY),
 	for (i = 0; i < bufs; i++) {
@@ -717,9 +764,13 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 		int index = 0;
 		uint64_t offset = 0;
 
+		rpra[i].attrs = 0;
 		if (maps[i]) {
 			table = maps[i]->table;
-			rpra[i].type = FASTRPC_BUF_TYPE_ION;
+			rpra[i].attrs |= FASTRPC_BUF_ATTR_ION;
+			if (maps[i]->dma_flags & ION_FLAG_CACHED)
+				rpra[i].attrs |= FASTRPC_BUF_ATTR_CACHED;
+			rpra[i].crc = 0;
 			rpra[i].pv = buf;
 			rpra[i].buf_len = len;
 			rpra[i].payload_len = table->nents *
@@ -729,6 +780,8 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 				sgbuf[index].pv = sg_dma_address(sgl);
 				sgbuf[index].len = sg_dma_len(sgl);
 			}
+			calc_compare_crc(ctx, (uint8_t *)payload, (int)rpra[i].payload_len,
+					&(rpra[i].crc), NULL);
 			down_read(&current->mm->mmap_sem);
 			VERIFY(err, NULL != (vma = find_vma(current->mm, maps[i]->va)));
 			if (err) {
@@ -750,7 +803,9 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 		} else if (ctx->desc &&
 			   ctx->desc[i].type == FASTRPC_BUF_TYPE_INTERNAL) {
 			table = &ctx->desc[i].buf->sgt;
-			rpra[i].type = FASTRPC_BUF_TYPE_INTERNAL;
+			rpra[i].attrs |= FASTRPC_BUF_ATTR_INTERNAL;
+			rpra[i].attrs |= FASTRPC_BUF_ATTR_CACHED;
+			rpra[i].crc = 0;
 			rpra[i].pv = buf;
 			rpra[i].buf_len = len;
 			rpra[i].payload_len = table->nents *
@@ -760,6 +815,8 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 				sgbuf[index].pv = page_to_phys(sg_page(sgl));
 				sgbuf[index].len = sgl->length;
 			}
+			calc_compare_crc(ctx, (uint8_t *)payload, (int)rpra[i].payload_len,
+					&(rpra[i].crc), NULL);
 			if (i < inbufs && len) {
 				K_COPY_FROM_USER(err, 0, ctx->desc[i].buf->va,
 						lpra[i].buf.pv, len);
@@ -771,7 +828,7 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 			payload += rpra[i].payload_len;
 		} else {
 			/* copy non ion buffers */
-			rpra[i].type = FASTRPC_BUF_TYPE_NORMAL;
+			rpra[i].crc = 0;
 			rpra[i].pv = buf;
 			rpra[i].buf_len = len;
 			rpra[i].payload_len = len;
@@ -780,6 +837,8 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 						lpra[i].buf.pv, len);
 				if (err)
 					goto bail;
+				calc_compare_crc(ctx, (uint8_t *)payload, (int)len,
+						&(rpra[i].crc), NULL);
 			}
 			rpra[i].offset = 0;
 			payload += len;
@@ -800,7 +859,9 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 			handle[hlist].offset = (uint32_t)(uintptr_t)lpra[i].buf.pv;
 			/* copy dma handle sglist to data area */
 			table = maps[i]->table;
-			rpra[i].type = FASTRPC_BUF_TYPE_ION;
+			rpra[i].attrs = FASTRPC_BUF_ATTR_ION;
+			if (maps[i]->dma_flags & ION_FLAG_CACHED)
+				rpra[i].attrs |= FASTRPC_BUF_ATTR_CACHED;
 			rpra[i].buf_len = lpra[i].buf.len;
 			rpra[i].payload_len = table->nents *
 				sizeof(struct virt_fastrpc_sgl);
@@ -809,6 +870,9 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 				sgbuf[index].pv = sg_dma_address(sgl);
 				sgbuf[index].len = sg_dma_len(sgl);
 			}
+			calc_compare_crc(ctx, (uint8_t *)payload, (int) rpra[i].payload_len,
+					&(rpra[i].crc), NULL);
+			rpra[i].offset = 0;
 			payload += rpra[i].payload_len;
 		}
 	}
@@ -829,7 +893,11 @@ static int put_args(struct fastrpc_invoke_ctx *ctx)
 	remote_arg_t *lpra = ctx->lpra;
 	struct virt_fastrpc_buf *rpra;
 	struct virt_fastrpc_dmahandle *handle;
+	uint32_t crc;
 	uint64_t *fdlist;
+	uint32_t *crclist = NULL;
+	uint32_t *early_hint = NULL;
+	uint64_t *perf_dsp_list = NULL;
 	struct fastrpc_mmap **maps = ctx->maps, *mmap = NULL;
 	char *payload;
 
@@ -856,7 +924,10 @@ static int put_args(struct fastrpc_invoke_ctx *ctx)
 	rpra = (struct virt_fastrpc_buf *)rsp->pra;
 	handle = (struct virt_fastrpc_dmahandle *)&rpra[total];
 	fdlist = (uint64_t *)&handle[handles];
-	payload = (char *)&fdlist[M_FDLIST] + ctx->outbufs_offset;
+	crclist = (uint32_t *)(fdlist + M_FDLIST);
+	early_hint = (uint32_t *)(crclist + M_CRCLIST);
+	perf_dsp_list = (uint64_t *)(early_hint + 1);
+	payload = (char *)&perf_dsp_list[M_DSP_PERF_LIST] + ctx->outbufs_offset;
 
 	for (i = inbufs; i < bufs; i++) {
 		if (maps[i]) {
@@ -871,6 +942,9 @@ static int put_args(struct fastrpc_invoke_ctx *ctx)
 			if (err)
 				goto bail;
 		} else {
+			calc_compare_crc(ctx, (uint8_t *)payload, (int)rpra[i].buf_len,
+					&crc, &(rpra[i].crc));
+
 			K_COPY_TO_USER(err, 0, lpra[i].buf.pv,
 					payload, rpra[i].buf_len);
 			if (err)
@@ -890,6 +964,10 @@ static int put_args(struct fastrpc_invoke_ctx *ctx)
 		}
 	}
 	mutex_unlock(&fl->map_mutex);
+	if (ctx->crc && crclist && rpra)
+		K_COPY_TO_USER(err, 0, ctx->crc,
+				crclist, M_CRCLIST * sizeof(uint32_t));
+
 bail:
 	return err;
 }
@@ -1071,9 +1149,9 @@ int fastrpc_internal_munmap(struct fastrpc_file *fl,
 		dev_err(me->dev, "%s: user application %s trying to unmap without initialization\n",
 			 __func__, current->comm);
 		err = -EBADR;
-		goto bail;
+		return err;
 	}
-
+	mutex_lock(&fl->internal_map_mutex);
 	spin_lock(&fl->hlock);
 	hlist_for_each_entry_safe(rbuf, n, &fl->remote_bufs, hn_rem) {
 		if (rbuf->raddr && (rbuf->flags == ADSP_MMAP_ADD_PAGES)) {
@@ -1091,6 +1169,7 @@ int fastrpc_internal_munmap(struct fastrpc_file *fl,
 		if (err)
 			goto bail;
 		fastrpc_buf_free(rbuf, 0);
+		mutex_unlock(&fl->internal_map_mutex);
 		return err;
 	}
 
@@ -1114,6 +1193,7 @@ bail:
 		fastrpc_mmap_add(fl, map);
 		mutex_unlock(&fl->map_mutex);
 	}
+	mutex_unlock(&fl->internal_map_mutex);
 	return err;
 }
 
@@ -1129,8 +1209,9 @@ int fastrpc_internal_munmap_fd(struct fastrpc_file *fl,
 		dev_err(me->dev, "%s: user application %s trying to unmap without initialization\n",
 			__func__, current->comm);
 		err = -EBADR;
-		goto bail;
+		return err;
 	}
+	mutex_lock(&fl->internal_map_mutex);
 	mutex_lock(&fl->map_mutex);
 	if (fastrpc_mmap_find(fl, ud->fd, ud->va, ud->len, 0, 0, &map)) {
 		dev_err(me->dev, "mapping not found to unmap fd 0x%x, va 0x%lx, len 0x%x\n",
@@ -1143,6 +1224,7 @@ int fastrpc_internal_munmap_fd(struct fastrpc_file *fl,
 		fastrpc_mmap_free(fl, map, 0);
 	mutex_unlock(&fl->map_mutex);
 bail:
+	mutex_unlock(&fl->internal_map_mutex);
 	return err;
 }
 
@@ -1227,8 +1309,9 @@ int fastrpc_internal_mmap(struct fastrpc_file *fl,
 		dev_err(me->dev, "%s: user application %s trying to map without initialization\n",
 			__func__, current->comm);
 		err = -EBADR;
-		goto bail;
+		return err;
 	}
+	mutex_lock(&fl->internal_map_mutex);
 	if (ud->flags == ADSP_MMAP_ADD_PAGES) {
 		if (ud->vaddrin) {
 			err = -EINVAL;
@@ -1238,7 +1321,8 @@ int fastrpc_internal_mmap(struct fastrpc_file *fl,
 		}
 		dma_attr = DMA_ATTR_NO_KERNEL_MAPPING;
 		err = fastrpc_buf_alloc(fl, ud->size, dma_attr, ud->flags,
-								1, &rbuf);
+								1, pgprot_noncached(PAGE_KERNEL),
+								&rbuf);
 		if (err)
 			goto bail;
 		err = virt_fastrpc_mmap(fl, ud->flags, 0, rbuf->sgt.sgl,
@@ -1277,6 +1361,7 @@ int fastrpc_internal_mmap(struct fastrpc_file *fl,
 		fastrpc_mmap_free(fl, map, 0);
 		mutex_unlock(&fl->map_mutex);
 	}
+	mutex_unlock(&fl->internal_map_mutex);
 	return err;
 }
 
@@ -1548,6 +1633,8 @@ int fastrpc_init_process(struct fastrpc_file *fl,
 				goto bail;
 			}
 		}
+
+		fl->procattrs = uproc->attrs;
 		break;
 	case FASTRPC_INIT_CREATE_STATIC:
 		fl->pd = STATIC_PD;
