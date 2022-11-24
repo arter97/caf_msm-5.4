@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2011, 2013-2014, 2018-2019, 2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 /*
  * Subsystem restart notifier API header
@@ -35,6 +36,7 @@ enum subsys_notif_type {
 enum early_subsys_notif_type {
 	XPORT_LAYER_NOTIF,
 	PCIE_DRV_LAYER_NOTIF,
+	AUDIO_LAYER_NOTIF,
 	NUM_EARLY_NOTIFS
 };
 
