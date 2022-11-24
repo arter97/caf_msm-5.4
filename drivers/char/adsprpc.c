@@ -1415,6 +1415,7 @@ static inline bool fastrpc_get_persistent_map(size_t len, struct fastrpc_mmap **
 			map->is_persistent && !map->in_use) {
 			*pers_map = map;
 			map->in_use = true;
+			map->refs++;
 			found = true;
 			break;
 		}
@@ -4843,6 +4844,8 @@ static int fastrpc_mmap_remove_ssr(struct fastrpc_file *fl)
 						err = -EADDRNOTAVAIL;
 						return err;
 					}
+					/* Decrement ref count for persistent map */
+					map->refs--;
 					spin_lock(&me->hlock);
 				}
 				match = NULL;
