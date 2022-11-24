@@ -4255,9 +4255,23 @@ static int tpdm_suspend(struct device *dev)
 }
 #endif
 
+#ifdef CONFIG_HIBERNATION
+static int tpdm_freeze(struct device *dev)
+{
+	struct tpdm_drvdata *drvdata = dev_get_drvdata(dev);
+
+	coresight_disable(drvdata->csdev);
+
+	return 0;
+}
+#endif
+
 static const struct dev_pm_ops tpdm_dev_pm_ops = {
 #ifdef CONFIG_DEEPSLEEP
 	.suspend = tpdm_suspend,
+#endif
+#ifdef CONFIG_HIBERNATION
+	.freeze  = tpdm_freeze,
 #endif
 };
 

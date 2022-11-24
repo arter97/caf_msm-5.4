@@ -1703,6 +1703,8 @@ static void handle_fifo_timeout(struct spi_master *spi,
 	mb();
 	timeout = wait_for_completion_timeout(&mas->xfer_done, HZ);
 	if (!timeout) {
+		GENI_SE_ERR(mas->ipc, true, mas->dev,
+			    "Failed cancel CMD\n");
 		reinit_completion(&mas->xfer_done);
 		geni_abort_m_cmd(mas->base);
 		/* Ensure cmd abort is written */
@@ -1710,8 +1712,8 @@ static void handle_fifo_timeout(struct spi_master *spi,
 		timeout = wait_for_completion_timeout(&mas->xfer_done,
 								HZ);
 		if (!timeout)
-			dev_err(mas->dev,
-				"Failed to cancel/abort m_cmd\n");
+			GENI_SE_ERR(mas->ipc, true, mas->dev,
+				    "Failed abort CMD\n");
 	}
 dma_unprep:
 	geni_spi_dma_unprepare(spi, xfer);
@@ -2022,7 +2024,8 @@ static void geni_spi_dma_unprepare(struct spi_master *spi,
 			timeout =
 			wait_for_completion_timeout(&mas->xfer_done, HZ);
 			if (!timeout)
-				dev_err(mas->dev, "DMA TX RESET failed\n");
+				GENI_SE_ERR(mas->ipc, true, mas->dev,
+					    "DMA TX RESET failed\n");
 		}
 
 		if (xfer->rx_buf && xfer->rx_dma) {
@@ -2031,7 +2034,8 @@ static void geni_spi_dma_unprepare(struct spi_master *spi,
 			timeout =
 			wait_for_completion_timeout(&mas->xfer_done, HZ);
 			if (!timeout)
-				dev_err(mas->dev, "DMA RX RESET failed\n");
+				GENI_SE_ERR(mas->ipc, true, mas->dev,
+					    "DMA RX RESET failed\n");
 		}
 
 		if (spi->slave && mas->is_dma_not_done) {
@@ -2044,8 +2048,8 @@ static void geni_spi_dma_unprepare(struct spi_master *spi,
 			mb();
 			timeout = wait_for_completion_timeout(&mas->xfer_done, HZ);
 			if (!timeout)
-				dev_err(mas->dev,
-					"Failed to cancel/abort m_cmd\n");
+				GENI_SE_ERR(mas->ipc, true, mas->dev,
+					    "Failed abort CMD\n");
 		}
 
 		if (xfer->tx_buf && xfer->tx_dma)

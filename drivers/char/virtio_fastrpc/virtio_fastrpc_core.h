@@ -80,7 +80,14 @@ struct fastrpc_file {
 	spinlock_t hlock;
 	struct hlist_head maps;
 	struct hlist_head cached_bufs;
+	/* Number of cached internal buffer, upper limit is MAX_CACHED_BUFS. */
+	u32 num_cached_buf;
 	struct hlist_head remote_bufs;
+	/*
+	 * List to store virtio fastrpc cmds interrupted by signal while waiting
+	 * for completion.
+	 */
+	struct hlist_head interrupted_cmds;
 	struct fastrpc_ctx_lst clst;
 	uint32_t mode;
 	int tgid;
@@ -95,6 +102,7 @@ struct fastrpc_file {
 	struct fastrpc_apps *apps;
 	struct dentry *debugfs_file;
 	struct mutex map_mutex;
+	struct mutex internal_map_mutex;
 	/* Identifies the device (MINOR_NUM_DEV / MINOR_NUM_SECURE_DEV) */
 	int dev_minor;
 	char *debug_buf;

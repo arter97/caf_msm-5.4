@@ -618,7 +618,17 @@ static void clk_alpha_pll_disable(struct clk_hw *hw)
 static unsigned long
 alpha_pll_calc_rate(u64 prate, u32 l, u32 a, u32 alpha_width)
 {
-	return (prate * l) + ((prate * a) >> ALPHA_SHIFT(alpha_width));
+	unsigned long rate;
+
+	rate = (prate * l) + ((prate * a) >> ALPHA_SHIFT(alpha_width));
+
+	/*
+	 * PLLs with narrow ALPHA (e.g. 16 bits) aren't able to hit all
+	 * frequencies precisely and may be under by a few hundred Hz. Round to
+	 * the nearest KHz to avoid reporting strange, slightly lower than
+	 * requested frequencies. The small delta has no functional impact.
+	 */
+	return roundup(rate, 1000);
 }
 
 static unsigned long
@@ -640,10 +650,7 @@ alpha_pll_round_rate(unsigned long rate, unsigned long prate, u32 *l, u64 *a,
 	/* Upper ALPHA_BITWIDTH bits of Alpha */
 	quotient = remainder << ALPHA_SHIFT(alpha_width);
 
-	remainder = do_div(quotient, prate);
-
-	if (remainder)
-		quotient++;
+	do_div(quotient, prate);
 
 	*a = quotient;
 	return alpha_pll_calc_rate(prate, *l, *a, alpha_width);
@@ -975,7 +982,7 @@ alpha_huayra_pll_calc_rate(u64 prate, u32 l, u32 a)
 	if (a >= BIT(PLL_HUAYRA_ALPHA_WIDTH - 1))
 		l -= 1;
 
-	return (prate * l) + (prate * a >> PLL_HUAYRA_ALPHA_WIDTH);
+	return alpha_pll_calc_rate(prate, l, a, PLL_HUAYRA_ALPHA_WIDTH);
 }
 
 static unsigned long
@@ -995,10 +1002,7 @@ alpha_huayra_pll_round_rate(unsigned long rate, unsigned long prate,
 	}
 
 	quotient = remainder << PLL_HUAYRA_ALPHA_WIDTH;
-	remainder = do_div(quotient, prate);
-
-	if (remainder)
-		quotient++;
+	do_div(quotient, prate);
 
 	/*
 	 * alpha_val should be in two’s compliment number in the range
@@ -1157,6 +1161,14 @@ int clk_trion_pll_configure(struct clk_alpha_pll *pll, struct regmap *regmap,
 
 	if (trion_pll_is_enabled(pll, regmap)) {
 		pr_warn("PLL is already enabled. Skipping configuration.\n");
+
+		/*
+		 * Set the PLL_UPDATE_BYPASS bit to latch the input before continuing.
+		 */
+		regmap_update_bits(regmap, pll->offset + PLL_MODE(pll),
+				 PLL_UPDATE_BYPASS,
+				 PLL_UPDATE_BYPASS);
+
 		return 0;
 	}
 
@@ -1401,6 +1413,9 @@ static int clk_trion_pll_prepare(struct clk_hw *hw)
 	/* Return early if calibration is not needed. */
 	regmap_read(pll->clkr.regmap, PLL_STATUS(pll), &regval);
 	if (regval & TRION_PCAL_DONE)
+		return ret;
+
+	if (clk_trion_pll_is_enabled(hw))
 		return ret;
 
 	ret = clk_trion_pll_enable(hw);
