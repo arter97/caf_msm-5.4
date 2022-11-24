@@ -494,8 +494,8 @@ static int hh_rm_send_request(u32 message_id,
 	unsigned long tx_flags;
 	u32 num_fragments = 0;
 	size_t payload_size;
-	void *msg;
-	int i, ret = 0;
+	void *send_buff;
+	int i, ret;
 
 	num_fragments = (req_buff_size + HH_RM_MAX_MSG_SIZE_BYTES - 1) /
 			HH_RM_MAX_MSG_SIZE_BYTES;
@@ -512,15 +512,11 @@ static int hh_rm_send_request(u32 message_id,
 		return -E2BIG;
 	}
 
-	msg = kzalloc(HH_RM_MAX_MSG_SIZE_BYTES, GFP_KERNEL);
-	if (!msg)
-		return -ENOMEM;
-
 	if (mutex_lock_interruptible(&hh_rm_send_lock)) {
-		ret = -ERESTARTSYS;
-		goto free_msg;
+		return -ERESTARTSYS;
 	}
 
+	/* Consider also the 'request' packet for the loop count */
 	for (i = 0; i <= num_fragments; i++) {
 		if (buff_size_remaining > HH_RM_MAX_MSG_SIZE_BYTES) {
 			payload_size = HH_RM_MAX_MSG_SIZE_BYTES;
@@ -529,10 +525,13 @@ static int hh_rm_send_request(u32 message_id,
 			payload_size = buff_size_remaining;
 		}
 
-		memset(msg, 0, HH_RM_MAX_MSG_SIZE_BYTES);
-		/* Fill header */
-		hdr = msg;
+		send_buff = kzalloc(sizeof(*hdr) + payload_size, GFP_KERNEL);
+		if (!send_buff) {
+			mutex_unlock(&hh_rm_send_lock);
+			return -ENOMEM;
+		}
 
+		hdr = send_buff;
 		hdr->version = HH_RM_RPC_HDR_VERSION_ONE;
 		hdr->hdr_words = HH_RM_RPC_HDR_WORDS;
 		hdr->type = i == 0 ? HH_RM_RPC_TYPE_REQ : HH_RM_RPC_TYPE_CONT;
@@ -540,12 +539,11 @@ static int hh_rm_send_request(u32 message_id,
 		hdr->seq = connection->seq;
 		hdr->msg_id = message_id;
 
-		/* Copy payload */
-		memcpy(msg + sizeof(*hdr), req_buff_curr, payload_size);
+		memcpy(send_buff + sizeof(*hdr), req_buff_curr, payload_size);
 		req_buff_curr += payload_size;
 
-		/* Force the last fragment to be sent immediately to
-		 * the receiver
+		/* Force the last fragment (or the request type)
+		 * to be sent immediately to the receiver
 		 */
 		tx_flags = (i == num_fragments) ? HH_MSGQ_TX_PUSH : 0;
 
@@ -554,17 +552,25 @@ static int hh_rm_send_request(u32 message_id,
 		    message_id == HH_RM_RPC_MSG_ID_CALL_VM_CONSOLE_FLUSH)
 			udelay(800);
 
-		ret = hh_msgq_send(hh_rm_msgq_desc, msg,
+		ret = hh_msgq_send(hh_rm_msgq_desc, send_buff,
 					sizeof(*hdr) + payload_size, tx_flags);
 
-		if (ret)
-			break;
+		/*
+		 * In the case of a success, the hypervisor would have consumed
+		 * the buffer. While in the case of a failure, we are going to
+		 * quit anyways. Hence, free the buffer regardless of the
+		 * return value.
+		 */
+		kfree(send_buff);
+
+		if (ret) {
+			mutex_unlock(&hh_rm_send_lock);
+			return ret;
+		}
 	}
 
 	mutex_unlock(&hh_rm_send_lock);
-free_msg:
-	kfree(msg);
-	return ret;
+	return 0;
 }
 
 /**
