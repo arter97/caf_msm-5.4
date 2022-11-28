@@ -3465,8 +3465,14 @@ static void ufs_qcom_parse_limits(struct ufs_qcom_host *host)
 	of_property_read_u32(np, "limit-rx-pwm-gear", &host->limit_rx_pwm_gear);
 	of_property_read_u32(np, "limit-rate", &host->limit_rate);
 #if defined(CONFIG_SCSI_UFSHCD_QTI)
-	if (host->ufs_dev_types == 0)
+	if (host->ufs_dev_types < 2)
 		of_property_read_u32(np, "limit-phy-submode", &host->limit_phy_submode);
+	else {
+		if (host->limit_phy_submode) {
+			host->limit_rate = PA_HS_MODE_A;
+			dev_info(host->hba->dev, "UFS 3.x device is detected, Mode is set to RATE A\n");
+		}
+	}
 	host->hba->limit_phy_submode = host->limit_phy_submode;
 #else
 	of_property_read_u32(np, "limit-phy-submode", &host->limit_phy_submode);
