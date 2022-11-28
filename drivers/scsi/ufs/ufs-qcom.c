@@ -3772,11 +3772,16 @@ static int ufs_qcom_remove(struct platform_device *pdev)
 	struct ufs_hba *hba =  platform_get_drvdata(pdev);
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	struct ufs_qcom_qos_req *r = host->ufs_qos;
-	struct qos_cpu_group *qcg = r->qcg;
+	struct qos_cpu_group *qcg = NULL;
 	int i;
 
+	if (r && r->qcg)
+		qcg = r->qcg;
+	else
+		dev_err(&pdev->dev, "ufs_qcom_remove qcg is null\n");
+
 	pm_runtime_get_sync(&(pdev)->dev);
-	for (i = 0; i < r->num_groups; i++, qcg++)
+	for (i = 0; qcg != NULL && i < r->num_groups; i++, qcg++)
 		remove_group_qos(qcg);
 	ufshcd_remove(hba);
 	return 0;
