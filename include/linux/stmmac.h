@@ -114,6 +114,7 @@ struct stmmac_rxq_cfg {
 	u8 pkt_route;
 	bool use_prio;
 	u32 prio;
+	bool use_rtc;
 };
 
 struct stmmac_txq_cfg {
@@ -217,5 +218,6 @@ struct plat_stmmacenet_data {
 	void (*phy_irq_disable)(void *priv);
 	void (*rgmii_loopback_cfg)(void *priv, int loopback_en);
 	bool sph_disable;
+	unsigned int jumbo_mtu;
 };
 #endif

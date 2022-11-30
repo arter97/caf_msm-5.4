@@ -2025,6 +2025,8 @@ u32 mtl_rx_int;
 	/* configure all channels */
 	for (chan = 0; chan < rx_channels_count; chan++) {
 		qmode = priv->plat->rx_queues_cfg[chan].mode_to_use;
+		if (priv->plat->rx_queues_cfg[chan].use_rtc)
+			rxmode = tc;
 
 		stmmac_dma_rx_mode(priv, priv->ioaddr, rxmode, chan,
 				rxfifosz, qmode);
@@ -2930,6 +2932,17 @@ static int stmmac_open(struct net_device *dev)
 	if (bfsize < BUF_SIZE_16KiB)
 		bfsize = stmmac_set_bfsize(dev->mtu, priv->dma_buf_sz);
 
+	/* Set dam_buf_sz up to 2K to reduce memory usage.
+	 * Save the calculated buf size for jumbo packet to jumbo_frame_sz
+	 * which is used for allocating the jumbo skb to get all segments.
+	 */
+	if (priv->plat->jumbo_mtu >= MIN_JUMBO_FRAME_SIZE) {
+		priv->jumbo_frame_sz =
+		priv->plat->jumbo_mtu == MAX_SUPPORTED_JUMBO_MTU ?
+		MAX_SUPPORTED_JUMBO_FRAME_SIZE : bfsize;
+		bfsize = MIN_JUMBO_FRAME_SIZE;
+	}
+
 	priv->dma_buf_sz = bfsize;
 	buf_sz = bfsize;
 
@@ -3803,6 +3816,220 @@ void swap_ip_port(struct sk_buff *skb, unsigned int eth_type)
 }
 
 /**
+ * stmmac_rx_jumbo - manage the jumbo packet receive process
+ * @priv: driver private structure
+ * @queue: RX queue index.
+ * @entry: current entry
+ * @p: current descriptor pointer
+ * @status: pointer to the current packet status
+ * Description :  this function is called by the stmmac_rx.
+ * It gets all the segments for a jumbo packet.
+ */
+
+static int stmmac_rx_jumbo(struct stmmac_priv *priv, u32 queue,
+			   int entry, struct dma_desc *p, int *status)
+{
+	struct stmmac_rx_queue *rx_q = &priv->rx_queue[queue];
+	struct stmmac_channel *ch = &priv->channel[queue];
+	int coe = priv->hw->rx_csum;
+	unsigned int next_entry = entry;
+	int jb_status = *status, err_status = -1;
+
+	unsigned int frame_len = 0;
+	struct sk_buff *skb = NULL;
+	struct dma_desc *np;
+	struct stmmac_rx_buffer *buf;
+
+	/* Check if we need to handle an incomplete
+	 * jumbo frame when first enter here.
+	 */
+	if (rx_q->jumbo_pkt_state.state_saved) {
+		rx_q->jumbo_pkt_state.state_saved = false;
+		skb = rx_q->jumbo_pkt_state.jumbo_skb;
+		frame_len = rx_q->jumbo_pkt_state.jumbo_len;
+	}
+
+jumbo_read_again:
+	if (next_entry != entry) {
+		entry = next_entry;
+		buf = &rx_q->buf_pool[entry];
+		if (priv->extend_desc)
+			p = (struct dma_desc *)(rx_q->dma_erx + entry);
+		else
+			p = rx_q->dma_rx + entry;
+
+		/* read the status of the incoming frame */
+		jb_status = priv->hw->desc->rx_status_err(&priv->dev->stats,
+						       &priv->xstats, p,
+						       &err_status);
+		*status = jb_status;
+
+		/* Save the current skb pointer and length before exit
+		 * if managed by the DMA before complete the jumbo frame.
+		 */
+		if (unlikely(jb_status & dma_own)) {
+			rx_q->jumbo_pkt_state.jumbo_skb = skb;
+			rx_q->jumbo_pkt_state.jumbo_len = frame_len;
+			rx_q->jumbo_pkt_state.state_saved = true;
+			return next_entry;
+		}
+
+		rx_q->cur_rx = STMMAC_GET_ENTRY(rx_q->cur_rx,
+						DMA_RX_SIZE);
+		next_entry = rx_q->cur_rx;
+		/* If an error happens in any segment of a jumbo frame,
+		 * discard the whole packet.
+		 */
+		if (unlikely(rx_q->jumbo_pkt_state.jumbo_error)) {
+			if (net_ratelimit())
+				dev_warn(priv->device,
+					 "desc3 = 0x%x\n",
+					 le32_to_cpu(p->des3));
+			if (jb_status & rx_not_fsls) {
+				goto jumbo_read_again;
+			} else if (jb_status & rx_ls_only) {
+				dev_kfree_skb(skb);
+				rx_q->jumbo_pkt_state.jumbo_error = 0;
+				return next_entry;
+			}
+		}
+	} else {
+		rx_q->cur_rx = STMMAC_GET_ENTRY(rx_q->cur_rx,
+						DMA_RX_SIZE);
+		next_entry = rx_q->cur_rx;
+	}
+
+	if (priv->extend_desc)
+		np = (struct dma_desc *)(rx_q->dma_erx + next_entry);
+	else
+		np = rx_q->dma_rx + next_entry;
+
+	prefetch(np);
+	prefetch(page_address(buf->page));
+
+	if (unlikely(jb_status & discard_frame)) {
+		priv->dev->stats.rx_errors++;
+		if (priv->hwts_rx_en && !priv->extend_desc) {
+			/* DESC2 & DESC3 will be overwritten by device
+			 * with timestamp value, hence reinitialize
+			 * them in stmmac_rx_refill() function so that
+			 * device can reuse it.
+			 */
+			page_pool_recycle_direct(rx_q->page_pool, buf->page);
+			buf->page = NULL;
+		}
+
+		/* Last segment is discarded, do clean up and return */
+		dev_kfree_skb(skb);
+		rx_q->jumbo_pkt_state.jumbo_error = 0;
+	} else {
+		/* Buffer is good. Go on. */
+		unsigned char *buf_data = page_address(buf->page);
+		unsigned int prev_len = frame_len;
+
+		prefetch(buf_data - NET_IP_ALIGN);
+		frame_len = stmmac_get_rx_frame_len(priv, p, coe);
+
+		if (likely(jb_status & rx_fs_only)) {
+			/* Handle first segment
+			 * alloc a buffer for jumbo frame
+			 */
+			skb = napi_alloc_skb(&ch->rx_napi,
+					     priv->jumbo_frame_sz);
+			if (unlikely(!skb)) {
+				if (net_ratelimit())
+					dev_warn(priv->device,
+						 "jumbo packet dropped\n");
+				priv->dev->stats.rx_dropped++;
+				rx_q->jumbo_pkt_state.jumbo_error = 1;
+				goto jumbo_read_again;
+			}
+
+			dma_sync_single_for_cpu(GET_MEM_PDEV_DEV,
+						buf->addr, frame_len,
+						DMA_FROM_DEVICE);
+			skb_copy_to_linear_data(skb, page_address(buf->page),
+						frame_len);
+
+			skb_put(skb, frame_len);
+			page_pool_recycle_direct(rx_q->page_pool, buf->page);
+			buf->page = NULL;
+			goto jumbo_read_again;
+		} else {
+			unsigned int buf_len = frame_len - prev_len;
+
+			/* Handle intermediate and last segments */
+			if (likely(jb_status & rx_ls_only)) {
+				if (priv->extend_desc &&
+				    priv->hw->desc->rx_extended_status)
+					priv->hw->desc->rx_extended_status
+						(&priv->dev->stats,
+						 &priv->xstats,
+						 rx_q->dma_erx + entry);
+				/* It is last segment and flame length is the
+				 * full packet length.
+				 *
+				 * If frame length is greater than jumbo frame
+				 * size when jumbo mtu is configured then the
+				 * packet is ignored.
+				 */
+				if (priv->jumbo_frame_sz > 0 &&
+				    frame_len > priv->jumbo_frame_sz) {
+					priv->dev->stats.rx_length_errors++;
+					dev_kfree_skb(skb);
+					return next_entry;
+				}
+				/* ACS is set; GMAC core strips PAD/FCS for
+				 * IEEE 802.3 Type frames (LLC/LLC-SNAP)
+				 *
+				 * llc_snap is never checked in GMAC >= 4,
+				 * so this ACS feature is always disabled and
+				 * packets need to be stripped manually.
+				 */
+				if ((unlikely(priv->synopsys_id <
+					      DWMAC_CORE_4_00) &&
+				     unlikely(jb_status != llc_snap)))
+					frame_len -= ETH_FCS_LEN;
+			}
+
+			dma_sync_single_for_cpu(GET_MEM_PDEV_DEV,
+						buf->addr, buf_len,
+						DMA_FROM_DEVICE);
+			skb_copy_to_linear_data_offset(skb,
+						       prev_len,
+						       buf_data -
+						       NET_IP_ALIGN,
+						       buf_len);
+			skb_put(skb, buf_len);
+			page_pool_recycle_direct(rx_q->page_pool, buf->page);
+			buf->page = NULL;
+
+			if (likely(jb_status & rx_not_fsls))
+				goto jumbo_read_again;
+		}
+
+		/* Full jumbo frame is received */
+		stmmac_get_rx_hwtstamp(priv, p, np, skb);
+
+		stmmac_rx_vlan(priv->dev, skb);
+
+		skb->protocol = eth_type_trans(skb, priv->dev);
+
+		if (unlikely(!coe))
+			skb_checksum_none_assert(skb);
+		else
+			skb->ip_summed = CHECKSUM_UNNECESSARY;
+
+		skb_record_rx_queue(skb, queue);
+		napi_gro_receive(&ch->rx_napi, skb);
+		priv->dev->stats.rx_packets++;
+		priv->dev->stats.rx_bytes += frame_len;
+	}
+
+	return next_entry;
+}
+
+/**
  * stmmac_rx - manage the receive process
  * @priv: driver private structure
  * @limit: napi bugget
@@ -3870,6 +4097,31 @@ read_again:
 		/* check if managed by the DMA otherwise go ahead */
 		if (unlikely(status & dma_own))
 			break;
+
+		if ((status & rx_fs_only) || (status & rx_ls_only) ||
+		    (status & rx_not_fsls)) {
+			if (!rx_q->jumbo_en) {
+				/* Drop packets here if the queue not
+				 * support jumbo frame
+				 */
+				if (status & rx_ls_only) {
+					priv->dev->stats.rx_dropped++;
+					count++;
+				}
+				rx_q->cur_rx = STMMAC_GET_ENTRY
+					       (rx_q->cur_rx, DMA_RX_SIZE);
+				next_entry = rx_q->cur_rx;
+				count++;
+				continue;
+			}
+
+			next_entry = stmmac_rx_jumbo(priv, queue, entry,
+						     p, &status);
+			if (unlikely(status & dma_own))
+				break;
+			count += next_entry - entry;
+			continue;
+		}
 
 		rx_q->cur_rx = STMMAC_GET_ENTRY(rx_q->cur_rx, DMA_RX_SIZE);
 		next_entry = rx_q->cur_rx;
@@ -4988,6 +5240,9 @@ int stmmac_dvr_probe(struct device *device,
 		dev_warn(priv->device,
 			 "%s: warning: maxmtu having invalid value (%d)\n",
 			 __func__, priv->plat->maxmtu);
+
+	if (priv->plat->jumbo_mtu > 0)
+		ndev->mtu = priv->plat->jumbo_mtu;
 
 	if (flow_ctrl)
 		priv->flow_ctrl = FLOW_AUTO;	/* RX/TX pause on */
