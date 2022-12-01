@@ -2786,6 +2786,7 @@ static int stmmac_hw_setup(struct net_device *dev, bool init_ptp)
 			priv->hw->ps = 0;
 		}
 	}
+	priv->hw->crc_strip_en = priv->plat->crc_strip_en;
 
 	/* Initialize the MAC Core */
 	stmmac_core_init(priv, priv->hw, dev);

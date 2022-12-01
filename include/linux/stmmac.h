@@ -219,5 +219,6 @@ struct plat_stmmacenet_data {
 	void (*rgmii_loopback_cfg)(void *priv, int loopback_en);
 	bool sph_disable;
 	unsigned int jumbo_mtu;
+	bool crc_strip_en;
 };
 #endif

@@ -423,6 +423,8 @@ stmmac_probe_config_dt(struct platform_device *pdev, const char **mac)
 	if (plat->interface < 0)
 		plat->interface = plat->phy_interface;
 
+	plat->crc_strip_en = of_property_read_bool(np, "snps,crc_strip");
+
 	/* Some wrapper drivers still rely on phy_node. Let's save it while
 	 * they are not converted to phylink. */
 	plat->phy_node = of_parse_phandle(np, "phy-handle", 0);
