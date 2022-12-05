@@ -264,7 +264,7 @@ static u8 *get_wlan_mac_address(struct device *dev,
 		addr = &priv->wlan_der_mac_addr;
 
 	if (!addr->no_of_mac_addr_set) {
-		pr_err("WLAN MAC address is not set, type %d\n", type);
+		pr_debug("WLAN MAC address is not set, ignore, type %d\n", type);
 		goto out;
 	}
 	*num = addr->no_of_mac_addr_set;
