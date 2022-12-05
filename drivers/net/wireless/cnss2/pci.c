@@ -5977,7 +5977,7 @@ static int cnss_pci_of_reserved_mem_device_init(struct cnss_pci_data *pci_priv)
 	 */
 	ret = of_reserved_mem_device_init(dev_pci);
 	if (ret)
-		cnss_pr_err("Failed to init reserved mem device, err = %d\n",
+		cnss_pr_dbg("OPT feature, Failed to init reserved mem device, ignore, err = %d\n",
 			    ret);
 	if (dev_pci->cma_area)
 		cnss_pr_dbg("CMA area is %s\n",
