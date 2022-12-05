@@ -17,12 +17,6 @@ static int ufs_qcom_phy_qmp_v4_phy_calibrate(struct phy *generic_phy)
 	bool is_g4, is_rate_B;
 	int err;
 
-	err = reset_control_assert(ufs_qcom_phy->ufs_reset);
-	if (err) {
-		dev_err(dev, "Failed to assert UFS PHY reset %d\n", err);
-		goto out;
-	}
-
 	/* For UFS PHY's submode, 1 = G4, 0 = non-G4 */
 	is_g4 = !!ufs_qcom_phy->submode;
 	is_rate_B = (ufs_qcom_phy->mode == PHY_MODE_UFS_HS_B) ? true : false;
@@ -59,12 +53,6 @@ static int ufs_qcom_phy_qmp_v4_phy_calibrate(struct phy *generic_phy)
 	/* flush buffered writes */
 	wmb();
 
-	err = reset_control_deassert(ufs_qcom_phy->ufs_reset);
-	if (err) {
-		dev_err(dev, "Failed to deassert UFS PHY reset %d\n", err);
-		goto out;
-	}
-
 	ufs_qcom_phy_qmp_v4_start_serdes(ufs_qcom_phy);
 
 	err = ufs_qcom_phy_qmp_v4_is_pcs_ready(ufs_qcom_phy);
@@ -94,7 +82,7 @@ static int ufs_qcom_phy_qmp_v4_init(struct phy *generic_phy)
 	}
 
 	/* Optional */
-	ufs_qcom_phy_get_reset(phy_common);
+	/* ufs_qcom_phy_get_reset(phy_common);*/
 
 out:
 	return err;
