@@ -175,7 +175,7 @@ static int __init sdam_init(void)
 {
 	return platform_driver_register(&sdam_driver);
 }
-subsys_initcall(sdam_init);
+early_subsys_initcall(sdam_init, EARLY_SUBSYS_PLATFORM, EARLY_INIT_LEVEL8);
 
 static void __exit sdam_exit(void)
 {

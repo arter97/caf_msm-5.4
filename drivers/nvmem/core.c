@@ -1421,7 +1421,7 @@ static void __exit nvmem_exit(void)
 	bus_unregister(&nvmem_bus_type);
 }
 
-subsys_initcall(nvmem_init);
+early_subsys_initcall(nvmem_init, EARLY_SUBSYS_PLATFORM, EARLY_INIT_LEVEL8);
 module_exit(nvmem_exit);
 
 MODULE_AUTHOR("Srinivas Kandagatla <srinivas.kandagatla@linaro.org");
