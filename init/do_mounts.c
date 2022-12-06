@@ -663,8 +663,9 @@ void __init prepare_namespace(void)
 	char name[16];
 	static int first_time = 1;
 
-	while (first_time == -1)
-		msleep(50);
+	if (pid_nr(task_pid(current)) == 1)
+		while (first_time)
+			msleep(50);
 
 	if (!first_time) {
 	if (root_delay) {
