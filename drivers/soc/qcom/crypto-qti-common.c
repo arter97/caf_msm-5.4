@@ -846,8 +846,15 @@ static ssize_t add_partition_store(struct device *dev,
 	//The unique key is generated via partition name , or legacy key if configured
 	if (strcmp(ice_dev->ice_instance_type, "ufs") == 0) {
 #if IS_ENABLED(CONFIG_QTI_CRYPTO_LEGACY_KEY_FDE)
-		key_res = qseecom_create_key_in_slot(QSEECOM_KM_USAGE_UFS_ICE_DISK_ENCRYPTION,
-			slot, CRYPTO_ICE_FDE_LEGACY_UFS, NULL);
+		if (list_empty(&ice_dev->part_cfg_list)) {
+			//In legacy mode, only one common key is needed
+			key_res = qseecom_create_key_in_slot(
+				QSEECOM_KM_USAGE_UFS_ICE_DISK_ENCRYPTION,
+				slot, CRYPTO_ICE_FDE_LEGACY_UFS, NULL);
+		} else {
+			//Key is already generated and set,contune
+			key_res == QSEECOM_KEY_ID_EXISTS;
+		}
 #else
 		key_res = qseecom_create_key_in_slot(QSEECOM_KM_USAGE_UFS_ICE_DISK_ENCRYPTION,
 			slot, label, NULL);
@@ -1673,7 +1680,7 @@ static int crypto_qti_ice_init_fde_node(struct device *dev)
 		//Get eMMC instance
 		ice_dev = crypto_qti_get_ice_device_from_storage_type("sdcc");
 		if (ice_dev == NULL) {
-			pr_err("Victor ice_dev NULL !\n");
+			pr_err("ice_dev NULL !\n");
 			return -EINVAL;
 		}
 	}
