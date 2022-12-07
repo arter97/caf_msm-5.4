@@ -250,6 +250,9 @@ struct stmmac_priv {
 
 	int phy_intr_wol_irq;
 	bool en_wol;
+
+	bool hw_offload_enabled;
+
 };
 
 enum stmmac_state {
