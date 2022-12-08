@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __QSEECOMI_H_
@@ -63,6 +64,7 @@ enum qseecom_qceos_cmd_id {
 	QSEOS_TEE_OPEN_SESSION_WHITELIST = 0x1D,
 	QSEOS_TEE_INVOKE_COMMAND_WHITELIST = 0x1E,
 	QSEOS_LISTENER_DATA_RSP_COMMAND_WHITELIST = 0x1F,
+	QSEOS_SOTA_NOTIFICATION_CHECK_STATUS = 0x20,
 	QSEOS_FSM_LTEOTA_REQ_CMD = 0x109,
 	QSEOS_FSM_LTEOTA_REQ_RSP_CMD = 0x110,
 	QSEOS_FSM_IKE_REQ_CMD = 0x203,
@@ -507,6 +509,12 @@ struct qseecom_continue_blocked_request_ireq {
 
 #define TZ_SECBOOT_GET_FUSE_INFO \
 	TZ_SYSCALL_CREATE_SMC_ID(TZ_OWNER_SIP, TZ_SVC_FUSE, 0x09)
+
+#define TZ_SOTA_UPDATE_NOTIFICATION_ID \
+	TZ_SYSCALL_CREATE_SMC_ID(TZ_OWNER_SIP, TZ_SVC_FUSE, 0x07)
+
+#define TZ_SOTA_UPDATE_NOTIFICATION_ID_PARAM_ID \
+	TZ_SYSCALL_CREATE_PARAM_ID_0
 
 #define TZ_SECBOOT_GET_FUSE_INFO_PARAM_ID \
 	TZ_SYSCALL_CREATE_PARAM_ID_4(\
