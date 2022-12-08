@@ -388,9 +388,9 @@ int ufshcd_prepare_lrbp_crypto_spec(struct ufs_hba *hba,
 
 	if (WARN_ON(!ufshcd_is_crypto_enabled(hba))) {
 		/*
-		 * Upper layer asked us to do inline encryption
-		 * but that isn't enabled, so we fail this request.
-		 */
+	 	* Upper layer asked us to do inline encryption
+	 	* but that isn't enabled, so we fail this request.
+	 	*/
 		return -EINVAL;
 	}
 	if (!ufshcd_keyslot_valid(hba, bc->bc_keyslot))
@@ -404,6 +404,7 @@ int ufshcd_prepare_lrbp_crypto_spec(struct ufs_hba *hba,
 	} else {
 		lrbp->data_unit_num = bc->bc_dun[0];
 	}
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(ufshcd_prepare_lrbp_crypto_spec);

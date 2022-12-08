@@ -84,7 +84,13 @@ int ufshcd_crypto_qti_prep_lrbp_crypto(struct ufs_hba *hba,
 
 	lrbp->crypto_enable = true;
 	lrbp->crypto_key_slot = bc->bc_keyslot;
-	lrbp->data_unit_num = bc->bc_dun[0];
+
+	if (bc->is_ext4) {
+	                lrbp->data_unit_num = (u64)cmd->request->bio->bi_iter.bi_sector;
+	                lrbp->data_unit_num >>= 3;
+	} else {
+	   lrbp->data_unit_num = bc->bc_dun[0];
+	}
 
 	return 0;
 }
@@ -316,7 +322,7 @@ static int ufshcd_hba_init_crypto_qti_spec(struct ufs_hba *hba,
 	}
 #endif
 	hba->ksm = keyslot_manager_create(hba->dev, num_slots,
-				ksm_ops, BLK_CRYPTO_FEATURE_WRAPPED_KEYS,
+				ksm_ops, BLK_CRYPTO_FEATURE_STANDARD_KEYS | BLK_CRYPTO_FEATURE_WRAPPED_KEYS,
 				crypto_modes_supported, hba);
 
 	if (!hba->ksm) {
