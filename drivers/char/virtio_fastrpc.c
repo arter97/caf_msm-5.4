@@ -1048,7 +1048,7 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 		} else if (ctx->desc &&
 			   ctx->desc[i].type == FASTRPC_BUF_TYPE_INTERNAL) {
 			table = &ctx->desc[i].buf->sgt;
-			rpra[i].attrs |= FASTRPC_BUF_ATTR_INTERNAL;
+			rpra[i].attrs |= FASTRPC_BUF_ATTR_INTERNAL | FASTRPC_BUF_ATTR_CACHED;
 			rpra[i].crc = 0;
 			rpra[i].pv = buf;
 			rpra[i].buf_len = len;
@@ -1436,7 +1436,7 @@ static struct page **fastrpc_alloc_buffer(struct fastrpc_buf *buf, gfp_t gfp)
 
 	if (!(buf->dma_attr & DMA_ATTR_NO_KERNEL_MAPPING)) {
 		buf->va = vmap(pages, count, VM_USERMAP,
-				pgprot_noncached(PAGE_KERNEL));
+				PAGE_KERNEL);
 		if (!buf->va)
 			goto out_free_sg;
 	}
