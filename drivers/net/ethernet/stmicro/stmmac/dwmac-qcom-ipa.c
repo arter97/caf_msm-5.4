@@ -34,9 +34,14 @@
 #include "stmmac_ptp.h"
 
 #define NTN_IPA_DBG_MAX_MSG_LEN 3000
+#define IPA_SYSFS_DEV_ATTR_PERMS 0644
 static char buf[3000];
 static struct ethqos_prv_ipa_data eth_ipa_ctx;
 static void __ipa_eth_free_msg(void *buff, u32 len, u32 type) {}
+static struct class *emac_ipa_class;
+static dev_t emac_ipa_dev_num;
+static struct cdev *emac_ipa_cdev;
+static struct device *emac_ipa_dev;
 
 /* Network driver specific init for hw offload */
 static void eth_ipa_net_drv_init(void)
@@ -1644,30 +1649,42 @@ static bool ethqos_is_phy_link_up(struct qcom_ethqos *ethqos)
 	}
 }
 
-static ssize_t read_ipa_offload_status(struct file *file,
-				       char __user *user_buf, size_t count,
-				       loff_t *ppos)
+static ssize_t read_ipa_offload_status(struct device *dev,
+				       struct device_attribute *attr,
+				       char *user_buf)
 {
-	unsigned int len = 0, buf_len = NTN_IPA_DBG_MAX_MSG_LEN;
-	struct qcom_ethqos *ethqos = file->private_data;
+	int BUFF_SZ = 256;
+	struct net_device *netdev = to_net_dev(dev);
+	struct stmmac_priv *priv;
+	struct qcom_ethqos *ethqos;
+
+	if (!netdev) {
+		ETHQOSERR("netdev is NULL\n");
+		return -EINVAL;
+	}
+
+	priv = netdev_priv(netdev);
+	ethqos = priv->plat->bsp_priv;
+
+	if (!ethqos) {
+		ETHQOSERR("ethqos is NULL\n");
+		return -EINVAL;
+	}
 
 	if (ethqos_is_phy_link_up(ethqos)) {
 		if (eth_ipa_ctx.ipa_offload_susp)
-			len += scnprintf(buf + len, buf_len - len,
-					 "IPA Offload suspended\n");
+			return scnprintf(user_buf, BUFF_SZ,
+					"IPA Offload suspended");
 		else
-			len += scnprintf(buf + len, buf_len - len,
-					 "IPA Offload enabled\n");
-	} else {
-		len += scnprintf(buf + len, buf_len - len,
-				 "Cannot read status, No PHY link\n");
+			return scnprintf(user_buf, BUFF_SZ,
+					"IPA Offload enabled");
 	}
-
-	if (len > buf_len)
-		len = buf_len;
-
-	return simple_read_from_buffer(user_buf, count, ppos, buf, len);
+	return scnprintf(user_buf, BUFF_SZ,
+			"Cannot read status, No PHY link");
 }
+
+#define SUSPEND_ETH_IPA_OFFLOAD 1
+#define RESUME_ETH_IPA_OFFLOAD 0
 
 /* Generic Bit descirption; reset = 0, set = 1*/
 static char * const bit_status_string[] = {
@@ -1681,33 +1698,36 @@ static char * const bit_mask_string[] = {
 	"Enable",
 };
 
-static ssize_t suspend_resume_ipa_offload(struct file *file,
-					  const char __user *user_buf,
-					  size_t count, loff_t *ppos)
+static ssize_t suspend_resume_ipa_offload(struct device *dev,
+					  struct device_attribute *attr,
+					  const char *user_buf,
+					  size_t count)
 {
-	s8 option = 0;
-	char in_buf[2];
-	unsigned long ret;
-	struct qcom_ethqos *ethqos = file->private_data;
-	struct platform_device *pdev = ethqos->pdev;
-	struct net_device *dev = platform_get_drvdata(pdev);
-	struct stmmac_priv *priv = netdev_priv(dev);
+	s8 input = 0;
+	struct net_device *netdev = to_net_dev(dev);
+	struct stmmac_priv *priv;
+	struct qcom_ethqos *ethqos;
 
-	if (sizeof(in_buf) < 2)
+	if (!netdev) {
+		ETHQOSERR("netdev is NULL\n");
+		return -EINVAL;
+	}
+
+	priv = netdev_priv(netdev);
+	ethqos = priv->plat->bsp_priv;
+
+	if (!ethqos) {
+		ETHQOSERR("ethqos is NULL\n");
+		return -EINVAL;
+	}
+
+	if (kstrtos8(user_buf, 0, &input))
 		return -EFAULT;
 
-	ret = copy_from_user(in_buf, user_buf, 1);
-	if (ret)
-		return -EFAULT;
-
-	in_buf[1] = '\0';
-	if (kstrtos8(in_buf, 0, &option))
-		return -EFAULT;
-
-	if (ethqos_is_phy_link_up(ethqos)) {
-		if (option == 1)
+	if (qcom_ethqos_is_phy_link_up(ethqos)) {
+		if (input == SUSPEND_ETH_IPA_OFFLOAD)
 			ethqos_ipa_offload_event_handler(priv, EV_USR_SUSPEND);
-		else if (option == 0)
+		else if (input == RESUME_ETH_IPA_OFFLOAD)
 			ethqos_ipa_offload_event_handler(priv, EV_USR_RESUME);
 	} else {
 		ETHQOSERR("Operation not permitted, No PHY link");
@@ -2027,17 +2047,36 @@ static const struct file_operations fops_ntn_dma_stats = {
 	.llseek = default_llseek,
 };
 
-static const struct file_operations fops_ntn_ipa_offload_en = {
-	.read = read_ipa_offload_status,
-	.write = suspend_resume_ipa_offload,
-	.open = simple_open,
-	.owner = THIS_MODULE,
-	.llseek = default_llseek,
-};
+static DEVICE_ATTR(suspend_ipa_offload, IPA_SYSFS_DEV_ATTR_PERMS,
+		   read_ipa_offload_status,
+		   suspend_resume_ipa_offload);
 
 static int ethqos_ipa_cleanup_debugfs(struct qcom_ethqos *ethqos)
 {
 	struct ethqos_prv_ipa_data *eth_ipa = &eth_ipa_ctx;
+	struct net_device *netdev;
+
+	if (!ethqos) {
+		ETHQOSERR("ethqos is NULL\n");
+		return -EINVAL;
+	}
+
+	netdev = platform_get_drvdata(ethqos->pdev);
+
+	if (!netdev) {
+		ETHQOSERR("netdev is NULL\n");
+		return -EINVAL;
+	}
+
+	if (emac_ipa_dev) {
+		device_destroy(emac_ipa_class, emac_ipa_dev_num);
+		class_destroy(emac_ipa_class);
+		cdev_del(emac_ipa_cdev);
+		unregister_chrdev_region(emac_ipa_dev_num, 1);
+	}
+
+	sysfs_remove_file(&netdev->dev.kobj,
+			  &dev_attr_suspend_ipa_offload.attr);
 
 	if (!ethqos || !eth_ipa) {
 		ETHQOSERR("Null Param\n");
@@ -2050,9 +2089,6 @@ static int ethqos_ipa_cleanup_debugfs(struct qcom_ethqos *ethqos)
 
 		debugfs_remove(eth_ipa->debugfs_dma_stats);
 		eth_ipa->debugfs_dma_stats = NULL;
-
-		debugfs_remove(eth_ipa->debugfs_suspend_ipa_offload);
-		eth_ipa->debugfs_suspend_ipa_offload = NULL;
 	}
 
 	ETHQOSERR("IPA debugfs Deleted Successfully\n");
@@ -2069,16 +2105,63 @@ static int ethqos_ipa_cleanup_debugfs(struct qcom_ethqos *ethqos)
 static int ethqos_ipa_create_debugfs(struct qcom_ethqos *ethqos)
 {
 	struct ethqos_prv_ipa_data *eth_ipa = &eth_ipa_ctx;
+	int ret;
+	struct net_device *netdev;
 
-	eth_ipa->debugfs_suspend_ipa_offload =
-		debugfs_create_file("suspend_ipa_offload", 0600,
-				    ethqos->debugfs_dir, ethqos,
-				    &fops_ntn_ipa_offload_en);
-	if (!eth_ipa->debugfs_suspend_ipa_offload ||
-	    IS_ERR(eth_ipa->debugfs_suspend_ipa_offload)) {
-		ETHQOSERR("Cannot create debugfs ipa_offload_en %d\n",
-			  (int)eth_ipa->debugfs_suspend_ipa_offload);
+	if (!ethqos) {
+		ETHQOSERR("ethqos is NULL\n");
+		return -EINVAL;
+	}
+
+	netdev = platform_get_drvdata(ethqos->pdev);
+
+	if (!netdev) {
+		ETHQOSERR("netdev is NULL\n");
+		return -EINVAL;
+	}
+
+	ret = sysfs_create_file(&netdev->dev.kobj,
+				&dev_attr_suspend_ipa_offload.attr);
+	if (ret) {
+		ETHQOSERR("unable to create suspend_ipa_offload sysfs node\n");
 		goto fail;
+	}
+
+	ret = alloc_chrdev_region(&emac_ipa_dev_num, 0, 1, "emac_ipa");
+	if (ret) {
+		ETHQOSERR("alloc_chrdev_region error for node %s\n",
+			  "emac_ipa");
+		goto alloc_emac_ipa_chrdev_region_fail;
+	}
+
+	emac_ipa_cdev = cdev_alloc();
+	if (!emac_ipa_cdev) {
+		ret = -ENOMEM;
+		ETHQOSERR("failed to alloc emac_ipa cdev\n");
+		goto fail_alloc_emac_ipa_cdev;
+	}
+
+	cdev_init(emac_ipa_cdev, NULL);
+
+	ret = cdev_add(emac_ipa_cdev, emac_ipa_dev_num, 1);
+	if (ret < 0) {
+		ETHQOSERR("emac_ipa cdev_add err=%d\n", -ret);
+		goto emac_ipa_cdev_add_fail;
+	}
+
+	emac_ipa_class = class_create(THIS_MODULE, "emac_ipa");
+	if (!emac_ipa_class) {
+		ret = -ENODEV;
+		ETHQOSERR("failed to create emac_ipa class\n");
+		goto fail_create_emac_ipa_class;
+	}
+
+	emac_ipa_dev = device_create(emac_ipa_class, NULL,
+				     emac_ipa_dev_num, NULL, "emac_ipa");
+	if (!emac_ipa_dev) {
+		ret = -EINVAL;
+		ETHQOSERR("failed to create emac_ipa device\n");
+		goto fail_create_emac_ipa_device;
 	}
 
 	eth_ipa->debugfs_ipa_stats =
@@ -2108,6 +2191,15 @@ static int ethqos_ipa_create_debugfs(struct qcom_ethqos *ethqos)
 fail:
 	ethqos_ipa_cleanup_debugfs(ethqos);
 	return -ENOMEM;
+fail_create_emac_ipa_device:
+	class_destroy(emac_ipa_class);
+fail_create_emac_ipa_class:
+	cdev_del(emac_ipa_cdev);
+emac_ipa_cdev_add_fail:
+fail_alloc_emac_ipa_cdev:
+	unregister_chrdev_region(emac_ipa_dev_num, 1);
+alloc_emac_ipa_chrdev_region_fail:
+	return ret;
 }
 
 static int ethqos_ipa_offload_connect(struct qcom_ethqos *ethqos,
@@ -2381,6 +2473,10 @@ static int ethqos_ipa_offload_suspend(struct qcom_ethqos *ethqos)
 		}
 	}
 
+	/* Map RX queue 0 to DMA channel 1 before IPA offload disconnect */
+	priv->hw->mac->map_mtl_to_dma(priv->hw, EMAC_QUEUE_0, EMAC_CHANNEL_1);
+	ETHQOSINFO("Mapped queue 0 to channel 1\n");
+
 	/* Disconnect IPA offload */
 	if (eth_ipa_ctx.ipa_offload_conn) {
 		for (type = 0; type < IPA_QUEUE_MAX; type++) {
@@ -2390,7 +2486,7 @@ static int ethqos_ipa_offload_suspend(struct qcom_ethqos *ethqos)
 				if (ret) {
 					ETHQOSERR("%s: Disconnect Failed %d\n",
 						  __func__, ret);
-					return ret;
+					goto err_revert_dma_map;
 				}
 			}
 			eth_ipa_ctx.ipa_offload_conn = false;
@@ -2406,7 +2502,7 @@ static int ethqos_ipa_offload_suspend(struct qcom_ethqos *ethqos)
 			if (ret != 0) {
 				ETHQOSERR("%s: stop_dma_tx failed %d\n",
 					  __func__, ret);
-				return ret;
+				goto err_revert_dma_map;
 			}
 		}
 	}
@@ -2434,7 +2530,7 @@ static int ethqos_ipa_offload_suspend(struct qcom_ethqos *ethqos)
 				if (ret) {
 					ETHQOSERR("%s: Cleanup Failed, %d\n",
 						  __func__, ret);
-					return ret;
+					goto err_revert_dma_map;
 				}
 			}
 		}
@@ -2442,6 +2538,9 @@ static int ethqos_ipa_offload_suspend(struct qcom_ethqos *ethqos)
 		eth_ipa_ctx.ipa_offload_init = false;
 	}
 
+	return ret;
+err_revert_dma_map:
+	priv->hw->mac->map_mtl_to_dma(priv->hw, EMAC_QUEUE_0, EMAC_CHANNEL_0);
 	return ret;
 }
 
@@ -2512,6 +2611,10 @@ static int ethqos_ipa_offload_resume(struct qcom_ethqos *ethqos)
 		ETHQOSINFO("Mapped queue 0 to channel 1 again\n");
 		return ret;
 	}
+
+	/* Map RX queue 0 to DMA channel 0 on successful IPA offload resume */
+	priv->hw->mac->map_mtl_to_dma(priv->hw, EMAC_QUEUE_0, EMAC_CHANNEL_0);
+	ETHQOSINFO("Mapped queue 0 to channel 0\n");
 
 	ETHQOSDBG("Exit\n");
 
@@ -2772,6 +2875,18 @@ void ethqos_ipa_offload_event_handler(void *data,
 	IPA_LOCK();
 
 	switch (ev) {
+	case EV_IPA_SSR_UP:
+		if (!eth_ipa_ctx.emac_dev_ready ||
+		    !eth_ipa_ctx.ipa_uc_ready)
+			break;
+			ethqos_ipa_offload_resume(eth_ipa_ctx.ethqos);
+		break;
+	case EV_IPA_SSR_DOWN:
+		if (!eth_ipa_ctx.emac_dev_ready ||
+		    !eth_ipa_ctx.ipa_uc_ready)
+			break;
+			ethqos_ipa_offload_suspend(eth_ipa_ctx.ethqos);
+		break;
 	case EV_PHY_LINK_DOWN:
 		if (!eth_ipa_ctx.emac_dev_ready ||
 		    !eth_ipa_ctx.ipa_uc_ready ||
@@ -2810,6 +2925,17 @@ void ethqos_ipa_offload_event_handler(void *data,
 
 		if (!eth_ipa_ctx.ipa_uc_ready)
 			ethqos_ipa_uc_ready(eth_ipa_ctx.ethqos);
+
+		if (!eth_ipa_ctx.ipa_debugfs_exists &&
+		    eth_ipa_ctx.emac_dev_reset) {
+			if (!ethqos_ipa_create_debugfs(eth_ipa_ctx.ethqos)) {
+				ETHQOSERR("eMAC Debugfs created\n");
+				eth_ipa_ctx.ipa_debugfs_exists = true;
+			} else {
+				ETHQOSERR("eMAC Debugfs failed\n");
+			}
+		}
+		eth_ipa_ctx.emac_dev_reset = false;
 
 		break;
 	case EV_IPA_READY:
@@ -2858,6 +2984,7 @@ void ethqos_ipa_offload_event_handler(void *data,
 
 		/* reset link down on dev close */
 		eth_ipa_ctx.ipa_offload_link_down = false;
+		eth_ipa_ctx.emac_dev_reset = true;
 		ethqos_free_ipa_queue_mem(eth_ipa_ctx.ethqos);
 
 		break;
@@ -2935,7 +3062,8 @@ void ethqos_ipa_offload_event_handler(void *data,
 	if (eth_ipa_ctx.queue_enabled[IPA_QUEUE_CV2X] &&
 	    (ev == EV_USR_SUSPEND || ev == EV_USR_RESUME ||
 	     ev == EV_DEV_CLOSE || ev == EV_DEV_OPEN ||
-	     ev == EV_PHY_LINK_DOWN || ev ==  EV_PHY_LINK_UP)) {
+	     ev == EV_PHY_LINK_DOWN || ev ==  EV_PHY_LINK_UP ||
+	     ev == EV_IPA_SSR_DOWN || ev ==  EV_IPA_SSR_UP)) {
 		if (eth_ipa_ctx.ipa_offload_conn_prev !=
 		    eth_ipa_ctx.ipa_offload_conn)
 			ETHQOSDBG("need-status-updated\n");

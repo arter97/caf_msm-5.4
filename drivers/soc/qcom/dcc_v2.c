@@ -784,6 +784,7 @@ static void dcc_disable(struct dcc_drvdata *drvdata)
 	}
 	dcc_sram_memset(drvdata->dev, drvdata->ram_base, 0, drvdata->ram_size);
 	drvdata->ram_cfg = 0;
+	drvdata->ram_cpy_len = 0;
 	drvdata->ram_start = 0;
 	mutex_unlock(&drvdata->mutex);
 }
@@ -1230,6 +1231,7 @@ static void dcc_config_reset(struct dcc_drvdata *drvdata)
 	}
 	drvdata->ram_start = 0;
 	drvdata->ram_cfg = 0;
+	drvdata->ram_cpy_len = 0;
 	mutex_unlock(&drvdata->mutex);
 }
 
@@ -1965,6 +1967,11 @@ static int dcc_state_store(struct device *dev)
 		return -EINVAL;
 	}
 
+	if (!is_dcc_enabled(drvdata)) {
+		dev_dbg(dev, "DCC is not enabled.\n");
+		return 0;
+	}
+
 	if (!drvdata->ll_state_cnt) {
 		dev_dbg(dev, "reg-offsets property doesn't exist\n");
 		return 0;
@@ -2029,18 +2036,32 @@ out:
 static int dcc_state_restore(struct device *dev)
 {
 	int n, i, j, dcc_ll_index;
+	int ret = 0;
 	int *sram_state;
 	struct dcc_drvdata *drvdata = dev_get_drvdata(dev);
 	uint32_t ram_cpy_wlen;
 
-	if (!drvdata || !drvdata->ll_state || !drvdata->sram_state) {
+	if (!drvdata) {
 		dev_err(dev, "Err: %s Invalid argument\n", __func__);
 		return -EINVAL;
 	}
 
+	if (!is_dcc_enabled(drvdata)) {
+		dev_dbg(dev, "DCC is not enabled.\n");
+		ret = 0;
+		goto out;
+	}
+
 	if (!drvdata->ll_state_cnt) {
 		dev_dbg(dev, "reg-offsets property doesn't exist\n");
-		return 0;
+		ret = 0;
+		goto out;
+	}
+
+	if (!drvdata->sram_state || !drvdata->ll_state) {
+		dev_err(dev, "Err: Restore state is NULL\n");
+		ret = -EINVAL;
+		goto out;
 	}
 
 	ram_cpy_wlen = drvdata->ram_cpy_len / 4;
@@ -2067,13 +2088,14 @@ static int dcc_state_restore(struct device *dev)
 	}
 
 	mutex_unlock(&drvdata->mutex);
-
+out:
 	kfree(drvdata->sram_state);
-	kfree(drvdata->ll_state);
 	drvdata->sram_state = NULL;
+
+	kfree(drvdata->ll_state);
 	drvdata->ll_state = NULL;
 
-	return 0;
+	return ret;
 }
 #endif
 
