@@ -70,6 +70,8 @@ static inline void ethqos_ipa_offload_event_handler(void *data, int ev)
 #define EV_QTI_CHECK_CONN_UPDATE (EV_QTI_GET_CONN_STATUS + 1)
 #define EV_IPA_HANDLE_RX_INTR (EV_QTI_CHECK_CONN_UPDATE + 1)
 #define EV_IPA_HANDLE_TX_INTR (EV_IPA_HANDLE_RX_INTR + 1)
+#define EV_IPA_SSR_DOWN (EV_IPA_HANDLE_TX_INTR + 1)
+#define EV_IPA_SSR_UP (EV_IPA_SSR_DOWN + 1)
 #define EV_IPA_OFFLOAD_MAX (EV_IPA_HANDLE_TX_INTR + 1)
 
 #endif
