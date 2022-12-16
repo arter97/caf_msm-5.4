@@ -247,7 +247,7 @@ static bool dcc_ready(struct dcc_drvdata *drvdata)
 	uint32_t val;
 
 	/* poll until DCC ready */
-	if (!readl_poll_timeout((drvdata->base + DCC_STATUS), val,
+	if (!readl_poll_timeout((drvdata->base + dcc_offset_conv(drvdata, DCC_STATUS)), val,
 				(BMVAL(val, 0, 1) == 0), 1, TIMEOUT_US))
 		return true;
 
@@ -784,6 +784,7 @@ static void dcc_disable(struct dcc_drvdata *drvdata)
 	}
 	dcc_sram_memset(drvdata->dev, drvdata->ram_base, 0, drvdata->ram_size);
 	drvdata->ram_cfg = 0;
+	drvdata->ram_cpy_len = 0;
 	drvdata->ram_start = 0;
 	mutex_unlock(&drvdata->mutex);
 }
@@ -1230,6 +1231,7 @@ static void dcc_config_reset(struct dcc_drvdata *drvdata)
 	}
 	drvdata->ram_start = 0;
 	drvdata->ram_cfg = 0;
+	drvdata->ram_cpy_len = 0;
 	mutex_unlock(&drvdata->mutex);
 }
 
@@ -1953,8 +1955,7 @@ static int dcc_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_DEEPSLEEP
-
+#if defined(CONFIG_DEEPSLEEP) || defined(CONFIG_HIBERNATION)
 static int dcc_state_store(struct device *dev)
 {
 	int ret = 0, n, i;
@@ -1964,6 +1965,11 @@ static int dcc_state_store(struct device *dev)
 	if (!drvdata) {
 		dev_dbg(dev, "Invalid drvdata\n");
 		return -EINVAL;
+	}
+
+	if (!is_dcc_enabled(drvdata)) {
+		dev_dbg(dev, "DCC is not enabled.\n");
+		return 0;
 	}
 
 	if (!drvdata->ll_state_cnt) {
@@ -2008,7 +2014,7 @@ static int dcc_state_store(struct device *dev)
 
 	for (i = 0; i < n; i++) {
 		drvdata->ll_state[i].offset = ll_reg_offsets[i];
-		drvdata->ll_state[i].val    = dcc_readl(drvdata, ll_reg_offsets[i]);
+		drvdata->ll_state[i].val    = __raw_readl(drvdata->base + ll_reg_offsets[i]);
 	}
 
 	mutex_unlock(&drvdata->mutex);
@@ -2030,18 +2036,32 @@ out:
 static int dcc_state_restore(struct device *dev)
 {
 	int n, i, j, dcc_ll_index;
+	int ret = 0;
 	int *sram_state;
 	struct dcc_drvdata *drvdata = dev_get_drvdata(dev);
 	uint32_t ram_cpy_wlen;
 
-	if (!drvdata || !drvdata->ll_state || !drvdata->sram_state) {
+	if (!drvdata) {
 		dev_err(dev, "Err: %s Invalid argument\n", __func__);
 		return -EINVAL;
 	}
 
+	if (!is_dcc_enabled(drvdata)) {
+		dev_dbg(dev, "DCC is not enabled.\n");
+		ret = 0;
+		goto out;
+	}
+
 	if (!drvdata->ll_state_cnt) {
 		dev_dbg(dev, "reg-offsets property doesn't exist\n");
-		return 0;
+		ret = 0;
+		goto out;
+	}
+
+	if (!drvdata->sram_state || !drvdata->ll_state) {
+		dev_err(dev, "Err: Restore state is NULL\n");
+		ret = -EINVAL;
+		goto out;
 	}
 
 	ram_cpy_wlen = drvdata->ram_cpy_len / 4;
@@ -2063,19 +2083,23 @@ static int dcc_state_restore(struct device *dev)
 		}
 
 		for (j = 0; j < drvdata->per_ll_reg_cnt; i++, j++)
-			dcc_writel(drvdata, drvdata->ll_state[i].val, drvdata->ll_state[i].offset);
+			__raw_writel(drvdata->ll_state[i].val,
+						drvdata->base + drvdata->ll_state[i].offset);
 	}
 
 	mutex_unlock(&drvdata->mutex);
-
+out:
 	kfree(drvdata->sram_state);
-	kfree(drvdata->ll_state);
 	drvdata->sram_state = NULL;
+
+	kfree(drvdata->ll_state);
 	drvdata->ll_state = NULL;
 
-	return 0;
+	return ret;
 }
+#endif
 
+#ifdef CONFIG_DEEPSLEEP
 static int dcc_v2_suspend(struct device *dev)
 {
 	if (mem_sleep_current == PM_SUSPEND_MEM)
@@ -2091,7 +2115,9 @@ static int dcc_v2_resume(struct device *dev)
 
 	return 0;
 }
+#endif
 
+#ifdef CONFIG_HIBERNATION
 static int dcc_v2_freeze(struct device *dev)
 {
 	return dcc_state_store(dev);
@@ -2118,13 +2144,14 @@ static int dcc_v2_thaw(struct device *dev)
 
 	return 0;
 }
-
 #endif
 
 static const struct dev_pm_ops dcc_v2_pm_ops = {
 #ifdef CONFIG_DEEPSLEEP
 	.suspend         = dcc_v2_suspend,
 	.resume          = dcc_v2_resume,
+#endif
+#ifdef CONFIG_HIBERNATION
 	.freeze          = dcc_v2_freeze,
 	.restore         = dcc_v2_restore,
 	.thaw            = dcc_v2_thaw,

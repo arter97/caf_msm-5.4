@@ -228,6 +228,7 @@ enum {
  * @intent_req_lock: Synchronises multiple intent requests
  * @intent_req_result: Result of intent request
  * @intent_req_comp: Completion for intent_req signalling
+ * @remote_close: Tracks remote initiated close request
  */
 struct glink_slatecom_channel {
 	struct rpmsg_endpoint ept;
@@ -259,6 +260,7 @@ struct glink_slatecom_channel {
 	bool intent_req_result;
 	struct completion intent_req_comp;
 	struct completion intent_alloc_comp;
+	bool remote_close;
 };
 
 struct rx_pkt {
@@ -272,8 +274,6 @@ struct rx_pkt {
 			struct glink_slatecom_channel, ept)
 
 static const struct rpmsg_endpoint_ops glink_endpoint_ops;
-static unsigned int glink_slatecom_wakeup_ms =
-			CONFIG_RPMSG_GLINK_SLATECOM_WAKEUP_MS;
 
 #define SLATECOM_CMD_VERSION			0
 #define SLATECOM_CMD_VERSION_ACK			1
@@ -313,6 +313,7 @@ glink_slatecom_alloc_channel(struct glink_slatecom *glink, const char *name)
 
 	channel->glink = glink;
 	channel->name = kstrdup(name, GFP_KERNEL);
+	channel->remote_close = false;
 
 	init_completion(&channel->open_req);
 	init_completion(&channel->open_ack);
@@ -403,10 +404,18 @@ free_intent:
 static void tx_wakeup_worker(struct glink_slatecom *glink)
 {
 	struct slatecom_fifo_fill fifo_fill;
+	int rc;
 
 	mutex_lock(&glink->tx_avail_lock);
-	slatecom_reg_read(glink->slatecom_handle, SLATECOM_REG_FIFO_FILL, 1,
-						&fifo_fill);
+	__pm_stay_awake(glink->ws);
+
+	rc = slatecom_reg_read(glink->slatecom_handle, SLATECOM_REG_FIFO_FILL, 1,
+		&fifo_fill);
+	if (rc < 0)
+		GLINK_ERR(glink, "%s: Error %d receiving data\n",
+					__func__, rc);
+	__pm_relax(glink->ws);
+
 	glink->fifo_fill.tx_avail = fifo_fill.tx_avail;
 	if (glink->fifo_fill.tx_avail > glink->fifo_size.to_slave/2)
 		glink->water_mark_reached = false;
@@ -491,13 +500,18 @@ static void glink_slatecom_send_read_notify(struct glink_slatecom *glink)
 
 	GLINK_INFO(glink, "Cmd size in words = %d\n", sizeof(msg)/WORD_SIZE);
 
-	ret = slatecom_fifo_write(glink->slatecom_handle, sizeof(msg)/WORD_SIZE,
-								&msg);
-	if (ret < 0) {
-		GLINK_ERR(glink, "%s: Error %d writing data\n",
-							__func__, ret);
-		return;
-	}
+	do {
+		ret = slatecom_fifo_write(glink->slatecom_handle, sizeof(msg)/WORD_SIZE,
+									&msg);
+		if (ret < 0) {
+			GLINK_ERR(glink, "%s: Error %d writing data\n",
+								__func__, ret);
+			if (ret == -ECANCELED)
+				usleep_range(TX_WAIT_US, TX_WAIT_US + 1000);
+			else
+				return;
+		}
+	} while (ret == -ECANCELED);
 
 	glink_slatecom_update_tx_avail(glink, sizeof(msg)/WORD_SIZE);
 }
@@ -506,6 +520,9 @@ static int glink_slatecom_tx(struct glink_slatecom *glink, void *data,
 						size_t dlen, bool wait)
 {
 	int ret = 0;
+
+	if (atomic_read(&glink->in_reset))
+		return -ENXIO;
 
 	mutex_lock(&glink->tx_lock);
 
@@ -713,6 +730,7 @@ static int glink_slatecom_send_final(struct glink_slatecom_channel *channel,
 				struct glink_slatecom_rx_intent *intent,
 				bool wait)
 {
+	int rc;
 	struct glink_slatecom *glink = channel->glink;
 	struct {
 		struct glink_slatecom_msg msg;
@@ -767,9 +785,17 @@ static int glink_slatecom_send_final(struct glink_slatecom_channel *channel,
 			glink->sent_read_notify = false;
 	}
 
-	slatecom_ahb_write_bytes(glink->slatecom_handle,
-	(uint32_t)(size_t)(intent->addr + intent->offset),
-	len, data);
+	do {
+		rc = slatecom_ahb_write_bytes(glink->slatecom_handle,
+					(uint32_t)(size_t)(intent->addr + intent->offset),
+					len, data);
+		if (rc < 0) {
+			GLINK_ERR(glink, "%s: Error %d writing data\n",
+							__func__, rc);
+			if (rc == -ECANCELED)
+				usleep_range(TX_WAIT_US, TX_WAIT_US + 1000);
+		}
+	} while (rc == -ECANCELED);
 
 	intent->offset += len;
 	glink_slatecom_tx_write(glink, &req, sizeof(req));
@@ -938,11 +964,16 @@ static void glink_slatecom_send_close_req(struct glink_slatecom *glink,
 	req.param1 = cpu_to_le16(channel->lcid);
 
 	CH_INFO(channel, "\n");
-	glink_slatecom_tx(glink, &req, sizeof(req), true);
 
-	ret = wait_for_completion_timeout(&channel->close_ack, 2 * HZ);
-	if (!ret) {
-		GLINK_ERR(glink, "rx_close_ack timedout[%d]:[%d]\n",
+	ret = glink_slatecom_tx(glink, &req, sizeof(req), true);
+	if (ret < 0) {
+		GLINK_ERR(glink, "transmit error:%d\n", ret);
+		return;
+	}
+	if (!channel->remote_close) {
+		ret = wait_for_completion_timeout(&channel->close_ack, 2 * HZ);
+		if (!ret)
+			GLINK_ERR(glink, "rx_close_ack timedout[%d]:[%d]\n",
 				 channel->rcid, channel->lcid);
 	}
 }
@@ -1246,6 +1277,7 @@ static void glink_slatecom_rx_close(struct glink_slatecom *glink, unsigned int r
 	mutex_unlock(&glink->idr_lock);
 	if (WARN(!channel, "close request on unknown channel\n"))
 		return;
+	channel->remote_close = true;
 	CH_INFO(channel, "\n");
 
 	/* Decouple the potential rpdev from the channel */
@@ -2012,20 +2044,35 @@ static void __rx_worker(struct rx_pkt *rx_pkt_info)
 static void rx_worker(struct kthread_work *work)
 {
 	struct rx_pkt *rx_pkt_info;
+	struct glink_slatecom *glink;
 
 	rx_pkt_info = container_of(work, struct rx_pkt, kwork);
+	glink = rx_pkt_info->glink;
 	__rx_worker(rx_pkt_info);
+
+	__pm_relax(glink->ws);
 };
 
 static void glink_slatecom_linkup(struct glink_slatecom *glink)
 {
 	int ret;
+	int rc;
 
 	if (glink->slatecom_status != SLATECOM_LINKUP)
 		return;
 	atomic_set(&glink->in_reset, 0);
-	slatecom_reg_read(glink->slatecom_handle, SLATECOM_REG_FIFO_SIZE, 1,
-				&glink->fifo_size);
+
+	do {
+		rc = slatecom_reg_read(glink->slatecom_handle, SLATECOM_REG_FIFO_SIZE, 1,
+			&glink->fifo_size);
+		if (rc < 0) {
+			GLINK_ERR(glink, "%s: Error %d receiving data\n",
+							__func__, rc);
+			if (rc == -ECANCELED)
+				usleep_range(TX_WAIT_US, TX_WAIT_US + 1000);
+		}
+	} while (rc == -ECANCELED);
+
 	mutex_lock(&glink->tx_avail_lock);
 	glink->fifo_fill.tx_avail = glink->fifo_size.to_master;
 	mutex_unlock(&glink->tx_avail_lock);
@@ -2064,6 +2111,7 @@ static int glink_slatecom_cleanup(struct glink_slatecom *glink)
 	/* Release any defunct local channels, waiting for close-ack */
 	idr_for_each_entry(&glink->lcids, channel, cid) {
 		/* Wakeup threads waiting for intent*/
+		complete(&channel->close_ack);
 		complete(&channel->intent_req_comp);
 		kref_put(&channel->refcount, glink_slatecom_channel_release);
 		idr_remove(&glink->lcids, cid);
@@ -2127,7 +2175,7 @@ static void glink_slatecom_event_handler(void *handle,
 		rx_pkt_info->rx_len = data->fifo_data.to_master_fifo_used;
 		rx_pkt_info->glink = glink;
 		kthread_init_work(&rx_pkt_info->kwork, rx_worker);
-		pm_wakeup_ws_event(glink->ws, glink_slatecom_wakeup_ms, true);
+		__pm_stay_awake(glink->ws);
 		kthread_queue_work(&glink->kworker, &rx_pkt_info->kwork);
 		break;
 	case SLATECOM_EVENT_TO_SLAVE_FIFO_FREE:

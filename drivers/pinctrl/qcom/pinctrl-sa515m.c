@@ -222,9 +222,6 @@ static const struct pinctrl_pin_desc sa515m_pins[] = {
 	PINCTRL_PIN(109, "SDC1_CLK"),
 	PINCTRL_PIN(110, "SDC1_CMD"),
 	PINCTRL_PIN(111, "SDC1_DATA"),
-	PINCTRL_PIN(112, "SDC2_CLK"),
-	PINCTRL_PIN(113, "SDC2_CMD"),
-	PINCTRL_PIN(114, "SDC2_DATA"),
 };
 
 #define DECLARE_MSM_GPIO_PINS(pin) \
@@ -342,9 +339,6 @@ static const unsigned int sdc1_rclk_pins[] = { 108 };
 static const unsigned int sdc1_clk_pins[] = { 109 };
 static const unsigned int sdc1_cmd_pins[] = { 110 };
 static const unsigned int sdc1_data_pins[] = { 111 };
-static const unsigned int sdc2_clk_pins[] = { 112 };
-static const unsigned int sdc2_cmd_pins[] = { 113 };
-static const unsigned int sdc2_data_pins[] = { 114 };
 
 enum sa515m_functions {
 	msm_mux_gpio,
@@ -1207,13 +1201,10 @@ static const struct msm_pingroup sa515m_groups[] = {
 	[105] = PINGROUP(105, NA, NA, NA, NA, NA, NA, NA, NA, NA),
 	[106] = PINGROUP(106, emac_PPS0, NA, NA, NA, NA, NA, NA, NA, NA),
 	[107] = PINGROUP(107, NA, NA, NA, NA, NA, NA, NA, NA, NA),
-	[108] = SDC_QDSD_PINGROUP(sdc1_rclk, 0x10a000, 15, 0),
-	[109] = SDC_QDSD_PINGROUP(sdc1_clk, 0x10a000, 13, 6),
-	[110] = SDC_QDSD_PINGROUP(sdc1_cmd, 0x10a000, 11, 3),
-	[111] = SDC_QDSD_PINGROUP(sdc1_data, 0x10a000, 9, 0),
-	[112] = SDC_QDSD_PINGROUP(sdc2_clk, 0x109000, 14, 6),
-	[113] = SDC_QDSD_PINGROUP(sdc2_cmd, 0x109000, 11, 3),
-	[114] = SDC_QDSD_PINGROUP(sdc2_data, 0x109000, 9, 0),
+	[108] = SDC_QDSD_PINGROUP(sdc1_rclk, 0x9a000, 15, 0),
+	[109] = SDC_QDSD_PINGROUP(sdc1_clk, 0x9a000, 13, 6),
+	[110] = SDC_QDSD_PINGROUP(sdc1_cmd, 0x9a000, 11, 3),
+	[111] = SDC_QDSD_PINGROUP(sdc1_data, 0x9a000, 9, 0),
 };
 
 static const struct msm_gpio_wakeirq_map sa515m_pdc_map[] = {

@@ -46,7 +46,7 @@ int32_t habmm_socket_recv(int32_t handle, void *dst_buff, uint32_t *size_bytes,
 	if (!size_bytes || !dst_buff)
 		return -EINVAL;
 
-	ret = hab_vchan_recv(hab_driver.kctx, &msg, handle, size_bytes, flags);
+	ret = hab_vchan_recv(hab_driver.kctx, &msg, handle, size_bytes, timeout, flags);
 
 	if (ret == 0 && msg) {
 		if (unlikely(msg->scatter)) {

@@ -407,6 +407,11 @@ extern const struct stmmac_desc_ops ndesc_ops;
 
 struct mac_device_info;
 
+struct vlan_filter_info {
+	u16 vlan_id;
+	u32 vlan_offset;
+	u32 rx_queue;
+};
 extern const struct stmmac_hwtimestamp stmmac_ptp;
 extern const struct stmmac_mode_ops dwmac4_ring_mode_ops;
 
@@ -470,6 +475,9 @@ void stmmac_set_mac_addr(void __iomem *ioaddr, u8 addr[6],
 void stmmac_get_mac_addr(void __iomem *ioaddr, unsigned char *addr,
 			 unsigned int high, unsigned int low);
 void stmmac_set_mac(void __iomem *ioaddr, bool enable);
+
+void stmmac_set_vlan_filter_rx_queue(struct vlan_filter_info *vlan,
+				     void __iomem *ioaddr);
 
 void stmmac_dwmac4_set_mac_addr(void __iomem *ioaddr, u8 addr[6],
 				unsigned int high, unsigned int low);

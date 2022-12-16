@@ -3109,12 +3109,15 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 				IPC_LOG_MSG(msm_port->ipc_log_misc,
 					"%s:GSI DMA-Tx ch\n", __func__);
 				msm_geni_serial_stop_tx(uport);
-				geni_se_iommu_unmap_buf(tx_dev,
-							&msm_port->tx_dma,
-							msm_port->xmit_size,
-							DMA_TO_DEVICE);
-				IPC_LOG_MSG(msm_port->ipc_log_misc,
-					"%s:Unmap buf done\n", __func__);
+				if (msm_port->tx_dma) {
+					geni_se_iommu_unmap_buf(tx_dev,
+								&msm_port->tx_dma,
+								msm_port->xmit_size,
+								DMA_TO_DEVICE);
+					msm_port->tx_dma = (dma_addr_t)NULL;
+					IPC_LOG_MSG(msm_port->ipc_log_misc,
+						    "%s:Unmap buf done\n", __func__);
+				}
 			}
 		} else {
 			msm_geni_serial_stop_tx(uport);
@@ -3530,7 +3533,8 @@ static int msm_geni_serial_reconfigure_baud_rate(struct uart_port *uport)
 static int msm_geni_serial_config_baud_rate(struct uart_port *uport,
 					    struct ktermios *termios, unsigned int baud)
 {
-	int clk_div, ret;
+	int ret;
+	unsigned int clk_div;
 	unsigned long ser_clk_cfg = 0;
 	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
 	unsigned long clk_rate;
@@ -3561,7 +3565,7 @@ static int msm_geni_serial_config_baud_rate(struct uart_port *uport,
 	}
 
 	clk_div = DIV_ROUND_UP(clk_rate, desired_rate);
-	if (clk_div <= 0)
+	if (!clk_div)
 		return -EINVAL;
 
 	clk_freq_diff =  (desired_rate - (clk_rate / clk_div));

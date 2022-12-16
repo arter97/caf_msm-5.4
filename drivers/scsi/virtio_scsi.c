@@ -796,7 +796,7 @@ static int virtscsi_slave_configure(struct scsi_device *sdev)
 }
 
 /**
- * ufshcd_slave_destroy - remove SCSI device configurations
+ * virtscsi_slave_destroy - remove SCSI device configurations
  * @sdev: pointer to SCSI device
  */
 static void virtscsi_slave_destroy(struct scsi_device *sdev)

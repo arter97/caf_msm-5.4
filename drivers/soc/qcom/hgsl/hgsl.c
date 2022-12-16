@@ -127,15 +127,15 @@ enum HGSL_DBQ_IBDESC_WAIT_TYPE {
 };
 
 /* DBQ structure
- *   IBs storage | reserved | w.idx/r.idx | ctxt.info | hard reset |
- * 0             1K         1.5K          2K          3.5K         |
- * |             |          |             |           |            |
+ *   IBs storage | reserved | w.idx/r.idx | ctxt.info | hard reset | batch ibs |
+ * 0             1K         1.5K          2K          5.5K         6K          |
+ * |             |          |             |           |            |           |
  */
 
 #define HGSL_DBQ_HFI_Q_INDEX_BASE_OFFSET_IN_DWORD            (1536 >> 2)
 #define HGSL_DBQ_CONTEXT_INFO_BASE_OFFSET_IN_DWORD           (2048 >> 2)
-#define HGSL_DBQ_COOPERATIVE_RESET_INFO_BASE_OFFSET_IN_DWORD (3584 >> 2)
-#define HGSL_DBQ_IBDESC_BASE_OFFSET_IN_DWORD                 (4096 >> 2)
+#define HGSL_DBQ_COOPERATIVE_RESET_INFO_BASE_OFFSET_IN_DWORD (5632 >> 2)
+#define HGSL_DBQ_IBDESC_BASE_OFFSET_IN_DWORD                 (6144 >> 2)
 
 
 static inline bool _timestamp_retired(struct hgsl_context *ctxt,
@@ -536,9 +536,9 @@ static int db_send_msg(struct hgsl_priv  *priv,
 	cmds = (struct hgsl_db_cmds *)msg_req->ptr_data;
 	do {
 		hard_reset_req = hgsl_dbq_get_state_info((uint32_t *)dbq->vbase,
-		HGSL_DBQ_METADATA_COOPERATIVE_RESET,
-		HGSL_DBQ_CONTEXT_ANY,
-		HGSL_DBQ_HOST_TO_GVM_HARDRESET_REQ);
+			HGSL_DBQ_METADATA_COOPERATIVE_RESET,
+			HGSL_DBQ_CONTEXT_ANY,
+			HGSL_DBQ_HOST_TO_GVM_HARDRESET_REQ);
 
 		/* ensure read is done before comparison */
 		rmb();
@@ -584,6 +584,9 @@ static int db_send_msg(struct hgsl_priv  *priv,
 	dst = dbq->data.vaddr + (wptr << 2);
 	src = msg_req->ptr_data;
 	memcpy(dst, src, (move_dwords << 2));
+
+	/* ensure data is committed before update wptr */
+	dma_wmb();
 
 	wptr = (wptr + msg_size_align) % queue_size_dword;
 	hgsl_dbq_set_state_info((uint32_t *)dbq->vbase,

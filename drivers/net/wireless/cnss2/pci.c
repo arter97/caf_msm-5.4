@@ -425,6 +425,9 @@ static struct cnss_misc_reg syspm_reg_access_seq[] = {
 #define WLAON_REG_SIZE ARRAY_SIZE(wlaon_reg_access_seq)
 #define SYSPM_REG_SIZE ARRAY_SIZE(syspm_reg_access_seq)
 
+static bool cnss_should_suspend_pwroff(struct pci_dev *pci_dev);
+static void cnss_pci_suspend_pwroff(struct pci_dev *pci_dev);
+
 #if IS_ENABLED(CONFIG_PCI_MSM)
 /**
  * _cnss_pci_enumerate() - Enumerate PCIe endpoints
@@ -1351,8 +1354,11 @@ static void cnss_pci_handle_linkdown(struct cnss_pci_data *pci_priv)
 	}
 	pci_priv->pci_link_down_ind = true;
 	spin_unlock_irqrestore(&pci_link_down_lock, flags);
-	/* Notify MHI about link down*/
-	mhi_control_error(pci_priv->mhi_ctrl);
+
+	if (pci_priv->mhi_ctrl) {
+		/* Notify MHI about link down*/
+		mhi_control_error(pci_priv->mhi_ctrl);
+	}
 
 	if (pci_dev->device == QCA6174_DEVICE_ID)
 		disable_irq(pci_dev->irq);
@@ -3149,8 +3155,12 @@ int cnss_pci_register_driver_hdlr(struct cnss_pci_data *pci_priv,
 
 int cnss_pci_unregister_driver_hdlr(struct cnss_pci_data *pci_priv)
 {
-	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct cnss_plat_data *plat_priv;
 
+	if (!pci_priv)
+		return -EINVAL;
+
+	plat_priv = pci_priv->plat_priv;
 	set_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state);
 	cnss_pci_dev_shutdown(pci_priv);
 	pci_priv->driver_ops = NULL;
@@ -3429,7 +3439,8 @@ out:
 static int cnss_pci_suspend(struct device *dev)
 {
 	int ret = 0;
-	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(to_pci_dev(dev));
+	struct pci_dev *pci_dev = to_pci_dev(dev);
+	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(pci_dev);
 	struct cnss_plat_data *plat_priv;
 
 	if (!pci_priv)
@@ -3441,6 +3452,29 @@ static int cnss_pci_suspend(struct device *dev)
 
 	if (!cnss_is_device_powered_on(plat_priv))
 		goto out;
+
+	/* No mhi state bit set if only finish pcie enumeration,
+	 * so test_bit is not applicable to check if it is INIT state.
+	 */
+	if (pci_priv->mhi_state == CNSS_MHI_INIT) {
+		bool suspend = cnss_should_suspend_pwroff(pci_dev);
+
+		/* Do PCI link suspend and power off in the LPM case
+		 * if chipset didn't do that after pcie enumeration.
+		 */
+		if (!suspend) {
+			ret = cnss_suspend_pci_link(pci_priv);
+			if (ret)
+				cnss_pr_err("Failed to suspend PCI link, err = %d\n",
+					    ret);
+
+			if (pci_dev->device == QCA6390_DEVICE_ID)
+				cnss_disable_redundant_vreg(plat_priv);
+
+			cnss_power_off_device(plat_priv);
+			goto out;
+		}
+	}
 
 	if (!test_bit(DISABLE_DRV, &plat_priv->ctrl_params.quirks) &&
 	    pci_priv->drv_supported) {
@@ -4600,6 +4634,8 @@ int cnss_get_soc_info(struct device *dev, struct cnss_soc_info *info)
 	       sizeof(info->device_version));
 	memcpy(&info->dev_mem_info, &plat_priv->dev_mem_info,
 	       sizeof(info->dev_mem_info));
+	memcpy(&info->fw_build_id, &plat_priv->fw_build_id,
+	       sizeof(info->fw_build_id));
 
 	return 0;
 }
@@ -5842,7 +5878,9 @@ static void cnss_pci_unregister_mhi(struct cnss_pci_data *pci_priv)
 	mhi_unregister_mhi_controller(mhi_ctrl);
 	cnss_pci_mhi_ipc_logging_deinit(pci_priv);
 	kfree(mhi_ctrl->irq);
+	mhi_ctrl->irq = NULL;
 	mhi_free_controller(mhi_ctrl);
+	pci_priv->mhi_ctrl = NULL;
 	cnss_qmi_deinit(pci_priv->plat_priv);
 }
 
@@ -6052,11 +6090,7 @@ static int cnss_try_suspend(struct cnss_plat_data *plat_priv)
 						    true,
 						    false);
 
-			ret = cnss_suspend_pci_link(pci_priv);
-			if (ret)
-				cnss_pr_err("Failed to suspend PCI link, err = %d\n",
-					    ret);
-			cnss_power_off_device(plat_priv);
+			cnss_pci_suspend_pwroff(pci_dev);
 			break;
 		default:
 			cnss_pr_err("Unknown PCI device found: 0x%x\n",
@@ -6183,6 +6217,54 @@ static void cnss_pci_suspend_pwroff(struct pci_dev *pci_dev)
 	}
 }
 
+#ifdef CONFIG_CNSS2_ENUM_WITH_LOW_SPEED
+static void
+cnss_pci_downgrade_rc_speed(struct cnss_plat_data *plat_priv, u32 rc_num)
+{
+	int ret;
+
+	ret = cnss_pci_set_max_link_speed(plat_priv->bus_priv, rc_num,
+					  PCI_EXP_LNKSTA_CLS_2_5GB);
+	if (ret)
+		cnss_pr_err("Failed to set max PCIe RC%x link speed to Gen1, err = %d\n",
+			    rc_num, ret);
+}
+
+static void
+cnss_pci_restore_rc_speed(struct cnss_pci_data *pci_priv)
+{
+	int ret;
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+
+	/* if not Genoa, not restore rc speed */
+	if (pci_priv->device_id != QCN7605_DEVICE_ID) {
+		/* The request 0 will reset maximum GEN speed to default */
+		ret = cnss_pci_set_max_link_speed(pci_priv, plat_priv->rc_num, 0);
+		if (ret)
+			cnss_pr_err("Failed to reset max PCIe RC%x link speed to default, err = %d\n",
+				    plat_priv->rc_num, ret);
+
+		/* suspend/resume will trigger retain to re-establish link speed */
+		ret = cnss_suspend_pci_link(pci_priv);
+		if (ret)
+			cnss_pr_err("Failed to suspend PCI link, err = %d\n", ret);
+
+		ret = cnss_resume_pci_link(pci_priv);
+			cnss_pr_err("Failed to resume PCI link, err = %d\n", ret);
+	}
+}
+#else
+static void
+cnss_pci_downgrade_rc_speed(struct cnss_plat_data *plat_priv, u32 rc_num)
+{
+}
+
+static void
+cnss_pci_restore_rc_speed(struct cnss_pci_data *pci_priv)
+{
+}
+#endif
+
 static int cnss_pci_probe(struct pci_dev *pci_dev,
 			  const struct pci_device_id *id)
 {
@@ -6221,6 +6303,8 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	mutex_init(&pci_priv->bus_lock);
 	if (plat_priv->use_pm_domain)
 		dev->pm_domain = &cnss_pm_domain;
+
+	cnss_pci_restore_rc_speed(pci_priv);
 
 	ret = cnss_pci_get_dev_cfg_node(plat_priv);
 	if (ret) {
@@ -6333,6 +6417,7 @@ static void cnss_pci_remove(struct pci_dev *pci_dev)
 	struct cnss_plat_data *plat_priv =
 		cnss_bus_dev_to_plat_priv(&pci_dev->dev);
 
+	cnss_pci_unregister_driver_hdlr(pci_priv);
 	cnss_pci_free_m3_mem(pci_priv);
 	cnss_pci_free_fw_mem(pci_priv);
 	cnss_pci_free_qdss_mem(pci_priv);
@@ -6408,6 +6493,8 @@ static int cnss_pci_enumerate(struct cnss_plat_data *plat_priv, u32 rc_num)
 		if (ret && ret != -EPROBE_DEFER)
 			cnss_pr_err("Failed to set max PCIe RC%x link speed to Gen2, err = %d\n",
 				    rc_num, ret);
+	} else {
+		cnss_pci_downgrade_rc_speed(plat_priv, rc_num);
 	}
 
 	cnss_pr_dbg("Trying to enumerate with PCIe RC%x\n", rc_num);
