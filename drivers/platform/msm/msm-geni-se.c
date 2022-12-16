@@ -943,10 +943,15 @@ int se_geni_clks_off(struct se_geni_rsc *rsc)
 	clk_disable_unprepare(rsc->s_ahb_clk);
 	clk_disable_unprepare(rsc->m_ahb_clk);
 
-	ret = geni_se_rmv_ab_ib(geni_se_dev, rsc);
-	if (ret)
-		GENI_SE_ERR(geni_se_dev->log_ctx, false, NULL,
-			"%s: Error %d during bus_bw_update\n", __func__, ret);
+	if (rsc->bw_vote_done) {
+		ret = geni_se_rmv_ab_ib(geni_se_dev, rsc);
+		if (ret) {
+			GENI_SE_ERR(geni_se_dev->log_ctx, false, NULL,
+				"%s: Error %d during bus_bw_update\n", __func__, ret);
+			return ret;
+		}
+		rsc->bw_vote_done = false;
+	}
 
 	return ret;
 }
@@ -1089,11 +1094,14 @@ int se_geni_clks_on(struct se_geni_rsc *rsc)
 	if (unlikely(!geni_se_dev))
 		return -EPROBE_DEFER;
 
-	ret = geni_se_add_ab_ib(geni_se_dev, rsc);
-	if (ret) {
-		GENI_SE_ERR(geni_se_dev->log_ctx, false, NULL,
-			"%s: Error %d during bus_bw_update\n", __func__, ret);
-		return ret;
+	if (!rsc->bw_vote_done) {
+		ret = geni_se_add_ab_ib(geni_se_dev, rsc);
+		if (ret) {
+			GENI_SE_ERR(geni_se_dev->log_ctx, false, NULL,
+				"%s: Error %d during bus_bw_update\n", __func__, ret);
+			return ret;
+		}
+		rsc->bw_vote_done = true;
 	}
 
 	ret = clk_prepare_enable(rsc->m_ahb_clk);

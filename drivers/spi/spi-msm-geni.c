@@ -2251,6 +2251,7 @@ static int spi_geni_probe(struct platform_device *pdev)
 
 	rsc->rsc_ssr.ssr_enable = of_property_read_bool(pdev->dev.of_node,
 				"ssr-enable");
+	rsc->bw_vote_done = false;
 
 	geni_mas->spi_rsc.wrapper_dev = &wrapper_pdev->dev;
 	/*
