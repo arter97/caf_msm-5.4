@@ -348,6 +348,15 @@ static int smblite_parse_dt_misc(struct smblite *chip, struct device_node *node)
 				dev_err(chg->dev, "Failed to get nvmem-cells, rc=%d\n", rc);
 			return rc;
 		}
+
+		chg->soc_nvmem = devm_nvmem_cell_get(chg->dev, "charger_soc");
+		if (IS_ERR(chg->soc_nvmem)) {
+			rc = PTR_ERR(chg->soc_nvmem);
+			if (rc != -EPROBE_DEFER)
+				dev_err(chg->dev, "Failed to get charger_soc nvmem-cells, rc=%d\n",
+						rc);
+			return rc;
+		}
 	}
 
 	return 0;
@@ -2369,6 +2378,16 @@ static int smblite_restore(struct device *dev)
 
 	pr_debug("SMBLITE: USB Present=%d Battery present=%d\n",
 		usb_present, batt_present);
+
+	/*
+	 * There can be a case where DS exit happens quickly
+	 * and APSD done bit is not yet set. This causes the WA
+	 * to re-run APSD once APSD done bit is set in source
+	 * change_irq to handle slow insertion false detection to
+	 * not trigger. Re-run APSD once DS is complete to handle
+	 * fix false port detection.
+	 */
+	smblite_lib_rerun_apsd_if_required(chg);
 
 	return rc;
 }

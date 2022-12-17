@@ -215,6 +215,7 @@ struct plat_stmmacenet_data {
 	int (*phy_intr_enable)(void *priv);
 	void (*phy_irq_enable)(void *priv);
 	void (*phy_irq_disable)(void *priv);
+	void (*rgmii_loopback_cfg)(void *priv, int loopback_en);
 	bool sph_disable;
 };
 #endif

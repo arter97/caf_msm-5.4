@@ -5266,7 +5266,7 @@ int stmmac_resume(struct device *dev)
 		if (priv->plat->clk_ptp_ref)
 			clk_prepare_enable(priv->plat->clk_ptp_ref);
 		/* reset the phy so that it's ready */
-		if (priv->mii)
+		if (priv->mii && !priv->boot_kpi)
 			stmmac_mdio_reset(priv->mii);
 	}
 
@@ -5277,7 +5277,11 @@ int stmmac_resume(struct device *dev)
 	stmmac_free_tx_skbufs(priv);
 	stmmac_clear_descriptors(priv);
 
+	if (!device_can_wakeup(dev) && priv->plat->rgmii_loopback_cfg)
+		priv->plat->rgmii_loopback_cfg(priv, 1);
 	stmmac_hw_setup(ndev, false);
+	if (!device_can_wakeup(dev) && priv->plat->rgmii_loopback_cfg)
+		priv->plat->rgmii_loopback_cfg(priv, 0);
 
 	if (!priv->tx_coal_timer_disable)
 		stmmac_init_coalesce(priv);

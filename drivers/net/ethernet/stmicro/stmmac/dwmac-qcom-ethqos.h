@@ -92,6 +92,7 @@ do  {\
 #define TTSL0				GENMASK(30, 0)
 #define MAC_PPSX_INTERVAL(x)		(0x00000b88 + ((x) * 0x10))
 #define MAC_PPSX_WIDTH(x)		(0x00000b8c + ((x) * 0x10))
+#define MAC_RXQCTRL_PSRQX_PRIO_SHIFT(x)	(1 << (x))
 
 #define PPS_START_DELAY 100000000
 #define ONE_NS 1000000000
@@ -994,6 +995,7 @@ struct qcom_ethqos {
 	/* SSR over ethernet parameters */
 	struct work_struct eth_ssr;
 	unsigned long action;
+	bool driver_load_fail;
 };
 
 struct pps_cfg {
