@@ -2877,13 +2877,15 @@ void ethqos_ipa_offload_event_handler(void *data,
 	switch (ev) {
 	case EV_IPA_SSR_UP:
 		if (!eth_ipa_ctx.emac_dev_ready ||
-		    !eth_ipa_ctx.ipa_uc_ready)
+		    !eth_ipa_ctx.ipa_uc_ready ||
+		    !eth_ipa_ctx.ipa_offload_conn)
 			break;
 			ethqos_ipa_offload_resume(eth_ipa_ctx.ethqos);
 		break;
 	case EV_IPA_SSR_DOWN:
 		if (!eth_ipa_ctx.emac_dev_ready ||
-		    !eth_ipa_ctx.ipa_uc_ready)
+		    !eth_ipa_ctx.ipa_uc_ready ||
+		    !eth_ipa_ctx.ipa_offload_conn)
 			break;
 			ethqos_ipa_offload_suspend(eth_ipa_ctx.ethqos);
 		break;
