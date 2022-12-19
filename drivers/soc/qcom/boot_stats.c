@@ -204,6 +204,7 @@ static unsigned int calculate_marker_charsum(const char *name)
 	return sum;
 }
 
+#ifndef CONFIG_DISABLE_UNIQUE_MARKERS
 static struct boot_marker *find_entry(const char *name)
 {
 	struct boot_marker *marker;
@@ -216,6 +217,7 @@ static struct boot_marker *find_entry(const char *name)
 
 	return NULL;
 }
+#endif
 
 static void _create_boot_marker(const char *name,
 		unsigned long long timer_value)
@@ -231,12 +233,14 @@ static void _create_boot_marker(const char *name,
 		return;
 	}
 
+#ifndef CONFIG_DISABLE_UNIQUE_MARKERS
+
 	marker = find_entry(name);
 	if (marker) {
 		marker->timer_value = timer_value;
 		return;
 	}
-
+#endif
 	pr_debug("%-*s%*llu.%0*llu seconds\n",
 			MARKER_STRING_WIDTH, name,
 			TS_WHOLE_NUM_WIDTH, timer_value/TIMER_KHZ,

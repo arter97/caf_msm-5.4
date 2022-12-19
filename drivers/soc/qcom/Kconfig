@@ -422,6 +422,16 @@ config QGKI_MSM_BOOT_TIME_MARKER
 	  To create an entry, call "place_marker" function.
 	  At userspace, write marker name to "/sys/kernel/boot_kpi/kpi_values"
 
+config DISABLE_UNIQUE_MARKERS
+	bool "Allow to add duplicate boot time marker"
+	depends on QGKI_MSM_BOOT_TIME_MARKER
+	help
+	  Use this to allow duplicate entries of boot time markers.
+	  By default it overwrites the values of same marker string,
+	  setting this config helps in recording multiple instances.
+	  Useful for suspend resume usecases, where multiple instances
+	  of the same marker can be reported.
+
 config QCOM_QMI_HELPERS
 	tristate
 	depends on ARCH_QCOM || COMPILE_TEST
