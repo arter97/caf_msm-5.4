@@ -1027,7 +1027,7 @@ static void stmmac_mac_link_down(struct phylink_config *config,
 	priv->eee_active = false;
 	stmmac_eee_init(priv);
 	stmmac_set_eee_pls(priv, priv->hw, false);
-	if (priv->tx_queue[IPA_DMA_TX_CH].skip_sw)
+	if (priv->hw_offload_enabled)
 		ethqos_ipa_offload_event_handler(priv, EV_PHY_LINK_DOWN);
 }
 
@@ -1044,7 +1044,7 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 		stmmac_set_eee_pls(priv, priv->hw, true);
 	}
 
-	if (priv->tx_queue[IPA_DMA_TX_CH].skip_sw)
+	if (priv->hw_offload_enabled)
 		ethqos_ipa_offload_event_handler(priv, EV_PHY_LINK_UP);
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
 	if (!priv->boot_kpi) {
@@ -2036,6 +2036,8 @@ u32 mtl_rx_int;
 			       priv->ioaddr +
 			       (0x00000d00 + 0x2c));
 	}
+		if (priv->rx_queue[chan].en_fep)
+			priv->hw->dma->enable_rx_fep(priv->ioaddr, true, chan);
 		stmmac_set_dma_bfsize(priv, priv->ioaddr, priv->dma_buf_sz,
 				      chan);
 	}
@@ -2183,6 +2185,13 @@ void stmmac_tx_err(struct stmmac_priv *priv, u32 chan)
 	struct stmmac_tx_queue *tx_q = &priv->tx_queue[chan];
 	int i;
 
+	if (tx_q->skip_sw) {
+		ethqos_ipa_offload_event_handler(priv, EV_DEV_CLOSE);
+		ethqos_ipa_offload_event_handler(priv, EV_DEV_OPEN);
+		priv->dev->stats.tx_errors++;
+		return;
+	}
+
 	netif_tx_stop_queue(netdev_get_tx_queue(priv->dev, chan));
 
 	stmmac_stop_tx_dma(priv, chan);
@@ -2258,6 +2267,11 @@ static int stmmac_napi_check(struct stmmac_priv *priv, u32 chan)
 	int status = stmmac_dma_interrupt_status(priv, priv->ioaddr,
 						 &priv->xstats, chan);
 	struct stmmac_channel *ch = &priv->channel[chan];
+
+	if (priv->rx_queue[chan].skip_sw && (status & handle_rx))
+		ethqos_ipa_offload_event_handler(&chan, EV_IPA_HANDLE_RX_INTR);
+		if (priv->tx_queue[chan].skip_sw && (status & handle_tx))
+			ethqos_ipa_offload_event_handler(&chan, EV_IPA_HANDLE_TX_INTR);
 
 	if (!priv->tx_queue[chan].skip_sw) {
 		if ((status & handle_rx) && chan < priv->plat->rx_queues_to_use) {
@@ -2993,7 +3007,7 @@ static int stmmac_open(struct net_device *dev)
 
 	stmmac_enable_all_queues(priv);
 	netif_tx_start_all_queues(priv->dev);
-	if (priv->tx_queue[IPA_DMA_TX_CH].skip_sw)
+	if (priv->hw_offload_enabled)
 		ethqos_ipa_offload_event_handler(priv, EV_DEV_OPEN);
 
 	if (priv->plat->mac2mac_en) {
@@ -3070,7 +3084,7 @@ static int stmmac_release(struct net_device *dev)
 
 	/* Release and free the Rx/Tx resources */
 	free_dma_desc_resources(priv);
-	if (priv->tx_queue[IPA_DMA_TX_CH].skip_sw)
+	if (priv->hw_offload_enabled)
 		ethqos_ipa_offload_event_handler(priv, EV_DEV_CLOSE);
 
 	/* Disable the MAC Rx/Tx */
@@ -3804,9 +3818,7 @@ static int stmmac_rx(struct stmmac_priv *priv, int limit, u32 queue)
 	int status = 0, coe = priv->hw->rx_csum;
 	unsigned int next_entry = rx_q->cur_rx;
 	struct sk_buff *skb = NULL;
-#ifndef CONFIG_ETH_IPA_OFFLOAD
 	unsigned int eth_type;
-#endif
 
 	if (netif_msg_rx_status(priv)) {
 		void *rx_head;
@@ -3979,13 +3991,12 @@ read_again:
 
 		stmmac_get_rx_hwtstamp(priv, p, np, skb);
 		stmmac_rx_vlan(priv->dev, skb);
-#ifndef CONFIG_ETH_IPA_OFFLOAD
-			eth_type = dwmac_qcom_get_eth_type(skb->data);
 
-			if (priv->current_loopback > 0 &&
-			    eth_type == ETH_P_IP)
-				swap_ip_port(skb, eth_type);
-#endif
+		eth_type = dwmac_qcom_get_eth_type(skb->data);
+		if (priv->current_loopback > 0 &&
+		    eth_type == ETH_P_IP)
+			swap_ip_port(skb, eth_type);
+
 		skb->protocol = eth_type_trans(skb, priv->dev);
 
 		if (unlikely(!coe))
@@ -5110,8 +5121,6 @@ int stmmac_dvr_remove(struct device *dev)
 		phylink_destroy(priv->phylink);
 	if (priv->plat->stmmac_rst)
 		reset_control_assert(priv->plat->stmmac_rst);
-	clk_disable_unprepare(priv->plat->pclk);
-	clk_disable_unprepare(priv->plat->stmmac_clk);
 	if (priv->hw->pcs != STMMAC_PCS_RGMII &&
 	    priv->hw->pcs != STMMAC_PCS_TBI &&
 	    priv->hw->pcs != STMMAC_PCS_RTBI)
@@ -5268,7 +5277,11 @@ int stmmac_resume(struct device *dev)
 	stmmac_free_tx_skbufs(priv);
 	stmmac_clear_descriptors(priv);
 
+	if (!device_can_wakeup(dev) && priv->plat->rgmii_loopback_cfg)
+		priv->plat->rgmii_loopback_cfg(priv, 1);
 	stmmac_hw_setup(ndev, false);
+	if (!device_can_wakeup(dev) && priv->plat->rgmii_loopback_cfg)
+		priv->plat->rgmii_loopback_cfg(priv, 0);
 
 	if (!priv->tx_coal_timer_disable)
 		stmmac_init_coalesce(priv);

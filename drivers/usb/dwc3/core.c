@@ -1497,6 +1497,8 @@ static void dwc3_get_properties(struct dwc3 *dwc)
 	dwc->enable_bus_suspend = device_property_read_bool(dev,
 					"snps,bus-suspend-enable");
 
+	/* old project have no such property, but it is implict equal to 3 */
+	dwc->num_gsi_eps = 3;
 	device_property_read_u32(dev, "num-gsi-eps", &dwc->num_gsi_eps);
 
 	dwc->dis_metastability_quirk = device_property_read_bool(dev,

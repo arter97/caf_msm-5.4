@@ -75,7 +75,7 @@ static int qcom_usb_dev_qrtr_rx_thread_fn(void *data)
 		if (bytes_read < 0) {
 			dev_err(&qep->pdev->dev,
 				"error in ipc read operation %d\n", bytes_read);
-			break;
+			continue;
 		}
 
 		dev_dbg(&qep->pdev->dev, "received message with len=%d\n",

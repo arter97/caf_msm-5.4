@@ -89,6 +89,7 @@ struct stmmac_rx_queue {
 		unsigned int error;
 	} state;
 	bool skip_sw;
+	bool en_fep;
 };
 
 struct stmmac_channel {
@@ -248,6 +249,10 @@ struct stmmac_priv {
 	bool phy_irq_enabled;
 
 	int phy_intr_wol_irq;
+	bool en_wol;
+
+	bool hw_offload_enabled;
+
 };
 
 enum stmmac_state {

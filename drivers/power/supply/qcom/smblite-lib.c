@@ -856,7 +856,7 @@ static int smblite_lib_icl_irq_disable_vote_callback(struct votable *votable,
 {
 	struct smb_charger *chg = data;
 
-	if (!chg->irq_info[USBIN_ICL_CHANGE_IRQ].irq)
+	if (!chg->irq_info[USBIN_ICL_CHANGE_IRQ].is_requested)
 		return 0;
 
 	if (chg->irq_info[USBIN_ICL_CHANGE_IRQ].enabled) {
@@ -882,7 +882,7 @@ static int smblite_lib_temp_change_irq_disable_vote_callback(
 {
 	struct smb_charger *chg = data;
 
-	if (!chg->irq_info[TEMP_CHANGE_IRQ].irq)
+	if (!chg->irq_info[TEMP_CHANGE_IRQ].is_requested)
 		return 0;
 
 	if (chg->irq_info[TEMP_CHANGE_IRQ].enabled && disable) {
@@ -4212,8 +4212,8 @@ static void jeita_update_work(struct work_struct *work)
 		goto out;
 	}
 
-	/* if BMS is not ready, defer the work */
-	if (IS_ERR_OR_NULL(chg->iio_chan_list_qg))
+	/* if BMS is not ready and remote FG does not exist, defer the work */
+	if ((IS_ERR_OR_NULL(chg->iio_chan_list_qg)) && (!chg->is_fg_remote))
 		return;
 
 	rc = smblite_lib_get_prop_from_bms(chg,

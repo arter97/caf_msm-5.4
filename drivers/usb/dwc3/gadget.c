@@ -308,8 +308,8 @@ void dwc3_gadget_giveback(struct dwc3_ep *dep, struct dwc3_request *req,
 	dwc3_gadget_del_and_unmap_request(dep, req, status);
 	req->status = DWC3_REQUEST_STATUS_COMPLETED;
 
-	if (usb_endpoint_xfer_isoc(dep->endpoint.desc) &&
-					(list_empty(&dep->started_list))) {
+	if (dep->endpoint.desc && usb_endpoint_xfer_isoc(dep->endpoint.desc) &&
+			(list_empty(&dep->started_list))) {
 		dep->flags |= DWC3_EP_PENDING_REQUEST;
 		dbg_event(dep->number, "STARTEDLISTEMPTY", 0);
 	}
@@ -2557,6 +2557,8 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 	}
 	spin_unlock_irqrestore(&dwc->lock, flags);
 
+	dwc3_notify_event(dwc, DWC3_CONTROLLER_PULLUP_ENTER, is_on);
+
 	pm_runtime_get_sync(dwc->dev);
 	dbg_event(0xFF, "Pullup gsync",
 		atomic_read(&dwc->dev->power.usage_count));
@@ -2595,8 +2597,6 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 	if (is_on)
 		dwc3_device_core_soft_reset(dwc);
 
-	dwc3_notify_event(dwc, DWC3_CONTROLLER_PULLUP, is_on);
-
 	spin_lock_irqsave(&dwc->lock, flags);
 	if (dwc->ep0state != EP0_SETUP_PHASE)
 		dbg_event(0xFF, "EP0 is not in SETUP phase\n", dwc->ep0state);
@@ -2628,6 +2628,8 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 	pm_runtime_put_autosuspend(dwc->dev);
 	dbg_event(0xFF, "Pullup put",
 		atomic_read(&dwc->dev->power.usage_count));
+	dwc3_notify_event(dwc, DWC3_CONTROLLER_PULLUP_EXIT, is_on);
+
 	return 0;
 }
 
@@ -4262,7 +4264,6 @@ static irqreturn_t dwc3_process_event_buf(struct dwc3_event_buffer *evt)
 
 	dwc->bh_handled_evt_cnt[dwc->bh_dbg_index] += (evt->count / 4);
 	evt->count = 0;
-	evt->flags &= ~DWC3_EVENT_PENDING;
 	ret = IRQ_HANDLED;
 
 	/* Unmask interrupt */
@@ -4274,6 +4275,9 @@ static irqreturn_t dwc3_process_event_buf(struct dwc3_event_buffer *evt)
 		dwc3_writel(dwc->regs, DWC3_GEVNTCOUNT(0), DWC3_GEVNTCOUNT_EHB);
 		dwc3_writel(dwc->regs, DWC3_DEV_IMOD(0), dwc->imod_interval);
 	}
+
+	/* Keep the clearing of DWC3_EVENT_PENDING at the end */
+	evt->flags &= ~DWC3_EVENT_PENDING;
 
 	return ret;
 }
