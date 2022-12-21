@@ -41,7 +41,7 @@ enum {
 
 /* Default timeout before to re-enable gyro */
 static int asm330lhhx_delay_gyro = 10;
-static bool delayed_enable_gyro;
+static bool delayed_enable_gyro = true;
 
 static inline s64 st_asm330lhhx_ewma(s64 old, s64 new, int weight)
 {
@@ -208,9 +208,6 @@ iio_dev *st_asm330lhhx_get_iiodev_from_tag(struct st_asm330lhhx_hw *hw,
 int asm330lhhx_check_acc_gyro_early_buff_enable_flag(
 		struct st_asm330lhhx_sensor *sensor)
 {
-	if (sensor->buffer_asm_samples == true)
-		return 1;
-	else
 		return 0;
 }
 int asm330lhhx_check_sensor_enable_flag(
@@ -265,8 +262,12 @@ static void store_acc_gyro_boot_sample(struct iio_dev *iio_dev,
 		dev_info(sensor->hw->dev, "End of sensor %d buffering %d\n",
 				sensor->id, sensor->bufsample_cnt);
 		sensor->buffer_asm_samples = false;
-		if (!sensor->enable)
+		if (sensor->enable != true)
 			st_asm330lhhx_sensor_set_enable(sensor, false);
+			if (!hw->enable_mask) {
+				st_asm330lhhx_set_fifo_mode(hw,
+						ST_ASM330LHHX_FIFO_BYPASS);
+			}
 	}
 	mutex_unlock(&sensor->sensor_buff);
 }
@@ -566,6 +567,9 @@ int st_asm330lhhx_update_fifo(struct iio_dev *iio_dev, bool enable)
 		err = st_asm330lhhx_sensor_set_enable(sensor, enable);
 		if (err < 0)
 			goto out;
+
+		/* power up, wait 100 ms for stable output */
+		msleep(100);
 
 		err = st_asm330lhhx_set_sensor_batching_odr(sensor,
 							    enable);
