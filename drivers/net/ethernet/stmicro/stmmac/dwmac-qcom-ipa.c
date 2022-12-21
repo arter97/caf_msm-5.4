@@ -2457,6 +2457,10 @@ static int ethqos_ipa_offload_suspend(struct qcom_ethqos *ethqos)
 	struct net_device *dev = platform_get_drvdata(pdev);
 	struct stmmac_priv *priv = netdev_priv(dev);
 	int type;
+	int rxfifosz = priv->plat->rx_fifo_size;
+	u32 rx_channels_count = priv->plat->rx_queues_to_use;
+	u8 qmode = 0;
+	u32 mtl_rx_int;
 
 	ETHQOSDBG("Suspend/disable IPA offload\n");
 
@@ -2537,6 +2541,27 @@ static int ethqos_ipa_offload_suspend(struct qcom_ethqos *ethqos)
 		ETHQOSINFO("IPA Offload Cleanup Success\n");
 		eth_ipa_ctx.ipa_offload_init = false;
 	}
+	if (priv->plat->force_thresh_dma_mode_q0_en) {
+		/*set mac to stop state*/
+		priv->hw->mac->set_mac(priv->ioaddr, false);
+		/* Adjust for real per queue fifo size */
+		/*calculate rx fifo sz as it is required to set qmode*/
+		rxfifosz /= rx_channels_count;
+		qmode = priv->plat->rx_queues_cfg[0].mode_to_use;
+
+		/* DMA RX mode is set to operate on 32 byte of data on queue 0 */
+		priv->hw->dma->dma_rx_mode(priv->ioaddr, 32, 0, rxfifosz, qmode);
+
+		/*set mac to start state*/
+		priv->hw->mac->set_mac(priv->ioaddr, true);
+
+		/*Disable TXIOE interrupt*/
+		mtl_rx_int = readl_relaxed(priv->ioaddr +
+					   (0x00000d00 + 0x2c));
+		writel_relaxed(mtl_rx_int & ~(BIT(24)),
+			       priv->ioaddr +
+			       (0x00000d00 + 0x2c));
+	}
 
 	return ret;
 err_revert_dma_map:
@@ -2552,8 +2577,36 @@ static int ethqos_ipa_offload_resume(struct qcom_ethqos *ethqos)
 	struct net_device *dev = platform_get_drvdata(pdev);
 	struct stmmac_priv *priv = netdev_priv(dev);
 	int type;
+	int rxfifosz = priv->plat->rx_fifo_size;
+	u32 rx_channels_count = priv->plat->rx_queues_to_use;
+	u8 qmode = 0;
+	u32 mtl_rx_int;
+
 
 	ETHQOSDBG("Enter\n");
+
+	if (priv->plat->force_thresh_dma_mode_q0_en) {
+		/*set mac to stop state*/
+		priv->hw->mac->set_mac(priv->ioaddr, false);
+
+		/* Adjust for real per queue fifo size */
+		/*calculate rx fifo sz as it is required to set qmode*/
+		rxfifosz /= rx_channels_count;
+		qmode = priv->plat->rx_queues_cfg[0].mode_to_use;
+
+		/* DMA RX mode is set to operate on 32 byte of data on queue 0 */
+		priv->hw->dma->dma_rx_mode(priv->ioaddr, SF_DMA_MODE, 0, rxfifosz, qmode);
+
+		/*set mac to start state*/
+		priv->hw->mac->set_mac(priv->ioaddr, true);
+
+		/*Disable TXIOE interrupt*/
+		mtl_rx_int = readl_relaxed(priv->ioaddr +
+					   (0x00000d00 + 0x2c));
+		writel_relaxed(mtl_rx_int & ~(BIT(24)),
+			       priv->ioaddr +
+			       (0x00000d00 + 0x2c));
+	}
 
 	if (!eth_ipa_ctx.ipa_offload_init) {
 		for (type = 0; type < IPA_QUEUE_MAX; type++) {

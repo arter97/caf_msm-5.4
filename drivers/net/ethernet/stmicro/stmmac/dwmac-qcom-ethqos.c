@@ -4093,6 +4093,9 @@ static int _qcom_ethqos_probe(void *arg)
 		plat_dat->get_plat_tx_coal_frames =  dwmac_qcom_get_plat_tx_coal_frames;
 	plat_dat->has_gmac4 = 1;
 	plat_dat->tso_en = of_property_read_bool(np, "snps,tso");
+	plat_dat->force_thresh_dma_mode_q0_en =
+		of_property_read_bool(np,
+				      "snps,force_thresh_dma_mode_q0");
 	plat_dat->early_eth = ethqos->early_eth_enabled;
 	plat_dat->handle_prv_ioctl = ethqos_handle_prv_ioctl;
 	plat_dat->request_phy_wol = qcom_ethqos_request_phy_wol;
@@ -4107,11 +4110,11 @@ static int _qcom_ethqos_probe(void *arg)
 
 	/* Get rgmii interface speed for mac2c from device tree */
 	if (of_property_read_u32(np, "mac2mac-rgmii-speed",
-				 &plat_dat->mac2mac_rgmii_speed))
+				&plat_dat->mac2mac_rgmii_speed))
 		plat_dat->mac2mac_rgmii_speed = -1;
 	else
 		ETHQOSINFO("mac2mac rgmii speed = %d\n",
-			   plat_dat->mac2mac_rgmii_speed);
+				plat_dat->mac2mac_rgmii_speed);
 
 	if (of_property_read_bool(pdev->dev.of_node,
 				  "emac-core-version")) {
