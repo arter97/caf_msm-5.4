@@ -64,6 +64,9 @@
 #define HWCAP2_SVESHA3		(1 << 5)
 #define HWCAP2_SVESM4		(1 << 6)
 #define HWCAP2_FLAGM2		(1 << 7)
+#define HWCAP2_ECV		(1 << 19)
+#define HWCAP2_AFP		(1 << 20)
+#define HWCAP2_RPRES		(1 << 21)
 #define HWCAP2_FRINT		(1 << 8)
 
 #endif /* _UAPI__ASM_HWCAP_H */

@@ -425,6 +425,8 @@ static struct cnss_misc_reg syspm_reg_access_seq[] = {
 #define WLAON_REG_SIZE ARRAY_SIZE(wlaon_reg_access_seq)
 #define SYSPM_REG_SIZE ARRAY_SIZE(syspm_reg_access_seq)
 
+static bool cnss_should_suspend_pwroff(struct pci_dev *pci_dev);
+
 #if IS_ENABLED(CONFIG_PCI_MSM)
 /**
  * _cnss_pci_enumerate() - Enumerate PCIe endpoints
@@ -3149,8 +3151,12 @@ int cnss_pci_register_driver_hdlr(struct cnss_pci_data *pci_priv,
 
 int cnss_pci_unregister_driver_hdlr(struct cnss_pci_data *pci_priv)
 {
-	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct cnss_plat_data *plat_priv;
 
+	if (!pci_priv)
+		return -EINVAL;
+
+	plat_priv = pci_priv->plat_priv;
 	set_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state);
 	cnss_pci_dev_shutdown(pci_priv);
 	pci_priv->driver_ops = NULL;
@@ -3427,7 +3433,8 @@ out:
 static int cnss_pci_suspend(struct device *dev)
 {
 	int ret = 0;
-	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(to_pci_dev(dev));
+	struct pci_dev *pci_dev = to_pci_dev(dev);
+	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(pci_dev);
 	struct cnss_plat_data *plat_priv;
 
 	if (!pci_priv)
@@ -3439,6 +3446,29 @@ static int cnss_pci_suspend(struct device *dev)
 
 	if (!cnss_is_device_powered_on(plat_priv))
 		goto out;
+
+	/* No mhi state bit set if only finish pcie enumeration,
+	 * so test_bit is not applicable to check if it is INIT state.
+	 */
+	if (pci_priv->mhi_state == CNSS_MHI_INIT) {
+		bool suspend = cnss_should_suspend_pwroff(pci_dev);
+
+		/* Do pice link susped and power off in the LPM case
+		 * if chipset didn't do that after pcie enumeration.
+		 */
+		if (!suspend) {
+			ret = cnss_suspend_pci_link(pci_priv);
+			if (ret)
+				cnss_pr_err("Failed to suspend PCI link, err = %d\n",
+					    ret);
+
+			if (pci_dev->device == QCA6390_DEVICE_ID)
+				cnss_disable_redundant_vreg(plat_priv);
+
+			cnss_power_off_device(plat_priv);
+			goto out;
+		}
+	}
 
 	if (!test_bit(DISABLE_DRV, &plat_priv->ctrl_params.quirks) &&
 	    pci_priv->drv_supported) {
@@ -5823,7 +5853,9 @@ static void cnss_pci_unregister_mhi(struct cnss_pci_data *pci_priv)
 	mhi_unregister_mhi_controller(mhi_ctrl);
 	cnss_pci_mhi_ipc_logging_deinit(pci_priv);
 	kfree(mhi_ctrl->irq);
+	mhi_ctrl->irq = NULL;
 	mhi_free_controller(mhi_ctrl);
+	pci_priv->mhi_ctrl = NULL;
 	cnss_qmi_deinit(pci_priv->plat_priv);
 }
 
@@ -6117,6 +6149,53 @@ static int cnss_pci_get_dev_cfg_node(struct cnss_plat_data *plat_priv)
 	return -EINVAL;
 }
 
+#ifdef CONFIG_CNSS2_CONDITIONAL_POWEROFF
+static bool cnss_should_suspend_pwroff(struct pci_dev *pci_dev)
+{
+	bool suspend_pwroff;
+
+	switch (pci_dev->device) {
+	case QCA6390_DEVICE_ID:
+	case QCA6490_DEVICE_ID:
+		suspend_pwroff = false;
+		break;
+	default:
+		suspend_pwroff = true;
+	}
+
+	return suspend_pwroff;
+}
+#else
+static bool cnss_should_suspend_pwroff(struct pci_dev *pci_dev)
+{
+	return true;
+}
+#endif
+
+static void cnss_pci_suspend_pwroff(struct pci_dev *pci_dev)
+{
+	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(pci_dev);
+	int rc_num = pci_dev->bus->domain_nr;
+	struct cnss_plat_data *plat_priv = cnss_get_plat_priv_by_rc_num(rc_num);
+	int ret = 0;
+	bool suspend_pwroff = cnss_should_suspend_pwroff(pci_dev);
+
+	if (suspend_pwroff) {
+		ret = cnss_suspend_pci_link(pci_priv);
+		if (ret)
+			cnss_pr_err("Failed to suspend PCI link, err = %d\n",
+				    ret);
+
+		if (pci_dev->device == QCA6390_DEVICE_ID)
+			cnss_disable_redundant_vreg(plat_priv);
+
+		cnss_power_off_device(plat_priv);
+	} else {
+		cnss_pr_dbg("bus suspend and dev power off disabled for [%x]\n",
+			    pci_dev->device);
+	}
+}
+
 static int cnss_pci_probe(struct pci_dev *pci_dev,
 			  const struct pci_device_id *id)
 {
@@ -6238,15 +6317,7 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	if (cnss_is_dual_wlan_enabled() && !plat_priv->enumerate_done)
 		return 0;
 
-	ret = cnss_suspend_pci_link(pci_priv);
-	if (ret)
-		cnss_pr_err("Failed to suspend PCI link, err = %d\n", ret);
-
-	if (pci_dev->device == QCA6390_DEVICE_ID)
-		cnss_disable_redundant_vreg(plat_priv);
-
-	cnss_power_off_device(plat_priv);
-
+	cnss_pci_suspend_pwroff(pci_dev);
 	return 0;
 
 unreg_mhi:
@@ -6275,6 +6346,7 @@ static void cnss_pci_remove(struct pci_dev *pci_dev)
 	struct cnss_plat_data *plat_priv =
 		cnss_bus_dev_to_plat_priv(&pci_dev->dev);
 
+	cnss_pci_unregister_driver_hdlr(pci_priv);
 	cnss_pci_free_m3_mem(pci_priv);
 	cnss_pci_free_fw_mem(pci_priv);
 	cnss_pci_free_qdss_mem(pci_priv);
