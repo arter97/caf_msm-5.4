@@ -22,7 +22,7 @@
 #include <linux/hashtable.h>
 #include <clocksource/arm_arch_timer.h>
 
-#define MARKER_STRING_WIDTH 40
+#define MARKER_STRING_WIDTH 50
 #define TS_WHOLE_NUM_WIDTH 8
 #define TS_PRECISION_WIDTH 3
 /* Field width to consider the spaces, 's' character and \n */
