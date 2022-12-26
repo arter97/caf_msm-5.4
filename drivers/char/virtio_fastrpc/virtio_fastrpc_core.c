@@ -918,6 +918,11 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 			calc_compare_crc(ctx, (uint8_t *)payload, (int)rpra[i].payload_len,
 					&(rpra[i].crc), NULL);
 
+			/*
+			 * no need to sync cache even though internal buffers are
+			 * cached, since BE will do SMMU mapping with the same cache
+			 * attribute to enable the IO coherency
+			 */
 			if (i < inbufs && len) {
 				K_COPY_FROM_USER(err, 0, ctx->desc[i].buf->va,
 						lpra[i].buf.pv, len);

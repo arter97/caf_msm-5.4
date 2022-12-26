@@ -404,8 +404,11 @@ int fastrpc_mmap_create(struct fastrpc_file *fl, int fd,
 			goto bail;
 		}
 
-		if (!(map->dma_flags & ION_FLAG_CACHED))
-			map->attach->dma_map_attrs |= DMA_ATTR_SKIP_CPU_SYNC;
+		/*
+		 * no need to sync cache even for cached buffers, depending on
+		 * IO coherency
+		 */
+		map->attach->dma_map_attrs |= DMA_ATTR_SKIP_CPU_SYNC;
 		VERIFY(err, !IS_ERR_OR_NULL(map->table =
 					dma_buf_map_attachment(map->attach,
 					DMA_BIDIRECTIONAL)));
