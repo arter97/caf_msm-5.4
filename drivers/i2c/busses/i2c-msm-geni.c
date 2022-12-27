@@ -1441,8 +1441,6 @@ static int geni_i2c_probe(struct platform_device *pdev)
 
 	gi2c->i2c_rsc.rsc_ssr.ssr_enable = of_property_read_bool(
 				pdev->dev.of_node, "ssr-enable");
-	gi2c->i2c_rsc.bw_vote_done = false;
-
 	/*
 	 * For LE, clocks, gpio and icb voting will be provided by
 	 * by LA. The I2C operates in GSI mode only for LE usecase,
