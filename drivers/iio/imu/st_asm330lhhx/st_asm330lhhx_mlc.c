@@ -405,7 +405,7 @@ static int st_asm330lhhx_program_mlc(const struct firmware *fw,
 	u8 mlc_fsm_en = 0, fsm_mlc_requested_odr = 0;
 	u8 mlc_int = 0, mlc_num = 0, fsm_num = 0;
 	bool stmc_page = false, skip = false;
-	int reg, val, ret, i, j;
+	int reg, val, ret, i = 0, j = 0;
 	u32 uodr = 0;
 	u16 odr = 0;
 	char str[UCF_STR_LEN];

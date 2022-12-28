@@ -567,10 +567,13 @@ static void ipc_unbind(struct usb_configuration *c, struct usb_function *f)
 	struct ipc_context *ctxt = func_to_ipc(f);
 
 	pr_debug("%s: start unbinding\nclear_desc\n", __func__);
-	if (gadget_is_superspeed_plus(c->cdev->gadget))
-		usb_free_descriptors(f->ssp_descriptors);
-	if (gadget_is_superspeed(c->cdev->gadget))
+
+	if (gadget_is_superspeed_plus(c->cdev->gadget) ||
+			gadget_is_superspeed(c->cdev->gadget)) {
 		usb_free_descriptors(f->ss_descriptors);
+		f->ssp_descriptors = NULL;
+	}
+
 	if (gadget_is_dualspeed(c->cdev->gadget))
 		usb_free_descriptors(f->hs_descriptors);
 

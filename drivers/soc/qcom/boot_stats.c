@@ -20,6 +20,7 @@
 #include <linux/uaccess.h>
 #include <soc/qcom/boot_stats.h>
 #include <linux/hashtable.h>
+#include <clocksource/arm_arch_timer.h>
 
 #define MARKER_STRING_WIDTH 40
 #define TS_WHOLE_NUM_WIDTH 8
@@ -56,7 +57,11 @@ struct boot_marker {
 	unsigned long long timer_value;
 	struct list_head list;
 	struct hlist_node hash;
+#ifdef CONFIG_SMP
 	spinlock_t slock;
+#else
+	struct mutex lock;
+#endif
 };
 
 static struct boot_marker boot_marker_list;
@@ -161,7 +166,11 @@ static void _destroy_boot_marker(const char *name)
 	struct boot_marker *temp_addr;
 	unsigned long flags;
 
+#ifdef CONFIG_SMP
 	spin_lock_irqsave(&boot_marker_list.slock, flags);
+#else
+	mutex_lock(&boot_marker_list.lock);
+#endif
 	list_for_each_entry_safe(marker, temp_addr, &boot_marker_list.list,
 			list) {
 		if (strnstr(marker->marker_name, name,
@@ -172,7 +181,11 @@ static void _destroy_boot_marker(const char *name)
 			kfree(marker);
 		}
 	}
+#ifdef CONFIG_SMP
 	spin_unlock_irqrestore(&boot_marker_list.slock, flags);
+#else
+	mutex_unlock(&boot_marker_list.lock);
+#endif
 }
 
 /*
@@ -239,10 +252,18 @@ static void _create_boot_marker(const char *name,
 	new_boot_marker->timer_value = timer_value;
 	sum = calculate_marker_charsum(new_boot_marker->marker_name);
 
+#ifdef CONFIG_SMP
 	spin_lock_irqsave(&boot_marker_list.slock, flags);
+#else
+	mutex_lock(&boot_marker_list.lock);
+#endif
 	list_add_tail(&(new_boot_marker->list), &(boot_marker_list.list));
 	hash_add(marker_htable, &new_boot_marker->hash, sum);
+#ifdef CONFIG_SMP
 	spin_unlock_irqrestore(&boot_marker_list.slock, flags);
+#else
+	mutex_unlock(&boot_marker_list.lock);
+#endif
 	num_markers++;
 }
 
@@ -252,7 +273,11 @@ static void boot_marker_cleanup(void)
 	struct boot_marker *temp_addr;
 	unsigned long flags;
 
+#ifdef CONFIG_SMP
 	spin_lock_irqsave(&boot_marker_list.slock, flags);
+#else
+	mutex_lock(&boot_marker_list.lock);
+#endif
 	list_for_each_entry_safe(marker, temp_addr, &boot_marker_list.list,
 			list) {
 		num_markers--;
@@ -260,7 +285,11 @@ static void boot_marker_cleanup(void)
 		list_del(&marker->list);
 		kfree(marker);
 	}
+#ifdef CONFIG_SMP
 	spin_unlock_irqrestore(&boot_marker_list.slock, flags);
+#else
+	mutex_unlock(&boot_marker_list.lock);
+#endif
 }
 
 void destroy_marker(const char *name)
@@ -313,7 +342,7 @@ static ssize_t bootkpi_reader(struct file *fp, struct kobject *obj,
 		size_t count)
 {
 	struct boot_marker *marker;
-	unsigned long ts_whole_num, ts_precision;
+	unsigned long long ts_whole_num, ts_precision;
 	static char *kpi_buf;
 	static int temp;
 	int ret = 0;
@@ -326,7 +355,11 @@ static ssize_t bootkpi_reader(struct file *fp, struct kobject *obj,
 	}
 
 	if (!temp) {
+#ifdef CONFIG_SMP
 		spin_lock_irqsave(&boot_marker_list.slock, flags);
+#else
+		mutex_lock(&boot_marker_list.lock);
+#endif
 		list_for_each_entry(marker, &boot_marker_list.list, list) {
 			WARN_ON((BOOTKPI_BUF_SIZE - temp) <= 0);
 
@@ -351,7 +384,12 @@ static ssize_t bootkpi_reader(struct file *fp, struct kobject *obj,
 
 		}
 
+#ifdef CONFIG_SMP
 		spin_unlock_irqrestore(&boot_marker_list.slock, flags);
+#else
+		mutex_unlock(&boot_marker_list.lock);
+#endif
+
 	}
 
 	if (temp - off > count)
@@ -447,7 +485,12 @@ static int init_bootkpi(void)
 		return ret;
 
 	INIT_LIST_HEAD(&boot_marker_list.list);
+
+#ifdef CONFIG_SMP
 	spin_lock_init(&boot_marker_list.slock);
+#else
+	mutex_init(&boot_marker_list.lock);
+#endif
 
 	ret = register_pm_notifier(&boot_kpi_pm_nb);
 	if (ret)

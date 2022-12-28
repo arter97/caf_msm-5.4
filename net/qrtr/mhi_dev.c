@@ -123,9 +123,12 @@ static void qrtr_mhi_dev_event_cb(struct mhi_dev_client_cb_reason *reason)
 		if (reason->ch_id == QRTR_MHI_DEV_IN) {
 			qrtr_mhi_dev_read(qep);
 		} else {
-			mutex_lock(&qep->out_lock);
-			complete_all(&qep->out_tre);
-			mutex_unlock(&qep->out_lock);
+			/* check if wait_for_completion is in progress*/
+			if (!completion_done(&qep->out_tre)) {
+				mutex_lock(&qep->out_lock);
+				complete_all(&qep->out_tre);
+				mutex_unlock(&qep->out_lock);
+			}
 		}
 	}
 }

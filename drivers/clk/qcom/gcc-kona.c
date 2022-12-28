@@ -2150,12 +2150,15 @@ static struct clk_branch gcc_gpu_iref_en = {
 
 static struct clk_branch gcc_gpu_memnoc_gfx_clk = {
 	.halt_reg = 0x7100c,
-	.halt_check = BRANCH_VOTED,
+	.halt_check = BRANCH_HALT_VOTED,
+	.hwcg_reg = 0x3600c,
+	.hwcg_bit = 1,
 	.clkr = {
 		.enable_reg = 0x7100c,
 		.enable_mask = BIT(0),
 		.hw.init = &(struct clk_init_data){
 			.name = "gcc_gpu_memnoc_gfx_clk",
+			.flags = CLK_DONT_HOLD_STATE,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -2169,6 +2172,7 @@ static struct clk_branch gcc_gpu_snoc_dvm_gfx_clk = {
 		.enable_mask = BIT(0),
 		.hw.init = &(struct clk_init_data){
 			.name = "gcc_gpu_snoc_dvm_gfx_clk",
+			.flags = CLK_DONT_HOLD_STATE,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -4525,11 +4529,17 @@ static int gcc_kona_probe(struct platform_device *pdev)
 	return ret;
 }
 
+static void gcc_kona_sync_state(struct device *dev)
+{
+	qcom_cc_sync_state(dev, &gcc_kona_desc);
+}
+
 static struct platform_driver gcc_kona_driver = {
 	.probe = gcc_kona_probe,
 	.driver = {
 		.name = "gcc-kona",
 		.of_match_table = gcc_kona_match_table,
+		.sync_state = gcc_kona_sync_state,
 	},
 };
 

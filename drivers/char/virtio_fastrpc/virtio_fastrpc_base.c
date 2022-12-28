@@ -28,8 +28,10 @@
 #define VIRTIO_FASTRPC_F_MMAP				3
 /* indicates QOS setting is supported */
 #define VIRTIO_FASTRPC_F_CONTROL			4
-/* indicates version check is supported */
+/* indicates version is available in config space */
 #define VIRTIO_FASTRPC_F_VERSION			5
+/* indicates domain num is available in config space */
+#define VIRTIO_FASTRPC_F_DOMAIN_NUM			6
 
 #define NUM_CHANNELS			4 /* adsp, mdsp, slpi, cdsp0*/
 #define NUM_DEVICES			2 /* adsprpc-smd, adsprpc-smd-secure */
@@ -39,20 +41,25 @@
 
 #define MAX_FASTRPC_BUF_SIZE		(128*1024)
 #define DEBUGFS_SIZE			3072
-#define UL_SIZE				25
 
 /*
- * Increase only for critical patches which must be consistent with BE,
- * if not, the basic function is broken.
+ * FE_MAJOR_VER is used for the FE and BE's version match check,
+ * and it MUST be equal to BE_MAJOR_VER, otherwise virtual fastrpc
+ * cannot work properly. It increases when fundamental protocol is
+ * changed between FE and BE.
  */
-#define FE_MAJOR_VER 0x4
-/* Increase for new features. */
-#define FE_MINOR_VER 0x4
+#define FE_MAJOR_VER 0x5
+/* FE_MINOR_VER is used to track patches in this driver. It does not
+ * need to be matched with BE_MINOR_VER. And it will return to 0 when
+ * FE_MAJOR_VER is increased.
+ */
+#define FE_MINOR_VER 0x1
 #define FE_VERSION (FE_MAJOR_VER << 16 | FE_MINOR_VER)
 #define BE_MAJOR_VER(ver) (((ver) >> 16) & 0xffff)
 
 struct virtio_fastrpc_config {
 	u32 version;
+	u32 domain_num;
 } __packed;
 
 
@@ -69,25 +76,29 @@ static ssize_t fastrpc_debugfs_read(struct file *filp, char __user *buffer,
 	char *fileinfo = NULL;
 	unsigned int len = 0;
 	int err = 0;
-	char single_line[UL_SIZE] = "----------------";
-	char title[UL_SIZE] = "=========================";
+	char title[] = "=========================";
+
+	/* Only allow read once */
+	if (*position != 0)
+		goto bail;
 
 	fileinfo = kzalloc(DEBUGFS_SIZE, GFP_KERNEL);
-	if (!fileinfo)
+	if (!fileinfo) {
+		err = -ENOMEM;
 		goto bail;
+	}
 	if (fl) {
 		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
-				"\n%s %d\n", "CHANNEL =", fl->domain);
+				"\n%s %d %s %d\n", "channel =", fl->domain,
+				"proc_attr =", fl->procattrs);
+
 		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
-			"\n======%s %s %s======\n", title,
+			"\n========%s %s %s========\n", title,
 			" LIST OF BUFS ", title);
 		spin_lock(&fl->hlock);
 		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
-			"%-19s|%-19s|%-19s\n",
+			"%-19s|%-19s|%-19s\n\n",
 			"virt", "phys", "size");
-		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
-			"%s%s%s%s%s\n", single_line, single_line,
-			single_line, single_line, single_line);
 		hlist_for_each_entry_safe(buf, n, &fl->cached_bufs, hn) {
 			len += scnprintf(fileinfo + len,
 				DEBUGFS_SIZE - len,
@@ -98,14 +109,11 @@ static ssize_t fastrpc_debugfs_read(struct file *filp, char __user *buffer,
 		}
 
 		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
-			"\n%s %s %s\n", title,
+			"\n==%s %s %s==\n", title,
 			" LIST OF PENDING CONTEXTS ", title);
 		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
-			"%-20s|%-10s|%-10s|%-10s|%-20s\n",
+			"%-20s|%-10s|%-10s|%-10s|%-20s\n\n",
 			"sc", "pid", "tgid", "size", "handle");
-		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
-			"%s%s%s%s%s\n", single_line, single_line,
-			single_line, single_line, single_line);
 		hlist_for_each_entry_safe(ictx, n, &fl->clst.pending, hn) {
 			len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
 				"0x%-18X|%-10d|%-10d|%-10zu|0x%-20X\n\n",
@@ -117,11 +125,8 @@ static ssize_t fastrpc_debugfs_read(struct file *filp, char __user *buffer,
 			"\n%s %s %s\n", title,
 			" LIST OF INTERRUPTED CONTEXTS ", title);
 		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
-			"%-20s|%-10s|%-10s|%-10s|%-20s\n",
+			"%-20s|%-10s|%-10s|%-10s|%-20s\n\n",
 			"sc", "pid", "tgid", "size", "handle");
-		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
-			"%s%s%s%s%s\n", single_line, single_line,
-			single_line, single_line, single_line);
 		hlist_for_each_entry_safe(ictx, n, &fl->clst.interrupted, hn) {
 			len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
 				"0x%-18X|%-10d|%-10d|%-10zu|0x%-20X\n\n",
@@ -129,28 +134,26 @@ static ssize_t fastrpc_debugfs_read(struct file *filp, char __user *buffer,
 				ictx->size, ictx->handle);
 		}
 		spin_unlock(&fl->hlock);
+
 		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
-			"\n=======%s %s %s======\n", title,
+			"\n========%s %s %s========\n", title,
 			" LIST OF MAPS ", title);
 		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
-			"%-20s|%-20s|%-20s\n", "va", "phys", "size");
-		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
-			"%s%s%s%s%s\n",
-			single_line, single_line, single_line,
-			single_line, single_line);
+			"%-20s|%-20s|%-10s|%-10s|%-10s|%-10s\n\n",
+			"va", "phys", "size", "dma_flags", "attr", "refs");
 		mutex_lock(&fl->map_mutex);
 		hlist_for_each_entry_safe(map, n, &fl->maps, hn) {
 			len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
-				"0x%-20lX|0x%-20llX|0x%-20zu\n\n",
-				map->va, map->phys,
-				map->size);
+				"0x%-18lX|0x%-18llX|%-10zu|0x%-10lx|0x%-10x|%-10d\n\n",
+				map->va, map->phys, map->size, map->dma_flags,
+				map->attr, map->refs);
 		}
 		mutex_unlock(&fl->map_mutex);
-
 	}
 
 	if (len > DEBUGFS_SIZE)
 		len = DEBUGFS_SIZE;
+
 	err = simple_read_from_buffer(buffer, count, position, fileinfo, len);
 	kfree(fileinfo);
 bail:
@@ -526,7 +529,6 @@ static int fastrpc_release(struct inode *inode, struct file *file)
 	struct fastrpc_file *fl = (struct fastrpc_file *)file->private_data;
 
 	if (fl) {
-		debugfs_remove(fl->debugfs_file);
 		fastrpc_file_free(fl);
 		file->private_data = NULL;
 	}
@@ -725,7 +727,13 @@ static int virt_fastrpc_probe(struct virtio_device *vdev)
 		return err;
 	}
 
-	if (of_get_property(me->dev->of_node, "qcom,domain_num", NULL) != NULL) {
+	if (virtio_has_feature(vdev, VIRTIO_FASTRPC_F_DOMAIN_NUM)) {
+		virtio_cread(vdev, struct virtio_fastrpc_config, domain_num,
+				&config.domain_num);
+		dev_info(&vdev->dev, "get domain_num %d from config space\n",
+				config.domain_num);
+		me->num_channels = config.domain_num;
+	} else if (of_get_property(me->dev->of_node, "qcom,domain_num", NULL) != NULL) {
 		err = of_property_read_u32(me->dev->of_node, "qcom,domain_num",
 					&me->num_channels);
 		if (err) {
@@ -852,6 +860,7 @@ static unsigned int features[] = {
 	VIRTIO_FASTRPC_F_MMAP,
 	VIRTIO_FASTRPC_F_CONTROL,
 	VIRTIO_FASTRPC_F_VERSION,
+	VIRTIO_FASTRPC_F_DOMAIN_NUM,
 };
 
 static struct virtio_driver virtio_fastrpc_driver = {
