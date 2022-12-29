@@ -3684,8 +3684,10 @@ static ssize_t ethqos_write_dev_emac(struct file *file,
 	if (strnstr(in_buf, "cmac_id=", strlen(in_buf))) {
 		prefix = strnchr(in_buf, strlen(in_buf), '=');
 		if (prefix) {
-			memcpy(mac_str, (char *)prefix + 1, 30);
-
+			if (strlcpy(mac_str, (char *)prefix + 1, 30) >= 30) {
+				ETHQOSERR("Invalid prefix size\n");
+				return -EFAULT;
+			}
 			if (!mac_pton(mac_str, config_dev_addr)) {
 				ETHQOSERR("Invalid mac addr in /dev/emac\n");
 				return count;
