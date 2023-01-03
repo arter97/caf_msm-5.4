@@ -469,7 +469,10 @@ static int qcom_ethqos_add_ipv6addr(struct ip_params *ip_info,
 	if (!prefix) {
 		ir6.ifr6_prefixlen = 0;
 	} else {
-		kstrtoul(prefix + 1, 0, (unsigned long *)&ir6.ifr6_prefixlen);
+		ret = kstrtoul(prefix + 1, 0,
+			       (unsigned long *)&ir6.ifr6_prefixlen);
+		if (ret)
+			ETHQOSDBG("kstrtoul failed");
 		if (ir6.ifr6_prefixlen > 128)
 			ir6.ifr6_prefixlen = 0;
 	}
@@ -4014,6 +4017,39 @@ static int _qcom_ethqos_probe(void *arg)
 				plat_dat->rx_queues_cfg[i].pkt_route = 0;
 		}
 	}
+
+	if (ethqos->cv2x_mode) {
+		if (ethqos->cv2x_vlan.rx_queue >= plat_dat->rx_queues_to_use)
+			ethqos->cv2x_vlan.rx_queue = CV2X_TAG_TX_CHANNEL;
+
+		ret = of_property_read_u32(np, "jumbo-mtu",
+					   &plat_dat->jumbo_mtu);
+		if (!ret) {
+			if (plat_dat->jumbo_mtu >
+			    MAX_SUPPORTED_JUMBO_MTU) {
+				ETHQOSDBG("jumbo mtu %u biger than max val\n",
+					  plat_dat->jumbo_mtu);
+				ETHQOSDBG("Set it to max supported value %u\n",
+					  MAX_SUPPORTED_JUMBO_MTU);
+				plat_dat->jumbo_mtu =
+					MAX_SUPPORTED_JUMBO_MTU;
+			}
+
+			if (plat_dat->jumbo_mtu < MIN_JUMBO_FRAME_SIZE) {
+				plat_dat->jumbo_mtu = 0;
+			} else {
+				/* Store and Forward mode will limit the max
+				 * buffer size per rx fifo buffer size
+				 * configuration. Use Receive Queue Threshold
+				 * Control mode (rtc) for cv2x rx queue to
+				 * support the jumbo frame up to 8K.
+				 */
+				i = ethqos->cv2x_vlan.rx_queue;
+				plat_dat->rx_queues_cfg[i].use_rtc = true;
+			}
+		}
+	}
+
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "rgmii");
 	ethqos->rgmii_base = devm_ioremap_resource(&pdev->dev, res);
 	if (IS_ERR(ethqos->rgmii_base)) {
@@ -4208,9 +4244,15 @@ ethqos_emac_mem_base(ethqos);
 		ethqos_set_early_eth_param(priv, ethqos);
 	}
 
-	if (ethqos->cv2x_mode)
-		for (i = 0; i < plat_dat->rx_queues_to_use; i++)
+	if (ethqos->cv2x_mode) {
+		for (i = 0; i < plat_dat->rx_queues_to_use; i++) {
 			priv->rx_queue[i].en_fep = true;
+			if (plat_dat->jumbo_mtu && i == ethqos->cv2x_vlan.rx_queue) {
+				priv->rx_queue[i].jumbo_en = true;
+				ETHQOSDBG(" Jumbo fram enabled for queue = %d", i);
+			}
+		}
+	}
 
 	if (ethqos->qoe_mode || ethqos->cv2x_mode) {
 		ethqos_create_emac_device_node(&ethqos->emac_dev_t,
