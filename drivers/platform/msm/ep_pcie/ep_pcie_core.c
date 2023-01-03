@@ -27,6 +27,7 @@
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/interconnect.h>
+#include <soc/qcom/boot_stats.h>
 
 #include "ep_pcie_com.h"
 #include <linux/platform_device.h>
@@ -1949,6 +1950,9 @@ int ep_pcie_core_enable_endpoint(enum ep_pcie_options opt)
 		EP_PCIE_INFO(dev,
 			"PCIe V%d: link initialized for LE PCIe endpoint\n",
 			dev->rev);
+		pr_crit("PCIe - link initialized for LE PCIe endpoint\n");
+		place_marker(
+			"PCIe - link initialized for LE PCIe endpoint\n");
 	}
 
 checkbme:
