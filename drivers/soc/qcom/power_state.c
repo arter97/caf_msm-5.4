@@ -548,8 +548,8 @@ static int ssr_adsp_cb(struct notifier_block *this, unsigned long opcode, void *
 	struct ps_event adspe;
 
 	switch (opcode) {
-	case SUBSYS_BEFORE_SHUTDOWN:
-		pr_debug("ADSP_BEFORE_SHUTDOWN\n");
+	case SUBSYS_AFTER_SHUTDOWN:
+		pr_info("ADSP_AFTER_SHUTDOWN\n");
 		if (ignore_ssr != 1) {
 			adspe.event = ADSP_BEFORE_POWERDOWN;
 			send_uevent(&adspe);
