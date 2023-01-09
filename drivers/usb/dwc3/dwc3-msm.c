@@ -2891,6 +2891,8 @@ static bool dwc3_msm_ssphy_autosuspend(struct dwc3_msm *mdwc, int idx)
 	u32 reg = 0;
 	bool suspended = false;
 
+	BUG_ON((idx < 0) || (idx >= 4));
+
 	/* Clear previous P3 events */
 	dwc3_msm_write_reg(mdwc->base, PWR_EVNT_IRQ_STAT_REG[idx],
 		PWR_EVNT_POWERDOWN_IN_P3_MASK | PWR_EVNT_POWERDOWN_OUT_P3_MASK);
@@ -2921,6 +2923,7 @@ static void dwc3_msm_hsphy_prepare_suspend(struct dwc3_msm *mdwc, int idx)
 	unsigned long timeout;
 	u32 reg = 0;
 
+	BUG_ON((idx < 0) || (idx >= 4));
 	dwc3_msm_write_reg(mdwc->base, PWR_EVNT_IRQ_STAT_REG[idx],
 		PWR_EVNT_LPM_IN_L2_MASK | PWR_EVNT_LPM_OUT_L2_MASK);
 
