@@ -76,7 +76,8 @@ module_param(pause, int, 0644);
 MODULE_PARM_DESC(pause, "Flow Control Pause Time");
 
 #define TC_DEFAULT 64
-static int tc = TC_DEFAULT;
+#define TC_DEFAULT_Q0 32
+static int tc = TC_DEFAULT_Q0;
 module_param(tc, int, 0644);
 MODULE_PARM_DESC(tc, "DMA threshold control value");
 
@@ -1992,7 +1993,7 @@ static void stmmac_dma_operation_mode(struct stmmac_priv *priv)
 	u32 rxmode = 0;
 	u32 chan = 0;
 	u8 qmode = 0;
-u32 mtl_rx_int;
+	u32 mtl_rx_int;
 
 	if (rxfifosz == 0)
 		rxfifosz = priv->dma_cap.rx_fifo_size;
@@ -2027,21 +2028,24 @@ u32 mtl_rx_int;
 		qmode = priv->plat->rx_queues_cfg[chan].mode_to_use;
 		if (priv->plat->rx_queues_cfg[chan].use_rtc)
 			rxmode = tc;
-
-		stmmac_dma_rx_mode(priv, priv->ioaddr, rxmode, chan,
-				rxfifosz, qmode);
-
-	if (priv->rx_queue[chan].skip_sw) {
-		mtl_rx_int = readl_relaxed(priv->ioaddr +
-					   (0x00000d00 + 0x2c));
-		writel_relaxed(mtl_rx_int & ~(BIT(24)),
-			       priv->ioaddr +
-			       (0x00000d00 + 0x2c));
-	}
+		if (priv->plat->force_thresh_dma_mode_q0_en && chan == 0 &&
+		    !(priv->rx_queue[chan].skip_sw))
+			stmmac_dma_rx_mode(priv, priv->ioaddr, tc, chan,
+					   rxfifosz, qmode);
+		else
+			stmmac_dma_rx_mode(priv, priv->ioaddr, rxmode, chan,
+					   rxfifosz, qmode);
+		if (priv->rx_queue[chan].skip_sw) {
+			mtl_rx_int = readl_relaxed(priv->ioaddr +
+						(0x00000d00 + 0x2c));
+			writel_relaxed(mtl_rx_int & ~(BIT(24)),
+				       priv->ioaddr +
+				       (0x00000d00 + 0x2c));
+		}
 		if (priv->rx_queue[chan].en_fep)
 			priv->hw->dma->enable_rx_fep(priv->ioaddr, true, chan);
 		stmmac_set_dma_bfsize(priv, priv->ioaddr, priv->dma_buf_sz,
-				      chan);
+									chan);
 	}
 
 	for (chan = 0; chan < tx_channels_count; chan++) {
