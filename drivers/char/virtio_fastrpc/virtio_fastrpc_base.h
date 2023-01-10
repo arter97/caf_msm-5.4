@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __VIRTIO_FASTRPC_BASE_H__
 #define __VIRTIO_FASTRPC_BASE_H__
@@ -20,6 +20,7 @@
 
 #define CDSP_DOMAIN_ID	3
 #define CDSP1_DOMAIN_ID	4
+#define SESSION_ID_INDEX (30)
 
 struct fastrpc_dsp_capabilities {
 	uint32_t is_cached;	/* ! Flag if dsp attributes are cached */
