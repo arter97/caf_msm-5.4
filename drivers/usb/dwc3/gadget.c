@@ -3044,8 +3044,10 @@ static const struct usb_gadget_ops dwc3_gadget_ops = {
 
 /* -------------------------------------------------------------------------- */
 
-#define NUM_GSI_OUT_EPS(dwc)	(dwc->num_gsi_eps / 2)
-#define NUM_GSI_IN_EPS(dwc)	((dwc->num_gsi_eps + 1) / 2)
+#define NUM_GSI_OUT_EPS(dwc)	((dwc->num_gsi_eps / 2) + \
+				(dwc->normal_eps_in_gsi_mode ? 1 : 0))
+#define NUM_GSI_IN_EPS(dwc)	(((dwc->num_gsi_eps + 1) / 2) + \
+				(dwc->normal_eps_in_gsi_mode ? 1 : 0))
 
 static int dwc3_gadget_init_control_endpoint(struct dwc3_ep *dep)
 {
