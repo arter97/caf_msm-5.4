@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (c) 2018-19 Linaro Limited
 /* Copyright (c) 2021, The Linux Foundation. All rights reserved. */
-/*Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.*/
+/*Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.*/
 
 #include <linux/delay.h>
 #include <linux/module.h>
@@ -40,6 +40,7 @@
 void *ipc_emac_log_ctxt;
 void __iomem *tlmm_rgmii_pull_ctl1_base;
 void __iomem *tlmm_rgmii_rx_ctr_base;
+int open_not_called;
 
 #define PHY_LOOPBACK_1000 0x4140
 #define PHY_LOOPBACK_100 0x6100
@@ -1460,6 +1461,9 @@ static int emac_emb_smmu_cb_probe(struct platform_device *pdev,
 	if (pethqos && pethqos->early_eth_enabled) {
 		ETHQOSINFO("interface up after smmu probe\n");
 		queue_work(system_wq, &pethqos->early_eth);
+	} else {
+		open_not_called = 1;
+		ETHQOSINFO("interface up not done by smmu\n");
 	}
 	if (emac_emb_smmu_ctx.pdev_master)
 		goto smmu_probe_done;
@@ -4235,6 +4239,10 @@ ethqos_emac_mem_base(ethqos);
 		INIT_WORK(&ethqos->early_eth,
 			  qcom_ethqos_bringup_iface);
 		/* Queue the work*/
+		if (open_not_called == 1) {
+			ETHQOSINFO("calling driver open\n");
+			queue_work(system_wq, &ethqos->early_eth);
+		}
 		/*Set early eth parameters*/
 		ethqos_set_early_eth_param(priv, ethqos);
 	}
