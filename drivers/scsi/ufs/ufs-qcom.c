@@ -539,12 +539,6 @@ static int ufs_qcom_power_up_sequence(struct ufs_hba *hba)
 					PHY_MODE_UFS_HS_B : PHY_MODE_UFS_HS_A;
 	int submode = host->limit_phy_submode;
 
-	/* Reset UFS Host Controller and PHY */
-	ret = ufs_qcom_host_reset(hba);
-	if (ret)
-		dev_warn(hba->dev, "%s: host reset returned %d\n",
-				  __func__, ret);
-
 	if (host->hw_ver.major < 0x4)
 		submode = UFS_QCOM_PHY_SUBMODE_NON_G4;
 #if defined(CONFIG_SCSI_UFSHCD_QTI)
@@ -1604,8 +1598,11 @@ static void ufs_qcom_dev_ref_clk_ctrl(struct ufs_qcom_host *host, bool enable)
 
 		writel_relaxed(temp, host->dev_ref_clk_ctrl_mmio);
 
-		/* ensure that ref_clk is enabled/disabled before we return */
-		wmb();
+		/*
+		 * Make sure the write to ref_clk reaches the destination and
+		 * not stored in a Write Buffer (WB).
+		 */
+		readl(host->dev_ref_clk_ctrl_mmio);
 
 		/*
 		 * If we call hibern8 exit after this, we need to make sure that
@@ -1732,11 +1729,12 @@ static int ufs_qcom_pwr_change_notify(struct ufs_hba *hba,
 		if ((host->hw_ver.major >= 0x4) &&
 		    (dev_req_params->gear_tx == UFS_HS_G4))
 			ufs_qcom_set_adapt(hba);
-		else
+		else if (hba->ufs_version >= UFSHCI_VERSION_30) {
 			/* NO ADAPT */
 			ufshcd_dme_set(hba,
 				       UIC_ARG_MIB(PA_TXHSADAPTTYPE),
 				       PA_NO_ADAPT);
+		}
 		break;
 	case POST_CHANGE:
 		if (ufs_qcom_cfg_timers(hba, dev_req_params->gear_rx,
@@ -3527,6 +3525,13 @@ static void ufs_qcom_parse_wb(struct ufs_qcom_host *host)
 static void ufs_qcom_device_reset(struct ufs_hba *hba)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	int ret = 0;
+
+	/* Reset UFS Host Controller and PHY */
+	ret = ufs_qcom_host_reset(hba);
+	if (ret)
+		dev_warn(hba->dev, "%s: host reset returned %d\n",
+				  __func__, ret);
 
 	/* reset gpio is optional */
 	if (!host->device_reset)

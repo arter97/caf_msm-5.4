@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -32,6 +33,7 @@
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_bridge.h>
 #include <linux/string.h>
+#include <drm/drm_client.h>
 
 #define CFG_HPD_INTERRUPTS BIT(0)
 #define CFG_EDID_INTERRUPTS BIT(1)
@@ -144,6 +146,7 @@ struct lt9611_timing_info {
 };
 
 static struct lt9611_timing_info lt9611_supp_timing_cfg[] = {
+	{3840, 2160, 24, 60, 4, 2}, /* 3840x2160 24bit 60Hz 4Lane 2ports */
 	{3840, 2160, 24, 30, 4, 2}, /* 3840x2160 24bit 30Hz 4Lane 2ports */
 	{1920, 1080, 24, 60, 4, 1}, /* 1080P 24bit 60Hz 4lane 1port */
 	{1920, 1080, 24, 30, 3, 1}, /* 1080P 24bit 30Hz 3lane 1port */
@@ -186,6 +189,11 @@ static void lt9611_hpd_work(struct work_struct *work)
 	envp[3] = NULL;
 	envp[4] = NULL;
 	kobject_uevent_env(&dev->primary->kdev->kobj, KOBJ_CHANGE, envp);
+
+	if (dev->mode_config.funcs->output_poll_changed)
+		dev->mode_config.funcs->output_poll_changed(dev);
+
+	drm_client_dev_hotplug(dev);
 }
 
 static struct lt9611 *bridge_to_lt9611(struct drm_bridge *bridge)

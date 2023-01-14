@@ -907,8 +907,8 @@ static int f_audio_bind(struct usb_configuration *c, struct usb_function *f)
 	audio->in_ep->desc = &as_in_ep_desc;
 
 	/* copy descriptors, and track endpoint copies */
-	status = usb_assign_descriptors(f, f_audio_desc, f_audio_desc, f_audio_desc,
-					NULL);
+	status = usb_assign_descriptors(f, f_audio_desc, f_audio_desc,
+			f_audio_ss_desc, NULL);
 	if (status)
 		goto fail;
 
@@ -1057,6 +1057,7 @@ static ssize_t f_uac1_opts_speaker_volume_show(struct config_item *item,
 	if (!uac1)
 		return 0;
 
+	value = -1;
 	list_for_each_entry(cs, &uac1->cs, list) {
 		if (cs->id == FEATURE_UNIT_ID) {
 			list_for_each_entry(con, &cs->control, list) {
@@ -1086,6 +1087,7 @@ static ssize_t f_uac1_opts_mic_volume_show(struct config_item *item, char *page)
 	if (!uac1)
 		return 0;
 
+	value = -1;
 	list_for_each_entry(cs, &uac1->cs, list) {
 		if (cs->id == MIC_FEATURE_UNIT_ID) {
 			list_for_each_entry(con, &cs->control, list) {
@@ -1116,6 +1118,7 @@ static ssize_t f_uac1_opts_speaker_mute_show(struct config_item *item,
 	if (!uac1)
 		return 0;
 
+	value = -1;
 	list_for_each_entry(cs, &uac1->cs, list) {
 		if (cs->id == FEATURE_UNIT_ID) {
 			list_for_each_entry(con, &cs->control, list) {
@@ -1145,6 +1148,7 @@ static ssize_t f_uac1_opts_mic_mute_show(struct config_item *item, char *page)
 	if (!uac1)
 		return 0;
 
+	value = -1;
 	list_for_each_entry(cs, &uac1->cs, list) {
 		if (cs->id == MIC_FEATURE_UNIT_ID) {
 			list_for_each_entry(con, &cs->control, list) {
