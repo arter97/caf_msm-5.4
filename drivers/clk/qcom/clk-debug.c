@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2016, 2019-2021, The Linux Foundation. All rights reserved. */
+/* Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved. */
 
 #include <linux/clk.h>
 #include <linux/export.h>
@@ -12,6 +13,10 @@
 #include <linux/bitops.h>
 #include <linux/clk/qcom.h>
 #include <linux/mfd/syscon.h>
+#include <trace/events/power.h>
+
+#define CREATE_TRACE_POINTS
+#include "trace.h"
 
 #include "clk-regmap.h"
 #include "clk-debug.h"
@@ -316,6 +321,8 @@ static int clk_debug_measure_get(void *data, u64 *val)
 		*val *= get_mux_divs(measure);
 		disable_debug_clks(measure);
 	}
+
+	trace_clk_measure(clk_hw_get_name(hw), *val);
 exit:
 	mutex_unlock(&clk_debug_lock);
 	if (rclk)
