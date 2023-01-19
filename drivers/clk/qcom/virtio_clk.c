@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "%s: " fmt, __func__
@@ -662,6 +663,7 @@ err_find_desc:
 
 static const struct virtio_device_id id_table[] = {
 	{ VIRTIO_ID_CLOCK, VIRTIO_DEV_ANY_ID },
+	{ VIRTIO_ID_CLOCK_BC, VIRTIO_DEV_ANY_ID },
 	{ 0 },
 };
 
