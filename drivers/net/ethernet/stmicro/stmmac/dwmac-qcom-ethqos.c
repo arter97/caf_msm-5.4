@@ -4379,6 +4379,8 @@ static int qcom_ethqos_suspend(struct device *dev)
 		return 0;
 	}
 
+	place_marker("M - Ethernet Suspend start");
+
 	ethqos = get_stmmac_bsp_priv(dev);
 	if (!ethqos)
 		return -ENODEV;
@@ -4431,6 +4433,7 @@ static int qcom_ethqos_suspend(struct device *dev)
 		ethqos_phy_power_off(ethqos);
 	}
 
+	place_marker("M - Ethernet Suspend End");
 	priv->boot_kpi = false;
 	ETHQOSDBG(" ret = %d\n", ret);
 	return ret;
@@ -4446,6 +4449,8 @@ static int qcom_ethqos_resume(struct device *dev)
 	ETHQOSDBG("Resume Enter\n");
 	if (of_device_is_compatible(dev->of_node, "qcom,emac-smmu-embedded"))
 		return 0;
+
+	place_marker("M - Ethernet Resume start");
 
 	ethqos = get_stmmac_bsp_priv(dev);
 
@@ -4520,6 +4525,8 @@ static int qcom_ethqos_resume(struct device *dev)
 	}
 
 	ethqos_ipa_offload_event_handler(NULL, EV_DPM_RESUME);
+
+	place_marker("M - Ethernet Resume End");
 
 	ETHQOSDBG("<--Resume Exit\n");
 	return ret;
