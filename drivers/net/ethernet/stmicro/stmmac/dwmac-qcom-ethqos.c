@@ -4265,7 +4265,7 @@ ethqos_emac_mem_base(ethqos);
 	}
 
 	if (priv->plat->mac2mac_en)
-		priv->plat->mac2mac_link = -1;
+		priv->plat->mac2mac_link = 0;
 
 	if (pethqos->cv2x_mode != CV2X_MODE_DISABLE)
 		qcom_ethqos_register_listener();
