@@ -49,7 +49,7 @@ int open_not_called;
 static void ethqos_rgmii_io_macro_loopback(struct qcom_ethqos *ethqos,
 					   int mode);
 static int phy_digital_loopback_config(struct qcom_ethqos *ethqos, int speed, int config);
-
+static void __iomem *tlmm_central_base_addr;
 static struct emac_emb_smmu_cb_ctx emac_emb_smmu_ctx = {0};
 struct plat_stmmacenet_data *plat_dat;
 static struct qcom_ethqos *pethqos;
@@ -3215,6 +3215,121 @@ static struct notifier_block qcom_ethqos_panic_blk = {
 	.notifier_call  = qcom_ethqos_panic_notifier,
 };
 
+static int ethqos_update_mdio_drv_strength(struct qcom_ethqos *ethqos,
+					   struct device_node *np)
+{
+	u32 mdio_drv_str[2];
+	struct resource *resource = NULL;
+	unsigned long tlmm_central_base = 0;
+	unsigned long tlmm_central_size = 0;
+	int ret = 0;
+	unsigned long v;
+
+	resource = platform_get_resource_byname(ethqos->pdev,
+						IORESOURCE_MEM, "tlmm-central-base");
+
+	if (!resource) {
+		ETHQOSERR("Resource tlmm-central-base not found\n");
+		goto err_out;
+	}
+
+	tlmm_central_base = resource->start;
+	tlmm_central_size = resource_size(resource);
+	ETHQOSDBG("tlmm_central_base = 0x%x, size = 0x%x\n",
+		  tlmm_central_base, tlmm_central_size);
+
+	tlmm_central_base_addr = ioremap(tlmm_central_base,
+					 tlmm_central_size);
+
+	if (!tlmm_central_base_addr) {
+		ETHQOSERR("cannot map dwc_tlmm_central reg memory, aborting\n");
+		ret = -EIO;
+		goto err_out;
+	}
+
+	if (np && !of_property_read_u32(np, "mdio-drv-str",
+					&mdio_drv_str[0])) {
+		switch (mdio_drv_str[0]) {
+		case 2:
+			mdio_drv_str[0] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_2MA;
+			break;
+		case 4:
+			mdio_drv_str[0] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_4MA;
+			break;
+		case 6:
+			mdio_drv_str[0] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_6MA;
+			break;
+		case 8:
+			mdio_drv_str[0] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_8MA;
+			break;
+		case 10:
+			mdio_drv_str[0] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_10MA;
+			break;
+		case 12:
+			mdio_drv_str[0] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_12MA;
+			break;
+		case 14:
+			mdio_drv_str[0] = TLMM_RGMII_HDRV_PL_CTL1_TX_HDRV_14MA;
+			break;
+		case 16:
+			mdio_drv_str[0] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_16MA;
+			break;
+		default:
+			mdio_drv_str[0] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_16MA;
+			break;
+		}
+
+		TLMM_MDC_MDIO_HDRV_PULL_CTL_RGRD(v);
+		v = (v & (unsigned long)(0xFFFFFFF8))
+		 | (((mdio_drv_str[0]) & ((unsigned long)(0x7))) << 0);
+		TLMM_MDC_MDIO_HDRV_PULL_CTL_RGWR(v);
+	}
+
+	if (np && !of_property_read_u32(np, "mdc-drv-str",
+					&mdio_drv_str[1])) {
+		switch (mdio_drv_str[1]) {
+		case 2:
+			mdio_drv_str[1] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_2MA;
+			break;
+		case 4:
+			mdio_drv_str[1] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_4MA;
+			break;
+		case 6:
+			mdio_drv_str[1] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_6MA;
+			break;
+		case 8:
+			mdio_drv_str[1] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_8MA;
+			break;
+		case 10:
+			mdio_drv_str[1] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_10MA;
+			break;
+		case 12:
+			mdio_drv_str[1] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_12MA;
+			break;
+		case 14:
+			mdio_drv_str[1] = TLMM_RGMII_HDRV_PL_CTL1_TX_HDRV_14MA;
+			break;
+		case 16:
+			mdio_drv_str[1] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_16MA;
+			break;
+		default:
+			mdio_drv_str[1] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_16MA;
+			break;
+		}
+
+		TLMM_MDC_MDIO_HDRV_PULL_CTL_RGRD(v);
+		v = (v & (unsigned long)(0xFFFFFF1F))
+		 | (((mdio_drv_str[1]) & (unsigned long)(0x7)) << 5);
+		TLMM_MDC_MDIO_HDRV_PULL_CTL_RGWR(v);
+	}
+
+err_out:
+	if (tlmm_central_base_addr)
+		iounmap(tlmm_central_base_addr);
+
+	return ret;
+}
+
 static int ethqos_update_rgmii_tx_drv_strength(struct qcom_ethqos *ethqos)
 {
 	int ret = 0;
@@ -4179,6 +4294,7 @@ static int _qcom_ethqos_probe(void *arg)
 	ethqos->ioaddr = (&stmmac_res)->addr;
 	if (ethqos->io_macro.rgmii_tx_drv)
 		ethqos_update_rgmii_tx_drv_strength(ethqos);
+	ethqos_update_mdio_drv_strength(ethqos, np);
 	ethqos_mac_rec_init(ethqos);
 
 	ret = stmmac_dvr_probe(&pdev->dev, plat_dat, &stmmac_res);
