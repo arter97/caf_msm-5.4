@@ -435,7 +435,7 @@ static const char * const gsi_op_strings[] = {
 	"ENABLE_GSI", "UPDATE_XFER", "RING_DB",
 	"END_XFER", "GET_CH_INFO", "GET_XFER_IDX", "PREPARE_TRBS",
 	"FREE_TRBS", "SET_CLR_BLOCK_DBL", "CHECK_FOR_SUSP",
-	"EP_DISABLE" };
+	"EP_DISABLE", "EP_UPDATE_DB" };
 
 static const char * const usb_role_strings[] = {
 	"NONE",
@@ -1472,6 +1472,8 @@ static void gsi_ring_db(struct usb_ep *ep, struct usb_gsi_request *request)
 		return;
 	}
 
+	dep->gsi_db_reg_addr = gsi_dbl_address_lsb;
+
 	gsi_dbl_address_msb = ioremap_nocache(request->db_reg_phs_addr_msb,
 				sizeof(u32));
 	if (!gsi_dbl_address_msb) {
@@ -1493,8 +1495,10 @@ static void gsi_ring_db(struct usb_ep *ep, struct usb_gsi_request *request)
 	writel_relaxed(lower_32_bits(trb_dma), gsi_dbl_address_lsb);
 	writel_relaxed(upper_32_bits(trb_dma), gsi_dbl_address_msb);
 
-	iounmap(gsi_dbl_address_lsb);
-	iounmap(gsi_dbl_address_msb);
+	if (!dwc->normal_eps_in_gsi_mode) {
+		iounmap(gsi_dbl_address_lsb);
+		iounmap(gsi_dbl_address_msb);
+	}
 }
 
 /**
@@ -1980,6 +1984,19 @@ static inline int usb_gsi_ep_op_allow(struct usb_ep *ep, void *op_data, enum gsi
 	return 1;
 }
 
+static void dwc3_msm_gsi_db_update(struct dwc3_ep *dep, dma_addr_t offset)
+{
+	struct dwc3 *dwc = dep->dwc;
+	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
+
+	if (!dep->gsi_db_reg_addr)
+		dev_err(mdwc->dev, "Failed to update GSI DBL\n");
+
+	writel_relaxed(offset, dep->gsi_db_reg_addr);
+	dev_dbg(mdwc->dev, "Writing TRB addr: %pa to %pK\n",
+		&offset, dep->gsi_db_reg_addr);
+}
+
 /**
  * Performs GSI operations or GSI EP related operations.
  *
@@ -2000,6 +2017,7 @@ int usb_gsi_ep_op(struct usb_ep *ep, void *op_data, enum gsi_ep_op op)
 	struct gsi_channel_info *ch_info;
 	bool block_db;
 	unsigned long flags;
+	dma_addr_t offset;
 
 	dbg_log_string("%s(%d):%s", ep->name, dep->number >> 1,
 			gsi_op_to_string(op));
@@ -2068,6 +2086,10 @@ int usb_gsi_ep_op(struct usb_ep *ep, void *op_data, enum gsi_ep_op op)
 		break;
 	case GSI_EP_OP_DISABLE:
 		ret = ep->ops->disable(ep);
+		break;
+	case GSI_EP_OP_UPDATE_DB:
+		offset = *(dma_addr_t *)op_data;
+		dwc3_msm_gsi_db_update(dep, offset);
 		break;
 	case GSI_DYNAMIC_EP_INTR_CALC:
 		/*
@@ -6784,6 +6806,7 @@ MODULE_SOFTDEP("pre: phy-generic phy-msm-snps-hs phy-msm-ssusb-qmp eud");
 
 static int dwc3_msm_init(void)
 {
+	dwc3_msm_kretprobe_init();
 	return platform_driver_register(&dwc3_msm_driver);
 }
 module_init(dwc3_msm_init);
@@ -6791,5 +6814,6 @@ module_init(dwc3_msm_init);
 static void __exit dwc3_msm_exit(void)
 {
 	platform_driver_unregister(&dwc3_msm_driver);
+	dwc3_msm_kretprobe_exit();
 }
 module_exit(dwc3_msm_exit);
