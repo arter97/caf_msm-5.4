@@ -922,8 +922,6 @@ static int32_t virt_npu_map_buf(struct npu_client *client,
 		goto map_end;
 	}
 
-	ion_buf->attachment->dma_map_attrs = DMA_ATTR_SKIP_CPU_SYNC;
-
 	ion_buf->table = dma_buf_map_attachment(ion_buf->attachment,
 			DMA_BIDIRECTIONAL);
 	if (IS_ERR(ion_buf->table)) {

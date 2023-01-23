@@ -103,3 +103,17 @@ config CNSS_SUPPORT_DUAL_DEV
 	  This enables the changes from cnss2 platform driver to support dual
 	  wlan card attach. Now just supports QCA6390 chip and does not support
 	  asynchronous probe.
+
+config CNSS2_CONDITIONAL_POWEROFF
+	bool "Enable/Disable conditional bus suspend and device power off"
+	depends on CNSS2
+	depends on PCI
+	help
+	  Conditional pcie bus suspend and device powering off for wlan after
+	  driver probe for the first time.
+	  With this feature enabled, pcie bus suspend and device powering off
+	  will not take place for certain wlan chipsets after driver probing
+	  for the first time to avoid potential subsequent failures during
+	  device re-probe(after wlan function driver loaded) under very bad
+	  thermal conditions.
+
