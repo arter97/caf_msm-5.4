@@ -85,6 +85,7 @@ static const char *const hwcap_str[] = {
 	"flagm2",
 	"frint",
 	"ecv",
+	"afp",
 	NULL
 };
 
