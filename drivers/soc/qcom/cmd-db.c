@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2016-2019, The Linux Foundation. All rights reserved. */
+/* Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved. */
 
 #include <linux/debugfs.h>
 #include <linux/fs.h>
@@ -404,7 +405,7 @@ static int __init cmd_db_device_init(void)
 {
 	return platform_driver_register(&cmd_db_dev_driver);
 }
-arch_initcall(cmd_db_device_init);
+core_initcall(cmd_db_device_init);
 
 MODULE_DESCRIPTION("Qualcomm Technologies, Inc. Command DB for QCOM SoCs");
 MODULE_LICENSE("GPL v2");
