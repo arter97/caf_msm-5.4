@@ -356,6 +356,37 @@ static ssize_t ssc_qup_state_show(struct device *dev,
 
 static DEVICE_ATTR_RO(ssc_qup_state);
 
+void geni_se_ssc_clk_enable(struct se_geni_rsc *rsc, bool enable)
+{
+	struct geni_se_device *dev;
+	int ret = 0;
+
+	if (unlikely(!rsc || !rsc->wrapper_dev))
+		return;
+
+	dev = dev_get_drvdata(rsc->wrapper_dev);
+	if (!dev)
+		return;
+
+	if (!rsc->rsc_ssr.ssr_enable)
+		return;
+
+	if (enable) {
+		/* Enable core and core2x clock */
+		ret = clk_bulk_prepare_enable(SSC_NUM_CLKS, dev->ssc_clks);
+		if (ret) {
+			GENI_SE_ERR(dev->log_ctx, false, NULL,
+				"%s: corex/2x clk enable failed ret:%d\n",
+						__func__, ret);
+			return;
+		}
+	} else {
+		/* Disable core and core2x clk */
+		clk_bulk_disable_unprepare(SSC_NUM_CLKS, dev->ssc_clks);
+	}
+}
+EXPORT_SYMBOL(geni_se_ssc_clk_enable);
+
 static void geni_se_ssc_qup_down(struct geni_se_device *dev)
 {
 	struct se_geni_rsc *rsc = NULL;
@@ -371,8 +402,7 @@ static void geni_se_ssc_qup_down(struct geni_se_device *dev)
 					rsc_ssr.active_list) {
 		rsc->rsc_ssr.force_suspend(rsc->ctrl_dev);
 	}
-	/* Disable core and core2x clk */
-	clk_bulk_disable_unprepare(SSC_NUM_CLKS, dev->ssc_clks);
+	geni_se_ssc_clk_enable(rsc, false);
 }
 
 static void geni_se_ssc_qup_up(struct geni_se_device *dev)
@@ -385,14 +415,8 @@ static void geni_se_ssc_qup_up(struct geni_se_device *dev)
 			"%s: No Active usecase\n", __func__);
 		return;
 	}
-	/* Enable core/2x clk before TZ SCM call */
-	ret = clk_bulk_prepare_enable(SSC_NUM_CLKS, dev->ssc_clks);
-	if (ret) {
-		GENI_SE_ERR(dev->log_ctx, false, NULL,
-			"%s: corex/2x clk enable failed ret:%d\n",
-						__func__, ret);
-		return;
-	}
+
+	geni_se_ssc_clk_enable(rsc, true);
 
 	list_for_each_entry(rsc, &dev->ssr.active_list_head,
 					rsc_ssr.active_list) {
@@ -985,6 +1009,7 @@ int se_geni_resources_off(struct se_geni_rsc *rsc)
 	if (ret)
 		GENI_SE_ERR(geni_se_dev->log_ctx, false, NULL,
 			"%s: Error %d turning off clocks\n", __func__, ret);
+
 	ret = pinctrl_select_state(rsc->geni_pinctrl, rsc->geni_gpio_sleep);
 	if (ret)
 		GENI_SE_ERR(geni_se_dev->log_ctx, false, NULL,
