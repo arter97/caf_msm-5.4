@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -2542,14 +2542,13 @@ static int gsi_get_alt(struct usb_function *f, unsigned int intf)
 static int gsi_dynamic_ep_allocation(struct usb_function *f)
 {
 	struct f_gsi	 *gsi = func_to_gsi(f);
-	struct f_gsi	 *gsi_rmnet_v2x = inst_status[IPA_USB_RMNET_CV2X].opts->gsi;
 	struct usb_composite_dev *cdev = f->config->cdev;
 
 	if (gsi_normal_ep_support(cdev->gadget)) {
 		switch (gsi->prot_id) {
 		case IPA_USB_RMNET:
 		case IPA_USB_ECM:
-			if (gsi_rmnet_v2x->function.fs_descriptors) {
+			if (inst_status[IPA_USB_RMNET_CV2X].opts) {
 				if (gsi->d_port.in_ep)
 					usb_gsi_ep_op(gsi->d_port.in_ep,
 						&gsi->d_port.in_request,
@@ -2570,7 +2569,7 @@ static int gsi_dynamic_ep_allocation(struct usb_function *f)
 			}
 		break;
 		case IPA_USB_DIAG:
-			if (!gsi_rmnet_v2x->function.fs_descriptors)
+			if (!inst_status[IPA_USB_RMNET_CV2X].opts)
 				usb_gsi_ep_op(gsi->d_port.in_ep,
 					&gsi->d_port.in_request,
 					GSI_DYNAMIC_EP_INTR_CALC);
