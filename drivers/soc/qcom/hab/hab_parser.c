@@ -80,8 +80,7 @@ static int hab_parse_dt(struct local_vmid *settings)
 	int tmp = -1, vmids_num;
 	u32 vmids[16];
 	int32_t grp_start_id, be;
-	/* pchan is not kernel only by default */
-	int kernel_only = 0;
+	int kernel_only;
 
 	/* parse device tree*/
 	pr_debug("parsing hab node in device tree...\n");
@@ -141,12 +140,13 @@ static int hab_parse_dt(struct local_vmid *settings)
 
 		/* check the kernel_only flag for these pchans in this mmid group */
 		result = of_property_read_bool(mmid_grp_node, "kernel_only");
-
 		if (result) {
 			kernel_only = 1;
 			pr_debug("kernel_only flag is set for this mmid group\n");
-		} else
+		} else {
+			kernel_only = 0;
 			pr_debug("kernel_only flag is not set for this mmid group\n");
+		}
 
 		for (i = 0; i < vmids_num; i++) {
 			pr_debug("vmids_num = %d, vmids[%d] = %d\n",
