@@ -115,6 +115,7 @@ struct stmmac_rxq_cfg {
 	bool use_prio;
 	u32 prio;
 	bool use_rtc;
+	bool mbcast_route;
 };
 
 struct stmmac_txq_cfg {
