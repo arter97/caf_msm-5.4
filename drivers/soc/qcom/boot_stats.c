@@ -341,6 +341,13 @@ void place_marker(const char *name)
 }
 EXPORT_SYMBOL(place_marker);
 
+void update_marker(const char *name)
+{
+	destroy_marker(name);
+	place_marker(name);
+}
+EXPORT_SYMBOL(update_marker);
+
 static ssize_t bootkpi_reader(struct file *fp, struct kobject *obj,
 		struct bin_attribute *bin_attr, char *user_buffer, loff_t off,
 		size_t count)
