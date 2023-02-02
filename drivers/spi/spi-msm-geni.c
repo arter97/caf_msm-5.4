@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -2859,6 +2859,7 @@ static void ssr_spi_force_resume(struct device *dev)
 	mutex_lock(&mas->spi_ssr.ssr_lock);
 	mas->spi_ssr.is_ssr_down = false;
 	spi_geni_irq_enable(mas, true);
+	se_geni_clks_on(&mas->spi_rsc);
 	GENI_SE_DBG(mas->ipc, false, mas->dev, "force resume done\n");
 	mutex_unlock(&mas->spi_ssr.ssr_lock);
 }
