@@ -2140,23 +2140,8 @@ int cnss_register_subsys(struct cnss_plat_data *plat_priv)
 		cnss_pr_err("Failed to register subsys, err = %d\n", ret);
 		goto out;
 	}
-#if 0
-	subsys_info->subsys_handle =
-		subsystem_get(subsys_info->subsys_desc.name);
-	if (!subsys_info->subsys_handle) {
-		cnss_pr_err("Failed to get subsys_handle!\n");
-		ret = -EINVAL;
-		goto unregister_subsys;
-	} else if (IS_ERR(subsys_info->subsys_handle)) {
-		ret = PTR_ERR(subsys_info->subsys_handle);
-		cnss_pr_err("Failed to do subsystem_get, err = %d\n", ret);
-		goto unregister_subsys;
-	}
-#endif
 	return 0;
 
-unregister_subsys:
-	subsys_unregister(subsys_info->subsys_device);
 out:
 	return ret;
 }
@@ -2166,9 +2151,6 @@ void cnss_unregister_subsys(struct cnss_plat_data *plat_priv)
 	struct cnss_subsys_info *subsys_info;
 
 	subsys_info = &plat_priv->subsys_info;
-#if 0
-	subsystem_put(subsys_info->subsys_handle);
-#endif
 	subsys_unregister(subsys_info->subsys_device);
 }
 
