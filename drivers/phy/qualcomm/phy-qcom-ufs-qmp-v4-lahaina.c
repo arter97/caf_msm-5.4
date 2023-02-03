@@ -57,7 +57,6 @@ static int ufs_qcom_phy_qmp_v4_phy_calibrate(struct phy *generic_phy)
 
 	err = ufs_qcom_phy_qmp_v4_is_pcs_ready(ufs_qcom_phy);
 
-out:
 	return err;
 }
 
