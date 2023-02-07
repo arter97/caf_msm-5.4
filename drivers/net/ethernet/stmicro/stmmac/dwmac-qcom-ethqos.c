@@ -2735,6 +2735,9 @@ static ssize_t loopback_handling_config(struct file *file, const char __user *us
 		return -EOPNOTSUPP;
 	}
 
+	if (!priv->dev->phydev)
+		return -EOPNOTSUPP;
+
 	if ((config == ENABLE_PHY_LOOPBACK  || priv->current_loopback ==
 			ENABLE_PHY_LOOPBACK) &&
 			ethqos->current_phy_mode == DISABLE_PHY_IMMEDIATELY) {
