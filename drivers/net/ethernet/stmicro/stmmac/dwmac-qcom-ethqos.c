@@ -1754,7 +1754,8 @@ static void qcom_ethqos_phy_resume_clks(struct qcom_ethqos *ethqos)
 
 	ETHQOSINFO("Enter\n");
 
-	if (ethqos->phy_wol_supported) {
+	if (ethqos->phy_wol_supported ||
+	    ethqos->current_phy_mode == DISABLE_PHY_SUSPEND_ENABLE_RESUME) {
 		if (priv->plat->stmmac_clk)
 			clk_prepare_enable(priv->plat->stmmac_clk);
 
