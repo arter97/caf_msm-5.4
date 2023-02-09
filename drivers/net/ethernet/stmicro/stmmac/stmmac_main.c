@@ -1165,6 +1165,7 @@ static int stmmac_init_phy(struct net_device *dev)
 
 		ret = phylink_connect_phy(priv->phylink, priv->phydev);
 
+#ifndef DEFER_ENABLE_INTERRUPTS
 		if (priv->plat->phy_intr_en_extn_stm && priv->plat->phy_intr_en) {
 			if (priv->phydev->drv->ack_interrupt &&
 			    !priv->phydev->drv->ack_interrupt(priv->phydev)) {
@@ -1186,6 +1187,7 @@ static int stmmac_init_phy(struct net_device *dev)
 			pr_info("stmmac phy polling mode\n");
 			priv->phydev->irq = PHY_POLL;
 		}
+#endif
 	}
 
 	return ret;
@@ -1318,13 +1320,37 @@ static void stmmac_clear_tx_descriptors(struct stmmac_priv *priv, u32 queue)
 	int i;
 
 	/* Clear the TX descriptors */
-	for (i = 0; i < DMA_TX_SIZE; i++)
+	for (i = 0; i < DMA_TX_SIZE; i++) {
 		if (priv->extend_desc)
 			stmmac_init_tx_desc(priv, &tx_q->dma_etx[i].basic,
 					priv->mode, (i == DMA_TX_SIZE - 1));
 		else
 			stmmac_init_tx_desc(priv, &tx_q->dma_tx[i],
 					priv->mode, (i == DMA_TX_SIZE - 1));
+
+		if (tx_q->tx_skbuff_dma[i].buf) {
+			if (tx_q->tx_skbuff_dma[i].map_as_page)
+				dma_unmap_page(GET_MEM_PDEV_DEV,
+					       tx_q->tx_skbuff_dma[i].buf,
+					       tx_q->tx_skbuff_dma[i].len,
+					       DMA_TO_DEVICE);
+			else
+				dma_unmap_single(GET_MEM_PDEV_DEV,
+						 tx_q->tx_skbuff_dma[i].buf,
+						 tx_q->tx_skbuff_dma[i].len,
+						 DMA_TO_DEVICE);
+
+			if (tx_q->tx_skbuff[i]) {
+				dev_kfree_skb_any(tx_q->tx_skbuff[i]);
+				tx_q->tx_skbuff[i] = NULL;
+			}
+			tx_q->tx_skbuff_dma[i].buf = 0;
+			tx_q->tx_skbuff_dma[i].len = 0;
+			tx_q->tx_skbuff_dma[i].map_as_page = false;
+		}
+
+		tx_q->tx_skbuff_dma[i].last_segment = false;
+	}
 }
 
 /**
@@ -2993,6 +3019,30 @@ static int stmmac_open(struct net_device *dev)
 		stmmac_init_coalesce(priv);
 	else
 		priv->rx_coal_frames = STMMAC_RX_FRAMES;
+
+#ifdef DEFER_ENABLE_INTERRUPTS
+	if (priv->plat->phy_intr_en_extn_stm && priv->plat->phy_intr_en) {
+		if (priv->phydev->drv->ack_interrupt &&
+		    !priv->phydev->drv->ack_interrupt(priv->phydev)) {
+			pr_info(" qcom-ethqos: %s ack_interrupt successful aftre connect\n",
+				__func__);
+		} else {
+			pr_err(" qcom-ethqos: %s ack_interrupt failed aftre connect\n",
+			       __func__);
+		}
+
+		if (priv->phydev->drv &&
+		    priv->phydev->drv->config_intr &&
+		    !priv->phydev->drv->config_intr(priv->phydev)) {
+			pr_err(" qcom-ethqos: %s config_phy_intr successful aftre connect\n",
+			       __func__);
+			priv->plat->request_phy_wol(priv->plat);
+		}
+	} else {
+		pr_info("stmmac phy polling mode\n");
+		priv->phydev->irq = PHY_POLL;
+	}
+#endif
 
 	if (!priv->plat->mac2mac_en)
 		phylink_start(priv->phylink);

@@ -861,9 +861,6 @@ static ssize_t chip_id_show(struct device *dev,
 static inline int smi130_check_gyro_early_buff_enable_flag(
 		struct smi_gyro_client_data *client_data)
 {
-	if (client_data->gyro_buffer_smi130_samples)
-		return 1;
-	else
 		return 0;
 }
 
