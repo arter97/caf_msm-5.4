@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -318,7 +318,6 @@ static int do_pending_cancel(struct geni_i2c_dev *gi2c)
 		dmaengine_terminate_all(gi2c->tx_c);
 		gi2c->cfg_sent = 0;
 	} else {
-		do_reg68_war_for_rtl_se(gi2c);
 		reinit_completion(&gi2c->xfer);
 		geni_cancel_m_cmd(gi2c->base);
 		timeout = wait_for_completion_timeout(&gi2c->xfer, HZ);
@@ -1517,16 +1516,6 @@ static int geni_i2c_xfer(struct i2c_adapter *adap,
 		}
 	}
 
-	geni_ios = geni_read_reg_nolog(gi2c->base, SE_GENI_IOS);
-	if ((geni_ios & 0x3) != 0x3) { //SCL:b'1, SDA:b'0
-		GENI_SE_ERR(gi2c->ipcl, true, gi2c->dev,
-			    "IO lines in bad state, Power the slave\n");
-		pm_runtime_mark_last_busy(gi2c->dev);
-		pm_runtime_put_autosuspend(gi2c->dev);
-		mutex_unlock(&gi2c->i2c_ssr.ssr_lock);
-		return -ENXIO;
-	}
-
 	// WAR : Complete previous pending cancel cmd
 	if (gi2c->prev_cancel_pending) {
 		ret = do_pending_cancel(gi2c);
@@ -1536,6 +1525,16 @@ static int geni_i2c_xfer(struct i2c_adapter *adap,
 			mutex_unlock(&gi2c->i2c_ssr.ssr_lock);
 			return ret; //Don't perform xfer is cancel failed
 		}
+	}
+
+	geni_ios = geni_read_reg_nolog(gi2c->base, SE_GENI_IOS);
+	if ((geni_ios & 0x3) != 0x3) { //SCL:b'1, SDA:b'0
+		GENI_SE_ERR(gi2c->ipcl, true, gi2c->dev,
+				"IO lines in bad state, Power the slave\n");
+		pm_runtime_mark_last_busy(gi2c->dev);
+		pm_runtime_put_autosuspend(gi2c->dev);
+		mutex_unlock(&gi2c->i2c_ssr.ssr_lock);
+		return -ENXIO;
 	}
 
 	GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev,
