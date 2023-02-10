@@ -100,6 +100,11 @@
 #define PCIE20_PARF_CLKREQ_IN_VALUE (BIT(3))
 #define PCIE20_PARF_CLKREQ_IN_ENABLE (BIT(1))
 
+#define MAX_SHORT_BDF_NUM (16)
+#define PCIE20_PARF_BDF_TRANSLATE_CFG	(0x24C)
+#define PCIE20_PARF_SID_OFFSET	(0x234)
+#define PCIE20_PARF_BDF_TRANSLATE_N (0x250)
+
 #define PCIE20_ELBI_SYS_CTRL (0x04)
 #define PCIE20_ELBI_SYS_STTS (0x08)
 
@@ -838,6 +843,7 @@ struct msm_pcie_dev_t {
 	bool linkdown_panic;
 	uint32_t boot_option;
 	bool lpi_enable;
+	bool gdsc_clk_drv_ss_nonvotable;
 
 	uint32_t rc_idx;
 	uint32_t phy_ver;
@@ -4918,6 +4924,35 @@ static int msm_pcie_config_device_info(struct pci_dev *pcidev, void *pdev)
 	return 0;
 }
 
+static int msm_pcie_configure_legacy_smmu(struct pci_dev *dev, void *pdev)
+{
+	struct msm_pcie_dev_t *pcie_dev = (struct msm_pcie_dev_t *)pdev;
+	u8 busnr = dev->bus->number;
+	u8 slot = PCI_SLOT(dev->devfn);
+	u8 func = PCI_FUNC(dev->devfn);
+	u32 offset, bdf;
+
+	/* Calculating  offset and bdf */
+	PCIE_DBG(pcie_dev,
+		 "PCIe: RC%d: configure PCI device %02x:%02x.%01x\n",
+		 pcie_dev->rc_idx, busnr, slot, func);
+	offset = pcie_dev->sid_info[busnr].pcie_sid * 4;
+	bdf = BDF_OFFSET(dev->bus->number, dev->devfn);
+
+	if (offset >= MAX_SHORT_BDF_NUM * 4) {
+		PCIE_INFO(pcie_dev,
+				 "PCIe: RC%d: Invalid SID offset: 0x%x. Should be less than 0x%x\n",
+				 pcie_dev->rc_idx, offset, MAX_SHORT_BDF_NUM * 4);
+		return -EINVAL;
+		}
+
+	msm_pcie_write_reg(pcie_dev->parf, PCIE20_PARF_BDF_TRANSLATE_CFG, 0);
+	msm_pcie_write_reg(pcie_dev->parf, PCIE20_PARF_SID_OFFSET, 0);
+	msm_pcie_write_reg(pcie_dev->parf, PCIE20_PARF_BDF_TRANSLATE_N + offset, bdf >> 16);
+
+	return 0;
+}
+
 static void msm_pcie_config_sid(struct msm_pcie_dev_t *dev)
 {
 	void __iomem *bdf_to_sid_base = dev->parf +
@@ -4926,6 +4961,12 @@ static void msm_pcie_config_sid(struct msm_pcie_dev_t *dev)
 
 	if (!dev->sid_info)
 		return;
+
+	if (of_property_read_bool (dev->pdev->dev.of_node, "qcom,legacy-bdf-2-sid")) {
+		if (dev->enumerated)
+			pci_walk_bus(dev->dev->bus, &msm_pcie_configure_legacy_smmu, dev);
+		return;
+	}
 
 	/* clear BDF_TO_SID_BYPASS bit to enable BDF to SID translation */
 	msm_pcie_write_mask(dev->parf + PCIE20_PARF_BDF_TO_SID_CFG, BIT(0), 0);
@@ -6222,6 +6263,11 @@ static int msm_pcie_probe(struct platform_device *pdev)
 	else
 		PCIE_DBG(pcie_dev, "RC%d: wr-halt-size: 0x%x.\n",
 			pcie_dev->rc_idx, pcie_dev->wr_halt_size);
+
+	pcie_dev->gdsc_clk_drv_ss_nonvotable = of_property_read_bool(of_node,
+				"qcom,gdsc-clk-drv-ss-nonvotable");
+	PCIE_DBG(pcie_dev, "Gdsc clk is %s votable during drv hand over.\n",
+		pcie_dev->gdsc_clk_drv_ss_nonvotable ? "not" : "");
 
 	pcie_dev->slv_addr_space_size = SZ_16M;
 	of_property_read_u32(of_node, "qcom,slv-addr-space-size",
@@ -7661,11 +7707,13 @@ static int msm_pcie_drv_resume(struct msm_pcie_dev_t *pcie_dev)
 
 	PCIE_DBG(pcie_dev, "PCIe: RC%d:enable gdsc\n", pcie_dev->rc_idx);
 
-	ret = regulator_enable(pcie_dev->gdsc);
-	if (ret)
-		PCIE_ERR(pcie_dev,
-			"PCIe: RC%d: failed to enable GDSC: ret %d\n",
-			pcie_dev->rc_idx, ret);
+	if (!pcie_dev->gdsc_clk_drv_ss_nonvotable) {
+		ret = regulator_enable(pcie_dev->gdsc);
+		if (ret)
+			PCIE_ERR(pcie_dev,
+				"PCIe: RC%d: failed to enable GDSC: ret %d\n",
+				pcie_dev->rc_idx, ret);
+	}
 
 	PCIE_DBG(pcie_dev, "PCIe: RC%d:set ICC path vote\n", pcie_dev->rc_idx);
 
@@ -7864,7 +7912,8 @@ static int msm_pcie_drv_suspend(struct msm_pcie_dev_t *pcie_dev,
 				pcie_dev->rc_idx, ret);
 	}
 
-	regulator_disable(pcie_dev->gdsc);
+	if (!pcie_dev->gdsc_clk_drv_ss_nonvotable)
+		regulator_disable(pcie_dev->gdsc);
 
 	msm_pcie_vreg_deinit(pcie_dev);
 

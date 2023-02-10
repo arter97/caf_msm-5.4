@@ -529,7 +529,7 @@ int qcom_cc_runtime_resume(struct device *dev)
 {
 	struct qcom_cc_desc *desc = dev_get_drvdata(dev);
 	struct clk_vdd_class_data vdd_data = {0};
-	int ret;
+	int ret = 0;
 	int i;
 
 	for (i = 0; i < desc->num_clk_regulators; i++) {
@@ -552,9 +552,11 @@ int qcom_cc_runtime_resume(struct device *dev)
 		}
 	}
 
+#ifdef CONFIG_PM_CLK
 	ret = pm_clk_resume(dev);
 	if (ret)
 		dev_warn(dev, "%s: failed to enable clocks\n", __func__);
+#endif
 
 	return ret;
 }
@@ -567,9 +569,11 @@ int qcom_cc_runtime_suspend(struct device *dev)
 	int ret;
 	int i;
 
+#ifdef CONFIG_PM_CLK
 	ret = pm_clk_suspend(dev);
 	if (ret)
 		dev_warn(dev, "%s: failed to disable clocks\n", __func__);
+#endif
 
 	if (desc->path) {
 		ret = icc_set_bw(desc->path, 0, 0);

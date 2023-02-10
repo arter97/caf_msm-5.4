@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2014-2019, 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /*
@@ -43,7 +44,6 @@ static int i2c_msm_xfer_wait_for_completion(struct i2c_msm_ctrl *ctrl,
 						struct completion *complete);
 static int  i2c_msm_pm_resume(struct device *dev);
 static void i2c_msm_pm_suspend(struct device *dev);
-static void i2c_msm_clk_path_init(struct i2c_msm_ctrl *ctrl);
 static struct pinctrl_state *
 	i2c_msm_rsrcs_gpio_get_state(struct i2c_msm_ctrl *ctrl,
 					const char *name);
@@ -1553,8 +1553,6 @@ poll_active_end:
 
 static void i2c_msm_clk_path_vote(struct i2c_msm_ctrl *ctrl)
 {
-	i2c_msm_clk_path_init(ctrl);
-
 	if (ctrl->rsrcs.icc_path)
 		icc_set_bw(ctrl->rsrcs.icc_path,
 		I2C_MSM_CLK_PATH_AVRG_BW(ctrl), I2C_MSM_CLK_PATH_BRST_BW(ctrl));
@@ -1572,49 +1570,6 @@ static void i2c_msm_clk_path_teardown(struct i2c_msm_ctrl *ctrl)
 		icc_put(ctrl->rsrcs.icc_path);
 		ctrl->rsrcs.icc_path = NULL;
 	}
-}
-
-
-/*
- * i2c_msm_clk_path_postponed_register: reg with bus-scaling after it is probed
- *
- * @return zero on success
- *
- * Workaround: i2c driver may be probed before the bus scaling driver. Calling
- * icc_get() will fail if the bus scaling driver is not ready yet. Thus, this
- * function should be called not from probe but from a
- * later context.
- */
-static int i2c_msm_clk_path_postponed_register(struct i2c_msm_ctrl *ctrl)
-{
-	int ret = 0;
-
-	ctrl->rsrcs.icc_path =
-		icc_get(&ctrl->adapter.dev, ctrl->rsrcs.mstr_id, DST_ID);
-
-	if (IS_ERR_OR_NULL(ctrl->rsrcs.icc_path)) {
-		ret = ctrl->rsrcs.icc_path ?
-			PTR_ERR(ctrl->rsrcs.icc_path) : -EINVAL;
-		dev_err(ctrl->dev, "%s(): failed to get ICC path: %d\n", __func__, ret);
-		ctrl->rsrcs.icc_path = NULL;
-	}
-
-	return ctrl->rsrcs.icc_path ? ret : -ENOENT;
-}
-
-static void i2c_msm_clk_path_init(struct i2c_msm_ctrl *ctrl)
-{
-	/*
-	 * bail out if path voting is diabled (master_id == 0) or if it is
-	 * already registered (client_hdl != 0)
-	 */
-	if (!ctrl->rsrcs.mstr_id ||
-		ctrl->rsrcs.icc_path)
-		return;
-
-	/* on failure try again later */
-	if (i2c_msm_clk_path_postponed_register(ctrl))
-		return;
 }
 
 /*
@@ -2624,6 +2579,30 @@ static void i2c_msm_rsrcs_clk_teardown(struct i2c_msm_ctrl *ctrl)
 	i2c_msm_clk_path_teardown(ctrl);
 }
 
+/**
+ * i2c_msm_get_icc_path() - get icc path.
+ * @ctrl: Pointer to driver's main structure.
+ * @pdev: Pointer to platform_device structure.
+ *
+ * This function is used to get the ICC path. Based on
+ * return value of of_icc_get(), assign the ret value.
+ *
+ * Return: zero on success, negative error code on failure.
+ */
+static int i2c_msm_get_icc_path(struct i2c_msm_ctrl *ctrl,
+				struct platform_device *pdev)
+{
+	int ret = 0;
+
+	ctrl->rsrcs.icc_path = of_icc_get(&pdev->dev, "blsp-ddr");
+	if (IS_ERR_OR_NULL(ctrl->rsrcs.icc_path)) {
+		ret = ctrl->rsrcs.icc_path ?
+		PTR_ERR(ctrl->rsrcs.icc_path) : -ENOENT;
+		dev_err(ctrl->dev, "failed to get ICC path: %d\n", ret);
+		return ret;
+	}
+	return ret;
+}
 
 
 static void i2c_msm_pm_suspend(struct device *dev)
@@ -2834,6 +2813,10 @@ static int i2c_msm_probe(struct platform_device *pdev)
 		goto mem_err;
 
 	ret = i2c_msm_rsrcs_clk_init(ctrl);
+	if (ret)
+		goto clk_err;
+
+	ret = i2c_msm_get_icc_path(ctrl, pdev);
 	if (ret)
 		goto clk_err;
 

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
- */
+*/
 
 #ifndef	_DWMAC_QCOM_IPA_H
 #define	_DWMAC_QCOM_IPA_H
@@ -12,21 +12,6 @@
 
 #define IPA_LOCK() mutex_lock(&eth_ipa_ctx.ipa_lock)
 #define IPA_UNLOCK() mutex_unlock(&eth_ipa_ctx.ipa_lock)
-
-static char * const IPA_OFFLOAD_EVENT_string[] = {
-	"EV_INVALID",
-	"EV_DEV_OPEN",
-	"EV_DEV_CLOSE",
-	"EV_IPA_READY",
-	"EV_IPA_UC_READY",
-	"EV_PHY_LINK_UP",
-	"EV_PHY_LINK_DOWN",
-	"EV_DPM_SUSPEND",
-	"EV_DPM_RESUME",
-	"EV_USR_SUSPEND",
-	"EV_USR_RESUME",
-	"EV_IPA_OFFLOAD_MAX"
-};
 
 /* VLAN ids range for IPA offload */
 #define MIN_VLAN_ID 1
@@ -60,22 +45,29 @@ static char * const IPA_OFFLOAD_EVENT_string[] = {
 
 #define GET_RX_CURRENT_RCVD_LAST_DESC_INDEX(start_index, offset, desc_cnt)\
 		((desc_cnt) - 1)
-#define GET_RX_DESC_IDX(QINX, desc)\
-	(((desc) - eth_ipa_ctx.rx_queue->rx_desc_dma_addrs[0]) / \
+#define GET_RX_DESC_IDX(type, desc)\
+	(((desc) - eth_ipa_ctx.rx_queue[type]->rx_desc_dma_addrs[0]) / \
 	 (sizeof(struct dma_desc)))
 
-#define GET_TX_DESC_IDX(QINX, desc)\
-	(((desc) - eth_ipa_ctx.tx_queue->tx_desc_dma_addrs[0]) / \
+#define GET_TX_DESC_IDX(type, desc)\
+	(((desc) - eth_ipa_ctx.tx_queue[type]->tx_desc_dma_addrs[0]) / \
 	 (sizeof(struct dma_desc)))
 
 #define DMA_CR0_RGOFFADDR ((BASE_ADDRESS + 0x1100))
+#define DMA_CR3_RGOFFADDR ((BASE_ADDRESS + 0x1280))
+#define DMA_CR4_RGOFFADDR ((BASE_ADDRESS + 0x1300))
 
-#define ETHQOS_ETH_FRAME_LEN_IPA ((1 << 11)) /*IPA can support 2KB max length*/
+/* IPA can support 2KB max length */
+#define ETHQOS_ETH_FRAME_LEN_IPA_BE ((1 << 11))
+#define ETHQOS_ETH_FRAME_LEN_IPA_CV2X ((1 << 11))
 
-#define IPA_TX_DESC_CNT	128 /*Increase TX desc count to 128 for IPA offload*/
-#define IPA_RX_DESC_CNT	128 /*Increase RX desc count to 128 for IPA offload*/
+/* Default desc count */
+#define IPA_TX_DESC_CNT_BE	128
+#define IPA_RX_DESC_CNT_BE	128
+#define IPA_TX_DESC_CNT_CV2X 128
+#define IPA_RX_DESC_CNT_CV2X 128
 
-#define  BASE_ADDRESS (ethqos->ioaddr)
+#define  BASE_ADDRESS (eth_ipa_ctx.ethqos->ioaddr)
 
 #define DMA_TDRLR_RGOFFADDR (BASE_ADDRESS + 0x112c)
 
@@ -558,13 +550,13 @@ struct ethqos_tx_queue {
 
 	void **ipa_tx_buff_pool_va_addrs_base;
 
-	dma_addr_t *ipa_tx_buff_pool_pa_addrs_base;
-	dma_addr_t ipa_tx_buff_pool_pa_addrs_base_dmahndl;
+	dma_addr_t *ipa_tx_pa_addrs_base;
+	dma_addr_t ipa_tx_pa_addrs_base_dmahndl;
 
 	dma_addr_t *skb_dma;		/* dma address of skb */
 	struct sk_buff **skb;	/* virtual address of skb */
 	unsigned short *len;	/* length of first skb */
-	phys_addr_t *ipa_tx_buff_phy_addr; /* physical address of ipa TX buff */
+	phys_addr_t *ipa_tx_phy_addr; /* physical address of ipa TX buff */
 };
 
 struct ethqos_rx_queue {
@@ -576,8 +568,8 @@ struct ethqos_rx_queue {
 
 	void **ipa_rx_buff_pool_va_addrs_base;
 
-	dma_addr_t *ipa_rx_buff_pool_pa_addrs_base;
-	dma_addr_t ipa_rx_buff_pool_pa_addrs_base_dmahndl;
+	dma_addr_t *ipa_rx_pa_addrs_base;
+	dma_addr_t ipa_rx_pa_addrs_base_dmahndl;
 
 	dma_addr_t *skb_dma;		/* dma address of skb */
 	struct sk_buff **skb;	/* virtual address of skb */
@@ -633,12 +625,64 @@ struct ethqos_ipa_stats {
 };
 
 struct ethqos_prv_ipa_data {
-	struct ethqos_tx_queue *tx_queue;
-	struct ethqos_rx_queue *rx_queue;
+	bool cv2x_queue_enabled;
+	bool queue_enabled[IPA_QUEUE_MAX];
+	struct ethqos_tx_queue *tx_queue[IPA_QUEUE_MAX];
+	struct ethqos_rx_queue *rx_queue[IPA_QUEUE_MAX];
 
-	phys_addr_t uc_db_rx_addr;
-	phys_addr_t uc_db_tx_addr;
-	u32 ipa_client_hndl;
+	void __iomem *uc_db_rx_addr[IPA_QUEUE_MAX];
+	void __iomem *uc_db_tx_addr[IPA_QUEUE_MAX];
+	u32 ipa_client_hndl[IPA_QUEUE_MAX];
+
+	/* desc count */
+	u32 ipa_dma_tx_desc_cnt[IPA_QUEUE_MAX];
+	u32 ipa_dma_rx_desc_cnt[IPA_QUEUE_MAX];
+
+	/* intr moderation count only for RX */
+	/* TX is taken care by IPA */
+	u32 rx_intr_mod_cnt[IPA_QUEUE_MAX];
+
+	/* interrupt routing mode */
+	enum ipa_intr_route_type tx_intr_route_mode[IPA_QUEUE_MAX];
+	enum ipa_intr_route_type rx_intr_route_mode[IPA_QUEUE_MAX];
+
+	/* queue/chan number*/
+	u8 tx_queue_num[IPA_QUEUE_MAX];
+	u8 rx_queue_num[IPA_QUEUE_MAX];
+
+	/* buffer lens */
+	u32 buf_len[IPA_QUEUE_MAX];
+
+	/* ipa cb for rx exception packets */
+	ipa_notify_cb ipa_notify_cb[IPA_QUEUE_MAX];
+
+	/* IPA protocol */
+	u32 ipa_proto[IPA_QUEUE_MAX];
+
+	/* IPA client enums prod/cons */
+	u32 tx_client[IPA_QUEUE_MAX];
+	u32 rx_client[IPA_QUEUE_MAX];
+
+	/* rx channel reg base ptr */
+	phys_addr_t rx_reg_base_ptr_pa[IPA_QUEUE_MAX];
+
+	/* tx channel reg base ptr */
+	phys_addr_t tx_reg_base_ptr_pa[IPA_QUEUE_MAX];
+
+	/* set if ipa_send_message is needed for a queue type */
+	bool need_send_msg[IPA_QUEUE_MAX];
+
+	/* network device name*/
+	char netdev_name[IPA_QUEUE_MAX][ETH_DEV_NAME_LEN];
+
+	/* network device index */
+	u8 netdev_index[IPA_QUEUE_MAX];
+
+	/* network device addr */
+	u8 netdev_addr[IPA_QUEUE_MAX][ETH_ALEN];
+
+	/* DMA stats for IPA offload path */
+	bool dma_stats_type[IPA_QUEUE_MAX];
 
 	/* IPA state variables */
 	/* State of EMAC HW initialization */
@@ -651,12 +695,20 @@ struct ethqos_prv_ipa_data {
 	bool ipa_offload_init;
 	/* State of IPA pipes connection */
 	bool ipa_offload_conn;
+	/* State of IPA Offload intf registration with IPA driver */
+	bool ipa_offload_init_cv2x;
+	/* State of IPA pipes connection */
+	bool ipa_offload_conn_cv2x;
+	/* State of IPA pipes connection previously */
+	bool ipa_offload_conn_prev_cv2x;
 	/* State of debugfs creation */
 	bool ipa_debugfs_exists;
 	/* State of IPA offload suspended by user */
-	bool ipa_offload_susp;
+	bool ipa_offload_susp[IPA_QUEUE_MAX];
 	/* State of IPA offload enablement from PHY link event*/
 	bool ipa_offload_link_down;
+	/* State of netdev interface reset*/
+	bool emac_dev_reset;
 
 	/* Dev state */
 	struct work_struct ntn_ipa_rdy_work;
@@ -668,10 +720,11 @@ struct ethqos_prv_ipa_data {
 
 	struct dentry *debugfs_ipa_stats;
 	struct dentry *debugfs_dma_stats;
-	struct dentry *debugfs_suspend_ipa_offload;
-	struct ethqos_ipa_stats ipa_stats;
+	struct ethqos_ipa_stats ipa_stats[IPA_QUEUE_MAX];
 
 	struct qcom_ethqos *ethqos;
 };
 
+static void ntn_ipa_notify_cb_be(void *priv, enum ipa_dp_evt_type evt, unsigned long data);
+static void ntn_ipa_notify_cb_cv2x(void *priv, enum ipa_dp_evt_type evt, unsigned long data);
 #endif

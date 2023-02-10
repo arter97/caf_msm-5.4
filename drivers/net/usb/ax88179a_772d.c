@@ -271,7 +271,7 @@ void ax88179a_get_fw_version(struct ax_device *axdev)
 
 int ax88179a_signature(struct ax_device *axdev, struct _ax_ioctl_command *info)
 {
-	strncpy(info->sig, AX88179A_SIGNATURE, strlen(AX88179A_SIGNATURE));
+	strlcpy(info->sig, AX88179A_SIGNATURE, sizeof(info->sig));
 	return 0;
 }
 

@@ -275,6 +275,9 @@ enum rx_frame_status {
 	dma_own = 0x8,
 	rx_not_ls = 0x10,
 	ctxt_desc = 0x20,
+	rx_fs_only = 0x40,
+	rx_ls_only = 0x80,
+	rx_not_fsls = 0x100,
 };
 
 /* Tx status */
@@ -407,6 +410,11 @@ extern const struct stmmac_desc_ops ndesc_ops;
 
 struct mac_device_info;
 
+struct vlan_filter_info {
+	u16 vlan_id;
+	u32 vlan_offset;
+	u32 rx_queue;
+};
 extern const struct stmmac_hwtimestamp stmmac_ptp;
 extern const struct stmmac_mode_ops dwmac4_ring_mode_ops;
 
@@ -453,6 +461,8 @@ struct mac_device_info {
 	unsigned int pcs;
 	unsigned int pmt;
 	unsigned int ps;
+	unsigned int crc_strip_en;
+	unsigned int acs_strip_en;
 };
 
 struct stmmac_rx_routing {
@@ -470,6 +480,9 @@ void stmmac_set_mac_addr(void __iomem *ioaddr, u8 addr[6],
 void stmmac_get_mac_addr(void __iomem *ioaddr, unsigned char *addr,
 			 unsigned int high, unsigned int low);
 void stmmac_set_mac(void __iomem *ioaddr, bool enable);
+
+void stmmac_set_vlan_filter_rx_queue(struct vlan_filter_info *vlan,
+				     void __iomem *ioaddr);
 
 void stmmac_dwmac4_set_mac_addr(void __iomem *ioaddr, u8 addr[6],
 				unsigned int high, unsigned int low);

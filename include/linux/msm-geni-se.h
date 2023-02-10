@@ -89,6 +89,7 @@ struct se_rsc_ssr {
  * @clk_perf_tbl:	Table of clock frequency input to Serial Engine clock.
  * @skip_bw_vote:	Used for PMIC over i2c use case to skip the BW vote.
  * @se_rsc_ssr:		Pointer to Geni resource SSR structure.
+ * @is_list_add;	To synchronize list add and del.
  */
 struct se_geni_rsc {
 	struct device *ctrl_dev;
@@ -113,6 +114,7 @@ struct se_geni_rsc {
 	unsigned long *clk_perf_tbl;
 	bool skip_bw_vote;
 	struct se_rsc_ssr rsc_ssr;
+	bool is_list_add;
 };
 
 #define PINCTRL_DEFAULT	"default"
@@ -169,6 +171,7 @@ struct se_geni_rsc {
 #define SE_IRQ_EN			(0xE1C)
 #define SE_HW_PARAM_0			(0xE24)
 #define SE_HW_PARAM_1			(0xE28)
+#define SE_HW_PARAM_2			(0xE2C)
 #define SE_DMA_GENERAL_CFG		(0xE30)
 #define SE_DMA_DEBUG_REG0		(0xE40)
 #define SLAVE_MODE_EN			(BIT(3))
@@ -346,6 +349,9 @@ struct se_geni_rsc {
 #define RX_FIFO_WIDTH_SHFT	(24)
 #define RX_FIFO_DEPTH_MSK	(GENMASK(21, 16))
 #define RX_FIFO_DEPTH_SHFT	(16)
+
+/* SE_HW_PARAM_2 fields */
+#define GEN_HW_FSM_I2C		(BIT(15))
 
 /* SE_DMA_GENERAL_CFG */
 #define DMA_RX_CLK_CGC_ON	(BIT(0))

@@ -239,6 +239,8 @@ struct npu_device {
 	struct llcc_slice_desc *sys_cache;
 	uint32_t execute_v2_flag;
 	bool cxlimit_registered;
+	struct icc_path *icc_npu_cdspmem;
+	struct icc_path *icc_cpu_imemcfg;
 
 	uint32_t hw_version;
 };

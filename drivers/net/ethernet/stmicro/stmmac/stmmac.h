@@ -28,6 +28,10 @@
 #include <linux/icmp.h>
 #include "dwmac-qcom-ethqos.h"
 
+#define MIN_JUMBO_FRAME_SIZE	2048
+#define MAX_SUPPORTED_JUMBO_MTU	8188
+#define MAX_SUPPORTED_JUMBO_FRAME_SIZE	9022
+
 struct stmmac_resources {
 	void __iomem *addr;
 	const char *mac;
@@ -89,6 +93,14 @@ struct stmmac_rx_queue {
 		unsigned int error;
 	} state;
 	bool skip_sw;
+	bool en_fep;
+	bool jumbo_en;
+	struct {
+		unsigned int state_saved;
+		unsigned int jumbo_error;
+		unsigned int jumbo_len;
+		struct sk_buff *jumbo_skb;
+	} jumbo_pkt_state;
 };
 
 struct stmmac_channel {
@@ -160,6 +172,7 @@ struct stmmac_priv {
 	u32 sarc_type;
 
 	unsigned int dma_buf_sz;
+	unsigned int jumbo_frame_sz;
 	unsigned int rx_copybreak;
 	u32 rx_riwt;
 	int hwts_rx_en;
@@ -248,6 +261,10 @@ struct stmmac_priv {
 	bool phy_irq_enabled;
 
 	int phy_intr_wol_irq;
+	bool en_wol;
+
+	bool hw_offload_enabled;
+
 };
 
 enum stmmac_state {

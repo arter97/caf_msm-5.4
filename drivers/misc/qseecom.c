@@ -900,6 +900,15 @@ static int qseecom_scm_call2(uint32_t svc_id, uint32_t tz_cmd_id,
 			ret = __qseecom_scm_call2_locked(smc_id, &desc);
 			break;
 		}
+
+		case QSEOS_SOTA_NOTIFICATION_CHECK_STATUS: {
+			smc_id = TZ_SOTA_UPDATE_NOTIFICATION_ID;
+			desc.arginfo = TZ_SOTA_UPDATE_NOTIFICATION_ID_PARAM_ID;
+			__qseecom_reentrancy_check_if_no_app_blocked(smc_id);
+			ret = __qseecom_scm_call2_locked(smc_id, &desc);
+			break;
+		}
+
 		case QSEOS_DIAG_FUSE_REQ_CMD:
 		case QSEOS_DIAG_FUSE_REQ_RSP_CMD: {
 			struct qseecom_client_send_fsm_diag_req *req;
@@ -3210,8 +3219,28 @@ static int qseecom_prepare_unload_app(struct qseecom_dev_handle *data)
 		data->client.app_id, data->client.app_name,
 		data->client.unload_pending);
 
-	if (data->client.unload_pending ||
-	!memcmp(data->client.app_name, "keymaste", strlen("keymaste")))
+	/* For keymaster we are not going to unload so no need to add it in
+	 * unload app pending list as soon as we identify release ion buffer
+	 * and return .
+	 */
+	if (!memcmp(data->client.app_name, "keymaste", strlen("keymaste"))) {
+		if (data->client.dmabuf) {
+			/* Each client will get same KM TA loaded handle but will
+			 * allocate separate shared buffer during loading of TA,
+			 * as client can't unload KM TA so we will only free out
+			 * shared buffer and return early to avoid any ion buffer leak.
+			 */
+			qseecom_vaddr_unmap(data->client.sb_virt, data->client.sgt,
+				data->client.attach, data->client.dmabuf);
+			MAKE_NULL(data->client.sgt,
+				data->client.attach, data->client.dmabuf);
+		}
+		__qseecom_free_tzbuf(&data->sglistinfo_shm);
+		data->released = true;
+		return 0;
+	}
+
+	if (data->client.unload_pending)
 		return 0;
 	entry = kzalloc(sizeof(*entry), GFP_KERNEL);
 	if (!entry)
@@ -3383,6 +3412,42 @@ static int __qseecom_process_fsm_key_svc_cmd(
 	return ret;
 }
 
+static int __qseecom_process_sota_svc_cmd(struct qseecom_dev_handle *data_ptr,
+		struct qseecom_send_svc_cmd_req *req_ptr,
+		struct qseecom_client_send_service_ireq *send_svc_ireq_ptr)
+{
+	int ret = 0;
+	void *req_buf = NULL;
+
+	if ((req_ptr == NULL) || (send_svc_ireq_ptr == NULL)) {
+		pr_err("Error with pointer: req_ptr = %pK, send_svc_ptr = %pK\n",
+			req_ptr, send_svc_ireq_ptr);
+		return -EINVAL;
+	}
+
+	/* Clients need to ensure req_buf is at base offset of shared buffer */
+	if ((uintptr_t)req_ptr->cmd_req_buf !=
+			data_ptr->client.user_virt_sb_base) {
+		pr_err("cmd buf not pointing to base offset of shared buffer\n");
+		return -EINVAL;
+	}
+
+	if (data_ptr->client.sb_length <
+			sizeof(struct qseecom_rpmb_provision_key)) {
+		pr_err("shared buffer is too small to hold key type\n");
+		return -EINVAL;
+	}
+	req_buf = data_ptr->client.sb_virt;
+
+	send_svc_ireq_ptr->qsee_cmd_id = 0x20;
+	send_svc_ireq_ptr->req_len = req_ptr->cmd_req_len;
+	send_svc_ireq_ptr->rsp_ptr = (uint32_t)(__qseecom_uvirt_to_kphys(
+			data_ptr, (uintptr_t)req_ptr->resp_buf));
+	send_svc_ireq_ptr->rsp_len = req_ptr->resp_len;
+
+	return ret;
+}
+
 static int __validate_send_service_cmd_inputs(struct qseecom_dev_handle *data,
 				struct qseecom_send_svc_cmd_req *req)
 {
@@ -3500,6 +3565,13 @@ static int qseecom_send_service_cmd(struct qseecom_dev_handle *data,
 		send_req_ptr = &send_svc_ireq;
 		req_buf_size = sizeof(send_svc_ireq);
 		if (__qseecom_process_rpmb_svc_cmd(data, &req,
+				send_req_ptr))
+			return -EINVAL;
+		break;
+	case QSEOS_SOTA_NOTIFICATION_CHECK_STATUS:
+		send_req_ptr = &send_svc_ireq;
+		req_buf_size = sizeof(send_svc_ireq);
+		if (__qseecom_process_sota_svc_cmd(data, &req,
 				send_req_ptr))
 			return -EINVAL;
 		break;
@@ -6508,7 +6580,7 @@ int qseecom_create_key_in_slot(uint8_t usage_code, uint8_t key_slot, const uint8
 	struct qseecom_create_key_req create_key_req;
 	struct qseecom_key_generate_ireq generate_key_ireq;
 	struct qseecom_key_select_ireq set_key_ireq;
-	uint32_t entries = 0;
+	int32_t entries = 0;
 	bool new_key_generated = false;
 	static struct qseecom_dev_handle local_handle = {0};
 	static struct qseecom_dev_handle *data = &local_handle;
@@ -6698,7 +6770,7 @@ static int qseecom_wipe_key(struct qseecom_dev_handle *data,
 	struct qseecom_wipe_key_req wipe_key_req;
 	struct qseecom_key_delete_ireq delete_key_ireq;
 	struct qseecom_key_select_ireq clear_key_ireq;
-	uint32_t entries = 0;
+	int32_t entries = 0;
 
 	ret = copy_from_user(&wipe_key_req, argp, sizeof(wipe_key_req));
 	if (ret) {

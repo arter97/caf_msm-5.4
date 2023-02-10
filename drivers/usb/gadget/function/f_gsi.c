@@ -32,6 +32,7 @@ static void gsi_rndis_ipa_reset_trigger(struct gsi_data_port *d_port);
 static int gsi_ctrl_send_notification(struct f_gsi *gsi);
 static struct gsi_ctrl_pkt *gsi_ctrl_pkt_alloc(unsigned int len, gfp_t flags);
 static void gsi_ctrl_pkt_free(struct gsi_ctrl_pkt *pkt);
+static int gsi_dynamic_ep_allocation(struct usb_function *f);
 
 static inline bool usb_gsi_remote_wakeup_allowed(struct usb_function *f)
 {
@@ -646,6 +647,21 @@ static int ipa_connect_channels(struct gsi_data_port *d_port)
 			gsi_channel_info.depcmd_low_addr;
 		out_params->xfer_scratch.depcmd_hi_addr =
 			gsi_channel_info.depcmd_hi_addr;
+	}
+
+	/*
+	 * Set 'is_sw_path' flag to true for functions using normal EPs so that
+	 * IPA can ignore the dummy address for GEVENTCOUNT register.
+	 */
+	in_params->is_sw_path = false;
+
+	if (!d_port->in_request.ep_intr_num)
+		in_params->is_sw_path = true;
+
+	if (d_port->out_ep) {
+		out_params->is_sw_path = false;
+		if (!d_port->out_request.ep_intr_num)
+			out_params->is_sw_path = true;
 	}
 
 	/* Populate connection params */
@@ -2519,6 +2535,76 @@ static int gsi_get_alt(struct usb_function *f, unsigned int intf)
 	return -EINVAL;
 }
 
+/*
+ * Wrapper to allocate GSI EP interrupters dynamically
+ * when more than 3 GSI EPs are used.
+ */
+static int gsi_dynamic_ep_allocation(struct usb_function *f)
+{
+	struct f_gsi	 *gsi = func_to_gsi(f);
+	struct f_gsi	 *gsi_rmnet_v2x = inst_status[IPA_USB_RMNET_CV2X].opts->gsi;
+	struct usb_composite_dev *cdev = f->config->cdev;
+
+	if (gsi_normal_ep_support(cdev->gadget)) {
+		switch (gsi->prot_id) {
+		case IPA_USB_RMNET:
+		case IPA_USB_ECM:
+			if (gsi_rmnet_v2x->function.fs_descriptors) {
+				if (gsi->d_port.in_ep)
+					usb_gsi_ep_op(gsi->d_port.in_ep,
+						&gsi->d_port.in_request,
+						GSI_DYNAMIC_EP_INTR_CALC);
+				if (gsi->d_port.out_ep)
+					usb_gsi_ep_op(gsi->d_port.out_ep,
+						&gsi->d_port.out_request,
+						GSI_SW_EP_PATH);
+			} else {
+				if (gsi->d_port.in_ep)
+					usb_gsi_ep_op(gsi->d_port.in_ep,
+						&gsi->d_port.in_request,
+						GSI_DYNAMIC_EP_INTR_CALC);
+				if (gsi->d_port.out_ep)
+					usb_gsi_ep_op(gsi->d_port.out_ep,
+						&gsi->d_port.out_request,
+						GSI_DYNAMIC_EP_INTR_CALC);
+			}
+		break;
+		case IPA_USB_DIAG:
+			if (!gsi_rmnet_v2x->function.fs_descriptors)
+				usb_gsi_ep_op(gsi->d_port.in_ep,
+					&gsi->d_port.in_request,
+					GSI_DYNAMIC_EP_INTR_CALC);
+			else
+				usb_gsi_ep_op(gsi->d_port.in_ep,
+					&gsi->d_port.in_request,
+					GSI_SW_EP_PATH);
+		break;
+		case IPA_USB_RMNET_CV2X:
+			if (gsi->d_port.in_ep)
+				usb_gsi_ep_op(gsi->d_port.in_ep,
+					&gsi->d_port.in_request,
+					GSI_DYNAMIC_EP_INTR_CALC);
+			if (gsi->d_port.out_ep)
+				usb_gsi_ep_op(gsi->d_port.out_ep,
+					&gsi->d_port.out_request,
+					GSI_DYNAMIC_EP_INTR_CALC);
+		break;
+		default:
+			log_event_dbg("%s: Data interface not supported\n", __func__);
+			return -EINVAL;
+		}
+	} else {
+		if (gsi->d_port.in_ep)
+			usb_gsi_ep_op(gsi->d_port.in_ep, &gsi->d_port.in_request,
+					GSI_DYNAMIC_EP_INTR_CALC);
+		if (gsi->d_port.out_ep)
+			usb_gsi_ep_op(gsi->d_port.out_ep, &gsi->d_port.out_request,
+					GSI_DYNAMIC_EP_INTR_CALC);
+	}
+
+	return 0;
+}
+
 static int gsi_set_alt(struct usb_function *f, unsigned int intf,
 						unsigned int alt)
 {
@@ -2581,13 +2667,12 @@ static int gsi_set_alt(struct usb_function *f, unsigned int intf,
 			gsi->d_port.ntb_info.ntb_input_size =
 				MBIM_NTB_DEFAULT_IN_SIZE;
 		if (alt == 1) {
-			if (gsi->d_port.in_ep)
-				usb_gsi_ep_op(gsi->d_port.in_ep, &gsi->d_port.in_request,
-						GSI_DYNAMIC_EP_INTR_CALC);
 
-			if (gsi->d_port.out_ep)
-				usb_gsi_ep_op(gsi->d_port.out_ep, &gsi->d_port.out_request,
-						GSI_DYNAMIC_EP_INTR_CALC);
+			/*
+			 * Check if target supports SW EPs
+			 */
+			if (gsi_dynamic_ep_allocation(f))
+				pr_err("%s: Failed allocating GSI interrupters\n", __func__);
 
 			gsi->d_port.gadget = cdev->gadget;
 			gsi->d_port.cdev = cdev;

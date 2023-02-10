@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/cdev.h>
@@ -39,7 +40,10 @@
 /* indicates multi-buffer per command is supported */
 #define VIRTIO_NPU_F_MULTI_BUF	1
 
-#define VIRTIO_ID_NPU           35
+/* Virtio ID of NPU : 0xC005 */
+#define VIRTIO_ID_NPU           49157
+/* Virtio ID of NPU for Backward compatibility : 0x23 */
+#define VIRTIO_ID_NPU_BC	35
 
 #define NPU_MAX_STATS_BUF_SIZE	16384
 #define NPU_MAX_PATCH_NUM       160
@@ -921,8 +925,6 @@ static int32_t virt_npu_map_buf(struct npu_client *client,
 		ion_buf->attachment = NULL;
 		goto map_end;
 	}
-
-	ion_buf->attachment->dma_map_attrs = DMA_ATTR_SKIP_CPU_SYNC;
 
 	ion_buf->table = dma_buf_map_attachment(ion_buf->attachment,
 			DMA_BIDIRECTIONAL);
@@ -2549,6 +2551,7 @@ static void virt_npu_remove(struct virtio_device *vdev)
 
 static struct virtio_device_id id_table[] = {
 	{ VIRTIO_ID_NPU, VIRTIO_DEV_ANY_ID },
+	{ VIRTIO_ID_NPU_BC, VIRTIO_DEV_ANY_ID },
 	{ 0 },
 };
 

@@ -117,3 +117,10 @@ config CNSS2_CONDITIONAL_POWEROFF
 	  device re-probe(after wlan function driver loaded) under very bad
 	  thermal conditions.
 
+config CNSS2_ENUM_WITH_LOW_SPEED
+	bool "Enable/Disable enumurate with low speed feature"
+	depends on CNSS2
+	depends on PCI
+	help
+	Set link target speed to Gen1 before enum, and then restore default
+	RC speed to re-establish link speed. For Genoa chip, needn't restore.

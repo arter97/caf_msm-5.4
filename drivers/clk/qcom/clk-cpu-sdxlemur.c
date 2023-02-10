@@ -393,6 +393,20 @@ static struct clk_init_data apcs_cpu_pll_sdx55 = {
 	.ops = &clk_alpha_pll_lucid_ops,
 };
 
+/* Initial configuration for 345.6MHz */
+static const struct alpha_pll_config apcs_cpu_alpha_pll_config_sdxpoorwills = {
+	.l = 0x12,
+};
+
+static struct clk_init_data apcs_cpu_pll_sdxpoorwills = {
+	.name = "apcs_cpu_pll",
+	.parent_data = &(const struct clk_parent_data){
+		.fw_name = "bi_tcxo_ao",
+	},
+	.num_parents = 1,
+	.ops = &clk_trion_pll_ops,
+};
+
 static const struct parent_map apcs_mux_clk_parent_map[] = {
 	{ P_BI_TCXO, 0 },
 	{ P_GPLL0, 1 },
@@ -449,6 +463,7 @@ static const struct of_device_id match_table[] = {
 	{ .compatible = "qcom,sdxnightjar-apsscc" },
 	{ .compatible = "qcom,qcs404-apsscc" },
 	{ .compatible = "qcom,sdx55-apsscc" },
+	{ .compatible = "qcom,sdxpoorwills-apsscc" },
 	{}
 };
 
@@ -712,6 +727,20 @@ static void cpucc_sdx55_fixup(void)
 			&apcs_cpu_alpha_pll_config_sdx55);
 }
 
+static void cpucc_sdxpoorwills_fixup(void)
+{
+	apcs_cpu_pll.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TRION];
+
+	apcs_cpu_pll.clkr.hw.init = &apcs_cpu_pll_sdxpoorwills;
+	apcs_cpu_pll.clkr.vdd_data.rate_max[VDD_LOWER] = 345600000;
+	apcs_cpu_pll.clkr.vdd_data.rate_max[VDD_LOW] = 576000000;
+	apcs_cpu_pll.clkr.vdd_data.rate_max[VDD_NOMINAL] = 1094400000;
+	apcs_cpu_pll.clkr.vdd_data.rate_max[VDD_HIGH] = 1497600000;
+
+	clk_trion_pll_configure(&apcs_cpu_pll, apcs_cpu_pll.clkr.regmap,
+					&apcs_cpu_alpha_pll_config_sdxpoorwills);
+}
+
 static int cpucc_get_and_parse_dt_resource_qcs404(struct platform_device *pdev)
 {
 	/* Rail Regulator for apcs_pll */
@@ -861,7 +890,7 @@ static int cpucc_driver_probe(struct platform_device *pdev)
 	struct clk_hw_onecell_data *data;
 	struct device *dev = &pdev->dev;
 	int i, ret, cpu;
-	bool is_sdxnightjar, is_qcs404, is_sdx55;
+	bool is_sdxnightjar, is_qcs404, is_sdx55, is_sdxpoorwills;
 	unsigned long xo_rate;
 	u32 l_val;
 
@@ -875,6 +904,8 @@ static int cpucc_driver_probe(struct platform_device *pdev)
 						 "qcom,qcs404-apsscc");
 	is_sdx55 = of_device_is_compatible(pdev->dev.of_node,
 						 "qcom,sdx55-apsscc");
+	is_sdxpoorwills = of_device_is_compatible(pdev->dev.of_node,
+						 "qcom,sdxpoorwills-apsscc");
 	if (is_sdxnightjar) {
 		l_val = apcs_cpu_alpha_pll_config.l;
 		cpucc_sdxnightjar_fixup();
@@ -884,6 +915,9 @@ static int cpucc_driver_probe(struct platform_device *pdev)
 	} else if (is_sdx55) {
 		l_val = apcs_cpu_alpha_pll_config_sdx55.l;
 		cpucc_sdx55_fixup();
+	} else if (is_sdxpoorwills) {
+		l_val = apcs_cpu_alpha_pll_config_sdxpoorwills.l;
+		cpucc_sdxpoorwills_fixup();
 	} else {
 		l_val = apcs_cpu_pll_config.l;
 		clk_lucid_5lpe_pll_configure(&apcs_cpu_pll, apcs_cpu_pll.clkr.regmap,

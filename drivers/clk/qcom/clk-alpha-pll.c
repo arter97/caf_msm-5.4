@@ -1161,6 +1161,14 @@ int clk_trion_pll_configure(struct clk_alpha_pll *pll, struct regmap *regmap,
 
 	if (trion_pll_is_enabled(pll, regmap)) {
 		pr_warn("PLL is already enabled. Skipping configuration.\n");
+
+		/*
+		 * Set the PLL_UPDATE_BYPASS bit to latch the input before continuing.
+		 */
+		regmap_update_bits(regmap, pll->offset + PLL_MODE(pll),
+				 PLL_UPDATE_BYPASS,
+				 PLL_UPDATE_BYPASS);
+
 		return 0;
 	}
 

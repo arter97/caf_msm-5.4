@@ -20,6 +20,7 @@
 #include <linux/soc/qcom/llcc-qcom.h>
 #include <linux/soc/qcom/cdsprm_cxlimit.h>
 #include <soc/qcom/devfreq_icc.h>
+#include <linux/interconnect.h>
 
 #include "npu_common.h"
 #include "npu_hw.h"
@@ -33,6 +34,8 @@
 
 #define MBOX_OP_TIMEOUTMS 1000
 
+#define ICC_NPU_CDSPMEM          "icc-npu-cdspmem"
+#define ICC_CPU_IMEMCFG          "icc-cpu-imemcfg"
 /* -------------------------------------------------------------------------
  * File Scope Prototypes
  * -------------------------------------------------------------------------
@@ -123,7 +126,10 @@ static void __exit npu_exit(void);
 static int npu_set_power_level(struct npu_device *npu_dev, bool notify_cxlimit);
 static uint32_t npu_notify_cdsprm_cxlimit_corner(struct npu_device *npu_dev,
 	uint32_t pwr_lvl);
-
+static void npu_icc_init(struct npu_device *npu_dev);
+static void npu_icc_deinit(struct npu_device *npu_dev);
+static void npu_disable_icc_bw(struct npu_device *npu_dev);
+static void npu_enable_icc_bw(struct npu_device *npu_dev);
 /* -------------------------------------------------------------------------
  * File Scope Variables
  * -------------------------------------------------------------------------
@@ -615,14 +621,18 @@ int npu_enable_core_power(struct npu_device *npu_dev)
 
 	mutex_lock(&npu_dev->dev_lock);
 	if (!pwr->pwr_vote_num) {
+		npu_enable_icc_bw(npu_dev);
 		ret = npu_enable_regulators(npu_dev);
-		if (ret)
+		if (ret) {
+			npu_disable_icc_bw(npu_dev);
 			goto fail;
+		}
 
 		ret = npu_enable_core_clocks(npu_dev);
 		if (ret) {
 			npu_disable_regulators(npu_dev);
 			pwr->pwr_vote_num = 0;
+			npu_disable_icc_bw(npu_dev);
 			goto fail;
 		}
 		npu_resume_devbw(npu_dev);
@@ -649,6 +659,7 @@ void npu_disable_core_power(struct npu_device *npu_dev)
 		npu_suspend_devbw(npu_dev);
 		npu_disable_core_clocks(npu_dev);
 		npu_disable_regulators(npu_dev);
+		npu_disable_icc_bw(npu_dev);
 		pwr->active_pwrlevel = pwr->default_pwrlevel;
 		pwr->uc_pwrlevel = pwr->max_pwrlevel;
 		pwr->cdsprm_pwrlevel = pwr->max_pwrlevel;
@@ -2042,6 +2053,66 @@ static int npu_hw_info_init(struct npu_device *npu_dev)
 	return rc;
 }
 
+static void npu_icc_init(struct npu_device *npu_dev)
+{
+	struct platform_device *pdev = npu_dev->pdev;
+
+	npu_dev->icc_npu_cdspmem = of_icc_get(&pdev->dev, ICC_NPU_CDSPMEM);
+	if (IS_ERR_OR_NULL(npu_dev->icc_npu_cdspmem)) {
+		dev_err(&pdev->dev, "(%ld): failed getting %s path\n",
+			PTR_ERR(npu_dev->icc_npu_cdspmem), ICC_NPU_CDSPMEM);
+		npu_dev->icc_npu_cdspmem = NULL;
+	} else {
+		pr_info("get interconnects between npu and cdsp_mem successfully\n");
+	}
+	npu_dev->icc_cpu_imemcfg = of_icc_get(&pdev->dev, ICC_CPU_IMEMCFG);
+	if (IS_ERR_OR_NULL(npu_dev->icc_cpu_imemcfg)) {
+		dev_err(&pdev->dev, "(%ld): failed getting %s path\n",
+			PTR_ERR(npu_dev->icc_cpu_imemcfg), ICC_CPU_IMEMCFG);
+		npu_dev->icc_cpu_imemcfg = NULL;
+	} else {
+		pr_info("get interconnects between cpu and imemcfg successfully\n");
+	}
+}
+
+static void npu_icc_deinit(struct npu_device *npu_dev)
+{
+	if (npu_dev->icc_npu_cdspmem) {
+		icc_put(npu_dev->icc_npu_cdspmem);
+		npu_dev->icc_npu_cdspmem = NULL;
+	}
+	if (npu_dev->icc_cpu_imemcfg) {
+		icc_put(npu_dev->icc_cpu_imemcfg);
+		npu_dev->icc_cpu_imemcfg = NULL;
+	}
+}
+
+static void npu_enable_icc_bw(struct npu_device *npu_dev)
+{
+	int ret = 0;
+
+	if (npu_dev->icc_npu_cdspmem) {
+		ret = icc_set_bw(npu_dev->icc_npu_cdspmem, 100, 100);
+		if (ret)
+			pr_err("set interconnects npu-cdspmem bw failed, ret: (%d)\n", ret);
+	} else {
+		pr_err("icc_path icc_npu_cdspmem is nullptr\n");
+	}
+
+	if (npu_dev->icc_cpu_imemcfg) {
+		ret = icc_set_bw(npu_dev->icc_cpu_imemcfg, 100, 100);
+		if (ret)
+			pr_err("set interconnects cpu-imemcfg bw failed, ret: (%d)\n", ret);
+	} else {
+		pr_err("icc_path icc_cpu_imemcfg is nullptr\n");
+	}
+}
+
+static void npu_disable_icc_bw(struct npu_device *npu_dev)
+{
+	icc_set_bw(npu_dev->icc_npu_cdspmem, 0, 0);
+	icc_set_bw(npu_dev->icc_cpu_imemcfg, 0, 0);
+}
 /* -------------------------------------------------------------------------
  * Probe/Remove
  * -------------------------------------------------------------------------
@@ -2141,6 +2212,9 @@ static int npu_probe(struct platform_device *pdev)
 	if (rc)
 		goto error_get_dev_num;
 
+	//init interconnets path if exists in devicetree file
+	npu_icc_init(npu_dev);
+
 	rc = npu_hw_info_init(npu_dev);
 	if (rc)
 		goto error_get_dev_num;
@@ -2160,6 +2234,8 @@ static int npu_probe(struct platform_device *pdev)
 	rc = npu_mbox_init(npu_dev);
 	if (rc)
 		goto error_get_dev_num;
+
+
 
 	/* character device might be optional */
 	rc = alloc_chrdev_region(&npu_dev->dev_num, 0, 1, DRIVER_NAME);
@@ -2243,6 +2319,7 @@ error_class_create:
 	unregister_chrdev_region(npu_dev->dev_num, 1);
 	npu_mbox_deinit(npu_dev);
 error_get_dev_num:
+	npu_icc_deinit(npu_dev);
 	return rc;
 }
 
@@ -2263,7 +2340,7 @@ static int npu_remove(struct platform_device *pdev)
 	unregister_chrdev_region(npu_dev->dev_num, 1);
 	platform_set_drvdata(pdev, NULL);
 	npu_mbox_deinit(npu_dev);
-
+	npu_icc_deinit(npu_dev);
 	g_npu_dev = NULL;
 
 	return 0;

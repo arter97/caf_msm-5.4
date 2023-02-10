@@ -57,10 +57,6 @@ static int plat_env_count;
 static struct cnss_plat_data *plat_env;
 #endif
 
-static bool pm_notify_registered;
-
-static DECLARE_RWSEM(cnss_pm_sem);
-
 static struct cnss_fw_files FW_FILES_QCA6174_FW_3_0 = {
 	"qwlan30.bin", "bdwlan30.bin", "otp30.bin", "utf30.bin",
 	"utfbd30.bin", "epping30.bin", "evicted30.bin"
@@ -338,25 +334,6 @@ int cnss_get_feature_list(struct cnss_plat_data *plat_priv,
 	return 0;
 }
 
-static int cnss_pm_notify(struct notifier_block *b,
-			  unsigned long event, void *p)
-{
-	switch (event) {
-	case PM_SUSPEND_PREPARE:
-		down_write(&cnss_pm_sem);
-		break;
-	case PM_POST_SUSPEND:
-		up_write(&cnss_pm_sem);
-		break;
-	}
-
-	return NOTIFY_DONE;
-}
-
-static struct notifier_block cnss_pm_notifier = {
-	.notifier_call = cnss_pm_notify,
-};
-
 void cnss_pm_stay_awake(struct cnss_plat_data *plat_priv)
 {
 	if (atomic_inc_return(&plat_priv->pm_count) != 1)
@@ -382,18 +359,6 @@ void cnss_pm_relax(struct cnss_plat_data *plat_priv)
 		    atomic_read(&plat_priv->pm_count));
 	pm_relax(&plat_priv->plat_dev->dev);
 }
-
-void cnss_lock_pm_sem(struct device *dev)
-{
-	down_read(&cnss_pm_sem);
-}
-EXPORT_SYMBOL(cnss_lock_pm_sem);
-
-void cnss_release_pm_sem(struct device *dev)
-{
-	up_read(&cnss_pm_sem);
-}
-EXPORT_SYMBOL(cnss_release_pm_sem);
 
 int cnss_get_fw_files_for_target(struct device *dev,
 				 struct cnss_fw_files *pfw_files,
@@ -1583,7 +1548,9 @@ void cnss_schedule_recovery(struct device *dev,
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
 	struct cnss_recovery_data *data;
 
-	if (!test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state))
+	if (!test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state) &&
+	    test_bit(CNSS_FW_READY, &plat_priv->driver_state) &&
+	    !test_bit(CNSS_IN_COLD_BOOT_CAL, &plat_priv->driver_state))
 		cnss_bus_update_status(plat_priv, CNSS_FW_DOWN);
 
 	if (test_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state) ||
@@ -3188,16 +3155,6 @@ static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 	timer_setup(&plat_priv->fw_boot_timer,
 		    cnss_bus_fw_boot_timeout_hdlr, 0);
 
-	if (!pm_notify_registered) {
-		ret = register_pm_notifier(&cnss_pm_notifier);
-		if (ret)
-			cnss_pr_err("Failed to register PM notifier, err = %d\n",
-				    ret);
-		else
-			pm_notify_registered = true;
-	}
-
-
 	plat_priv->reboot_nb.notifier_call = cnss_reboot_notifier;
 	ret = register_reboot_notifier(&plat_priv->reboot_nb);
 	if (ret)
@@ -3233,10 +3190,6 @@ static void cnss_misc_deinit(struct cnss_plat_data *plat_priv)
 	complete_all(&plat_priv->power_up_complete);
 	device_init_wakeup(&plat_priv->plat_dev->dev, false);
 	unregister_reboot_notifier(&plat_priv->reboot_nb);
-	if (pm_notify_registered) {
-		unregister_pm_notifier(&cnss_pm_notifier);
-		pm_notify_registered = false;
-	}
 	del_timer(&plat_priv->fw_boot_timer);
 	wakeup_source_unregister(plat_priv->recovery_ws);
 }

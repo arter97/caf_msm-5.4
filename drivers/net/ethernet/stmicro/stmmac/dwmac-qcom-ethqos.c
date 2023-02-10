@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (c) 2018-19 Linaro Limited
 /* Copyright (c) 2021, The Linux Foundation. All rights reserved. */
+/*Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.*/
 
 #include <linux/delay.h>
 #include <linux/module.h>
@@ -27,6 +28,9 @@
 #include <asm-generic/io.h>
 #include <linux/kthread.h>
 #include <linux/io-64-nonatomic-hi-lo.h>
+#include <linux/if_vlan.h>
+#include <linux/msm_eth.h>
+#include <soc/qcom/sb_notification.h>
 #include "stmmac.h"
 #include "stmmac_platform.h"
 #include "dwmac-qcom-ethqos.h"
@@ -36,6 +40,7 @@
 void *ipc_emac_log_ctxt;
 void __iomem *tlmm_rgmii_pull_ctl1_base;
 void __iomem *tlmm_rgmii_rx_ctr_base;
+int open_not_called;
 
 #define PHY_LOOPBACK_1000 0x4140
 #define PHY_LOOPBACK_100 0x6100
@@ -44,7 +49,7 @@ void __iomem *tlmm_rgmii_rx_ctr_base;
 static void ethqos_rgmii_io_macro_loopback(struct qcom_ethqos *ethqos,
 					   int mode);
 static int phy_digital_loopback_config(struct qcom_ethqos *ethqos, int speed, int config);
-
+static void __iomem *tlmm_central_base_addr;
 static struct emac_emb_smmu_cb_ctx emac_emb_smmu_ctx = {0};
 struct plat_stmmacenet_data *plat_dat;
 static struct qcom_ethqos *pethqos;
@@ -105,6 +110,7 @@ static struct ethqos_emac_driver_data emac_por_data = {
 	.num_por = ARRAY_SIZE(emac_por),
 };
 
+static unsigned char config_dev_addr[ETH_ALEN] = {0};
 static void qcom_ethqos_read_iomacro_por_values(struct qcom_ethqos *ethqos)
 {
 	int i;
@@ -124,33 +130,62 @@ u16 dwmac_qcom_select_queue(struct net_device *dev,
 			    struct net_device *sb_dev)
 {
 	u16 txqueue_select = ALL_OTHER_TRAFFIC_TX_CHANNEL;
-	unsigned int eth_type, priority;
+	unsigned int eth_type, priority, vlan_id;
 	struct stmmac_priv *priv = netdev_priv(dev);
+	bool ipa_enabled = pethqos->ipa_enabled;
 
 	/* Retrieve ETH type */
 	eth_type = dwmac_qcom_get_eth_type(skb->data);
 
-	if (eth_type == ETH_P_TSN) {
+	if (eth_type == ETH_P_TSN && pethqos->cv2x_mode == CV2X_MODE_DISABLE) {
 		/* Read VLAN priority field from skb->data */
 		priority = dwmac_qcom_get_vlan_ucp(skb->data);
 
 		priority >>= VLAN_TAG_UCP_SHIFT;
 		if (priority == CLASS_A_TRAFFIC_UCP)
 			txqueue_select = CLASS_A_TRAFFIC_TX_CHANNEL;
-		else if (priority == CLASS_B_TRAFFIC_UCP)
+		else if (priority == CLASS_B_TRAFFIC_UCP) {
 			txqueue_select = CLASS_B_TRAFFIC_TX_CHANNEL;
+		} else {
+			if (ipa_enabled)
+				txqueue_select = ALL_OTHER_TRAFFIC_TX_CHANNEL;
 		else
 			txqueue_select = ALL_OTHER_TX_TRAFFIC_IPA_DISABLED;
+		}
+	} else if (eth_type == ETH_P_1588) {
+		/*gPTP seelct tx queue 1*/
+		txqueue_select = NON_TAGGED_IP_TRAFFIC_TX_CHANNEL;
+	} else if (skb_vlan_tag_present(skb)) {
+		vlan_id = skb_vlan_tag_get_id(skb);
+
+		if (pethqos->cv2x_mode == CV2X_MODE_AP &&
+		    vlan_id == pethqos->cv2x_vlan.vlan_id) {
+			txqueue_select = CV2X_TAG_TX_CHANNEL;
+		} else if (pethqos->qoe_mode &&
+			 vlan_id == pethqos->qoe_vlan.vlan_id){
+			txqueue_select = QMI_TAG_TX_CHANNEL;
+		} else {
+			if (ipa_enabled)
+				txqueue_select = ALL_OTHER_TRAFFIC_TX_CHANNEL;
+			else
+				txqueue_select =
+				ALL_OTHER_TX_TRAFFIC_IPA_DISABLED;
+		}
 	} else {
 		/* VLAN tagged IP packet or any other non vlan packets (PTP)*/
 		txqueue_select = ALL_OTHER_TX_TRAFFIC_IPA_DISABLED;
 		if (priv->tx_queue[txqueue_select].skip_sw)
 			txqueue_select = ALL_OTHER_TRAFFIC_TX_CHANNEL;
 	}
-	if (priv->tx_queue[txqueue_select].skip_sw)
-		netdev_err(priv->dev, "TX Chan %d is not valid for SW path\n",
-			   txqueue_select);
 
+	/* use better macro, cannot afford function call here */
+	if (ipa_enabled && (txqueue_select == IPA_DMA_TX_CH_BE ||
+			    (pethqos->cv2x_mode != CV2X_MODE_DISABLE &&
+			     txqueue_select == IPA_DMA_TX_CH_CV2X))) {
+		ETHQOSERR("TX Channel [%d] is not a valid for SW path\n",
+			  txqueue_select);
+		WARN_ON(1);
+	}
 	ETHQOSDBG("tx_queue %d\n", txqueue_select);
 	return txqueue_select;
 }
@@ -435,7 +470,10 @@ static int qcom_ethqos_add_ipv6addr(struct ip_params *ip_info,
 	if (!prefix) {
 		ir6.ifr6_prefixlen = 0;
 	} else {
-		kstrtoul(prefix + 1, 0, (unsigned long *)&ir6.ifr6_prefixlen);
+		ret = kstrtoul(prefix + 1, 0,
+			       (unsigned long *)&ir6.ifr6_prefixlen);
+		if (ret)
+			ETHQOSDBG("kstrtoul failed");
 		if (ir6.ifr6_prefixlen > 128)
 			ir6.ifr6_prefixlen = 0;
 	}
@@ -475,6 +513,27 @@ static void rgmii_updatel(struct qcom_ethqos *ethqos,
 	rgmii_writel(ethqos, temp, offset);
 }
 
+static void rgmii_loopback_config(void *priv_n, int loopback_en)
+{
+	struct stmmac_priv *priv = priv_n;
+	struct qcom_ethqos *ethqos;
+
+	if (!priv->plat->bsp_priv)
+		return;
+
+	ethqos = (struct qcom_ethqos *)priv->plat->bsp_priv;
+
+	if (loopback_en) {
+		rgmii_updatel(ethqos, RGMII_CONFIG_LOOPBACK_EN,
+			      RGMII_CONFIG_LOOPBACK_EN,
+			      RGMII_IO_MACRO_CONFIG);
+		ETHQOSINFO("Loopback EN Enabled\n");
+	} else {
+		rgmii_updatel(ethqos, RGMII_CONFIG_LOOPBACK_EN,
+			      0, RGMII_IO_MACRO_CONFIG);
+		ETHQOSINFO("Loopback EN Disabled\n");
+	}
+}
 static void rgmii_dump(struct qcom_ethqos *ethqos)
 {
 	dev_dbg(&ethqos->pdev->dev, "Rgmii register dump\n");
@@ -1398,6 +1457,14 @@ static int emac_emb_smmu_cb_probe(struct platform_device *pdev,
 
 	ETHQOSINFO("Successfully attached to IOMMU\n");
 	plat_dat->stmmac_emb_smmu_ctx = emac_emb_smmu_ctx;
+
+	if (pethqos && pethqos->early_eth_enabled) {
+		ETHQOSINFO("interface up after smmu probe\n");
+		queue_work(system_wq, &pethqos->early_eth);
+	} else {
+		open_not_called = 1;
+		ETHQOSINFO("interface up not done by smmu\n");
+	}
 	if (emac_emb_smmu_ctx.pdev_master)
 		goto smmu_probe_done;
 
@@ -1718,57 +1785,42 @@ void qcom_ethqos_request_phy_wol(void *plat_n)
 {
 	struct plat_stmmacenet_data *plat = plat_n;
 	struct qcom_ethqos *ethqos;
-	struct platform_device *pdev;
-	struct net_device *ndev;
+	struct stmmac_priv *priv;
+	int ret = 0;
 
 	if (!plat)
 		return;
 
 	ethqos = plat->bsp_priv;
+	priv = qcom_ethqos_get_priv(ethqos);
 
-	pdev = ethqos->pdev;
-	ndev = platform_get_drvdata(pdev);
+	if (!priv || !priv->en_wol)
+		return;
 
-	ethqos->phy_wol_supported = 0;
-	ethqos->phy_wol_wolopts = 0;
 	/* Check if phydev is valid*/
 	/* Check and enable Wake-on-LAN functionality in PHY*/
-
-	if (ndev->phydev) {
+	if (priv->phydev) {
 		struct ethtool_wolinfo wol = {.cmd = ETHTOOL_GWOL};
+		phy_ethtool_get_wol(priv->phydev, &wol);
 
-		wol.supported = 0;
-		wol.wolopts = 0;
-		ETHQOSINFO("phydev addr: 0x%pK\n", ndev->phydev);
-		phy_ethtool_get_wol(ndev->phydev, &wol);
-		ethqos->phy_wol_supported = wol.supported;
-		ETHQOSINFO("Get WoL[0x%x] in %s\n", wol.supported,
-			   ndev->phydev->drv->name);
+		wol.cmd = ETHTOOL_SWOL;
+		wol.wolopts = wol.supported;
+		ret = phy_ethtool_set_wol(priv->phydev, &wol);
 
-	/* Try to enable supported Wake-on-LAN features in PHY*/
-		if (wol.supported) {
-			device_set_wakeup_capable(&ethqos->pdev->dev, 1);
-
-			wol.cmd = ETHTOOL_SWOL;
-			wol.wolopts = wol.supported;
-
-			if (!phy_ethtool_set_wol(ndev->phydev, &wol)) {
-				ethqos->phy_wol_wolopts = wol.wolopts;
-
-				enable_irq_wake(ethqos->phy_intr);
-				device_set_wakeup_enable(&ethqos->pdev->dev, 1);
-
-				ETHQOSINFO("Enabled WoL[0x%x] in %s\n",
-					   wol.wolopts,
-					   ndev->phydev->drv->name);
-			} else {
-				ETHQOSINFO("Disabled WoL[0x%x] in %s\n",
-					   wol.wolopts,
-					   ndev->phydev->drv->name);
-			}
-		} else {
-			ETHQOSINFO("WoL Not Supported\n");
+		if (ret) {
+			ETHQOSERR("set wol in PHY failed\n");
+			return;
 		}
+
+		if (ret == EOPNOTSUPP) {
+			ETHQOSERR("WOL not supported\n");
+			return;
+		}
+
+		device_set_wakeup_capable(priv->device, 1);
+
+		enable_irq_wake(ethqos->phy_intr);
+		device_set_wakeup_enable(&ethqos->pdev->dev, 1);
 	}
 }
 
@@ -2030,6 +2082,68 @@ static void read_mac_addr_from_fuse_reg(struct device_node *np)
 	}
 }
 
+static void qcom_ethqos_handle_ssr_workqueue(struct work_struct *work)
+{
+	struct stmmac_priv *priv = NULL;
+
+	priv = qcom_ethqos_get_priv(pethqos);
+
+	ETHQOSINFO("%s is executing action: %d\n", __func__, pethqos->action);
+
+	if (priv->hw_offload_enabled) {
+		if (pethqos->action == EVENT_REMOTE_STATUS_DOWN) {
+			ethqos_ipa_offload_event_handler(NULL, EV_IPA_SSR_DOWN);
+		} else {
+			if (pethqos->action == EVENT_REMOTE_STATUS_UP)
+				ethqos_ipa_offload_event_handler(NULL, EV_IPA_SSR_UP);
+		}
+	}
+}
+
+static int qcom_ethqos_qti_alert(struct notifier_block *nb,
+				 unsigned long action, void *dev)
+{
+	struct stmmac_priv *priv = NULL;
+
+	priv = qcom_ethqos_get_priv(pethqos);
+	if (!priv) {
+		ETHQOSERR("Unable to alert QTI of SSR status: %s\n", __func__);
+		return NOTIFY_DONE;
+	}
+
+	switch (action) {
+	case EVENT_REMOTE_STATUS_UP:
+		ETHQOSINFO("Link up\n");
+		pethqos->action = EVENT_REMOTE_STATUS_UP;
+		break;
+	case EVENT_REMOTE_STATUS_DOWN:
+		ETHQOSINFO("Link down\n");
+		pethqos->action = EVENT_REMOTE_STATUS_DOWN;
+		break;
+	default:
+		ETHQOSERR("Invalid action passed: %s, %d\n", __func__,
+			  action);
+		return NOTIFY_DONE;
+	}
+
+	INIT_WORK(&pethqos->eth_ssr, qcom_ethqos_handle_ssr_workqueue);
+	queue_work(system_wq, &pethqos->eth_ssr);
+
+	return NOTIFY_DONE;
+}
+
+static void qcom_ethqos_register_listener(void)
+{
+	int ret;
+
+	ETHQOSINFO("Registering sb notification listener: %s\n", __func__);
+
+	pethqos->qti_nb.notifier_call = qcom_ethqos_qti_alert;
+	ret = sb_register_evt_listener(&pethqos->qti_nb);
+	if (ret)
+		ETHQOSERR("sb_register_evt_listener failed at: %s\n", __func__);
+}
+
 static void ethqos_is_ipv4_NW_stack_ready(struct work_struct *work)
 {
 	struct delayed_work *dwork;
@@ -2186,22 +2300,12 @@ static ssize_t read_rgmii_reg_dump(struct file *file,
 				   loff_t *ppos)
 {
 	struct qcom_ethqos *ethqos = file->private_data;
-	struct platform_device *pdev;
-	struct net_device *dev;
 	unsigned int len = 0, buf_len = 2000;
 	char *buf;
 	ssize_t ret_cnt;
 	int rgmii_data = 0;
 
 	if (!ethqos) {
-		ETHQOSERR("NULL Pointer\n");
-		return -EINVAL;
-	}
-
-	pdev = ethqos->pdev;
-	dev = platform_get_drvdata(pdev);
-
-	if (!dev->phydev) {
 		ETHQOSERR("NULL Pointer\n");
 		return -EINVAL;
 	}
@@ -2354,7 +2458,7 @@ static ssize_t phy_off_config(struct file *file, const char __user *user_buffer,
 	if (config == DISABLE_PHY_IMMEDIATELY) {
 		ethqos->current_phy_mode = DISABLE_PHY_IMMEDIATELY;
 	//make phy off
-		if (ethqos->current_loopback == ENABLE_PHY_LOOPBACK) {
+		if (priv->current_loopback == ENABLE_PHY_LOOPBACK) {
 			/* If Phy loopback is enabled
 			 *  Disabled It before phy off
 			 */
@@ -2622,7 +2726,14 @@ static ssize_t loopback_handling_config(struct file *file, const char __user *us
 		ETHQOSERR("Invalid config =%d\n", config);
 		return -EINVAL;
 	}
-	if ((config == ENABLE_PHY_LOOPBACK  || ethqos->current_loopback ==
+
+	if (priv->current_loopback == ENABLE_PHY_LOOPBACK &&
+	    priv->plat->mac2mac_en) {
+		ETHQOSINFO("Not supported with Mac2Mac enabled\n");
+		return -EOPNOTSUPP;
+	}
+
+	if ((config == ENABLE_PHY_LOOPBACK  || priv->current_loopback ==
 			ENABLE_PHY_LOOPBACK) &&
 			ethqos->current_phy_mode == DISABLE_PHY_IMMEDIATELY) {
 		ETHQOSERR("Can't enabled/disable ");
@@ -2638,7 +2749,7 @@ static ssize_t loopback_handling_config(struct file *file, const char __user *us
 			return -EINVAL;
 	}
 
-	if (config == ethqos->current_loopback) {
+	if (config == priv->current_loopback) {
 		switch (config) {
 		case DISABLE_LOOPBACK:
 			ETHQOSINFO("Loopback is already disabled\n");
@@ -2660,23 +2771,23 @@ static ssize_t loopback_handling_config(struct file *file, const char __user *us
 	}
 	/*If request to enable loopback & some other loopback already enabled*/
 	if (config != DISABLE_LOOPBACK &&
-	    ethqos->current_loopback > DISABLE_LOOPBACK) {
+	    priv->current_loopback > DISABLE_LOOPBACK) {
 		ETHQOSINFO("Loopback is already enabled\n");
-		print_loopback_detail(ethqos->current_loopback);
+		print_loopback_detail(priv->current_loopback);
 		return -EINVAL;
 	}
 	ETHQOSINFO("enable loopback = %d with link speed = %d backup now\n",
 		   config, speed);
 
 	/*Backup speed & duplex before Enabling Loopback */
-	if (ethqos->current_loopback == DISABLE_LOOPBACK &&
+	if (priv->current_loopback == DISABLE_LOOPBACK &&
 	    config > DISABLE_LOOPBACK) {
 		/*Backup old speed & duplex*/
 		ethqos->backup_speed = priv->speed;
 		ethqos->backup_duplex = priv->dev->phydev->duplex;
 	}
 	/*Backup BMCR before Enabling Phy LoopbackLoopback */
-	if (ethqos->current_loopback == DISABLE_LOOPBACK &&
+	if (priv->current_loopback == DISABLE_LOOPBACK &&
 	    config == ENABLE_PHY_LOOPBACK)
 		ethqos->bmcr_backup = ethqos_mdio_read(priv,
 						       priv->plat->phy_addr,
@@ -2691,11 +2802,11 @@ static ssize_t loopback_handling_config(struct file *file, const char __user *us
 	switch (config) {
 	case DISABLE_LOOPBACK:
 		ETHQOSINFO("Request to Disable Loopback\n");
-		if (ethqos->current_loopback == ENABLE_IO_MACRO_LOOPBACK)
+		if (priv->current_loopback == ENABLE_IO_MACRO_LOOPBACK)
 			ethqos_rgmii_io_macro_loopback(ethqos, 0);
-		else if (ethqos->current_loopback == ENABLE_MAC_LOOPBACK)
+		else if (priv->current_loopback == ENABLE_MAC_LOOPBACK)
 			ethqos_mac_loopback(ethqos, 0);
-		else if (ethqos->current_loopback == ENABLE_PHY_LOOPBACK)
+		else if (priv->current_loopback == ENABLE_PHY_LOOPBACK)
 			phy_digital_loopback_config(ethqos,
 						    ethqos->backup_speed, 0);
 		break;
@@ -2717,7 +2828,7 @@ static ssize_t loopback_handling_config(struct file *file, const char __user *us
 		break;
 	}
 
-	ethqos->current_loopback = config;
+	priv->current_loopback = config;
 	kfree(in_buf);
 	return count;
 }
@@ -2728,6 +2839,9 @@ static ssize_t read_loopback_config(struct file *file,
 {
 	unsigned int len = 0, buf_len = 2000;
 	struct qcom_ethqos *ethqos = file->private_data;
+	struct platform_device *pdev;
+	struct net_device *dev;
+	struct stmmac_priv *priv;
 	char *buf;
 	ssize_t ret_cnt;
 
@@ -2735,20 +2849,24 @@ static ssize_t read_loopback_config(struct file *file,
 		ETHQOSERR("NULL Pointer\n");
 		return -EINVAL;
 	}
+	pdev = ethqos->pdev;
+	dev = platform_get_drvdata(pdev);
+	priv = netdev_priv(dev);
+
 	buf = kzalloc(buf_len, GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
 
-	if (ethqos->current_loopback == DISABLE_LOOPBACK)
+	if (priv->current_loopback == DISABLE_LOOPBACK)
 		len += scnprintf(buf + len, buf_len - len,
 				 "Loopback is Disabled\n");
-	else if (ethqos->current_loopback == ENABLE_IO_MACRO_LOOPBACK)
+	else if (priv->current_loopback == ENABLE_IO_MACRO_LOOPBACK)
 		len += scnprintf(buf + len, buf_len - len,
 				 "Current Loopback is IO MACRO LOOPBACK\n");
-	else if (ethqos->current_loopback == ENABLE_MAC_LOOPBACK)
+	else if (priv->current_loopback == ENABLE_MAC_LOOPBACK)
 		len += scnprintf(buf + len, buf_len - len,
 				 "Current Loopback is MAC LOOPBACK\n");
-	else if (ethqos->current_loopback == ENABLE_PHY_LOOPBACK)
+	else if (priv->current_loopback == ENABLE_PHY_LOOPBACK)
 		len += scnprintf(buf + len, buf_len - len,
 				 "Current Loopback is PHY LOOPBACK\n");
 	else
@@ -2904,6 +3022,7 @@ static const struct file_operations fops_mac_rec = {
 	.llseek = default_llseek,
 };
 
+#ifdef CONFIG_DEBUG_FS
 static int ethqos_create_debugfs(struct qcom_ethqos        *ethqos)
 {
 	static struct dentry *phy_reg_dump;
@@ -2911,12 +3030,14 @@ static int ethqos_create_debugfs(struct qcom_ethqos        *ethqos)
 	static struct dentry *phy_off;
 	static struct dentry *loopback_enable_mode;
 	static struct dentry *mac_rec;
+	struct stmmac_priv *priv;
 
 	if (!ethqos) {
 		ETHQOSERR("Null Param\n");
 		return -ENOMEM;
 	}
 
+	priv = qcom_ethqos_get_priv(ethqos);
 	ethqos->debugfs_dir = debugfs_create_dir("eth", NULL);
 
 	if (!ethqos->debugfs_dir || IS_ERR(ethqos->debugfs_dir)) {
@@ -2948,12 +3069,14 @@ static int ethqos_create_debugfs(struct qcom_ethqos        *ethqos)
 		goto fail;
 	}
 
-	phy_off = debugfs_create_file("phy_off", 0400,
-				      ethqos->debugfs_dir, ethqos,
-				      &fops_phy_off);
-	if (!phy_off || IS_ERR(phy_off)) {
-		ETHQOSERR("Can't create phy_off %x\n", phy_off);
-		goto fail;
+	if (!priv->plat->mac2mac_en) {
+		phy_off = debugfs_create_file("phy_off", 0400,
+					      ethqos->debugfs_dir, ethqos,
+					      &fops_phy_off);
+		if (!phy_off || IS_ERR(phy_off)) {
+			ETHQOSERR("Can't create phy_off %x\n", phy_off);
+			goto fail;
+		}
 	}
 
 	loopback_enable_mode = debugfs_create_file("loopback_enable_mode", 0400,
@@ -2985,6 +3108,7 @@ static int ethqos_cleanup_debugfs(struct qcom_ethqos *ethqos)
 	ETHQOSDBG("debugfs Deleted Successfully");
 	return 0;
 }
+#endif
 
 static void ethqos_emac_mem_base(struct qcom_ethqos *ethqos)
 {
@@ -3090,6 +3214,121 @@ static int qcom_ethqos_panic_notifier(struct notifier_block *this,
 static struct notifier_block qcom_ethqos_panic_blk = {
 	.notifier_call  = qcom_ethqos_panic_notifier,
 };
+
+static int ethqos_update_mdio_drv_strength(struct qcom_ethqos *ethqos,
+					   struct device_node *np)
+{
+	u32 mdio_drv_str[2];
+	struct resource *resource = NULL;
+	unsigned long tlmm_central_base = 0;
+	unsigned long tlmm_central_size = 0;
+	int ret = 0;
+	unsigned long v;
+
+	resource = platform_get_resource_byname(ethqos->pdev,
+						IORESOURCE_MEM, "tlmm-central-base");
+
+	if (!resource) {
+		ETHQOSERR("Resource tlmm-central-base not found\n");
+		goto err_out;
+	}
+
+	tlmm_central_base = resource->start;
+	tlmm_central_size = resource_size(resource);
+	ETHQOSDBG("tlmm_central_base = 0x%x, size = 0x%x\n",
+		  tlmm_central_base, tlmm_central_size);
+
+	tlmm_central_base_addr = ioremap(tlmm_central_base,
+					 tlmm_central_size);
+
+	if (!tlmm_central_base_addr) {
+		ETHQOSERR("cannot map dwc_tlmm_central reg memory, aborting\n");
+		ret = -EIO;
+		goto err_out;
+	}
+
+	if (np && !of_property_read_u32(np, "mdio-drv-str",
+					&mdio_drv_str[0])) {
+		switch (mdio_drv_str[0]) {
+		case 2:
+			mdio_drv_str[0] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_2MA;
+			break;
+		case 4:
+			mdio_drv_str[0] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_4MA;
+			break;
+		case 6:
+			mdio_drv_str[0] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_6MA;
+			break;
+		case 8:
+			mdio_drv_str[0] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_8MA;
+			break;
+		case 10:
+			mdio_drv_str[0] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_10MA;
+			break;
+		case 12:
+			mdio_drv_str[0] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_12MA;
+			break;
+		case 14:
+			mdio_drv_str[0] = TLMM_RGMII_HDRV_PL_CTL1_TX_HDRV_14MA;
+			break;
+		case 16:
+			mdio_drv_str[0] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_16MA;
+			break;
+		default:
+			mdio_drv_str[0] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_16MA;
+			break;
+		}
+
+		TLMM_MDC_MDIO_HDRV_PULL_CTL_RGRD(v);
+		v = (v & (unsigned long)(0xFFFFFFF8))
+		 | (((mdio_drv_str[0]) & ((unsigned long)(0x7))) << 0);
+		TLMM_MDC_MDIO_HDRV_PULL_CTL_RGWR(v);
+	}
+
+	if (np && !of_property_read_u32(np, "mdc-drv-str",
+					&mdio_drv_str[1])) {
+		switch (mdio_drv_str[1]) {
+		case 2:
+			mdio_drv_str[1] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_2MA;
+			break;
+		case 4:
+			mdio_drv_str[1] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_4MA;
+			break;
+		case 6:
+			mdio_drv_str[1] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_6MA;
+			break;
+		case 8:
+			mdio_drv_str[1] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_8MA;
+			break;
+		case 10:
+			mdio_drv_str[1] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_10MA;
+			break;
+		case 12:
+			mdio_drv_str[1] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_12MA;
+			break;
+		case 14:
+			mdio_drv_str[1] = TLMM_RGMII_HDRV_PL_CTL1_TX_HDRV_14MA;
+			break;
+		case 16:
+			mdio_drv_str[1] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_16MA;
+			break;
+		default:
+			mdio_drv_str[1] = TLMM_RGMII_HDRV_PULL_CTL1_TX_HDRV_16MA;
+			break;
+		}
+
+		TLMM_MDC_MDIO_HDRV_PULL_CTL_RGRD(v);
+		v = (v & (unsigned long)(0xFFFFFF1F))
+		 | (((mdio_drv_str[1]) & (unsigned long)(0x7)) << 5);
+		TLMM_MDC_MDIO_HDRV_PULL_CTL_RGWR(v);
+	}
+
+err_out:
+	if (tlmm_central_base_addr)
+		iounmap(tlmm_central_base_addr);
+
+	return ret;
+}
 
 static int ethqos_update_rgmii_tx_drv_strength(struct qcom_ethqos *ethqos)
 {
@@ -3511,6 +3750,298 @@ void qcom_ethqos_serdes_init(struct qcom_ethqos *ethqos, int speed)
 		ETHQOSERR("PLL Lock Status timedout with retry = %d\n", retry);
 }
 
+static ssize_t ethqos_read_dev_emac(struct file *filp, char __user *buf,
+				    size_t count, loff_t *f_pos)
+{
+	struct eth_msg_meta msg;
+	u8 status = 0;
+
+	memset(&msg, 0,  sizeof(struct eth_msg_meta));
+
+	if (pethqos && pethqos->ipa_enabled)
+		ethqos_ipa_offload_event_handler(&status, EV_QTI_GET_CONN_STATUS);
+
+	msg.msg_type = status;
+
+	ETHQOSDBG("status %02x\n", status);
+	ETHQOSDBG("msg.msg_type %02x\n", msg.msg_type);
+	ETHQOSDBG("msg.rsvd %02x\n", msg.rsvd);
+	ETHQOSDBG("msg.msg_len %d\n", msg.msg_len);
+
+	return copy_to_user(buf, &msg, sizeof(struct eth_msg_meta));
+}
+
+static ssize_t ethqos_write_dev_emac(struct file *file,
+				     const char __user *user_buf,
+				     size_t count, loff_t *ppos)
+{
+	unsigned char in_buf[300] = {0};
+	unsigned long ret;
+	struct qcom_ethqos *ethqos = pethqos;
+	struct stmmac_priv *priv = qcom_ethqos_get_priv(pethqos);
+	char mac_str[30] = {0};
+	char vlan_str[30] = {0};
+	char *prefix = NULL;
+	u32 err, prio, queue;
+	unsigned int number;
+
+	if (sizeof(in_buf) < count) {
+		ETHQOSERR("emac string is too long - count=%u\n", count);
+		return -EFAULT;
+	}
+
+	memset(in_buf, 0,  sizeof(in_buf));
+	ret = copy_from_user(in_buf, user_buf, count);
+
+	if (ret)
+		return -EFAULT;
+
+	strlcpy(vlan_str, in_buf, sizeof(vlan_str));
+
+	ETHQOSINFO("emac string is %s\n", vlan_str);
+
+	if (strnstr(vlan_str, "QOE", sizeof(vlan_str))) {
+		ethqos->qoe_vlan.available = true;
+		queue = ethqos->qoe_vlan.rx_queue;
+		priv->plat->rx_queues_cfg[queue].use_prio = true;
+		prio = priv->plat->rx_queues_cfg[queue].prio;
+		priv->hw->mac->rx_queue_prio(priv->hw, prio, queue);
+	}
+
+	if (strnstr(vlan_str, "qvlanid=", sizeof(vlan_str))) {
+		prefix = strnchr(vlan_str,
+				 strlen(vlan_str), '=');
+		ETHQOSINFO("vlanid data written is %s\n", prefix + 1);
+		if (prefix) {
+			err = kstrtouint(prefix + 1, 0, &number);
+			if (!err)
+				ethqos->qoe_vlan.vlan_id = number;
+		}
+	}
+
+	if (strnstr(vlan_str, "qvlan_pcp=", strlen(vlan_str))) {
+		prefix = strnchr(vlan_str, strlen(vlan_str), '=');
+		ETHQOSDBG("QMI vlan_pcp data written is %s\n", prefix + 1);
+		if (prefix) {
+			err = kstrtouint(prefix + 1, 0, &number);
+			if (!err) {
+				/* Convert prio to bit format */
+				prio = MAC_RXQCTRL_PSRQX_PRIO_SHIFT(number);
+				queue = ethqos->qoe_vlan.rx_queue;
+				priv->plat->rx_queues_cfg[queue].prio = prio;
+			}
+		}
+	}
+
+	if (strnstr(vlan_str, "Cv2X", strlen(vlan_str))) {
+		ETHQOSDBG("Cv2X supported mode is %u\n", ethqos->cv2x_mode);
+		ethqos->cv2x_vlan.available = true;
+		queue = ethqos->cv2x_vlan.rx_queue;
+		priv->plat->rx_queues_cfg[queue].use_prio = true;
+		prio = priv->plat->rx_queues_cfg[queue].prio;
+		priv->hw->mac->rx_queue_prio(priv->hw, prio, queue);
+	}
+
+	if (strnstr(vlan_str, "cvlanid=", strlen(vlan_str))) {
+		prefix = strnchr(vlan_str, strlen(vlan_str), '=');
+		ETHQOSDBG("Cv2X vlanid data written is %s\n", prefix + 1);
+		if (prefix) {
+			err = kstrtouint(prefix + 1, 0, &number);
+			if (!err)
+				ethqos->cv2x_vlan.vlan_id = number;
+		}
+	}
+
+	if (strnstr(vlan_str, "cvlan_pcp=", strlen(vlan_str))) {
+		prefix = strnchr(vlan_str, strlen(vlan_str), '=');
+		ETHQOSDBG("Cv2X vlan_pcp data written is %s\n", prefix + 1);
+		if (prefix) {
+			err = kstrtouint(prefix + 1, 0, &number);
+			if (!err) {
+				/* Convert prio to bit format */
+				prio = MAC_RXQCTRL_PSRQX_PRIO_SHIFT(number);
+				queue = ethqos->cv2x_vlan.rx_queue;
+				priv->plat->rx_queues_cfg[queue].prio = prio;
+			}
+		}
+	}
+
+	if (strnstr(in_buf, "cmac_id=", strlen(in_buf))) {
+		prefix = strnchr(in_buf, strlen(in_buf), '=');
+		if (prefix) {
+			if (strlcpy(mac_str, (char *)prefix + 1, 30) >= 30) {
+				ETHQOSERR("Invalid prefix size\n");
+				return -EFAULT;
+			}
+			if (!mac_pton(mac_str, config_dev_addr)) {
+				ETHQOSERR("Invalid mac addr in /dev/emac\n");
+				return count;
+			}
+
+			if (!is_valid_ether_addr(config_dev_addr)) {
+				ETHQOSERR("Invalid/Multcast mac addr found\n");
+				return count;
+			}
+
+			ether_addr_copy(dev_addr, config_dev_addr);
+			memcpy(ethqos->cv2x_dev_addr, dev_addr, ETH_ALEN);
+		}
+	}
+
+	return count;
+}
+
+static void ethqos_get_qoe_dt(struct qcom_ethqos *ethqos,
+			      struct device_node *np)
+{
+	int res;
+
+	res = of_property_read_u32(np, "qcom,qoe_mode", &ethqos->qoe_mode);
+	if (res) {
+		ETHQOSDBG("qoe_mode not in dtsi\n");
+		ethqos->qoe_mode = 0;
+	}
+
+	if (ethqos->qoe_mode) {
+		res = of_property_read_u32(np, "qcom,qoe-queue",
+					   &ethqos->qoe_vlan.rx_queue);
+		if (res) {
+			ETHQOSERR("qoe-queue not in dtsi for qoe_mode %u\n",
+				  ethqos->qoe_mode);
+			ethqos->qoe_vlan.rx_queue = QMI_TAG_TX_CHANNEL;
+		}
+
+		res = of_property_read_u32(np, "qcom,qoe-vlan-offset",
+					   &ethqos->qoe_vlan.vlan_offset);
+		if (res) {
+			ETHQOSERR("qoe-vlan-offset not in dtsi\n");
+			ethqos->qoe_vlan.vlan_offset = 0;
+		}
+	}
+}
+
+static DECLARE_WAIT_QUEUE_HEAD(dev_emac_wait);
+#ifdef CONFIG_ETH_IPA_OFFLOAD
+void ethqos_wakeup_dev_emac_queue(void)
+{
+	ETHQOSDBG("\n");
+	wake_up_interruptible(&dev_emac_wait);
+}
+#endif
+
+static unsigned int ethqos_poll_dev_emac(struct file *file, poll_table *wait)
+{
+	int mask = 0;
+	int update = 0;
+
+	ETHQOSDBG("\n");
+
+	poll_wait(file, &dev_emac_wait, wait);
+
+	if (pethqos && pethqos->ipa_enabled && pethqos->cv2x_mode)
+		ethqos_ipa_offload_event_handler(&update, EV_QTI_CHECK_CONN_UPDATE);
+
+	if (update)
+		mask = POLLIN | POLLRDNORM;
+
+	ETHQOSDBG("mask %d\n", mask);
+
+	return mask;
+}
+
+static const struct file_operations emac_fops = {
+	.owner = THIS_MODULE,
+	.open = simple_open,
+	.read = ethqos_read_dev_emac,
+	.write = ethqos_write_dev_emac,
+	.poll = ethqos_poll_dev_emac,
+};
+
+static int ethqos_create_emac_device_node(dev_t *emac_dev_t,
+					  struct cdev **emac_cdev,
+					  struct class **emac_class,
+					  char *emac_dev_node_name)
+{
+	int ret;
+
+	ret = alloc_chrdev_region(emac_dev_t, 0, 1,
+				  emac_dev_node_name);
+	if (ret) {
+		ETHQOSERR("alloc_chrdev_region error for node %s\n",
+			  emac_dev_node_name);
+		goto alloc_chrdev1_region_fail;
+	}
+
+	*emac_cdev = cdev_alloc();
+	if (!*emac_cdev) {
+		ret = -ENOMEM;
+		ETHQOSERR("failed to alloc cdev\n");
+		goto fail_alloc_cdev;
+	}
+	cdev_init(*emac_cdev, &emac_fops);
+
+	ret = cdev_add(*emac_cdev, *emac_dev_t, 1);
+	if (ret < 0) {
+		ETHQOSERR(":cdev_add err=%d\n", -ret);
+		goto cdev1_add_fail;
+	}
+
+	*emac_class = class_create(THIS_MODULE, emac_dev_node_name);
+	if (!*emac_class) {
+		ret = -ENODEV;
+		ETHQOSERR("failed to create class\n");
+		goto fail_create_class;
+	}
+
+	if (!device_create(*emac_class, NULL,
+			   *emac_dev_t, NULL, emac_dev_node_name)) {
+		ret = -EINVAL;
+		ETHQOSERR("failed to create device_create\n");
+		goto fail_create_device;
+	}
+
+	return 0;
+
+fail_create_device:
+	class_destroy(*emac_class);
+fail_create_class:
+	cdev_del(*emac_cdev);
+cdev1_add_fail:
+fail_alloc_cdev:
+	unregister_chrdev_region(*emac_dev_t, 1);
+alloc_chrdev1_region_fail:
+		return ret;
+}
+
+static void ethqos_get_cv2x_dt(struct qcom_ethqos *ethqos,
+			       struct device_node *np)
+{
+	int res;
+
+	res = of_property_read_u32(np, "qcom,cv2x_mode", &ethqos->cv2x_mode);
+	if (res) {
+		ETHQOSDBG("cv2x_mode not in dtsi\n");
+		ethqos->cv2x_mode = CV2X_MODE_DISABLE;
+	}
+
+	if (ethqos->cv2x_mode != CV2X_MODE_DISABLE) {
+		res = of_property_read_u32(np, "qcom,cv2x-queue",
+					   &ethqos->cv2x_vlan.rx_queue);
+		if (res) {
+			ETHQOSERR("cv2x-queue not in dtsi for cv2x_mode %u\n",
+				  ethqos->cv2x_mode);
+			ethqos->cv2x_vlan.rx_queue = CV2X_TAG_TX_CHANNEL;
+		}
+
+		res = of_property_read_u32(np, "qcom,cv2x-vlan-offset",
+					   &ethqos->cv2x_vlan.vlan_offset);
+		if (res) {
+			ETHQOSERR("cv2x-vlan-offset not in dtsi\n");
+			ethqos->cv2x_vlan.vlan_offset = 1;
+		}
+	}
+}
+
 static int _qcom_ethqos_probe(void *arg)
 {
 	struct platform_device *pdev = (struct platform_device *)arg;
@@ -3519,7 +4050,7 @@ static int _qcom_ethqos_probe(void *arg)
 	struct stmmac_resources stmmac_res;
 	struct qcom_ethqos *ethqos = NULL;
 	struct resource *res = NULL;
-	int ret;
+	int ret, i;
 	struct net_device *ndev;
 	struct stmmac_priv *priv;
 
@@ -3580,10 +4111,54 @@ static int _qcom_ethqos_probe(void *arg)
 	ethqos_init_regulators(ethqos);
 	ethqos_init_gpio(ethqos);
 
+	ethqos_get_qoe_dt(ethqos, np);
+	ethqos_get_cv2x_dt(ethqos, np);
+
 	plat_dat = stmmac_probe_config_dt(pdev, &stmmac_res.mac);
 	if (IS_ERR(plat_dat)) {
 		dev_err(&pdev->dev, "dt configuration failed\n");
 		return PTR_ERR(plat_dat);
+	}
+
+	if (ethqos->cv2x_mode == CV2X_MODE_MDM ||
+	    ethqos->cv2x_mode == CV2X_MODE_AP) {
+		for (i = 0; i < plat_dat->rx_queues_to_use; i++) {
+			if (plat_dat->rx_queues_cfg[i].pkt_route ==
+			    PACKET_AVCPQ)
+				plat_dat->rx_queues_cfg[i].pkt_route = 0;
+		}
+	}
+
+	if (ethqos->cv2x_mode) {
+		if (ethqos->cv2x_vlan.rx_queue >= plat_dat->rx_queues_to_use)
+			ethqos->cv2x_vlan.rx_queue = CV2X_TAG_TX_CHANNEL;
+
+		ret = of_property_read_u32(np, "jumbo-mtu",
+					   &plat_dat->jumbo_mtu);
+		if (!ret) {
+			if (plat_dat->jumbo_mtu >
+			    MAX_SUPPORTED_JUMBO_MTU) {
+				ETHQOSDBG("jumbo mtu %u biger than max val\n",
+					  plat_dat->jumbo_mtu);
+				ETHQOSDBG("Set it to max supported value %u\n",
+					  MAX_SUPPORTED_JUMBO_MTU);
+				plat_dat->jumbo_mtu =
+					MAX_SUPPORTED_JUMBO_MTU;
+			}
+
+			if (plat_dat->jumbo_mtu < MIN_JUMBO_FRAME_SIZE) {
+				plat_dat->jumbo_mtu = 0;
+			} else {
+				/* Store and Forward mode will limit the max
+				 * buffer size per rx fifo buffer size
+				 * configuration. Use Receive Queue Threshold
+				 * Control mode (rtc) for cv2x rx queue to
+				 * support the jumbo frame up to 8K.
+				 */
+				i = ethqos->cv2x_vlan.rx_queue;
+				plat_dat->rx_queues_cfg[i].use_rtc = true;
+			}
+		}
 	}
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "rgmii");
@@ -3630,9 +4205,16 @@ static int _qcom_ethqos_probe(void *arg)
 	plat_dat->bsp_priv = ethqos;
 	plat_dat->fix_mac_speed = ethqos_fix_mac_speed;
 	plat_dat->tx_select_queue = dwmac_qcom_select_queue;
-	plat_dat->get_plat_tx_coal_frames =  dwmac_qcom_get_plat_tx_coal_frames;
+	if (of_property_read_bool(pdev->dev.of_node,
+				  "disable-intr-mod"))
+		ETHQOSINFO("disabling Interrupt moderation\n");
+	else
+		plat_dat->get_plat_tx_coal_frames =  dwmac_qcom_get_plat_tx_coal_frames;
 	plat_dat->has_gmac4 = 1;
 	plat_dat->tso_en = of_property_read_bool(np, "snps,tso");
+	plat_dat->force_thresh_dma_mode_q0_en =
+		of_property_read_bool(np,
+				      "snps,force_thresh_dma_mode_q0");
 	plat_dat->early_eth = ethqos->early_eth_enabled;
 	plat_dat->handle_prv_ioctl = ethqos_handle_prv_ioctl;
 	plat_dat->request_phy_wol = qcom_ethqos_request_phy_wol;
@@ -3643,14 +4225,15 @@ static int _qcom_ethqos_probe(void *arg)
 	plat_dat->phyad_change = ethqos->phyad_change;
 	plat_dat->is_gpio_phy_reset = ethqos->is_gpio_phy_reset;
 	plat_dat->handle_mac_err = dwmac_qcom_handle_mac_err;
+	plat_dat->rgmii_loopback_cfg = rgmii_loopback_config;
 
 	/* Get rgmii interface speed for mac2c from device tree */
 	if (of_property_read_u32(np, "mac2mac-rgmii-speed",
-				 &plat_dat->mac2mac_rgmii_speed))
+				&plat_dat->mac2mac_rgmii_speed))
 		plat_dat->mac2mac_rgmii_speed = -1;
 	else
 		ETHQOSINFO("mac2mac rgmii speed = %d\n",
-			   plat_dat->mac2mac_rgmii_speed);
+				plat_dat->mac2mac_rgmii_speed);
 
 	if (of_property_read_bool(pdev->dev.of_node,
 				  "emac-core-version")) {
@@ -3692,16 +4275,18 @@ static int _qcom_ethqos_probe(void *arg)
 			emac_emb_smmu_ctx.ret = 0;
 		}
 	}
-	if (of_property_read_bool(pdev->dev.of_node,
-				  "emac-phy-off-suspend")) {
-		/* Read emac core version value from dtsi */
-		ret = of_property_read_u32(pdev->dev.of_node,
-					   "emac-phy-off-suspend",
-					   &ethqos->current_phy_mode);
-		if (ret) {
-			ETHQOSDBG(":resource emac-phy-off-suspend! ");
-			ETHQOSDBG("not in dtsi\n");
-			ethqos->current_phy_mode = 0;
+	if (!plat_dat->mac2mac_en) {
+		if (of_property_read_bool(pdev->dev.of_node,
+					  "emac-phy-off-suspend")) {
+			/* Read emac core version value from dtsi */
+			ret = of_property_read_u32(pdev->dev.of_node,
+						   "emac-phy-off-suspend",
+						   &ethqos->current_phy_mode);
+			if (ret) {
+				ETHQOSDBG(":resource emac-phy-off-suspend! ");
+				ETHQOSDBG("not in dtsi\n");
+				ethqos->current_phy_mode = 0;
+			}
 		}
 	}
 	ETHQOSINFO("emac-phy-off-suspend = %d\n",
@@ -3709,6 +4294,7 @@ static int _qcom_ethqos_probe(void *arg)
 	ethqos->ioaddr = (&stmmac_res)->addr;
 	if (ethqos->io_macro.rgmii_tx_drv)
 		ethqos_update_rgmii_tx_drv_strength(ethqos);
+	ethqos_update_mdio_drv_strength(ethqos, np);
 	ethqos_mac_rec_init(ethqos);
 
 	ret = stmmac_dvr_probe(&pdev->dev, plat_dat, &stmmac_res);
@@ -3717,15 +4303,14 @@ static int _qcom_ethqos_probe(void *arg)
 
 ethqos_emac_mem_base(ethqos);
 	pethqos = ethqos;
+#ifdef CONFIG_DEBUG_FS
 	ethqos_create_debugfs(ethqos);
-
+#endif
 	ndev = dev_get_drvdata(&ethqos->pdev->dev);
 	priv = netdev_priv(ndev);
 
 #ifdef CONFIG_ETH_IPA_OFFLOAD
-	ethqos->ipa_enabled = true;
-	priv->rx_queue[IPA_DMA_RX_CH].skip_sw = true;
-	priv->tx_queue[IPA_DMA_TX_CH].skip_sw = true;
+	ethqos_ipa_offload_event_handler(ethqos, EV_PROBE_INIT);
 #endif
 
 	rgmii_dump(ethqos);
@@ -3744,6 +4329,8 @@ ethqos_emac_mem_base(ethqos);
 						 &ethqos->avb_class_b_class,
 						 AVB_CLASS_B_POLL_DEV_NODE);
 	}
+
+	priv->en_wol = of_property_read_bool(np, "enable-wol");
 
 	qcom_ethqos_read_iomacro_por_values(ethqos);
 
@@ -3768,13 +4355,36 @@ ethqos_emac_mem_base(ethqos);
 		INIT_WORK(&ethqos->early_eth,
 			  qcom_ethqos_bringup_iface);
 		/* Queue the work*/
-		queue_work(system_wq, &ethqos->early_eth);
+		if (open_not_called == 1) {
+			ETHQOSINFO("calling driver open\n");
+			queue_work(system_wq, &ethqos->early_eth);
+		}
 		/*Set early eth parameters*/
 		ethqos_set_early_eth_param(priv, ethqos);
 	}
 
+	if (ethqos->cv2x_mode) {
+		for (i = 0; i < plat_dat->rx_queues_to_use; i++) {
+			priv->rx_queue[i].en_fep = true;
+			if (plat_dat->jumbo_mtu && i == ethqos->cv2x_vlan.rx_queue) {
+				priv->rx_queue[i].jumbo_en = true;
+				ETHQOSDBG(" Jumbo fram enabled for queue = %d", i);
+			}
+		}
+	}
+
+	if (ethqos->qoe_mode || ethqos->cv2x_mode) {
+		ethqos_create_emac_device_node(&ethqos->emac_dev_t,
+					       &ethqos->emac_cdev,
+					       &ethqos->emac_class,
+					       "emac");
+	}
+
 	if (priv->plat->mac2mac_en)
-		priv->plat->mac2mac_link = -1;
+		priv->plat->mac2mac_link = 0;
+
+	if (pethqos->cv2x_mode != CV2X_MODE_DISABLE)
+		qcom_ethqos_register_listener();
 
 	if (!qcom_ethqos_init_panic_notifier(ethqos))
 		atomic_notifier_chain_register(&panic_notifier_list,
@@ -3798,15 +4408,16 @@ ethqos_emac_mem_base(ethqos);
 	}
 #endif
 
-	return ret;
+	return 0;
 
 err_clk:
 	clk_disable_unprepare(ethqos->rgmii_clk);
 
 err_mem:
+	ethqos->driver_load_fail = true;
 	stmmac_remove_config_dt(pdev, plat_dat);
 
-	return ret;
+	return 0;
 }
 
 static int qcom_ethqos_probe(struct platform_device *pdev)
@@ -3853,7 +4464,9 @@ static int qcom_ethqos_remove(struct platform_device *pdev)
 	if (ethqos->io_macro.pps_remove)
 		ethqos_remove_pps_dev(ethqos);
 
+#ifdef CONFIG_DEBUG_FS
 	ethqos_cleanup_debugfs(ethqos);
+#endif
 	ethqos_free_gpios(ethqos);
 	emac_emb_smmu_exit();
 	ethqos_disable_regulators(ethqos);
@@ -3874,19 +4487,34 @@ static int qcom_ethqos_suspend(struct device *dev)
 	int ret;
 	struct stmmac_priv *priv;
 	struct plat_stmmacenet_data *plat;
+	int allow_suspend = 1;
 
+	ETHQOSDBG("Suspend Enter\n");
 	if (of_device_is_compatible(dev->of_node, "qcom,emac-smmu-embedded")) {
 		ETHQOSDBG("smmu return\n");
 		return 0;
 	}
 
+	place_marker("M - Ethernet Suspend start");
+
 	ethqos = get_stmmac_bsp_priv(dev);
 	if (!ethqos)
 		return -ENODEV;
 
+	if (ethqos->driver_load_fail) {
+		ETHQOSINFO("driver load failed\n");
+		return 0;
+	}
+
 	ndev = dev_get_drvdata(dev);
 
-	if (!ndev || !netif_running(ndev))
+	ethqos_ipa_offload_event_handler(&allow_suspend, EV_DPM_SUSPEND);
+	if (!allow_suspend) {
+		enable_irq_wake(ndev->irq);
+		ETHQOSDBG("Suspend Exit enable IRQ\n");
+		return 0;
+	}
+	if (!ndev)
 		return -EINVAL;
 	priv = netdev_priv(ndev);
 	plat = priv->plat;
@@ -3921,6 +4549,7 @@ static int qcom_ethqos_suspend(struct device *dev)
 		ethqos_phy_power_off(ethqos);
 	}
 
+	place_marker("M - Ethernet Suspend End");
 	priv->boot_kpi = false;
 	ETHQOSDBG(" ret = %d\n", ret);
 	return ret;
@@ -3937,14 +4566,21 @@ static int qcom_ethqos_resume(struct device *dev)
 	if (of_device_is_compatible(dev->of_node, "qcom,emac-smmu-embedded"))
 		return 0;
 
+	place_marker("M - Ethernet Resume start");
+
 	ethqos = get_stmmac_bsp_priv(dev);
 
 	if (!ethqos)
 		return -ENODEV;
 
+	if (ethqos->driver_load_fail) {
+		ETHQOSINFO("driver load failed\n");
+		return 0;
+	}
+
 	ndev = dev_get_drvdata(dev);
 
-	if (!ndev || !netif_running(ndev)) {
+	if (!ndev) {
 		ETHQOSERR(" Resume not possible\n");
 		return -EINVAL;
 	}
@@ -3965,17 +4601,25 @@ static int qcom_ethqos_resume(struct device *dev)
 		ETHQOSINFO("enable phy at resume\n");
 		ethqos_phy_power_on(ethqos);
 	}
+
+	if (!ethqos->clks_suspended) {
+		disable_irq_wake(ndev->irq);
+		ETHQOSDBG("Resume Exit disable IRQ\n");
+		return 0;
+	}
+
 	qcom_ethqos_phy_resume_clks(ethqos);
 
 	if (ethqos->current_phy_mode == DISABLE_PHY_SUSPEND_ENABLE_RESUME) {
 		ETHQOSINFO("reset phy after clock\n");
 		ethqos_reset_phy_enable_interrupt(ethqos);
 		if (ethqos->backup_autoneg == AUTONEG_DISABLE) {
-			priv->phydev->autoneg = ethqos->backup_autoneg;
-			if (priv->phydev)
+			if (priv->phydev) {
+				priv->phydev->autoneg = ethqos->backup_autoneg;
 				phy_write(priv->phydev, MII_BMCR, ethqos->backup_bmcr);
-			else
+			} else {
 				ETHQOSINFO("Phy dev is NULL\n");
+			}
 		}
 	}
 
@@ -3995,6 +4639,10 @@ static int qcom_ethqos_resume(struct device *dev)
 			      0, RGMII_IO_MACRO_CONFIG);
 		ETHQOSINFO("Loopback EN Disabled\n");
 	}
+
+	ethqos_ipa_offload_event_handler(NULL, EV_DPM_RESUME);
+
+	place_marker("M - Ethernet Resume End");
 
 	ETHQOSDBG("<--Resume Exit\n");
 	return ret;

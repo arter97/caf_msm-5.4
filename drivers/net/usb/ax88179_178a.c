@@ -1,8 +1,20 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * ASIX AX88179/178A USB 3.0/2.0 to Gigabit Ethernet Devices
  *
  * Copyright (C) 2011-2013 ASIX
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
  *
  * SPDX-License-Identifier: GPL-2.0
  * Copyright (c) 2022    ASIX Electronic Corporation    All rights reserved.
@@ -53,7 +65,7 @@ const struct ethtool_ops ax88179_ethtool_ops = {
 
 int ax88179_signature(struct ax_device *axdev, struct _ax_ioctl_command *info)
 {
-	strncpy(info->sig, AX88179_SIGNATURE, strlen(AX88179_SIGNATURE));
+	strlcpy(info->sig, AX88179_SIGNATURE, sizeof(info->sig));
 	return 0;
 }
 

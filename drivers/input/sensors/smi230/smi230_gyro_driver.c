@@ -915,26 +915,10 @@ static void smi230_free_irq(struct smi230_client_data *client_data)
 	gpio_free(client_data->gpio_pin);
 }
 
-static int smi230_request_irq(struct smi230_client_data *client_data)
+static int smi230_request_irq(struct smi230_client_data *client_data, struct smi230_dev *smi230_dev)
 {
 	int err = 0;
-
-	client_data->gpio_pin = of_get_named_gpio_flags(
-		client_data->dev->of_node,
-		"gpio_irq", 0, NULL);
-	PINFO("SMI230_GYRO gpio number:%d\n", client_data->gpio_pin);
-	err = gpio_request_one(client_data->gpio_pin,
-				GPIOF_IN, "smi230_gyro_interrupt");
-	if (err < 0) {
-		PDEBUG("gpio_request_one\n");
-		return err;
-	}
-	err = gpio_direction_input(client_data->gpio_pin);
-	if (err < 0) {
-		PDEBUG("gpio_direction_input\n");
-		return err;
-	}
-	client_data->IRQ = gpio_to_irq(client_data->gpio_pin);
+	client_data->IRQ = smi230_dev->irq;
 	err = request_threaded_irq(client_data->IRQ, smi230_irq_handle, smi230_irq_work_func,
 			IRQF_TRIGGER_RISING,
 			SENSOR_GYRO_NAME, client_data);
@@ -1140,7 +1124,7 @@ int smi230_gyro_probe(struct device *dev, struct smi230_dev *smi230_dev)
 	}
 
 	/*request irq and config*/
-	err = smi230_request_irq(client_data);
+	err = smi230_request_irq(client_data, smi230_dev);
 	if (err < 0) {
 		PERR("Request irq failed");
 		goto exit_cleanup_sysfs;
