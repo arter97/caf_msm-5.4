@@ -760,6 +760,7 @@ struct dwc3_ep_events {
  * @dbg_ep_events_diff: differential events counter for endpoint
  * @dbg_ep_events_ts: timestamp for previous event counters
  * @fifo_depth: allocated TXFIFO depth
+ * @gsi_db_reg_addr: Address of GSI DB register mapped to this EP
  */
 struct dwc3_ep {
 	struct usb_ep		endpoint;
@@ -823,6 +824,7 @@ struct dwc3_ep {
 	struct dwc3_ep_events	dbg_ep_events_diff;
 	ktime_t			dbg_ep_events_kt;
 	int			fifo_depth;
+	void __iomem		*gsi_db_reg_addr;
 };
 
 enum dwc3_phy {
