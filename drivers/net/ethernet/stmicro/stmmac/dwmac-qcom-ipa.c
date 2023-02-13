@@ -3369,6 +3369,10 @@ void ethqos_ipa_offload_event_handler(void *data,
 		    qcom_ethqos_is_phy_link_up(eth_ipa_ctx.ethqos))
 			ethqos_enable_ipa_offload(eth_ipa_ctx.ethqos);
 
+		if (eth_ipa_ctx.ipa_offload_susp) {
+			priv = netdev_priv(platform_get_drvdata(eth_ipa_ctx.ethqos->pdev));
+			priv->hw->mac->map_mtl_to_dma(priv->hw, EMAC_QUEUE_0, EMAC_CHANNEL_1);
+		}
 		break;
 	case EV_IPA_READY:
 		eth_ipa_ctx.ipa_ready = true;
