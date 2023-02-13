@@ -2704,6 +2704,10 @@ static void stmmac_mac_config_rx_queues_routing(struct stmmac_priv *priv)
 
 		packet = priv->plat->rx_queues_cfg[queue].pkt_route;
 		stmmac_rx_queue_routing(priv, priv->hw, packet, queue);
+
+		/* Configure Multicast and broadcast additionally if enabled */
+		if (priv->plat->rx_queues_cfg[queue].mbcast_route)
+			stmmac_rx_queue_routing(priv, priv->hw, PACKET_MCBCQ, queue);
 	}
 }
 
