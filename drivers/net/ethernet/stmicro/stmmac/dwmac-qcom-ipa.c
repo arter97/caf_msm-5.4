@@ -1790,6 +1790,16 @@ static ssize_t suspend_resume_ipa_offload(struct device *dev,
 							 EV_USR_SUSPEND);
 			ethqos_ipa_offload_event_handler(&qtype2,
 							 EV_USR_SUSPEND);
+		} else if (input == 2) {
+			ethqos_ipa_offload_event_handler(&qtype1,
+							 EV_USR_RESUME);
+			ethqos_ipa_offload_event_handler(&qtype2,
+							 EV_USR_SUSPEND);
+		} else if (input == 3) {
+			ethqos_ipa_offload_event_handler(&qtype1,
+							 EV_USR_SUSPEND);
+			ethqos_ipa_offload_event_handler(&qtype2,
+							 EV_USR_RESUME);
 		}
 	} else {
 		ETHQOSERR("Operation not permitted, No PHY link");
