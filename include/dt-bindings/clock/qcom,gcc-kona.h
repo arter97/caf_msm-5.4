@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _DT_BINDINGS_CLK_QCOM_GCC_KONA_H
@@ -221,6 +221,9 @@
 #define GPLL0							209
 #define GPLL0_OUT_EVEN						210
 #define GPLL9							211
+#define GCC_PCIE_0_PIPE_CLK_SRC					212
+#define GCC_PCIE_1_PIPE_CLK_SRC					213
+#define GCC_PCIE_2_PIPE_CLK_SRC					214
 
 /* GCC resets */
 #define GCC_GPU_BCR						0
