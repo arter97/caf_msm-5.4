@@ -497,6 +497,8 @@ stmmac_get_pauseparam(struct net_device *netdev,
 	struct stmmac_priv *priv = netdev_priv(netdev);
 	struct rgmii_adv adv_lp;
 
+	memset(&adv_lp, 0, sizeof(adv_lp));
+
 	if (priv->hw->pcs && !stmmac_pcs_get_adv_lp(priv, priv->ioaddr, &adv_lp)) {
 		pause->autoneg = 1;
 		if (!adv_lp.pause)
@@ -519,10 +521,11 @@ stmmac_set_pauseparam(struct net_device *netdev,
 {
 	struct stmmac_priv *priv = netdev_priv(netdev);
 	struct rgmii_adv adv_lp;
-
 	u32 tx_cnt = priv->plat->tx_queues_to_use;
 	struct phy_device *phy = netdev->phydev;
 	int new_pause = FLOW_OFF;
+
+	memset(&adv_lp, 0, sizeof(adv_lp));
 
 	if (!phy && !priv->plat->mac2mac_en) {
 		pr_err("%s: %s: PHY is not registered\n",
@@ -642,12 +645,12 @@ static void stmmac_get_strings(struct net_device *dev, u32 stringset, u8 *data)
 	int i;
 	u8 *p = data;
 	struct stmmac_priv *priv = netdev_priv(dev);
+	const char *desc = NULL;
 
 	switch (stringset) {
 	case ETH_SS_STATS:
 		if (priv->dma_cap.asp) {
 			for (i = 0; i < STMMAC_SAFETY_FEAT_SIZE; i++) {
-				const char *desc;
 				if (!stmmac_safety_feat_dump(priv,
 							&priv->sstats, i,
 							NULL, &desc)) {

@@ -760,6 +760,7 @@ struct dwc3_ep_events {
  * @dbg_ep_events_diff: differential events counter for endpoint
  * @dbg_ep_events_ts: timestamp for previous event counters
  * @fifo_depth: allocated TXFIFO depth
+ * @gsi_db_reg_addr: Address of GSI DB register mapped to this EP
  */
 struct dwc3_ep {
 	struct usb_ep		endpoint;
@@ -823,6 +824,7 @@ struct dwc3_ep {
 	struct dwc3_ep_events	dbg_ep_events_diff;
 	ktime_t			dbg_ep_events_kt;
 	int			fifo_depth;
+	void __iomem		*gsi_db_reg_addr;
 };
 
 enum dwc3_phy {
@@ -1181,6 +1183,8 @@ struct dwc3_scratchpad_array {
  * @active_highbw_isoc: if true, high bandwidth isochronous endpoint is active.
  * @ignore_statusirq: if true, ignore irq triggered for status stage.
  * @num_gsi_eps: number of GSI based hardware accelerated endpoints
+ * @normal_eps_in_gsi_mode: if true, two normal EPS (1 In, 1 Out) can be used in
+ *		 GSI mode.
  */
 struct dwc3 {
 	struct work_struct	drd_work;
@@ -1443,6 +1447,7 @@ struct dwc3 {
 	bool			active_highbw_isoc;
 	bool			ignore_statusirq;
 	u32			num_gsi_eps;
+	bool			normal_eps_in_gsi_mode;
 };
 
 #define INCRX_BURST_MODE 0

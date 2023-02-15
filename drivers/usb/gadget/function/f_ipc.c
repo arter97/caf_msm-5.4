@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/init.h>
@@ -571,7 +571,7 @@ static void ipc_unbind(struct usb_configuration *c, struct usb_function *f)
 	if (gadget_is_superspeed_plus(c->cdev->gadget) ||
 			gadget_is_superspeed(c->cdev->gadget)) {
 		usb_free_descriptors(f->ss_descriptors);
-		f->ssp_descriptors = NULL;
+		f->ssp_descriptors = f->ss_descriptors = NULL;
 	}
 
 	if (gadget_is_dualspeed(c->cdev->gadget))

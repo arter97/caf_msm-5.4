@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2008-2018, 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -304,50 +305,6 @@ static void msm_spi_clk_path_teardown(struct msm_spi *dd)
 		icc_put(dd->icc_path);
 		dd->icc_path = NULL;
 	}
-}
-
-/**
- * msm_spi_clk_path_postponed_register: reg with bus-scaling after it is probed
- *
- * @return zero on success
- *
- * Workaround: SPI driver may be probed before the bus scaling driver. Calling
- * icc_get() will fail if the bus scaling driver is not
- * ready yet. Thus, this function should be called not from probe but from a
- * later context. Also, this function may be called more then once before
- * register succeed. At this case only one error message will be logged. At boot
- * time all clocks are on, so earlier SPI transactions should succeed.
- */
-static int msm_spi_clk_path_postponed_register(struct msm_spi *dd)
-{
-	int ret = 0;
-
-	dd->icc_path =
-		icc_get(dd->dev, dd->pdata->master_id, DST_ID);
-
-	if (IS_ERR_OR_NULL(dd->icc_path)) {
-		ret = dd->icc_path ?
-			PTR_ERR(dd->icc_path) : -EINVAL;
-		dev_err(dd->dev, "%s(): failed to get ICC path: %d\n", __func__, ret);
-		dd->icc_path = NULL;
-	}
-
-	return dd->icc_path ? ret : -ENOENT;
-}
-
-static void msm_spi_clk_path_init(struct msm_spi *dd)
-{
-	/*
-	 * bail out if path voting is diabled (master_id == 0) or if it is
-	 * already registered (client_hdl != 0)
-	 */
-	if (!dd->pdata->master_id || dd->icc_path)
-		return;
-
-	/* on failure try again later */
-	if (msm_spi_clk_path_postponed_register(dd))
-		return;
-
 }
 
 static int msm_spi_calculate_size(int *fifo_size,
@@ -2434,6 +2391,32 @@ err_clk_get:
 	return rc;
 }
 
+/**
+ * msm_spi_get_icc_path() - get icc path.
+ * @dd:   Pointer to msm_spi structure.
+ * @pdev: Pointer to platform_device structure.
+ *
+ * This function is used to get the ICC path.
+ * Based on return value of of_icc_get, assign
+ * the ret value.
+ *
+ * Return: zero on success, negative error code on failure.
+ */
+static int msm_spi_get_icc_path(struct msm_spi *dd,
+				struct platform_device *pdev)
+{
+	int ret;
+
+	dd->icc_path = of_icc_get(&pdev->dev, "blsp-ddr");
+	if (IS_ERR_OR_NULL(dd->icc_path)) {
+		ret = dd->icc_path ?
+		PTR_ERR(dd->icc_path) : -ENOENT;
+		dev_err(dd->dev, "%s(): failed to get ICC path: %d\n", __func__, ret);
+		return ret;
+	}
+	return 0;
+}
+
 static int msm_spi_probe(struct platform_device *pdev)
 {
 	struct spi_master      *master;
@@ -2652,7 +2635,7 @@ static int msm_spi_pm_resume_runtime(struct device *device)
 
 		dd->is_init_complete = true;
 	}
-	msm_spi_clk_path_init(dd);
+	msm_spi_get_icc_path(dd, pdev);
 	msm_spi_clk_path_vote(dd, dd->pdata->max_clock_speed);
 
 	if (!dd->pdata->is_shared) {

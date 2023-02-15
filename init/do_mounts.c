@@ -26,6 +26,10 @@
 #include <uapi/linux/mount.h>
 #include <soc/qcom/boot_stats.h>
 
+#if defined CONFIG_QGKI_MSM_BOOT_TIME_MARKER
+#include <soc/qcom/boot_stats.h>
+#endif
+
 #include "do_mounts.h"
 
 int __initdata rd_doload;	/* 1 = load RAM disk, 0 = don't load */
@@ -387,8 +391,12 @@ static void __init get_fs_names(char *page)
 static int __init do_mount_root(char *name, char *fs, int flags, void *data)
 {
 	struct super_block *s;
+	int err = 0;
+
+#ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
 	place_marker("M - DRIVER F/S Init");
-	int err = ksys_mount(name, "/root", fs, flags, data);
+#endif
+	err = ksys_mount(name, "/root", fs, flags, data);
 	if (err)
 		return err;
 
@@ -400,7 +408,9 @@ static int __init do_mount_root(char *name, char *fs, int flags, void *data)
 	       s->s_type->name,
 	       sb_rdonly(s) ? " readonly" : "",
 	       MAJOR(ROOT_DEV), MINOR(ROOT_DEV));
+#ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
 	place_marker("M - DRIVER F/S Ready");
+#endif
 	return 0;
 }
 

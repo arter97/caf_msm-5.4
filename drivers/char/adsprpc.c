@@ -492,8 +492,9 @@ struct fastrpc_static_pd {
 	void *pdrhandle;
 	uint64_t pdrcount;
 	uint64_t prevpdrcount;
-	int ispdup;
+	atomic_t ispdup;
 	int cid;
+	wait_queue_head_t wait_for_pdup;
 };
 
 struct fastrpc_dsp_capabilities {
@@ -535,6 +536,9 @@ struct fastrpc_channel_ctx {
 	spinlock_t ctxlock;
 	struct fastrpc_rpmsg_log gmsg_log;
 	struct hlist_head initmems;
+	/* Flags for DSP up mutex */
+	wait_queue_head_t wait_for_rpmsg_ch;
+	atomic_t is_rpmsg_ch_up;
 };
 
 struct fastrpc_apps {
@@ -753,6 +757,7 @@ static inline void fastrpc_pm_awake(struct fastrpc_file *fl, int channel_type);
 static int fastrpc_mem_map_to_dsp(struct fastrpc_file *fl, int fd, int offset,
 				uint32_t flags, uintptr_t va, uint64_t phys,
 				size_t size, uintptr_t *raddr);
+static int fastrpc_check_pd_status(struct fastrpc_file *fl, char *sloc_name);
 
 static inline int64_t getnstimediff(struct timespec64 *start)
 {
@@ -3076,7 +3081,7 @@ static int fastrpc_invoke_send(struct smq_invoke_ctx *ctx,
 
 static void fastrpc_init(struct fastrpc_apps *me)
 {
-	int i;
+	int i, jj;
 
 	INIT_HLIST_HEAD(&me->drivers);
 	INIT_HLIST_HEAD(&me->maps);
@@ -3092,9 +3097,12 @@ static void fastrpc_init(struct fastrpc_apps *me)
 		me->channel[i].unsigned_support = false;
 		mutex_init(&me->channel[i].smd_mutex);
 		mutex_init(&me->channel[i].rpmsg_mutex);
+		init_waitqueue_head(&me->channel[i].wait_for_rpmsg_ch);
 		spin_lock_init(&me->channel[i].ctxlock);
 		spin_lock_init(&me->channel[i].gmsg_log.lock);
 		INIT_HLIST_HEAD(&me->channel[i].initmems);
+		for (jj = 0; jj < NUM_SESSIONS; jj++)
+			init_waitqueue_head(&me->channel[i].spd[jj].wait_for_pdup);
 	}
 	/* Set CDSP channel to non secure */
 	me->channel[CDSP_DOMAIN_ID].secure = NON_SECURE_CHANNEL;
@@ -3683,7 +3691,7 @@ bail:
 }
 
 static int fastrpc_mmap_remove_pdr(struct fastrpc_file *fl);
-static int fastrpc_channel_open(struct fastrpc_file *fl);
+static int fastrpc_channel_open(struct fastrpc_file *fl, uint32_t flags);
 static int fastrpc_mmap_remove_ssr(struct fastrpc_file *fl);
 static int fastrpc_check_pd_status(struct fastrpc_file *fl, char *sloc_name);
 
@@ -4021,6 +4029,8 @@ static int fastrpc_init_create_static_process(struct fastrpc_file *fl,
 
 	if (!strcmp(proc_name, "audiopd")) {
 		fl->servloc_name = AUDIO_PDR_SERVICE_LOCATION_CLIENT_NAME;
+	err = fastrpc_check_pd_status(fl,
+			AUDIO_PDR_SERVICE_LOCATION_CLIENT_NAME);
 		/*
 		 * Remove any previous mappings in case process is trying
 		 * to reconnect after a PD restart on remote subsystem.
@@ -4131,6 +4141,32 @@ bail:
 	return err;
 }
 
+/*
+ * This function is called from fastrpc_channel open to wait
+ * for rpmsg channel in the respective domain. The wait in this
+ * function is done only for CDSP, Audio and Sensors Daemons.
+ */
+int fastrpc_wait_for_rpmsg_interrupt(int cid, unsigned int flags)
+{
+	struct fastrpc_apps *me = &gfa;
+	int err = 0;
+	/*
+	 * The flags which are applicable only for daemons are checked.
+	 * Dynamic PDs will fail and return immediately if the
+	 * remote subsystem is not up.
+	 */
+	if (flags == FASTRPC_INIT_ATTACH || flags == FASTRPC_INIT_ATTACH_SENSORS
+		|| flags == FASTRPC_INIT_CREATE_STATIC) {
+		ADSPRPC_INFO("Thread waiting for cid %d rpmsg channel", cid);
+		err = wait_event_interruptible(me->channel[cid].wait_for_rpmsg_ch,
+				atomic_read(&me->channel[cid].is_rpmsg_ch_up));
+		ADSPRPC_INFO("Thread received signal for cid %d rpmsg channel (interrupted %d)",
+			cid, err);
+	}
+
+	return err;
+}
+
 static int fastrpc_init_process(struct fastrpc_file *fl,
 				struct fastrpc_ioctl_init_attrs *uproc)
 {
@@ -4165,7 +4201,7 @@ static int fastrpc_init_process(struct fastrpc_file *fl,
 		err = -ECONNREFUSED;
 		goto bail;
 	}
-	err = fastrpc_channel_open(fl);
+	err = fastrpc_channel_open(fl, init->flags);
 	if (err)
 		goto bail;
 	switch (init->flags) {
@@ -4252,7 +4288,7 @@ static int fastrpc_get_info_from_dsp(struct fastrpc_file *fl,
 	if (domain == MDSP_DOMAIN_ID)
 		goto bail;
 
-	err = fastrpc_channel_open(fl);
+	err = fastrpc_channel_open(fl, FASTRPC_INIT_NO_CREATE);
 	if (err)
 		goto bail;
 
@@ -4852,7 +4888,7 @@ static int fastrpc_mmap_remove_pdr(struct fastrpc_file *fl)
 		err = -EBADR;
 		goto bail;
 	}
-	if (!me->channel[cid].spd[session].ispdup) {
+	if (atomic_read(&me->channel[cid].spd[session].ispdup) == 0) {
 		err = -ENOTCONN;
 		goto bail;
 	}
@@ -5268,6 +5304,14 @@ static int fastrpc_rpmsg_probe(struct rpmsg_device *rpdev)
 	mutex_lock(&gcinfo[cid].rpmsg_mutex);
 	gcinfo[cid].rpdev = rpdev;
 	mutex_unlock(&gcinfo[cid].rpmsg_mutex);
+
+	/*
+	 * Set atomic variable to 1 when rpmsg channel is up
+	 * and wake up all threads waiting for rpmsg channel
+	 */
+	atomic_set(&gcinfo[cid].is_rpmsg_ch_up, 1);
+	wake_up_interruptible(&gcinfo[cid].wait_for_rpmsg_ch);
+
 	ADSPRPC_INFO("opened rpmsg channel for %s\n",
 		gcinfo[cid].subsys);
 bail:
@@ -5297,6 +5341,13 @@ static void fastrpc_rpmsg_remove(struct rpmsg_device *rpdev)
 	mutex_lock(&gcinfo[cid].rpmsg_mutex);
 	gcinfo[cid].rpdev = NULL;
 	mutex_unlock(&gcinfo[cid].rpmsg_mutex);
+
+	/*
+	 * Set atomic variable to 0 when rpmsg channel is down and
+	 * make threads wait on is_rpmsg_ch_up
+	 */
+	atomic_set(&gcinfo[cid].is_rpmsg_ch_up, 0);
+
 	ADSPRPC_INFO("closed rpmsg channel of %s\n",
 		gcinfo[cid].subsys);
 bail:
@@ -5739,7 +5790,7 @@ static const struct file_operations debugfs_fops = {
 	.read = fastrpc_debugfs_read,
 };
 
-static int fastrpc_channel_open(struct fastrpc_file *fl)
+static int fastrpc_channel_open(struct fastrpc_file *fl, uint32_t flags)
 {
 	struct fastrpc_apps *me = &gfa;
 	int cid = -1, err = 0;
@@ -5752,6 +5803,10 @@ static int fastrpc_channel_open(struct fastrpc_file *fl)
 		return err;
 	}
 	cid = fl->cid;
+
+	err = fastrpc_wait_for_rpmsg_interrupt(cid, flags);
+	if (err)
+		goto bail;
 
 	mutex_lock(&me->channel[cid].rpmsg_mutex);
 	VERIFY(err, NULL != me->channel[cid].rpdev);
@@ -6113,8 +6168,15 @@ static int fastrpc_check_pd_status(struct fastrpc_file *fl, char *sloc_name)
 			err = -EBADR;
 			goto bail;
 		}
-		if (!me->channel[cid].spd[session].ispdup) {
-			err = -ENOTCONN;
+		if (!strcmp(fl->servloc_name,
+			AUDIO_PDR_SERVICE_LOCATION_CLIENT_NAME) || !strcmp(fl->servloc_name,
+			SENSORS_PDR_ADSP_SERVICE_LOCATION_CLIENT_NAME) ||
+			!strcmp(fl->servloc_name,
+			SENSORS_PDR_SLPI_SERVICE_LOCATION_CLIENT_NAME)) {
+			err = wait_event_interruptible(
+			me->channel[cid].spd[session].wait_for_pdup,
+			atomic_read(&me->channel[cid].spd[session].ispdup));
+			ADSPRPC_WARN("PDR interrupt %d received\n", err);
 			goto bail;
 		}
 	}
@@ -6601,7 +6663,7 @@ static int fastrpc_pdr_notifier_cb(struct notifier_block *pdrnb,
 			gcinfo[spd->cid].subsys);
 		mutex_lock(&me->channel[spd->cid].smd_mutex);
 		spd->pdrcount++;
-		spd->ispdup = 0;
+		atomic_set(&spd->ispdup, 0);
 		mutex_unlock(&me->channel[spd->cid].smd_mutex);
 		if (!strcmp(spd->servloc_name,
 				AUDIO_PDR_SERVICE_LOCATION_CLIENT_NAME))
@@ -6626,7 +6688,8 @@ static int fastrpc_pdr_notifier_cb(struct notifier_block *pdrnb,
 		pr_info("adsprpc: %s: %s (%s) is up on %s\n",
 			__func__, spd->spdname, spd->servloc_name,
 			gcinfo[spd->cid].subsys);
-		spd->ispdup = 1;
+		atomic_set(&spd->ispdup, 1);
+		wake_up_interruptible(&spd->wait_for_pdup);
 	}
 
 	return NOTIFY_DONE;
@@ -6695,7 +6758,7 @@ pdr_register:
 	if (curr_state == SERVREG_NOTIF_SERVICE_STATE_UP_V01) {
 		pr_info("adsprpc: %s: %s (%s) PDR service for %s is up\n",
 			__func__, spd->servloc_name, cb_pdname, subsys);
-		spd->ispdup = 1;
+		atomic_set(&spd->ispdup, 1);
 	} else if (curr_state == SERVREG_NOTIF_SERVICE_STATE_UNINIT_V01) {
 		pr_info("adsprpc: %s: %s (%s) PDR service for %s is uninitialized\n",
 			__func__, spd->servloc_name, cb_pdname, subsys);

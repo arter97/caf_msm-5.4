@@ -1399,6 +1399,9 @@ int qrtr_endpoint_register(struct qrtr_endpoint *ep, unsigned int net_id,
 
 	if (svc_arr && svc_arr->size) {
 		node->no_wake_svc.arr = kmalloc_array(svc_arr->size, sizeof(u32), GFP_KERNEL);
+		if (!node->no_wake_svc.arr)
+			return -ENOMEM;
+
 		memcpy((void *)node->no_wake_svc.arr, (void *)svc_arr->arr,
 		       svc_arr->size * sizeof(u32));
 		node->no_wake_svc.size = svc_arr->size;

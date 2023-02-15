@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-only WITH Linux-syscall-note */
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+ *
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _UAPI_MSM_IPA_H_
@@ -148,10 +150,11 @@
 #define IPA_IOCTL_DEL_MACSEC_MAPPING            93
 #define IPA_IOCTL_QUERY_CACHED_DRIVER_MSG       94
 #define IPA_IOCTL_SET_EXT_ROUTER_MODE           95
+#define IPA_IOCTL_ADD_DEL_DSCP_PCP_MAPPING      96
 /**
  * max size of the header to be inserted
  */
-#define IPA_HDR_MAX_SIZE 64
+#define IPA_HDR_MAX_SIZE 128
 
 /**
  * max size of the name of the resource (routing table, header)
@@ -212,6 +215,11 @@
  */
 
 #define IPA_MAX_IPPT_NUM_PORT_FLT 5
+
+/**
+ * Max number of DSCP entries in uc
+ */
+#define IPA_UC_MAX_DSCP_VAL 64
 
 /**
  * New feature flag for CV2X config.
@@ -518,9 +526,15 @@ enum ipa_client_type {
 
 	/* RESERVED PROD                        = 124, */
 	IPA_CLIENT_TPUT_CONS                    = 125,
+
+	IPA_CLIENT_Q6_DL_NLO_ETH_DATA_PROD      = 126,
+	/* RESERVED CONS			            = 127, */
+
+	IPA_CLIENT_APPS_WAN_ETH_PROD            = 128,
+	/* RESERVED CONS			            = 129, */
 };
 
-#define IPA_CLIENT_MAX (IPA_CLIENT_TPUT_CONS + 1)
+#define IPA_CLIENT_MAX (IPA_CLIENT_APPS_WAN_ETH_PROD + 1)
 
 #define IPA_CLIENT_WLAN2_PROD IPA_CLIENT_A5_WLAN_AMPDU_PROD
 #define IPA_CLIENT_Q6_DL_NLO_DATA_PROD IPA_CLIENT_Q6_DL_NLO_DATA_PROD
@@ -563,7 +577,8 @@ enum ipa_client_type {
 	((client) == IPA_CLIENT_APPS_LAN_PROD || \
 	(client) == IPA_CLIENT_APPS_WAN_PROD || \
 	(client) == IPA_CLIENT_APPS_WAN_LOW_LAT_PROD || \
-	(client) == IPA_CLIENT_APPS_WAN_LOW_LAT_DATA_PROD)
+	(client) == IPA_CLIENT_APPS_WAN_LOW_LAT_DATA_PROD || \
+	(client) == IPA_CLIENT_APPS_WAN_ETH_PROD)
 
 #define IPA_CLIENT_IS_USB_CONS(client) \
 	((client) == IPA_CLIENT_USB_CONS || \
@@ -612,7 +627,8 @@ enum ipa_client_type {
 	(client) == IPA_CLIENT_Q6_DL_NLO_LL_DATA_PROD || \
 	(client) == IPA_CLIENT_Q6_DL_NLO_DATA_PROD || \
 	(client) == IPA_CLIENT_Q6_CV2X_PROD || \
-	(client) == IPA_CLIENT_Q6_AUDIO_DMA_MHI_PROD)
+	(client) == IPA_CLIENT_Q6_AUDIO_DMA_MHI_PROD || \
+	(client) == IPA_CLIENT_Q6_DL_NLO_ETH_DATA_PROD)
 
 #define IPA_CLIENT_IS_Q6_NON_ZIP_CONS(client) \
 	((client) == IPA_CLIENT_Q6_LAN_CONS || \
@@ -951,7 +967,14 @@ enum ipa_ext_route_evt {
 #define IPA_SET_EXT_ROUTER_MODE_EVENT_MAX IPA_SET_EXT_ROUTER_MODE_EVENT_MAX
 };
 
-#define IPA_EVENT_MAX_NUM (IPA_SET_EXT_ROUTER_MODE_EVENT_MAX)
+enum ipa_eth_pdu_evt {
+	IPA_ENABLE_ETH_PDU_MODE_EVENT = IPA_SET_EXT_ROUTER_MODE_EVENT_MAX,
+	IPA_ENABLE_ETH_PDU_MODE_EVENT_MAX
+#define IPA_ENABLE_ETH_PDU_MODE_EVENT_MAX IPA_ENABLE_ETH_PDU_MODE_EVENT_MAX
+};
+
+
+#define IPA_EVENT_MAX_NUM (IPA_ENABLE_ETH_PDU_MODE_EVENT_MAX)
 #define IPA_EVENT_MAX ((int)IPA_EVENT_MAX_NUM)
 
 /**
@@ -1505,6 +1528,7 @@ enum ipa_hdr_l2_type {
  * IPA_HDR_PROC_SET_DSCP:
  * IPA_HDR_PROC_EoGRE_HEADER_ADD:       Add IPV[46] and GRE header
  * IPA_HDR_PROC_EoGRE_HEADER_REMOVE:    Remove IPV[46] and GRE header
+ * IPA_HDR_PROC_WWAN_TO_ETHII_EX:		To update PCP value for E2E traffic.
  */
 enum ipa_hdr_proc_type {
 	IPA_HDR_PROC_NONE,
@@ -1520,8 +1544,9 @@ enum ipa_hdr_proc_type {
 	IPA_HDR_PROC_SET_DSCP,
 	IPA_HDR_PROC_EoGRE_HEADER_ADD,
 	IPA_HDR_PROC_EoGRE_HEADER_REMOVE,
+	IPA_HDR_PROC_WWAN_TO_ETHII_EX,
 };
-#define IPA_HDR_PROC_MAX (IPA_HDR_PROC_EoGRE_HEADER_REMOVE + 1)
+#define IPA_HDR_PROC_MAX (IPA_HDR_PROC_WWAN_TO_ETHII_EX + 1)
 
 /**
  * struct ipa_rt_rule - attributes of a routing rule
@@ -1846,12 +1871,34 @@ struct ipa_eogre_hdr_proc_ctx_params {
  *	(in bytes) from the start of the input IP hdr
  * @output_ethhdr_negative_offset: Specifies where the ethernet hdr offset is
  *	(in bytes) from the end of the template hdr
+ * @output_dscp_pcp_update: Specifies if VLAN PCP needs to be updated based on
+ *                         DSCP<->PCP mapping table.
  * @reserved: for future use
  */
 struct ipa_eth_II_to_eth_II_ex_procparams {
 	uint32_t input_ethhdr_negative_offset : 8;
 	uint32_t output_ethhdr_negative_offset : 8;
-	uint32_t reserved : 16;
+	uint32_t output_dscp_pcp_update : 1;
+	uint32_t reserved : 15;
+};
+
+/**
+ * struct ipa_wwan_to_eth_II_ex_procparams -
+ * @input_ethhdr_negative_offset: Specifies where the ethernet hdr offset is
+ *	(in bytes) from the start of the input IP hdr
+ * @output_ethhdr_negative_offset: Specifies where the ethernet hdr offset is
+ *	(in bytes) from the end of the template hdr
+ * @output_dscp_pcp_update: Specifies if VLAN PCP needs to be updated based on
+ *                         DSCP<->PCP mapping table.
+ * @input_ethhdr_valid: Specifies whether input ethernet header is valid or not.
+ * @reserved: for future use
+ */
+struct ipa_wwan_to_eth_II_ex_procparams {
+	uint32_t input_ethhdr_negative_offset : 8;
+	uint32_t output_ethhdr_negative_offset : 8;
+	uint32_t output_dscp_pcp_update : 1;
+	uint32_t input_ethhdr_valid : 1;
+	uint32_t reserved : 14;
 };
 
 #define L2TP_USER_SPACE_SPECIFY_DST_PIPE
@@ -1864,6 +1911,7 @@ struct ipa_eth_II_to_eth_II_ex_procparams {
  * @l2tp_params: l2tp parameters
  * @eogre_params: eogre parameters
  * @generic_params: generic proc_ctx params
+ * @generic_params_v2: generic proc_ctx params for bridging
  * @proc_ctx_hdl: out parameter, handle to proc_ctx, valid when status is 0
  * @status:	out parameter, status of header add operation,
  *		0 for success,
@@ -1877,6 +1925,7 @@ struct ipa_hdr_proc_ctx_add {
 	struct ipa_l2tp_hdr_proc_ctx_params l2tp_params;
 	struct ipa_eogre_hdr_proc_ctx_params eogre_params;
 	struct ipa_eth_II_to_eth_II_ex_procparams generic_params;
+	struct ipa_wwan_to_eth_II_ex_procparams generic_params_v2;
 };
 
 #define IPA_L2TP_HDR_PROC_SUPPORT
@@ -2813,6 +2862,8 @@ struct ipa_ioc_vlan_iface_info {
 	uint16_t vlan_id;
 #define IPACM_RESTART_FUNCTIONALITY
 	uint8_t add_vlan_done;
+#define IPA_VLAN_PRIORITY
+	uint8_t priority;
 };
 
 /**
@@ -3641,6 +3692,18 @@ struct ipa_ioc_ext_router_info {
 };
 
 /**
+ * struct ipa_ioc_dscp_pcp_map_info - provide dscp pcp mapping info to add/delete
+ * @add: Boolean to indicate add or delete the mapping
+ * @dscp_pcp_map: DSCP <6 bits> and PCP <3 bits>.
+ *                Only 3 bits are valid(0-7) for PCP.
+ *                DSCP is used as index (0-63).
+ */
+struct ipa_ioc_dscp_pcp_map_info {
+	uint32_t add;
+	uint8_t dscp_pcp_map[IPA_UC_MAX_DSCP_VAL];
+};
+
+/**
  *   actual IOCTLs supported by IPA driver
  */
 #define IPA_IOC_ADD_HDR _IOWR(IPA_IOC_MAGIC, \
@@ -3961,6 +4024,9 @@ struct ipa_ioc_ext_router_info {
 				IPA_IOCTL_SET_EXT_ROUTER_MODE, \
 				struct ipa_ioc_ext_router_info)
 
+#define IPA_IOC_ADD_DEL_DSCP_PCP_MAPPING _IOWR(IPA_IOC_MAGIC, \
+				IPA_IOCTL_ADD_DEL_DSCP_PCP_MAPPING, \
+				struct ipa_ioc_dscp_pcp_map_info)
 
 /*
  * unique magic number of the Tethering bridge ioctls
