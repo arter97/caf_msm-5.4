@@ -431,7 +431,7 @@ static ssize_t bootkpi_writer(struct file *fp, struct kobject *obj,
 		return rc;
 
 	buf[rc] = '\0';
-	place_marker(buf);
+	update_marker(buf);
 	return rc;
 }
 
