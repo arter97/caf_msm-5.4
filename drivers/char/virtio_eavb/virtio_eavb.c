@@ -25,8 +25,6 @@
 
 /* Virtio ID of eavb : 0xC006 */
 #define VIRTIO_ID_EAVB		49158
-/* Virtio ID of eavb for Backward compatibility : 0x24 */
-#define VIRTIO_ID_EAVB_BC	36
 
 /* support feature */
 #define VIRTIO_EAVB_F_SHMEM	1
@@ -1674,7 +1672,6 @@ static void virtio_eavb_remove(struct virtio_device *vdev)
 
 const static struct virtio_device_id id_table[] = {
 	{ VIRTIO_ID_EAVB, VIRTIO_DEV_ANY_ID },
-	{ VIRTIO_ID_EAVB_BC, VIRTIO_DEV_ANY_ID },
 	{ 0 },
 };
 
