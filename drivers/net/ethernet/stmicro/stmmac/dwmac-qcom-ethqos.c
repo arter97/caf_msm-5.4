@@ -4500,7 +4500,7 @@ static int qcom_ethqos_suspend(struct device *dev)
 		return 0;
 	}
 
-	place_marker("M - Ethernet Suspend start");
+	update_marker("M - Ethernet Suspend start");
 
 	ethqos = get_stmmac_bsp_priv(dev);
 	if (!ethqos)
@@ -4554,7 +4554,7 @@ static int qcom_ethqos_suspend(struct device *dev)
 		ethqos_phy_power_off(ethqos);
 	}
 
-	place_marker("M - Ethernet Suspend End");
+	update_marker("M - Ethernet Suspend End");
 	priv->boot_kpi = false;
 	ETHQOSDBG(" ret = %d\n", ret);
 	return ret;
