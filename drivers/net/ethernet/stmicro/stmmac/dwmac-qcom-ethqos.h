@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2021, The Linux Foundation. All rights reserved.
  */
-/*Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.*/
+/*Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.*/
 #ifndef	_DWMAC_QCOM_ETHQOS_H
 #define	_DWMAC_QCOM_ETHQOS_H
 
@@ -225,6 +225,7 @@ do  {\
 #define EMAC_CHANNEL_0 0
 #define EMAC_CHANNEL_1 1
 
+#define TLMM_BASE_ADDRESS (tlmm_central_base_addr)
 #define TLMM_BASE_RGMII_CTRL1 (tlmm_rgmii_pull_ctl1_base)
 #define TLMM_BASE_RX_CTR (tlmm_rgmii_rx_ctr_base)
 
@@ -237,9 +238,16 @@ do  {\
 #define TLMM_RGMII_HDRV_PULL_CTL1_ADDRESS\
 	(((unsigned long *)\
 		(TLMM_BASE_RGMII_CTRL1)))
-
+#define TLMM_MDC_MDIO_HDRV_PULL_CTL_ADDRESS\
+	(((unsigned long *)\
+		(TLMM_BASE_ADDRESS + 0xA9000)))
 #define TLMM_RGMII_HDRV_PULL_CTL1_RGWR(data)\
 	iowrite32(data,	(void __iomem *)TLMM_RGMII_HDRV_PULL_CTL1_ADDRESS)
+
+#define TLMM_MDC_MDIO_HDRV_PULL_CTL_RGWR(data)\
+	iowrite32(data, (void __iomem *)TLMM_MDC_MDIO_HDRV_PULL_CTL_ADDRESS)
+#define TLMM_MDC_MDIO_HDRV_PULL_CTL_RGRD(data)\
+	((data) = ioread32((void __iomem *)TLMM_MDC_MDIO_HDRV_PULL_CTL_ADDRESS))
 
 #define TLMM_RGMII_HDRV_PULL_CTL1_RGRD(data)\
 	((data) = ioread32((void __iomem *)TLMM_RGMII_HDRV_PULL_CTL1_ADDRESS))
@@ -973,6 +981,7 @@ struct qcom_ethqos {
 
 	u32 emac_mem_base;
 	bool ipa_enabled;
+	bool susp_ipa_offload;
 
 	/* Mac recovery parameters */
 	int mac_err_cnt[MAC_ERR_CNT];
@@ -995,6 +1004,7 @@ struct qcom_ethqos {
 	/* SSR over ethernet parameters */
 	struct work_struct eth_ssr;
 	unsigned long action;
+	bool driver_load_fail;
 };
 
 struct pps_cfg {

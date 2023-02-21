@@ -275,6 +275,9 @@ enum rx_frame_status {
 	dma_own = 0x8,
 	rx_not_ls = 0x10,
 	ctxt_desc = 0x20,
+	rx_fs_only = 0x40,
+	rx_ls_only = 0x80,
+	rx_not_fsls = 0x100,
 };
 
 /* Tx status */
@@ -458,6 +461,8 @@ struct mac_device_info {
 	unsigned int pcs;
 	unsigned int pmt;
 	unsigned int ps;
+	unsigned int crc_strip_en;
+	unsigned int acs_strip_en;
 };
 
 struct stmmac_rx_routing {

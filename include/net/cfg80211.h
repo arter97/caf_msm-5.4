@@ -22,6 +22,9 @@
 #include <linux/net.h>
 #include <net/regulatory.h>
 
+/* Indicate support for reporting rx FCS in cfg80211 */
+#define CFG80211_RX_FCS_ERROR_REPORTING_SUPPORT 1
+
 /**
  * DOC: Introduction
  *
