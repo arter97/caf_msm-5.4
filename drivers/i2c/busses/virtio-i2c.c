@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -20,9 +21,10 @@
 #include <linux/virtio_config.h>
 #include <linux/i2c.h>
 
-/* Virtio ID of I2C */
-#define VIRTIO_ID_I2C	32
-
+/* Virtio ID of I2C : 0xC002 */
+#define VIRTIO_ID_I2C		49154
+/* Virtio ID of I2C for Backward compatibility : 0x20 */
+#define VIRTIO_ID_I2C_BC	32
 #define I2C_ADAPTER_NR	0x00
 
 #define I2C_VIRTIO_RD		0x01
@@ -323,6 +325,7 @@ static unsigned int features[] = {
 };
 static struct virtio_device_id id_table[] = {
 	{ VIRTIO_ID_I2C, VIRTIO_DEV_ANY_ID },
+	{ VIRTIO_ID_I2C_BC, VIRTIO_DEV_ANY_ID },
 	{ 0 },
 };
 

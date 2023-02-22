@@ -114,6 +114,7 @@ struct stmmac_rxq_cfg {
 	u8 pkt_route;
 	bool use_prio;
 	u32 prio;
+	bool use_rtc;
 };
 
 struct stmmac_txq_cfg {
@@ -189,6 +190,7 @@ struct plat_stmmacenet_data {
 	int has_gmac4;
 	bool has_sun8i;
 	bool tso_en;
+	bool force_thresh_dma_mode_q0_en;
 	int rss_en;
 	int mac_port_sel_speed;
 	bool en_tx_lpi_clockgating;
@@ -217,5 +219,7 @@ struct plat_stmmacenet_data {
 	void (*phy_irq_disable)(void *priv);
 	void (*rgmii_loopback_cfg)(void *priv, int loopback_en);
 	bool sph_disable;
+	unsigned int jumbo_mtu;
+	bool crc_strip_en;
 };
 #endif

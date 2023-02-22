@@ -22,7 +22,7 @@
 #include <linux/hashtable.h>
 #include <clocksource/arm_arch_timer.h>
 
-#define MARKER_STRING_WIDTH 40
+#define MARKER_STRING_WIDTH 50
 #define TS_WHOLE_NUM_WIDTH 8
 #define TS_PRECISION_WIDTH 3
 /* Field width to consider the spaces, 's' character and \n */
@@ -204,6 +204,7 @@ static unsigned int calculate_marker_charsum(const char *name)
 	return sum;
 }
 
+#ifndef CONFIG_DISABLE_UNIQUE_MARKERS
 static struct boot_marker *find_entry(const char *name)
 {
 	struct boot_marker *marker;
@@ -216,6 +217,7 @@ static struct boot_marker *find_entry(const char *name)
 
 	return NULL;
 }
+#endif
 
 static void _create_boot_marker(const char *name,
 		unsigned long long timer_value)
@@ -231,12 +233,14 @@ static void _create_boot_marker(const char *name,
 		return;
 	}
 
+#ifndef CONFIG_DISABLE_UNIQUE_MARKERS
+
 	marker = find_entry(name);
 	if (marker) {
 		marker->timer_value = timer_value;
 		return;
 	}
-
+#endif
 	pr_debug("%-*s%*llu.%0*llu seconds\n",
 			MARKER_STRING_WIDTH, name,
 			TS_WHOLE_NUM_WIDTH, timer_value/TIMER_KHZ,
@@ -336,6 +340,13 @@ void place_marker(const char *name)
 	_create_boot_marker((char *)name, msm_timer_get_sclk_ticks());
 }
 EXPORT_SYMBOL(place_marker);
+
+void update_marker(const char *name)
+{
+	destroy_marker(name);
+	place_marker(name);
+}
+EXPORT_SYMBOL(update_marker);
 
 static ssize_t bootkpi_reader(struct file *fp, struct kobject *obj,
 		struct bin_attribute *bin_attr, char *user_buffer, loff_t off,

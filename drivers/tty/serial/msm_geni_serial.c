@@ -4506,8 +4506,10 @@ static int msm_geni_serial_remove(struct platform_device *pdev)
 	struct uart_driver *drv =
 			(struct uart_driver *)port->uport.private_data;
 
-	if (!uart_console(&port->uport) || port->console_rx_wakeup)
+	if (!uart_console(&port->uport) || port->console_rx_wakeup) {
 		wakeup_source_unregister(port->geni_wake);
+		port->geni_wake = NULL;
+	}
 	if (port->pm_auto_suspend_disable)
 		pm_runtime_allow(&pdev->dev);
 	uart_remove_one_port(drv, &port->uport);
@@ -4697,6 +4699,7 @@ static int msm_geni_serial_sys_suspend(struct device *dev)
 			mutex_unlock(&tty_port->mutex);
 			return -EBUSY;
 		}
+		geni_se_ssc_clk_enable(&port->serial_rsc, false);
 		IPC_LOG_MSG(port->ipc_log_pwr, "%s\n", __func__);
 		mutex_unlock(&tty_port->mutex);
 	}
@@ -4727,6 +4730,7 @@ static int msm_geni_serial_sys_hib_suspend(struct device *dev)
 			mutex_unlock(&tty_port->mutex);
 			return -EBUSY;
 		}
+		geni_se_ssc_clk_enable(&port->serial_rsc, false);
 		IPC_LOG_MSG(port->ipc_log_pwr, "%s\n", __func__);
 		mutex_unlock(&tty_port->mutex);
 	}
@@ -4756,6 +4760,7 @@ static int msm_geni_serial_sys_hib_resume(struct device *dev)
 		 * open the port during hibernation.
 		 */
 		port->port_setup = false;
+		geni_se_ssc_clk_enable(&port->serial_rsc, true);
 	}
 	return 0;
 }
@@ -4784,6 +4789,7 @@ static int msm_geni_serial_sys_resume(struct device *dev)
 			disable_irq(port->wakeup_irq);
 		uart_resume_port((struct uart_driver *)uport->private_data,
 									uport);
+		geni_se_ssc_clk_enable(&port->serial_rsc, true);
 	}
 	return 0;
 }

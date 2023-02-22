@@ -1,14 +1,19 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include "hab.h"
 #include "hab_qvm.h"
 
 /*
- * this is for platform does not provide probe features. the size should match
- * hab device side (all mmids)
+ * 1. The entry values are only for platform without probe features. For those
+ * platforms with probe feature, correct address and irq will be updated in it.
+ * 2. Length of the array decides the maximum number of successful probe attempts.
+ * Excessive probe attempts will fail and return -ENODEV.
+ * 3. The number of vdev-shmem devices for hab in linux-lv/la.config should be
+ * the same as the entry number of the below array to successfully probe and only
+ * probe those vdev-shmem devices for HAB if other vdev-shmem users exist.
  */
 static struct shmem_irq_config pchan_factory_settings[] = {
 	{0x1b000000, 7},
@@ -37,8 +42,6 @@ static struct shmem_irq_config pchan_factory_settings[] = {
 	{0x1b017000, 30},
 	{0x1b018000, 31},
 	{0x1b019000, 32},
-	{0x1b01a000, 33},
-	{0x1b01b000, 34},
 };
 
 struct qvm_plugin_info qvm_priv_info = {

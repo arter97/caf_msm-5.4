@@ -53,6 +53,7 @@ enum gsi_ep_op {
 	GSI_EP_OP_CHECK_FOR_SUSPEND,
 	GSI_EP_OP_DISABLE,
 	GSI_DYNAMIC_EP_INTR_CALC,
+	GSI_SW_EP_PATH,
 };
 
 /*
@@ -134,6 +135,7 @@ bool msm_dwc3_reset_ep_after_lpm(struct usb_gadget *gadget);
 int msm_dwc3_reset_dbm_ep(struct usb_ep *ep);
 int dwc3_msm_release_ss_lane(struct device *dev, bool usb_dp_concurrent_mode);
 bool usb_get_remote_wakeup_status(struct usb_gadget *gadget);
+bool gsi_normal_ep_support(struct usb_gadget *gadget);
 #else
 static inline struct usb_ep *usb_ep_autoconfig_by_name(
 		struct usb_gadget *gadget, struct usb_endpoint_descriptor *desc,

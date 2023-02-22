@@ -585,6 +585,7 @@ static const struct dev_pm_ops qpnp_tm_pm_ops = {
 	.restore = qpnp_tm_restore,
 	.suspend = qpnp_tm_suspend,
 	.resume = qpnp_tm_resume,
+	.thaw = qpnp_tm_restore,
 };
 
 static const struct of_device_id qpnp_tm_match_table[] = {
