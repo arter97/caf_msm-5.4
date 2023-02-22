@@ -223,16 +223,20 @@ void fastrpc_mmap_add(struct fastrpc_file *fl, struct fastrpc_mmap *map)
 	}
 }
 
-int fastrpc_mmap_remove(struct fastrpc_file *fl, uintptr_t va,
-		size_t len, struct fastrpc_mmap **ppmap)
+int fastrpc_mmap_remove(struct fastrpc_file *fl, int fd,
+		uintptr_t va, size_t len, struct fastrpc_mmap **ppmap)
 {
 	struct fastrpc_mmap *match = NULL, *map;
 	struct hlist_node *n;
 
 	hlist_for_each_entry_safe(map, n, &fl->maps, hn) {
-		if (map->raddr == va &&
-			map->raddr + map->len == va + len &&
-			map->refs == 1) {
+		if ((fd < 0 || map->fd == fd) && map->raddr == va &&
+				map->raddr + map->len == va + len &&
+				(map->refs == 1 ||
+				 (map->refs == 2 &&
+				  map->attr & FASTRPC_ATTR_KEEP_MAP))) {
+			if (map->attr & FASTRPC_ATTR_KEEP_MAP)
+				map->refs--;
 			match = map;
 			hlist_del_init(&map->hn);
 			break;
@@ -404,8 +408,11 @@ int fastrpc_mmap_create(struct fastrpc_file *fl, int fd,
 			goto bail;
 		}
 
-		if (!(map->dma_flags & ION_FLAG_CACHED))
-			map->attach->dma_map_attrs |= DMA_ATTR_SKIP_CPU_SYNC;
+		/*
+		 * no need to sync cache even for cached buffers, depending on
+		 * IO coherency
+		 */
+		map->attach->dma_map_attrs |= DMA_ATTR_SKIP_CPU_SYNC;
 		VERIFY(err, !IS_ERR_OR_NULL(map->table =
 					dma_buf_map_attachment(map->attach,
 					DMA_BIDIRECTIONAL)));

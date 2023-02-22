@@ -210,6 +210,10 @@ static int stmmac_mtl_setup(struct platform_device *pdev,
 		else
 			plat->rx_queues_cfg[queue].pkt_route = 0x0;
 
+		/* Multicast and broadcast routing */
+		if (of_property_read_bool(q_node, "snps,route-multi-broad"))
+			plat->rx_queues_cfg[queue].mbcast_route = true;
+
 		queue++;
 	}
 #ifndef CONFIG_DWMAC_QCOM_ETHQOS
@@ -422,6 +426,8 @@ stmmac_probe_config_dt(struct platform_device *pdev, const char **mac)
 	plat->interface = stmmac_of_get_mac_mode(np);
 	if (plat->interface < 0)
 		plat->interface = plat->phy_interface;
+
+	plat->crc_strip_en = of_property_read_bool(np, "snps,crc_strip");
 
 	/* Some wrapper drivers still rely on phy_node. Let's save it while
 	 * they are not converted to phylink. */

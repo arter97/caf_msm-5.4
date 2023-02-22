@@ -28,6 +28,7 @@
 #endif
 #include <uapi/linux/mount.h>
 #include <linux/dirent.h>
+
 #include "do_mounts.h"
 #include "prefetch.h"
 
@@ -390,7 +391,7 @@ static void __init get_fs_names(char *page)
 static int __init do_mount_root(char *name, char *fs, int flags, void *data)
 {
 	struct super_block *s;
-	int err;
+	int err = 0;
 
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
 	place_marker("M - DRIVER F/S Init");

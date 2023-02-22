@@ -108,7 +108,7 @@ int encrypt_page(void *buf)
 	ret = crypto_aead_setauthsize(tfm, AUTH_SIZE);
 	iv_size = crypto_aead_ivsize(tfm);
 	if (iv_size && first_encrypt)
-		memset(params->iv, 0xff, iv_size);
+		get_random_bytes(params->iv, iv_size);
 
 	ret = crypto_aead_setkey(tfm, key, AES256_KEY_SIZE);
 	if (ret) {

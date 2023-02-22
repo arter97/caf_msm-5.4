@@ -439,7 +439,7 @@ static int ctrl_cmd_del_client(struct sockaddr_qrtr *from,
 
 	/* Don't accept spoofed messages */
 	if (from->sq_node != node_id)
-		return -EINVAL;
+		return -EACCES;
 
 	/* Local DEL_CLIENT messages comes from the port being closed */
 	if (from->sq_node == qrtr_ns.local_node && from->sq_port != port)
@@ -549,7 +549,7 @@ static int ctrl_cmd_del_server(struct sockaddr_qrtr *from,
 
 	/* Don't accept spoofed messages */
 	if (from->sq_node != node_id)
-		return -EINVAL;
+		return -EACCES;
 
 	/* Local servers may only unregister themselves */
 	if (from->sq_node == qrtr_ns.local_node && from->sq_port != port)
