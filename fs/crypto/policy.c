@@ -29,6 +29,9 @@ bool fscrypt_policies_equal(const union fscrypt_policy *policy1,
 	if (policy1->version != policy2->version)
 		return false;
 
+#ifndef CONFIG_Q2S_OTA
+	return !memcmp(policy1, policy2, fscrypt_policy_size(policy1));
+#else
 	if (fscrypt_policy_contents_mode(policy1) == FSCRYPT_MODE_PRIVATE)
 		return(!memcmp(policy1->v1.master_key_descriptor,
 		       policy2->v1.master_key_descriptor,
@@ -43,6 +46,7 @@ bool fscrypt_policies_equal(const union fscrypt_policy *policy1,
 			~FSCRYPT_POLICY_FLAG_IV_INO_LBLK_32));
 	else
 		return !memcmp(policy1, policy2, fscrypt_policy_size(policy1));
+#endif
 }
 
 static bool fscrypt_valid_enc_modes(u32 contents_mode, u32 filenames_mode)
@@ -148,6 +152,12 @@ static bool fscrypt_supported_v1_policy(const struct fscrypt_policy_v1 *policy,
 		return false;
 	}
 
+#ifndef CONFIG_Q2S_OTA
+	if (policy->flags & ~(FSCRYPT_POLICY_FLAGS_PAD_MASK |
+                             FSCRYPT_POLICY_FLAG_DIRECT_KEY)) {
+		return false;
+	}
+#else
 	if (policy->flags & ~(FSCRYPT_POLICY_FLAGS_PAD_MASK |
 			      FSCRYPT_POLICY_FLAG_DIRECT_KEY |
 			      FSCRYPT_POLICY_FLAG_IV_INO_LBLK_32)) {
@@ -155,7 +165,7 @@ static bool fscrypt_supported_v1_policy(const struct fscrypt_policy_v1 *policy,
 			     policy->flags);
 		return false;
 	}
-
+#endif
 	if ((policy->flags & FSCRYPT_POLICY_FLAG_DIRECT_KEY) &&
 	    !supported_direct_key_modes(inode, policy->contents_encryption_mode,
 					policy->filenames_encryption_mode))
@@ -646,6 +656,7 @@ int fscrypt_has_permitted_context(struct inode *parent, struct inode *child)
 }
 EXPORT_SYMBOL(fscrypt_has_permitted_context);
 
+#ifdef CONFIG_Q2S_OTA
 #define SDHCI "sdhci"
 
 static int fscrypt_update_context(union fscrypt_context *ctx)
@@ -659,7 +670,7 @@ static int fscrypt_update_context(union fscrypt_context *ctx)
 	}
 	return -EINVAL;
 }
-
+#endif
 /**
  * fscrypt_inherit_context() - Sets a child context from its parent
  * @parent: Parent inode from which the context is inherited.
@@ -686,12 +697,14 @@ int fscrypt_inherit_context(struct inode *parent, struct inode *child,
 		return -ENOKEY;
 
 	ctxsize = fscrypt_new_context_from_policy(&ctx, &ci->ci_policy);
+#ifdef CONFIG_Q2S_OTA
 	if (fscrypt_policy_contents_mode(&ci->ci_policy) ==
 	    FSCRYPT_MODE_PRIVATE) {
 		res = fscrypt_update_context(&ctx);
 		if (res)
 			return res;
 	}
+#endif
 	BUILD_BUG_ON(sizeof(ctx) != FSCRYPT_SET_CONTEXT_MAX_SIZE);
 	res = parent->i_sb->s_cop->set_context(child, &ctx, ctxsize, fs_data);
 	if (res)

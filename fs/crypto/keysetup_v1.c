@@ -25,9 +25,11 @@
 #include <keys/user-type.h>
 #include <linux/hashtable.h>
 #include <linux/scatterlist.h>
+#ifdef CONFIG_Q2S_OTA
 #include <linux/bio-crypt-ctx.h>
 #include <linux/siphash.h>
 #include <crypto/sha.h>
+#endif
 
 #include "fscrypt_private.h"
 
@@ -35,7 +37,9 @@
 static DEFINE_HASHTABLE(fscrypt_direct_keys, 6); /* 6 bits = 64 buckets */
 static DEFINE_SPINLOCK(fscrypt_direct_keys_lock);
 
+#ifdef CONFIG_Q2S_OTA
 static struct crypto_shash *essiv_hash_tfm;
+#endif
 
 /*
  * v1 key derivation function.  This generates the derived key by encrypting the
@@ -88,6 +92,7 @@ out:
 	return res;
 }
 
+#ifdef CONFIG_Q2S_OTA
 static int fscrypt_do_sha256(const u8 *src, int srclen, u8 *dst)
 {
 	struct crypto_shash *tfm = READ_ONCE(essiv_hash_tfm);
@@ -117,7 +122,7 @@ static int fscrypt_do_sha256(const u8 *src, int srclen, u8 *dst)
 		return crypto_shash_digest(desc, src, srclen, dst);
 	}
 }
-
+#endif
 /*
  * Search the current task's subscribed keyrings for a "logon" key with
  * description prefix:descriptor, and if found acquire a read lock on it and
@@ -303,15 +308,27 @@ static int setup_v1_file_key_derived(struct fscrypt_info *ci,
 {
 	u8 *derived_key;
 	int err;
+#ifdef CONFIG_Q2S_OTA
 	int i;
 	union {
 		u8 bytes[FSCRYPT_MAX_HW_WRAPPED_KEY_SIZE];
 		u32 words[FSCRYPT_MAX_HW_WRAPPED_KEY_SIZE / sizeof(u32)];
 	} key_new;
-
 	memset(key_new.bytes, 0, FSCRYPT_MAX_HW_WRAPPED_KEY_SIZE);
-
+#endif
 	/*Support legacy ice based content encryption mode*/
+#ifndef CONFIG_Q2S_OTA
+	if ((fscrypt_policy_contents_mode(&ci->ci_policy) ==
+	    FSCRYPT_MODE_PRIVATE) &&
+	    fscrypt_using_inline_encryption(ci)) {
+		err = fscrypt_prepare_inline_crypt_key(&ci->ci_key,
+			raw_master_key,
+			ci->ci_mode->keysize,
+			false,
+			ci);
+		return err;
+	}
+#else
 	if ((fscrypt_policy_contents_mode(&ci->ci_policy) ==
 					  FSCRYPT_MODE_PRIVATE) &&
 					  fscrypt_using_inline_encryption(ci)) {
@@ -339,9 +356,9 @@ static int setup_v1_file_key_derived(struct fscrypt_info *ci,
 			__cpu_to_be32s(&key_new.words[i]);
 
 		err = setup_v1_file_key_direct(ci, key_new.bytes);
-
 		return err;
 	}
+#endif
 	/*
 	 * This cannot be a stack buffer because it will be passed to the
 	 * scatterlist crypto API during derive_key_aes().

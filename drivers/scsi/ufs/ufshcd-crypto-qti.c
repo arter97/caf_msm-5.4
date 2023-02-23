@@ -84,14 +84,16 @@ int ufshcd_crypto_qti_prep_lrbp_crypto(struct ufs_hba *hba,
 
 	lrbp->crypto_enable = true;
 	lrbp->crypto_key_slot = bc->bc_keyslot;
-
+#ifndef CONFIG_Q2S_OTA
+	lrbp->data_unit_num = bc->bc_dun[0];
+#else
 	if (bc->is_ext4) {
-	                lrbp->data_unit_num = (u64)cmd->request->bio->bi_iter.bi_sector;
-	                lrbp->data_unit_num >>= 3;
+		lrbp->data_unit_num = (u64)cmd->request->bio->bi_iter.bi_sector;
+		lrbp->data_unit_num >>= 3;
 	} else {
-	   lrbp->data_unit_num = bc->bc_dun[0];
+		lrbp->data_unit_num = bc->bc_dun[0];
 	}
-
+#endif
 	return 0;
 }
 #endif	//IS_ENABLED(CONFIG_QTI_CRYPTO_FDE)
@@ -321,9 +323,16 @@ static int ufshcd_hba_init_crypto_qti_spec(struct ufs_hba *hba,
 		}
 	}
 #endif
+
+#ifndef CONFIG_Q2S_OTA
 	hba->ksm = keyslot_manager_create(hba->dev, num_slots,
-				ksm_ops, BLK_CRYPTO_FEATURE_STANDARD_KEYS | BLK_CRYPTO_FEATURE_WRAPPED_KEYS,
-				crypto_modes_supported, hba);
+			ksm_ops, BLK_CRYPTO_FEATURE_WRAPPED_KEYS,
+			crypto_modes_supported, hba);
+#else
+	hba->ksm = keyslot_manager_create(hba->dev, num_slots,
+			ksm_ops, BLK_CRYPTO_FEATURE_STANDARD_KEYS | BLK_CRYPTO_FEATURE_WRAPPED_KEYS,
+			crypto_modes_supported, hba);
+#endif
 
 	if (!hba->ksm) {
 		err = -ENOMEM;
