@@ -28,6 +28,12 @@
 #include <uapi/linux/mount.h>
 #include "base.h"
 
+#ifdef CONFIG_DEVTMPFS_SAFE
+#define DEVTMPFS_MFLAGS       (MS_SILENT | MS_NOEXEC | MS_NOSUID)
+#else
+#define DEVTMPFS_MFLAGS       (MS_SILENT)
+#endif
+
 static struct task_struct *thread;
 
 #if defined CONFIG_DEVTMPFS_MOUNT
@@ -369,7 +375,7 @@ int devtmpfs_mount(const char *mntdir)
 	if (!thread)
 		return 0;
 
-	err = ksys_mount("devtmpfs", mntdir, "devtmpfs", MS_SILENT, NULL);
+	err = ksys_mount("devtmpfs", mntdir, "devtmpfs", DEVTMPFS_MFLAGS, NULL);
 	if (err)
 		printk(KERN_INFO "devtmpfs: error mounting %i\n", err);
 	else
@@ -394,7 +400,7 @@ static int devtmpfsd(void *p)
 	*err = ksys_unshare(CLONE_NEWNS);
 	if (*err)
 		goto out;
-	*err = ksys_mount("devtmpfs", "/", "devtmpfs", MS_SILENT, NULL);
+	*err = ksys_mount("devtmpfs", "/", "devtmpfs", DEVTMPFS_MFLAGS, NULL);
 	if (*err)
 		goto out;
 	ksys_chdir("/.."); /* will traverse into overmounted root */
