@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/bitops.h>
@@ -1457,14 +1458,6 @@ static int adc5_probe(struct platform_device *pdev)
 	return devm_iio_device_register(dev, indio_dev);
 }
 
-static int adc5_exit(struct platform_device *pdev)
-{
-	struct adc5_chip *adc = platform_get_drvdata(pdev);
-
-	mutex_destroy(&adc->lock);
-	return 0;
-}
-
 static int adc_restore(struct device *dev)
 {
 	int ret = 0;
@@ -1500,7 +1493,6 @@ static struct platform_driver adc5_driver = {
 		.pm = &adc_pm_ops,
 	},
 	.probe = adc5_probe,
-	.remove = adc5_exit,
 };
 module_platform_driver(adc5_driver);
 
