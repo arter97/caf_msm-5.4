@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/completion.h>
@@ -651,7 +652,7 @@ static void start_usb_peripheral_work(struct work_struct *w)
 	}
 }
 
-static void start_usb_dp(struct usbpd *pd)
+static void start_usb_dp(struct usbpd *pd, bool ss)
 {
 	enum plug_orientation cc = usbpd_get_plug_orientation(pd);
 	union extcon_property_value val;
@@ -662,9 +663,10 @@ static void start_usb_dp(struct usbpd *pd)
 	val.intval = (cc == ORIENTATION_CC2);
 	extcon_set_property(pd->extcon, EXTCON_USB_HOST, EXTCON_PROP_USB_TYPEC_POLARITY, val);
 
-	val.intval = pd->peer_usb_comm  ? 1 : 0;
+	val.intval = ss  ? 1 : 0;
 	extcon_set_property(pd->extcon, EXTCON_USB_HOST, EXTCON_PROP_USB_SS, val);
 
+	extcon_set_state(pd->extcon, EXTCON_DISP_DP, false);
 	extcon_set_state_sync(pd->extcon, EXTCON_DISP_DP, true);
 }
 
@@ -704,7 +706,7 @@ static int usbpd_release_ss_lane(struct usbpd *pd,
 
 	pd->ss_lane_svid = hdlr->svid;
 
-	start_usb_dp(pd);
+	start_usb_dp(pd, false);
 
 err_exit:
 	return ret;
@@ -1614,7 +1616,7 @@ static void handle_vdm_rx(struct usbpd *pd, struct rx_msg *rx_msg)
 		 * it is not good, as from usb view, for two lanes display,
 		 * there is extra operation except phy.
 		 */
-		start_usb_dp(pd);
+		start_usb_dp(pd, true);
 	}
 
 	/* if it's a supported SVID, pass the message to the handler */

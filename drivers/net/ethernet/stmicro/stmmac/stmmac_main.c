@@ -2704,6 +2704,10 @@ static void stmmac_mac_config_rx_queues_routing(struct stmmac_priv *priv)
 
 		packet = priv->plat->rx_queues_cfg[queue].pkt_route;
 		stmmac_rx_queue_routing(priv, priv->hw, packet, queue);
+
+		/* Configure Multicast and broadcast additionally if enabled */
+		if (priv->plat->rx_queues_cfg[queue].mbcast_route)
+			stmmac_rx_queue_routing(priv, priv->hw, PACKET_MCBCQ, queue);
 	}
 }
 
@@ -2931,6 +2935,12 @@ void stmmac_mac2mac_adjust_link(int speed, struct stmmac_priv *priv)
 	}
 
 	stmmac_hw_fix_mac_speed(priv);
+	/* Flow Control operation */
+	if (priv->flow_ctrl) {
+		pr_info("%s enable Flow ctrl\n", __func__);
+		stmmac_mac_flow_ctrl(priv, 1);
+	}
+
 	writel_relaxed(ctrl, priv->ioaddr + MAC_CTRL_REG);
 }
 

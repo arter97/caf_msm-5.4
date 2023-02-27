@@ -1754,7 +1754,8 @@ static void qcom_ethqos_phy_resume_clks(struct qcom_ethqos *ethqos)
 
 	ETHQOSINFO("Enter\n");
 
-	if (ethqos->phy_wol_supported) {
+	if (ethqos->phy_wol_supported ||
+	    ethqos->current_phy_mode == DISABLE_PHY_SUSPEND_ENABLE_RESUME) {
 		if (priv->plat->stmmac_clk)
 			clk_prepare_enable(priv->plat->stmmac_clk);
 
@@ -2734,6 +2735,9 @@ static ssize_t loopback_handling_config(struct file *file, const char __user *us
 		ETHQOSINFO("Not supported with Mac2Mac enabled\n");
 		return -EOPNOTSUPP;
 	}
+
+	if (!priv->dev->phydev)
+		return -EOPNOTSUPP;
 
 	if ((config == ENABLE_PHY_LOOPBACK  || priv->current_loopback ==
 			ENABLE_PHY_LOOPBACK) &&
@@ -4497,7 +4501,7 @@ static int qcom_ethqos_suspend(struct device *dev)
 		return 0;
 	}
 
-	place_marker("M - Ethernet Suspend start");
+	update_marker("M - Ethernet Suspend start");
 
 	ethqos = get_stmmac_bsp_priv(dev);
 	if (!ethqos)
@@ -4551,7 +4555,7 @@ static int qcom_ethqos_suspend(struct device *dev)
 		ethqos_phy_power_off(ethqos);
 	}
 
-	place_marker("M - Ethernet Suspend End");
+	update_marker("M - Ethernet Suspend End");
 	priv->boot_kpi = false;
 	ETHQOSDBG(" ret = %d\n", ret);
 	return ret;
@@ -4899,7 +4903,7 @@ static void __exit qcom_ethqos_exit_module(void)
  * to do something with the code that the module provides.
  */
 
-module_init(qcom_ethqos_init_module)
+arch_initcall(qcom_ethqos_init_module)
 
 /*!
  * \brief Macro to register the driver un-registration function.

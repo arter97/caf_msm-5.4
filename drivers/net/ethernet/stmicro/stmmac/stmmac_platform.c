@@ -210,6 +210,10 @@ static int stmmac_mtl_setup(struct platform_device *pdev,
 		else
 			plat->rx_queues_cfg[queue].pkt_route = 0x0;
 
+		/* Multicast and broadcast routing */
+		if (of_property_read_bool(q_node, "snps,route-multi-broad"))
+			plat->rx_queues_cfg[queue].mbcast_route = true;
+
 		queue++;
 	}
 #ifndef CONFIG_DWMAC_QCOM_ETHQOS
