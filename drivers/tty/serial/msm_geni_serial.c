@@ -3124,12 +3124,11 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 		disable_irq(uport->irq);
 	else {
 		msm_geni_serial_power_on(uport);
-		ret = wait_for_transfers_inflight(uport);
-		if (ret)
-			IPC_LOG_MSG(msm_port->ipc_log_misc,
-				"%s: wait_for_transfer_inflight return ret:%d\n",
-				__func__, ret);
-
+		if (msm_port->wakeup_irq > 0) {
+			irq_set_irq_wake(msm_port->wakeup_irq, 0);
+			disable_irq(msm_port->wakeup_irq);
+			free_irq(msm_port->wakeup_irq, uport);
+		}
 		if (msm_port->xfer_mode == GSI_DMA) {
 			/* From the framework every time the stop
 			 * rx sequncer will be called before the closing
@@ -3222,11 +3221,6 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 		msm_port->current_termios = NULL;
 	}
 
-	if (msm_port->wakeup_irq > 0) {
-		irq_set_irq_wake(msm_port->wakeup_irq, 0);
-		disable_irq(msm_port->wakeup_irq);
-		free_irq(msm_port->wakeup_irq, uport);
-	}
 	IPC_LOG_MSG(msm_port->ipc_log_misc, "%s: End\n", __func__);
 }
 
