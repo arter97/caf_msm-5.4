@@ -264,7 +264,6 @@ static void virtio_icc_remove(struct virtio_device *vdev)
 
 static const struct virtio_device_id id_table[] = {
 	{ VIRTIO_ID_INTERCONNECT, VIRTIO_DEV_ANY_ID },
-	{ VIRTIO_ID_INTERCONNECT_BC, VIRTIO_DEV_ANY_ID },
 	{ 0 },
 };
 
