@@ -1082,6 +1082,23 @@ static int ethqos_configure(struct qcom_ethqos *ethqos)
 		if (!retry)
 			dev_err(&ethqos->pdev->dev,
 				"Timeout while waiting for DLL lock\n");
+
+		/* Disable CK_OUT_EN */
+		rgmii_updatel(ethqos, SDCC_DLL_CONFIG_CK_OUT_EN,
+			      0,
+			      SDCC_HC_REG_DLL_CONFIG);
+
+		/* Wait for CK_OUT_EN clear */
+		do {
+			val = rgmii_readl(ethqos, SDCC_HC_REG_DLL_CONFIG);
+			val &= SDCC_DLL_CONFIG_CK_OUT_EN;
+			if (!val)
+				break;
+			usleep_range(1000, 1500);
+			retry--;
+		} while (retry > 0);
+		if (!retry)
+			dev_err(&ethqos->pdev->dev, "Clear CK_OUT_EN timedout\n");
 	}
 	return 0;
 }
