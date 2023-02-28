@@ -1201,6 +1201,32 @@ out:
 }
 
 /**
+ *pil_info_store() - store subsys name in imem
+ * @desc: descriptor as input param
+ *
+ * this function is called from hibernation/deepsleep exit routine
+ */
+static void pil_info_store(struct pil_desc *desc)
+{
+	struct pil_priv *priv = desc->priv;
+	void __iomem *addr;
+	char buf[sizeof(priv->info->name)];
+
+	if (!priv || (priv->id < 0)) {
+		pr_err("Invalid pil descriptior\n");
+		return;
+	}
+
+	if (pil_info_base) {
+		addr = pil_info_base + sizeof(struct pil_image_info) * priv->id;
+		priv->info = (struct pil_image_info __iomem *)addr;
+
+		strlcpy(buf, desc->name, sizeof(buf));
+		__iowrite32_copy(priv->info->name, buf, sizeof(buf) / 4);
+	}
+}
+
+/**
  * pil_boot() - Load a peripheral image into memory and boot it
  * @desc: descriptor from pil_desc_init()
  *
@@ -1218,6 +1244,7 @@ int pil_boot(struct pil_desc *desc)
 	bool mem_protect = false;
 	bool hyp_assign = false;
 
+	pil_info_store(desc);
 	ret = pil_notify_aop(desc, "on");
 	if (ret < 0) {
 		pil_err(desc, "Failed to send ON message to AOP rc:%d\n", ret);
@@ -1525,11 +1552,9 @@ static int collect_aux_minidump_ids(struct pil_desc *desc)
 int pil_desc_init(struct pil_desc *desc)
 {
 	struct pil_priv *priv;
-	void __iomem *addr;
 	void *ss_toc_addr;
 	int ret;
 	size_t size;
-	char buf[sizeof(priv->info->name)];
 	struct device_node *ofnode = desc->dev->of_node;
 
 	if (WARN(desc->ops->proxy_unvote && !desc->ops->proxy_vote,
@@ -1546,13 +1571,6 @@ int pil_desc_init(struct pil_desc *desc)
 	if (priv->id < 0)
 		goto err;
 
-	if (pil_info_base) {
-		addr = pil_info_base + sizeof(struct pil_image_info) * priv->id;
-		priv->info = (struct pil_image_info __iomem *)addr;
-
-		strlcpy(buf, desc->name, sizeof(buf));
-		__iowrite32_copy(priv->info->name, buf, sizeof(buf) / 4);
-	}
 	if (of_property_read_u32(ofnode, "qcom,minidump-id",
 		&desc->minidump_id))
 		pr_warn("minidump-id not found for %s\n", desc->name);
