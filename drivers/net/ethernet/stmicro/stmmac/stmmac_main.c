@@ -2887,6 +2887,12 @@ void stmmac_mac2mac_adjust_link(int speed, struct stmmac_priv *priv)
 	}
 
 	stmmac_hw_fix_mac_speed(priv);
+	/* Flow Control operation */
+	if (priv->flow_ctrl) {
+		pr_info("%s enable Flow ctrl\n", __func__);
+		stmmac_mac_flow_ctrl(priv, 1);
+	}
+
 	writel_relaxed(ctrl, priv->ioaddr + MAC_CTRL_REG);
 }
 

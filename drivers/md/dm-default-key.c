@@ -135,11 +135,10 @@ static int default_key_ctr_optional(struct dm_target *ti,
 	return 0;
 }
 
-static void default_key_adjust_sector_size_and_iv(char **argv,
-						  struct dm_target *ti,
-						  struct default_key_c **dkc,
-						  u8 *raw, u32 size,
-						  bool is_legacy)
+void default_key_adjust_sector_size_and_iv(char **argv, struct dm_target *ti,
+					   struct default_key_c **dkc, u8 *raw,
+					   u32 size,
+					   bool is_legacy)
 {
 	struct dm_dev *dev;
 	int i;
@@ -158,20 +157,15 @@ static void default_key_adjust_sector_size_and_iv(char **argv,
 
 		memcpy(raw, key_new.bytes, size);
 
-		if (ti->len & (((*dkc)->sector_size >> SECTOR_SHIFT) - 1))
+		if ((ti->len & (((*dkc)->sector_size >> SECTOR_SHIFT) - 1)) ||
+		    ((*dkc)->dev->bdev->bd_disk->disk_name[0] &&
+		     !strcmp((*dkc)->dev->bdev->bd_disk->disk_name, "mmcblk0")))
 			(*dkc)->sector_size = SECTOR_SIZE;
 
 		if (dev->bdev->bd_part)
 			(*dkc)->iv_offset += dev->bdev->bd_part->start_sect;
 	}
 
-	if (!strcmp(argv[0], "AES-256-XTS")) {
-		if (ti->len & (((*dkc)->sector_size >> SECTOR_SHIFT) - 1))
-			(*dkc)->sector_size = SECTOR_SIZE;
-
-		if (dev->bdev->bd_part)
-			(*dkc)->iv_offset += dev->bdev->bd_part->start_sect;
-	}
 }
 
 /*
