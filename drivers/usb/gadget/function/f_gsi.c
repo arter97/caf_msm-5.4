@@ -2534,14 +2534,25 @@ static int gsi_dynamic_ep_allocation(struct usb_function *f)
 					GSI_SW_EP_PATH);
 		break;
 		case IPA_USB_RMNET_CV2X:
-			if (gsi->d_port.in_ep)
-				usb_gsi_ep_op(gsi->d_port.in_ep,
-					&gsi->d_port.in_request,
-					GSI_DYNAMIC_EP_INTR_CALC);
-			if (gsi->d_port.out_ep)
-				usb_gsi_ep_op(gsi->d_port.out_ep,
-					&gsi->d_port.out_request,
-					GSI_DYNAMIC_EP_INTR_CALC);
+			/*
+			 * If V2X is present next to RMNET in composition
+			 * sequence then hardcode the EP interrupters.
+			 */
+			if (__gsi[IPA_USB_RMNET]->data_interface_up) {
+				if (gsi->d_port.in_ep)
+					gsi->d_port.in_request.ep_intr_num = 2;
+				if (gsi->d_port.out_ep)
+					gsi->d_port.out_request.ep_intr_num = 3;
+			} else {
+				if (gsi->d_port.in_ep)
+					usb_gsi_ep_op(gsi->d_port.in_ep,
+						&gsi->d_port.in_request,
+						GSI_DYNAMIC_EP_INTR_CALC);
+				if (gsi->d_port.out_ep)
+					usb_gsi_ep_op(gsi->d_port.out_ep,
+						&gsi->d_port.out_request,
+						GSI_DYNAMIC_EP_INTR_CALC);
+			}
 		break;
 		default:
 			log_event_dbg("%s: Data interface not supported\n", __func__);
