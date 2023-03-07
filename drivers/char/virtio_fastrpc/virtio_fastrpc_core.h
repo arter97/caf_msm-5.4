@@ -174,4 +174,10 @@ int fastrpc_internal_invoke2(struct fastrpc_file *fl,
 				struct fastrpc_ioctl_invoke2 *inv2);
 
 void fastrpc_queue_completed_async_job(struct fastrpc_invoke_ctx *ctx);
+
+int fastrpc_internal_mem_map(struct fastrpc_file *fl,
+				struct fastrpc_ioctl_mem_map *ud);
+
+int fastrpc_internal_mem_unmap(struct fastrpc_file *fl,
+				struct fastrpc_ioctl_mem_unmap *ud);
 #endif /*__VIRTIO_FASTRPC_CORE_H__*/

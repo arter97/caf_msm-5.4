@@ -1376,6 +1376,7 @@ static int coresight_remove_match(struct device *dev, void *data)
 			 * platform data.
 			 */
 			fwnode_handle_put(conn->child_fwnode);
+			conn->child_fwnode = NULL;
 			/* No need to continue */
 			break;
 		}
@@ -1491,7 +1492,7 @@ static int __init coresight_init(void)
 {
 	return bus_register(&coresight_bustype);
 }
-postcore_initcall(coresight_init);
+device_initcall(coresight_init);
 
 /*
  * coresight_release_platform_data: Release references to the devices connected

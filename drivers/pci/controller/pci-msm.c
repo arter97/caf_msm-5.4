@@ -843,6 +843,7 @@ struct msm_pcie_dev_t {
 	bool linkdown_panic;
 	uint32_t boot_option;
 	bool lpi_enable;
+	bool gdsc_clk_drv_ss_nonvotable;
 
 	uint32_t rc_idx;
 	uint32_t phy_ver;
@@ -3779,7 +3780,7 @@ static int msm_pcie_get_clk(struct msm_pcie_dev_t *pcie_dev)
 {
 	int i, cnt, ret;
 	struct msm_pcie_clk_info_t *clk_info;
-	u32 *clkfreq = NULL;
+	u32 *clkfreq = NULL, *clk_suppressible = NULL;
 	struct platform_device *pdev = pcie_dev->pdev;
 	char ref_clk_src[MAX_PROP_SIZE];
 
@@ -3825,6 +3826,42 @@ static int msm_pcie_get_clk(struct msm_pcie_dev_t *pcie_dev)
 
 			if (!strcmp(clk_info->name, "pcie_phy_refgen_clk"))
 				pcie_dev->rate_change_clk = clk_info;
+		}
+	}
+
+	ret = of_property_count_elems_of_size(pdev->dev.of_node,
+					      "clock-suppressible",
+					      sizeof(*clk_suppressible));
+	if ((ret < 0) || (ret != MSM_PCIE_MAX_CLK)) {
+		PCIE_DBG(pcie_dev,
+			 "PCIe: RC%d: mismatch between number of clock and suppressible entries: %d != %d\n",
+			 pcie_dev->rc_idx, MSM_PCIE_MAX_CLK, ret);
+	} else {
+
+		/* get clock suppressible info */
+		clk_suppressible = devm_kcalloc(&pdev->dev, MSM_PCIE_MAX_CLK,
+					sizeof(*clk_suppressible), GFP_KERNEL);
+		if (!clk_suppressible)
+			return -ENOMEM;
+
+		ret = of_property_read_u32_array(pdev->dev.of_node,
+					 "clock-suppressible",
+					 clk_suppressible, MSM_PCIE_MAX_CLK);
+		if (ret) {
+			PCIE_ERR(pcie_dev,
+			 "PCIe: RC%d: failed to get clock suppressible info: ret: %d\n",
+								 pcie_dev->rc_idx, ret);
+			return -EIO;
+		}
+
+		for (i = 0; i < MSM_PCIE_MAX_CLK; i++) {
+			clk_info = &pcie_dev->clk[i];
+			clk_info->suppressible = *clk_suppressible++;
+
+			PCIE_DBG(pcie_dev,
+			 "PCIe: RC%d: %s: suppressible: %d\n",
+			 pcie_dev->rc_idx, clk_info->name,
+					clk_info->suppressible);
 		}
 	}
 
@@ -6263,6 +6300,11 @@ static int msm_pcie_probe(struct platform_device *pdev)
 		PCIE_DBG(pcie_dev, "RC%d: wr-halt-size: 0x%x.\n",
 			pcie_dev->rc_idx, pcie_dev->wr_halt_size);
 
+	pcie_dev->gdsc_clk_drv_ss_nonvotable = of_property_read_bool(of_node,
+				"qcom,gdsc-clk-drv-ss-nonvotable");
+	PCIE_DBG(pcie_dev, "Gdsc clk is %s votable during drv hand over.\n",
+		pcie_dev->gdsc_clk_drv_ss_nonvotable ? "not" : "");
+
 	pcie_dev->slv_addr_space_size = SZ_16M;
 	of_property_read_u32(of_node, "qcom,slv-addr-space-size",
 				&pcie_dev->slv_addr_space_size);
@@ -7701,11 +7743,13 @@ static int msm_pcie_drv_resume(struct msm_pcie_dev_t *pcie_dev)
 
 	PCIE_DBG(pcie_dev, "PCIe: RC%d:enable gdsc\n", pcie_dev->rc_idx);
 
-	ret = regulator_enable(pcie_dev->gdsc);
-	if (ret)
-		PCIE_ERR(pcie_dev,
-			"PCIe: RC%d: failed to enable GDSC: ret %d\n",
-			pcie_dev->rc_idx, ret);
+	if (!pcie_dev->gdsc_clk_drv_ss_nonvotable) {
+		ret = regulator_enable(pcie_dev->gdsc);
+		if (ret)
+			PCIE_ERR(pcie_dev,
+				"PCIe: RC%d: failed to enable GDSC: ret %d\n",
+				pcie_dev->rc_idx, ret);
+	}
 
 	PCIE_DBG(pcie_dev, "PCIe: RC%d:set ICC path vote\n", pcie_dev->rc_idx);
 
@@ -7904,7 +7948,8 @@ static int msm_pcie_drv_suspend(struct msm_pcie_dev_t *pcie_dev,
 				pcie_dev->rc_idx, ret);
 	}
 
-	regulator_disable(pcie_dev->gdsc);
+	if (!pcie_dev->gdsc_clk_drv_ss_nonvotable)
+		regulator_disable(pcie_dev->gdsc);
 
 	msm_pcie_vreg_deinit(pcie_dev);
 

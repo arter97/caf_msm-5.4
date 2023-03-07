@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /* Uncomment this block to log an error on every VERIFY failure */
@@ -4157,10 +4157,10 @@ int fastrpc_wait_for_rpmsg_interrupt(int cid, unsigned int flags)
 	 */
 	if (flags == FASTRPC_INIT_ATTACH || flags == FASTRPC_INIT_ATTACH_SENSORS
 		|| flags == FASTRPC_INIT_CREATE_STATIC) {
-		ADSPRPC_INFO("Thread waiting for cid %d rpmsg channel", cid);
+		ADSPRPC_DEBUG("Thread waiting for cid %d rpmsg channel", cid);
 		err = wait_event_interruptible(me->channel[cid].wait_for_rpmsg_ch,
 				atomic_read(&me->channel[cid].is_rpmsg_ch_up));
-		ADSPRPC_INFO("Thread received signal for cid %d rpmsg channel (interrupted %d)",
+		ADSPRPC_DEBUG("Thread received signal for cid %d rpmsg channel (interrupted %d)",
 			cid, err);
 	}
 
@@ -4944,7 +4944,7 @@ static int fastrpc_internal_munmap(struct fastrpc_file *fl,
 			"user application %s trying to unmap without initialization\n",
 			current->comm);
 		err = -EHOSTDOWN;
-		goto bail;
+		return err;
 	}
 	mutex_lock(&fl->internal_map_mutex);
 
@@ -6176,7 +6176,6 @@ static int fastrpc_check_pd_status(struct fastrpc_file *fl, char *sloc_name)
 			err = wait_event_interruptible(
 			me->channel[cid].spd[session].wait_for_pdup,
 			atomic_read(&me->channel[cid].spd[session].ispdup));
-			ADSPRPC_WARN("PDR interrupt %d received\n", err);
 			goto bail;
 		}
 	}
