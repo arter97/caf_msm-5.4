@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only
  *
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __VIRTIO_FASTRPC_CORE_H__
 #define __VIRTIO_FASTRPC_CORE_H__
@@ -96,6 +96,7 @@ struct fastrpc_file {
 	int pd;
 	int tgid_open;	/* Process ID during device open */
 	bool untrusted_process;
+	int sessionid;
 	int procattrs;
 	int file_close;
 	int dsp_proc_init;
