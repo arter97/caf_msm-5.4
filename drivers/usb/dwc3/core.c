@@ -747,7 +747,7 @@ static void dwc3_core_exit(struct dwc3 *dwc)
 	dwc3_event_buffers_cleanup(dwc);
 
 	for (i = 0; i < dwc->num_hsphy; i++)
-		usb_phy_set_suspend(dwc->usb3_phy[i], 1);
+		usb_phy_set_suspend(dwc->usb2_phy[i], 1);
 	if (dwc->maximum_speed >= USB_SPEED_SUPER)
 		for (i = 0; i < dwc->num_ssphy; i++)
 			usb_phy_set_suspend(dwc->usb3_phy[i], 1);
@@ -755,7 +755,7 @@ static void dwc3_core_exit(struct dwc3 *dwc)
 	phy_power_off(dwc->usb3_generic_phy);
 
 	for (i = 0; i < dwc->num_hsphy; i++)
-		usb_phy_shutdown(dwc->usb3_phy[i]);
+		usb_phy_shutdown(dwc->usb2_phy[i]);
 	if (dwc->maximum_speed >= USB_SPEED_SUPER)
 		for (i = 0; i < dwc->num_ssphy; i++)
 			usb_phy_shutdown(dwc->usb3_phy[i]);
