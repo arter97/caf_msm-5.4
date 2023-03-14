@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/firmware.h>
@@ -647,12 +647,14 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 	if (ret)
 		goto err_req_fw;
 
-	if (bdf_type == CNSS_BDF_REGDB)
+	/*if (bdf_type == CNSS_BDF_REGDB)
 		ret = cnss_request_firmware_direct(plat_priv, &fw_entry,
 						   filename);
 	else
 		ret = firmware_request_nowarn(&fw_entry, filename,
-					      &plat_priv->plat_dev->dev);
+					      &plat_priv->plat_dev->dev);*/
+
+	ret = request_firmware(&fw_entry, filename,&plat_priv->plat_dev->dev);
 
 	if (ret) {
 		cnss_pr_err("Failed to load BDF: %s, ret: %d\n", filename, ret);

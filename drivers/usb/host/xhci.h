@@ -1918,6 +1918,7 @@ struct xhci_hcd {
 	void			*dbc;
 	/* platform-specific data -- must come last */
 	unsigned long		priv[0] __aligned(sizeof(s64));
+	unsigned int 		cmd_delay;
 };
 
 /* Platform specific overrides to generic XHCI hc_driver ops */

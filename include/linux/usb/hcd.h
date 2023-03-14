@@ -203,6 +203,7 @@ struct usb_hcd {
 #define HCD_BUFFER_POOLS	4
 	struct dma_pool		*pool[HCD_BUFFER_POOLS];
 
+	unsigned int            cmd_delay;
 	int			state;
 #	define	__ACTIVE		0x01
 #	define	__SUSPEND		0x04

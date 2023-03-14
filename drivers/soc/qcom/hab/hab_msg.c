@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include "hab.h"
 #include "hab_grantable.h"
@@ -343,7 +343,7 @@ int hab_msg_recv(struct physical_channel *pchan,
 
 			if (sizebytes) {
 				hab_msg_drop(pchan, sizebytes);
-				pr_err("%s msg dropped type %d size %d vcid %X session id %d\n",
+				pr_err("%s msg dropped type %d size %lu vcid %X session id %d\n",
 				pchan->name, payload_type,
 				sizebytes, vchan_id,
 				session_id);
