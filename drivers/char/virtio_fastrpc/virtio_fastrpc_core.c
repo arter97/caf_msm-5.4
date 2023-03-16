@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/ion.h>
@@ -326,6 +326,7 @@ struct fastrpc_file *fastrpc_file_alloc(void)
 	fl->domain = -1;
 	fl->cid = -1;
 	fl->dsp_proc_init = 0;
+	fl->sessionid = 0;
 	mutex_init(&fl->internal_map_mutex);
 	mutex_init(&fl->map_mutex);
 	return fl;
@@ -495,6 +496,8 @@ static int virt_fastrpc_close(struct fastrpc_file *fl)
 	vmsg = (struct virt_msg_hdr *)msg->txbuf;
 	vmsg->pid = fl->tgid;
 	vmsg->tid = current->pid;
+	if (fl->sessionid)
+		vmsg->tid |= (1 << SESSION_ID_INDEX);
 	vmsg->cid = fl->cid;
 	vmsg->cmd = VIRTIO_FASTRPC_CMD_CLOSE;
 	vmsg->len = sizeof(*vmsg);
@@ -831,6 +834,8 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 	vmsg = (struct virt_invoke_msg *)ctx->msg->txbuf;
 	vmsg->hdr.pid = fl->tgid;
 	vmsg->hdr.tid = current->pid;
+	if (fl->sessionid)
+		vmsg->hdr.tid |= (1 << SESSION_ID_INDEX);
 	vmsg->hdr.cid = fl->cid;
 	vmsg->hdr.cmd = VIRTIO_FASTRPC_CMD_INVOKE;
 	vmsg->hdr.len = size;
@@ -1402,6 +1407,8 @@ static int virt_fastrpc_munmap(struct fastrpc_file *fl, uintptr_t raddr,
 	vmsg = (struct virt_munmap_msg *)msg->txbuf;
 	vmsg->hdr.pid = fl->tgid;
 	vmsg->hdr.tid = current->pid;
+	if (fl->sessionid)
+		vmsg->hdr.tid |= (1 << SESSION_ID_INDEX);
 	vmsg->hdr.cid = fl->cid;
 	vmsg->hdr.cmd = VIRTIO_FASTRPC_CMD_MUNMAP;
 	vmsg->hdr.len = sizeof(*vmsg);
@@ -1556,6 +1563,8 @@ static int virt_fastrpc_munmap_fd(struct fastrpc_file *fl,
 	vmsg = (struct virt_munmap_fd_msg *)msg->txbuf;
 	vmsg->hdr.pid = fl->tgid;
 	vmsg->hdr.tid = current->pid;
+	if (fl->sessionid)
+		vmsg->hdr.tid |= (1 << SESSION_ID_INDEX);
 	vmsg->hdr.cid = fl->cid;
 	vmsg->hdr.cmd = VIRTIO_FASTRPC_CMD_MUNMAP_FD;
 	vmsg->hdr.len = total_size;
@@ -1654,6 +1663,8 @@ static int virt_fastrpc_mmap(struct fastrpc_file *fl, uint32_t flags,
 	vmsg = (struct virt_mmap_msg *)msg->txbuf;
 	vmsg->hdr.pid = fl->tgid;
 	vmsg->hdr.tid = current->pid;
+	if (fl->sessionid)
+		vmsg->hdr.tid |= (1 << SESSION_ID_INDEX);
 	vmsg->hdr.cid = fl->cid;
 	vmsg->hdr.cmd = VIRTIO_FASTRPC_CMD_MMAP;
 	vmsg->hdr.len = total_size;
@@ -2008,6 +2019,8 @@ static int virt_fastrpc_control(struct fastrpc_file *fl,
 	vmsg = (struct virt_control_msg *)msg->txbuf;
 	vmsg->hdr.pid = fl->tgid;
 	vmsg->hdr.tid = current->pid;
+	if (fl->sessionid)
+		vmsg->hdr.tid |= (1 << SESSION_ID_INDEX);
 	vmsg->hdr.cid = fl->cid;
 	vmsg->hdr.cmd = VIRTIO_FASTRPC_CMD_CONTROL;
 	vmsg->hdr.len = sizeof(*vmsg);
@@ -2185,6 +2198,8 @@ static int virt_fastrpc_open(struct fastrpc_file *fl,
 	vmsg = (struct virt_open_msg *)msg->txbuf;
 	vmsg->hdr.pid = fl->tgid;
 	vmsg->hdr.tid = current->pid;
+	if (fl->sessionid)
+		vmsg->hdr.tid |= (1 << SESSION_ID_INDEX);
 	vmsg->hdr.cid = -1;
 	vmsg->hdr.cmd = VIRTIO_FASTRPC_CMD_OPEN;
 	vmsg->hdr.len = sizeof(*vmsg);
@@ -2292,6 +2307,8 @@ static int virt_fastrpc_get_dsp_info(struct fastrpc_file *fl,
 	vmsg = (struct virt_cap_msg *)msg->txbuf;
 	vmsg->hdr.pid = fl->tgid;
 	vmsg->hdr.tid = current->pid;
+	if (fl->sessionid)
+		vmsg->hdr.tid |= (1 << SESSION_ID_INDEX);
 	vmsg->hdr.cid = -1;
 	vmsg->hdr.cmd = VIRTIO_FASTRPC_CMD_GET_DSP_INFO;
 	vmsg->hdr.len = sizeof(*vmsg);

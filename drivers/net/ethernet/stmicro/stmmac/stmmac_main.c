@@ -3408,6 +3408,7 @@ static netdev_tx_t stmmac_tso_xmit(struct sk_buff *skb, struct net_device *dev)
 	/* Manage tx mitigation */
 	tx_q->tx_count_frames += nfrags + 1;
 	if (likely(priv->tx_coal_timer_disable)) {
+		desc = &tx_q->dma_tx[tx_q->cur_tx];
 		tx_q->tx_count_frames = 0;
 		stmmac_set_tx_ic(priv, desc);
 		priv->xstats.tx_set_ic_bit++;
