@@ -1492,7 +1492,7 @@ static int __init coresight_init(void)
 {
 	return bus_register(&coresight_bustype);
 }
-device_initcall(coresight_init);
+postcore_initcall(coresight_init);
 
 /*
  * coresight_release_platform_data: Release references to the devices connected
