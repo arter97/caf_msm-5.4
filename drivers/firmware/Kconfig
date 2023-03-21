@@ -277,6 +277,23 @@ config QCOM_SCM_QCPE
 	  environment). The SCM channel will use QCOM HAB interface for
 	  front-end to back-end communication.
 
+config QCOM_SCM_QCPE_HOS
+	bool "Para-Virtualized Secure Channel Manager (SCM) support over QCPE (HOS)"
+	depends on QCOM_SCM
+	default n
+	help
+	  To enable Secure Channel Mananger(SCM) support for SoC
+	  in virtualized Linux, where SCM backend is QCPE (QCOM Protected
+	  environment).
+
+config QCOM_SCM_LOCK_DISABLE
+	bool "Disable SCM lock mechanism to allow simultaneous SMC calls over QCPE (HOS)"
+	depends on QCOM_SCM && QCOM_SCM_QCPE_HOS
+	default n
+	help
+	  To disable the Secure Channel Mananger (SCM) SMC call lock mechanism.
+	  Disabling the lock allows execute simultaneous SMC calls within single guest VM.
+
 config QTEE_SHM_BRIDGE
 	bool "QTI TEE shared memory bridge"
 	depends on QCOM_SCM

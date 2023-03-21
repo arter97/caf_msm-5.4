@@ -19,6 +19,9 @@
 #include <soc/qcom/qseecomi.h>
 
 #include "qcom_scm.h"
+#if IS_ENABLED(CONFIG_QCOM_SCM_QCPE_HOS)
+#include "qcom_scm-coqoshv.h"
+#endif
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/scm.h>
@@ -404,7 +407,7 @@ static void __qcom_scm_call_do_quirk(const struct arm_smccc_args *smc,
 {
 	ktime_t time;
 	const bool trace = trace_scm_call_enabled();
-#if !(IS_ENABLED(CONFIG_QCOM_SCM_QCPE))
+#if !(IS_ENABLED(CONFIG_QCOM_SCM_QCPE)) && !(IS_ENABLED(CONFIG_QCOM_SCM_QCPE_HOS))
 	unsigned long a0 = smc->a[0];
 	struct arm_smccc_quirk quirk = { .id = ARM_SMCCC_QUIRK_QCOM_A6 };
 
@@ -416,6 +419,9 @@ static void __qcom_scm_call_do_quirk(const struct arm_smccc_args *smc,
 #if IS_ENABLED(CONFIG_QCOM_SCM_QCPE)
 	scm_call_qcpe(smc, res, atomic);
 #else
+#if IS_ENABLED(CONFIG_QCOM_SCM_QCPE_HOS)
+	coqoshv_call_qcpe((const struct coqoshv_smc_mailbox *)smc, res, atomic);
+#else
 	do {
 		arm_smccc_smc_quirk(a0, smc->a[1], smc->a[2], smc->a[3],
 				    smc->a[4], smc->a[5], quirk.state.a6,
@@ -425,6 +431,7 @@ static void __qcom_scm_call_do_quirk(const struct arm_smccc_args *smc,
 			a0 = res->a0;
 
 	} while (res->a0 == QCOM_SCM_INTERRUPTED);
+#endif /* CONFIG_QCOM_SCM_QCPE_HOS */
 #endif
 	if (trace)
 		trace_scm_call(smc->a, res, ktime_us_delta(ktime_get(), time));
@@ -506,9 +513,13 @@ static int qcom_scm_call_smccc(struct device *dev,
 		int retry_count = 0;
 
 		do {
+#if IS_ENABLED(CONFIG_QCOM_SCM_LOCK_DISABLE)
+			__qcom_scm_call_do_quirk(&smc, &res, false);
+#else
 			mutex_lock(&qcom_scm_lock);
 			__qcom_scm_call_do_quirk(&smc, &res, false);
 			mutex_unlock(&qcom_scm_lock);
+#endif
 
 			if (res.a0 == QCOM_SCM_V2_EBUSY) {
 				if (retry_count++ > QCOM_SCM_EBUSY_MAX_RETRY ||
@@ -651,11 +662,17 @@ static int qcom_scm_call_legacy(struct device *dev, struct qcom_scm_desc *desc)
 	smc.a[1] = (unsigned long)&context_id;
 	smc.a[2] = cmd_phys;
 
+#if IS_ENABLED(CONFIG_QCOM_SCM_LOCK_DISABLE)
+	__qcom_scm_call_do(&smc, &res);
+	if (res.a0 < 0)
+		ret = qcom_scm_remap_error(res.a0);
+#else
 	mutex_lock(&qcom_scm_lock);
 	__qcom_scm_call_do(&smc, &res);
 	if (res.a0 < 0)
 		ret = qcom_scm_remap_error(res.a0);
 	mutex_unlock(&qcom_scm_lock);
+#endif
 	if (ret)
 		goto out;
 
