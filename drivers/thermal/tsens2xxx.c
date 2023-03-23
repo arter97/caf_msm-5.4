@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2020, 2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -13,6 +13,7 @@
 #include "tsens.h"
 #include "thermal_core.h"
 #include <linux/qcom_scm.h>
+#include <linux/suspend.h>
 
 #define TSENS_TM_INT_EN(n)			((n) + 0x4)
 #define TSENS_TM_CRITICAL_INT_STATUS(n)		((n) + 0x14)
@@ -784,6 +785,7 @@ static const struct tsens_irqs tsens2xxx_irqs[] = {
 	{ "tsens-0C", tsens_tm_zeroc_irq_thread},
 };
 
+#if defined(CONFIG_DEEPSLEEP) || defined(CONFIG_HIBERNATION)
 static int tsens2xxx_tsens_suspend(struct tsens_device *tmdev)
 {
 	int i, irq;
@@ -791,6 +793,9 @@ static int tsens2xxx_tsens_suspend(struct tsens_device *tmdev)
 
 	if (!tmdev)
 		return -EINVAL;
+
+	if (mem_sleep_current != PM_SUSPEND_MEM)
+		return 0;
 
 	pdev = tmdev->pdev;
 	for (i = 0; i < (ARRAY_SIZE(tsens2xxx_irqs) - 1); i++) {
@@ -817,6 +822,9 @@ static int tsens2xxx_tsens_resume(struct tsens_device *tmdev)
 	if (!tmdev)
 		return -EINVAL;
 
+	if (mem_sleep_current != PM_SUSPEND_MEM)
+		return 0;
+
 	rc = tsens2xxx_hw_init(tmdev);
 
 	if (rc) {
@@ -839,6 +847,17 @@ static int tsens2xxx_tsens_resume(struct tsens_device *tmdev)
 					&tmdev->therm_fwk_notify);
 	return 0;
 }
+#else
+static int tsens2xxx_tsens_suspend(struct tsens_device *tmdev)
+{
+	return 0;
+}
+
+static int tsens2xxx_tsens_resume(struct tsens_device *tmdev)
+{
+	return 0;
+}
+#endif
 
 static int tsens2xxx_register_interrupts(struct tsens_device *tmdev)
 {
