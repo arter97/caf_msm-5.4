@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/cma.h>
@@ -6237,14 +6237,6 @@ cnss_pci_restore_rc_speed(struct cnss_pci_data *pci_priv)
 		if (ret)
 			cnss_pr_err("Failed to reset max PCIe RC%x link speed to default, err = %d\n",
 				    plat_priv->rc_num, ret);
-
-		/* suspend/resume will trigger retain to re-establish link speed */
-		ret = cnss_suspend_pci_link(pci_priv);
-		if (ret)
-			cnss_pr_err("Failed to suspend PCI link, err = %d\n", ret);
-
-		ret = cnss_resume_pci_link(pci_priv);
-			cnss_pr_err("Failed to resume PCI link, err = %d\n", ret);
 	}
 }
 #else
