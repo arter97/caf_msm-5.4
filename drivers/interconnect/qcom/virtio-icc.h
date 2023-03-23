@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __LINUX_VIRTIO_ICC_H__
@@ -60,7 +60,7 @@ struct virtio_icc_node {
 	u16 num_links;
 };
 
-/* Virtio ID of interconnect */
-#define VIRTIO_ID_INTERCONNECT    37
+/* Virtio ID of interconnect : 0xC007 */
+#define VIRTIO_ID_INTERCONNECT		49159
 
 #endif /* __LINUX_VIRTIO_ICC_H__ */

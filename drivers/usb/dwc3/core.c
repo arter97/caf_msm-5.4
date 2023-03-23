@@ -747,20 +747,21 @@ static void dwc3_core_exit(struct dwc3 *dwc)
 	dwc3_event_buffers_cleanup(dwc);
 
 	for (i = 0; i < dwc->num_hsphy; i++)
-		usb_phy_shutdown(dwc->usb3_phy[i]);
+		usb_phy_set_suspend(dwc->usb2_phy[i], 1);
+	if (dwc->maximum_speed >= USB_SPEED_SUPER)
+		for (i = 0; i < dwc->num_ssphy; i++)
+			usb_phy_set_suspend(dwc->usb3_phy[i], 1);
+	phy_power_off(dwc->usb2_generic_phy);
+	phy_power_off(dwc->usb3_generic_phy);
+
+	for (i = 0; i < dwc->num_hsphy; i++)
+		usb_phy_shutdown(dwc->usb2_phy[i]);
 	if (dwc->maximum_speed >= USB_SPEED_SUPER)
 		for (i = 0; i < dwc->num_ssphy; i++)
 			usb_phy_shutdown(dwc->usb3_phy[i]);
 	phy_exit(dwc->usb2_generic_phy);
 	phy_exit(dwc->usb3_generic_phy);
 
-	for (i = 0; i < dwc->num_hsphy; i++)
-		usb_phy_set_suspend(dwc->usb3_phy[i], 1);
-	if (dwc->maximum_speed >= USB_SPEED_SUPER)
-		for (i = 0; i < dwc->num_ssphy; i++)
-			usb_phy_set_suspend(dwc->usb3_phy[i], 1);
-	phy_power_off(dwc->usb2_generic_phy);
-	phy_power_off(dwc->usb3_generic_phy);
 	clk_bulk_disable_unprepare(dwc->num_clks, dwc->clks);
 	reset_control_assert(dwc->reset);
 }
@@ -1501,6 +1502,8 @@ static void dwc3_get_properties(struct dwc3 *dwc)
 	dwc->num_gsi_eps = 3;
 	device_property_read_u32(dev, "num-gsi-eps", &dwc->num_gsi_eps);
 
+	dwc->normal_eps_in_gsi_mode = device_property_read_bool(dev,
+				"normal-eps-in-gsi-mode");
 	dwc->dis_metastability_quirk = device_property_read_bool(dev,
 				"snps,dis_metastability_quirk");
 	dwc->ssp_u3_u0_quirk = device_property_read_bool(dev,

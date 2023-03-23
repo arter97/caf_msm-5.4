@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/delay.h>
@@ -56,6 +56,7 @@ static int plat_env_count;
 #else
 static struct cnss_plat_data *plat_env;
 #endif
+static DECLARE_RWSEM(cnss_pm_sem);
 
 static struct cnss_fw_files FW_FILES_QCA6174_FW_3_0 = {
 	"qwlan30.bin", "bdwlan30.bin", "otp30.bin", "utf30.bin",
@@ -334,6 +335,25 @@ int cnss_get_feature_list(struct cnss_plat_data *plat_priv,
 	return 0;
 }
 
+static int cnss_pm_notify(struct notifier_block *b,
+			  unsigned long event, void *p)
+{
+	switch (event) {
+	case PM_SUSPEND_PREPARE:
+		down_write(&cnss_pm_sem);
+		break;
+	case PM_POST_SUSPEND:
+		up_write(&cnss_pm_sem);
+		break;
+	}
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block cnss_pm_notifier = {
+	.notifier_call = cnss_pm_notify,
+};
+
 void cnss_pm_stay_awake(struct cnss_plat_data *plat_priv)
 {
 	if (atomic_inc_return(&plat_priv->pm_count) != 1)
@@ -359,6 +379,18 @@ void cnss_pm_relax(struct cnss_plat_data *plat_priv)
 		    atomic_read(&plat_priv->pm_count));
 	pm_relax(&plat_priv->plat_dev->dev);
 }
+
+void cnss_lock_pm_sem(struct device *dev)
+{
+	down_read(&cnss_pm_sem);
+}
+EXPORT_SYMBOL(cnss_lock_pm_sem);
+
+void cnss_release_pm_sem(struct device *dev)
+{
+	up_read(&cnss_pm_sem);
+}
+EXPORT_SYMBOL(cnss_release_pm_sem);
 
 int cnss_get_fw_files_for_target(struct device *dev,
 				 struct cnss_fw_files *pfw_files,
@@ -3155,6 +3187,10 @@ static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 	timer_setup(&plat_priv->fw_boot_timer,
 		    cnss_bus_fw_boot_timeout_hdlr, 0);
 
+	ret = register_pm_notifier(&cnss_pm_notifier);
+	if (ret)
+		cnss_pr_err("Failed to register PM notifier, err = %d\n", ret);
+
 	plat_priv->reboot_nb.notifier_call = cnss_reboot_notifier;
 	ret = register_reboot_notifier(&plat_priv->reboot_nb);
 	if (ret)
@@ -3190,6 +3226,7 @@ static void cnss_misc_deinit(struct cnss_plat_data *plat_priv)
 	complete_all(&plat_priv->power_up_complete);
 	device_init_wakeup(&plat_priv->plat_dev->dev, false);
 	unregister_reboot_notifier(&plat_priv->reboot_nb);
+	unregister_pm_notifier(&cnss_pm_notifier);
 	del_timer(&plat_priv->fw_boot_timer);
 	wakeup_source_unregister(plat_priv->recovery_ws);
 }
@@ -3291,6 +3328,26 @@ cnss_is_converged_dt(struct cnss_plat_data *plat_priv)
 	return of_property_read_bool(plat_priv->plat_dev->dev.of_node,
 				     "qcom,converged-dt");
 }
+
+int cnss_set_wfc_mode(struct device *dev, struct cnss_wfc_cfg cfg)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	int ret = 0;
+
+	if (!plat_priv)
+		return -ENODEV;
+
+	/* If IMS server is connected, return success without QMI send */
+	if (test_bit(CNSS_IMS_CONNECTED, &plat_priv->driver_state)) {
+		cnss_pr_dbg("Ignore host request as IMS server is connected");
+		return ret;
+	}
+
+	ret = cnss_wlfw_send_host_wfc_call_status(plat_priv, cfg);
+
+	return ret;
+}
+EXPORT_SYMBOL(cnss_set_wfc_mode);
 
 static int cnss_probe(struct platform_device *plat_dev)
 {

@@ -1671,8 +1671,8 @@ static int crypto_qti_ice_init_fde_node(struct device *dev)
 	//Only one ice device is supported , remove the extra one(DTS has more than one node)
 
 	rc = crypto_qti_storage_type(&storage_type);
-	if(rc) {
-		pr_err("storage type not set %d", storage_type);
+	if (rc) {
+		pr_err("storage type not set %d\n", storage_type);
 		return rc;
 	}
 
@@ -1718,7 +1718,7 @@ static int crypto_qti_ice_init_fde_node(struct device *dev)
 		return -EINVAL;
 	}
 
-	if(ice_dev->fde_partitions != NULL)
+	if (ice_dev->fde_partitions != NULL)
 		goto out;
 
 

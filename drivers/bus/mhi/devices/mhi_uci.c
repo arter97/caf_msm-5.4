@@ -690,7 +690,7 @@ static void mhi_dl_xfer_cb(struct mhi_device *mhi_dev,
 	list_add_tail(&buf->node, &uci_chan->pending);
 	spin_unlock_irqrestore(&uci_chan->lock, flags);
 
-	if (mhi_dev->dev.power.wakeup)
+	if (device_may_wakeup(&mhi_dev->dev))
 		pm_wakeup_hard_event(&mhi_dev->dev);
 
 	wake_up(&uci_chan->wq);

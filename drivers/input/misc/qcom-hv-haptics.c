@@ -12,6 +12,7 @@
 #include <linux/init.h>
 #include <linux/input.h>
 #include <linux/interrupt.h>
+#include <linux/jiffies.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/nvmem-consumer.h>
@@ -25,6 +26,7 @@
 #include <linux/suspend.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
+#include <linux/workqueue.h>
 #include <linux/qpnp/qpnp-pbs.h>
 
 /* status register definitions in HAPTICS_CFG module */
@@ -519,6 +521,7 @@ struct haptics_chip {
 	struct haptics_effect		*custom_effect;
 	struct haptics_play_info	play;
 	struct dentry			*debugfs_dir;
+	struct delayed_work		stop_work;
 	struct regulator_dev		*swr_slave_rdev;
 	struct nvmem_cell		*cl_brake_nvmem;
 	struct nvmem_device		*hap_cfg_nvmem;
@@ -2397,24 +2400,39 @@ static u8 get_direct_play_max_amplitude(struct haptics_chip *chip)
 	return (u8)amplitude;
 }
 
+static void haptics_stop_constant_effect_play(struct work_struct *work)
+{
+	struct haptics_chip *chip = container_of(work, struct haptics_chip, stop_work.work);
+	int rc = 0;
+
+	rc = haptics_enable_play(chip, false);
+	if (rc < 0)
+		dev_err(chip->dev, "stop constant effect play failed\n");
+
+	rc = haptics_enable_hpwr_vreg(chip, false);
+	if (rc < 0)
+		dev_err(chip->dev, "disable hpwr_vreg failed\n");
+}
+
 static int haptics_upload_effect(struct input_dev *dev,
 		struct ff_effect *effect, struct ff_effect *old)
 {
 	struct haptics_chip *chip = input_get_drvdata(dev);
-	u32 length_us, tmp;
+	u32 length_ms, tmp;
 	s16 level;
 	u8 amplitude;
 	int rc = 0;
 
 	switch (effect->type) {
 	case FF_CONSTANT:
-		length_us = effect->replay.length * USEC_PER_MSEC;
+		length_ms = effect->replay.length;
 		level = effect->u.constant.level;
 		tmp = get_direct_play_max_amplitude(chip);
 		tmp *= level;
 		amplitude = tmp / 0x7fff;
-		dev_dbg(chip->dev, "upload constant effect, length = %dus, amplitude = %#x\n",
-				length_us, amplitude);
+		dev_dbg(chip->dev, "upload constant effect, length = %dms, amplitude = %#x\n",
+				length_ms, amplitude);
+		schedule_delayed_work(&chip->stop_work, msecs_to_jiffies(length_ms));
 		haptics_load_constant_effect(chip, amplitude);
 		if (rc < 0) {
 			dev_err(chip->dev, "set direct play failed, rc=%d\n",
@@ -2540,6 +2558,7 @@ static int haptics_erase(struct input_dev *dev, int effect_id)
 	int rc;
 
 	mutex_lock(&play->lock);
+	cancel_delayed_work_sync(&chip->stop_work);
 	if ((play->pattern_src == FIFO) &&
 			atomic_read(&play->fifo_status.is_busy)) {
 		if (atomic_read(&play->fifo_status.written_done) == 0) {
@@ -4874,6 +4893,7 @@ static int haptics_probe(struct platform_device *pdev)
 	mutex_init(&chip->play.lock);
 	disable_irq_nosync(chip->fifo_empty_irq);
 	chip->fifo_empty_irq_en = false;
+	INIT_DELAYED_WORK(&chip->stop_work, haptics_stop_constant_effect_play);
 
 	atomic_set(&chip->play.fifo_status.is_busy, 0);
 	atomic_set(&chip->play.fifo_status.written_done, 0);
@@ -4944,7 +4964,7 @@ static int haptics_remove(struct platform_device *pdev)
 #ifdef CONFIG_DEBUG_FS
 	debugfs_remove_recursive(chip->debugfs_dir);
 #endif
-	input_ff_destroy(chip->input_dev);
+	input_unregister_device(chip->input_dev);
 	dev_set_drvdata(chip->dev, NULL);
 
 	return 0;

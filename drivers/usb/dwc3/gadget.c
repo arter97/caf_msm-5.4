@@ -18,6 +18,7 @@
 #include <linux/io.h>
 #include <linux/list.h>
 #include <linux/dma-mapping.h>
+#include <linux/compiler_attributes.h>
 
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
@@ -3044,8 +3045,10 @@ static const struct usb_gadget_ops dwc3_gadget_ops = {
 
 /* -------------------------------------------------------------------------- */
 
-#define NUM_GSI_OUT_EPS(dwc)	(dwc->num_gsi_eps / 2)
-#define NUM_GSI_IN_EPS(dwc)	((dwc->num_gsi_eps + 1) / 2)
+#define NUM_GSI_OUT_EPS(dwc)	((dwc->num_gsi_eps / 2) + \
+				(dwc->normal_eps_in_gsi_mode ? 1 : 0))
+#define NUM_GSI_IN_EPS(dwc)	(((dwc->num_gsi_eps + 1) / 2) + \
+				(dwc->normal_eps_in_gsi_mode ? 1 : 0))
 
 static int dwc3_gadget_init_control_endpoint(struct dwc3_ep *dep)
 {
@@ -3427,7 +3430,7 @@ static void dwc3_gadget_endpoint_frame_from_event(struct dwc3_ep *dep,
 	dep->frame_number = event->parameters;
 }
 
-static void dwc3_gadget_endpoint_transfer_in_progress(struct dwc3_ep *dep,
+static noinline void dwc3_gadget_endpoint_transfer_in_progress(struct dwc3_ep *dep,
 		const struct dwc3_event_depevt *event)
 {
 	struct dwc3		*dwc = dep->dwc;

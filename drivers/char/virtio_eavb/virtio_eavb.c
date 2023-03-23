@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include<linux/init.h>
 #include<linux/kernel.h>
@@ -22,7 +23,8 @@
 
 #include "vio_eavb.h"
 
-#define VIRTIO_ID_EAVB         36 /* virtio eavb */
+/* Virtio ID of eavb : 0xC006 */
+#define VIRTIO_ID_EAVB		49158
 
 /* support feature */
 #define VIRTIO_EAVB_F_SHMEM	1
@@ -1394,7 +1396,46 @@ static long virtio_eavb_compat_ioctl(struct file *file,
 				unsigned int ioctl_cmd,
 				unsigned long ioctl_param)
 {
-	return -EOPNOTSUPP;
+	struct eavb_file *fl = file->private_data;
+	void __user *buf = (void __user *)ioctl_param;
+	int ret = 0;
+
+	switch (ioctl_cmd) {
+	case EAVB_IOCTL_CREATE_STREAM:
+		ret = qavb_create_stream(fl, buf);
+		break;
+	case EAVB_IOCTL_CREATE_STREAM_WITH_PATH:
+		ret = qavb_create_stream_with_path(fl, buf);
+		break;
+	case EAVB_IOCTL_GET_STREAM_INFO:
+		ret = qavb_get_stream_info(fl, buf);
+		break;
+	case EAVB_IOCTL_CONNECT_STREAM:
+		ret = qavb_connect_stream(fl, buf);
+		break;
+	case EAVB_IOCTL_RECEIVE:
+		ret = qavb_receive(fl, buf);
+		break;
+	case EAVB_IOCTL_RECV_DONE:
+		ret = qavb_recv_done(fl, buf);
+		break;
+	case EAVB_IOCTL_TRANSMIT:
+		ret = qavb_transmit(fl, buf);
+		break;
+	case EAVB_IOCTL_DISCONNECT_STREAM:
+		ret = qavb_disconnect_stream(fl, buf);
+		break;
+	case EAVB_IOCTL_DESTROY_STREAM:
+		ret = qavb_destroy_stream(fl, buf);
+		break;
+	case EAVB_IOCTL_GET_CRF_TS:
+		ret = qavb_get_crf_ts(fl, buf);
+		break;
+	default:
+		ret = -ENOTTY;
+		LOG_EAVB(LEVEL_ERR, "unsupported ioctl 0x%x\n", ioctl_cmd);
+	}
+	return ret;
 }
 
 static int virtio_eavb_mmap(struct file *file, struct vm_area_struct *vma)

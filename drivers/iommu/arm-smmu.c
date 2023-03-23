@@ -1434,8 +1434,6 @@ static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 			phys_addr_t phys_atos;
 
 			print_ctx_regs(smmu, cfg, fsr);
-			phys_atos = arm_smmu_verify_fault(domain, iova, fsr,
-							  fsynr0);
 			dev_err(smmu->dev,
 				"Unhandled context fault: iova=0x%08lx, cb=%d, fsr=0x%x, fsynr0=0x%x, fsynr1=0x%x\n",
 				iova, cfg->cbndx, fsr, fsynr0, fsynr1);
@@ -1450,6 +1448,8 @@ static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 				FIELD_GET(FSYNR1_PID, fsynr1),
 				FIELD_GET(FSYNR1_MID, fsynr1));
 
+			phys_atos = arm_smmu_verify_fault(domain, iova, fsr,
+							  fsynr0);
 			dev_err(smmu->dev,
 				"soft iova-to-phys=%pa\n", &phys_soft);
 			if (!phys_soft)
