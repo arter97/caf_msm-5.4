@@ -575,6 +575,12 @@ struct dwc3_msm {
 	bool			disable_host_mode_pm;
 	struct gpio_desc	*oc_gpiod;
 	int			oc_irq;
+
+	struct gpio_desc *vbus_out_gpiod;
+	bool		vbus_auto;
+	bool		has_vbus_gpio;
+	struct notifier_block	usbdev_nb;
+	bool			hc_died;
 };
 
 #define USB_HSPHY_3P3_VOL_MIN		3050000 /* uV */
@@ -2365,6 +2371,32 @@ static void dwc3_restart_usb_work(struct work_struct *w)
 	/* see comments in dwc3_msm_suspend */
 	if (!mdwc->vbus_active)
 		pm_relax(mdwc->dev);
+}
+
+static int msm_dwc3_usbdev_notify(struct notifier_block *self,
+			unsigned long action, void *priv)
+{
+	struct dwc3_msm *mdwc = container_of(self, struct dwc3_msm, usbdev_nb);
+	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
+	struct usb_bus *bus = priv;
+
+	/* Interested only in recovery when HC dies */
+	if (action != USB_BUS_DIED)
+		return 0;
+
+	dev_dbg(mdwc->dev, "%s initiate recovery from hc_died\n", __func__);
+	/* Recovery already under process */
+	if (mdwc->hc_died)
+		return 0;
+
+	if (bus->controller != &dwc->xhci->dev) {
+		dev_dbg(mdwc->dev, "%s event for diff HCD\n", __func__);
+		return 0;
+	}
+
+	mdwc->hc_died = true;
+	queue_delayed_work(mdwc->sm_usb_wq, &mdwc->sm_work, 0);
+	return 0;
 }
 
 /*
@@ -4532,6 +4564,36 @@ icc_err:
 
 	return ret;
 }
+static ssize_t vbus_auto_show(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
+
+	if (mdwc->vbus_auto)
+		return snprintf(buf, PAGE_SIZE, "on\n");
+	else
+		return snprintf(buf, PAGE_SIZE, "off\n");
+}
+
+static ssize_t vbus_auto_store(struct device *dev, struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
+
+	if (sysfs_streq(buf, "on")) {
+		mdwc->vbus_auto = true;
+		if (mdwc->has_vbus_gpio)
+			gpiod_set_value_cansleep(mdwc->vbus_out_gpiod, 1);
+	}
+	else {
+		mdwc->vbus_auto = false;
+		if (mdwc->has_vbus_gpio && mdwc->id_state != DWC3_ID_GROUND)
+				gpiod_set_value_cansleep(mdwc->vbus_out_gpiod, 0);
+	}
+
+	return count;
+}
+static DEVICE_ATTR_RW(vbus_auto);
 
 static int dwc_dpdm_cb(struct notifier_block *nb, unsigned long evt, void *p)
 {
@@ -4689,7 +4751,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	struct dwc3	*dwc;
 	struct resource *res;
 	int ret = 0, size = 0, i;
-	u32 val;
+	u32 val, debounce;
 
 	mdwc = devm_kzalloc(&pdev->dev, sizeof(*mdwc), GFP_KERNEL);
 	if (!mdwc)
@@ -4832,6 +4894,22 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev, "setting DMA mask to 32 failed.\n");
 			ret = -EOPNOTSUPP;
 			goto err;
+		}
+	}
+
+	if (!of_property_read_bool(node, "extcon")) {
+		/* Set up vbus gpio */
+		mdwc->vbus_out_gpiod = devm_gpiod_get(&pdev->dev, "vbus-out",
+							GPIOD_OUT_LOW);
+		mdwc->has_vbus_gpio = false;
+		if (!IS_ERR(mdwc->vbus_out_gpiod)) {
+			mdwc->has_vbus_gpio = true;
+			ret = of_property_read_u32(node, "debounce-delay-ms", &debounce);
+			if (ret == 0) {
+				ret = gpiod_set_debounce(mdwc->vbus_out_gpiod, debounce * 1000);
+				if (ret < 0)
+					dev_warn(dev, "No HW support for debouncing\n");
+			}
 		}
 	}
 
@@ -5173,6 +5251,8 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	device_create_file(&pdev->dev, &dev_attr_mode);
 	device_create_file(&pdev->dev, &dev_attr_speed);
 	device_create_file(&pdev->dev, &dev_attr_bus_vote);
+	if (mdwc->has_vbus_gpio)
+		device_create_file(&pdev->dev, &dev_attr_vbus_auto);
 
 	return 0;
 
@@ -5443,10 +5523,14 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 		usb_register_notify(&mdwc->host_nb);
 #endif
 
+		mdwc->usbdev_nb.notifier_call = msm_dwc3_usbdev_notify;
+		usb_register_atomic_notify(&mdwc->usbdev_nb);
+
 		dwc3_set_prtcap(dwc, DWC3_GCTL_PRTCAP_HOST);
 		if (!dwc->dis_enblslpm_quirk)
 			dwc3_en_sleep_mode(mdwc);
 		ret = dwc3_host_init(dwc);
+
 		if (ret) {
 			dev_err(mdwc->dev,
 				"%s: failed to add XHCI pdev ret=%d\n",
@@ -5511,6 +5595,7 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 				msecs_to_jiffies(1000 * PM_QOS_SAMPLE_SEC));
 	} else {
 		dev_dbg(mdwc->dev, "%s: turn off host\n", __func__);
+		usb_unregister_atomic_notify(&mdwc->usbdev_nb);
 
 		if (!IS_ERR_OR_NULL(mdwc->vbus_reg))
 			ret = regulator_disable(mdwc->vbus_reg);
@@ -5941,6 +6026,8 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 		} else {
 			mdwc->drd_state = DRD_STATE_HOST;
 
+			if (mdwc->has_vbus_gpio)
+				gpiod_set_value_cansleep(mdwc->vbus_out_gpiod, 1);
 			ret = dwc3_otg_start_host(mdwc, 1);
 			if ((ret == -EPROBE_DEFER) &&
 						mdwc->vbus_retry_count < 3) {
@@ -5962,12 +6049,15 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 		break;
 
 	case DRD_STATE_HOST:
-		if (test_bit(ID, &mdwc->inputs)) {
-			dev_dbg(mdwc->dev, "id\n");
+		if (test_bit(ID, &mdwc->inputs) || mdwc->hc_died) {
+			dev_dbg(mdwc->dev, "id || hc_died\n");
 			dwc3_otg_start_host(mdwc, 0);
 			mdwc->drd_state = DRD_STATE_IDLE;
 			mdwc->vbus_retry_count = 0;
+			mdwc->hc_died = false;
 			work = true;
+			if (!mdwc->vbus_auto && mdwc->has_vbus_gpio)
+				gpiod_set_value_cansleep(mdwc->vbus_out_gpiod, 0);
 		} else {
 			dev_dbg(mdwc->dev, "still in a_host state. Resuming root hub.\n");
 			dbg_event(0xFF, "XHCIResume", 0);

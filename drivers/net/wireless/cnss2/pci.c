@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/cma.h>
@@ -3470,7 +3470,7 @@ static int cnss_pci_suspend(struct device *dev)
 		}
 	}
 
-	if (!test_bit(DISABLE_DRV, &plat_priv->ctrl_params.quirks) &&
+/*	if (!test_bit(DISABLE_DRV, &plat_priv->ctrl_params.quirks) &&
 	    pci_priv->drv_supported) {
 		pci_priv->drv_connected_last =
 			cnss_pci_get_drv_connected(pci_priv);
@@ -3480,7 +3480,7 @@ static int cnss_pci_suspend(struct device *dev)
 			goto out;
 		}
 	}
-
+*/
 	set_bit(CNSS_IN_SUSPEND_RESUME, &plat_priv->driver_state);
 
 	ret = cnss_pci_suspend_driver(pci_priv);

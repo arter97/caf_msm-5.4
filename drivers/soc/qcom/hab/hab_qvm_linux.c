@@ -91,7 +91,7 @@ void hab_pipe_read_dump(struct physical_channel *pchan)
 	uint32_t buf_size = PIPE_SHMEM_SIZE;
 
 	snprintf(str, sizeof(str),
-		"index 0x%X rd_cnt %d wr_cnt %d size %d data_addr %lX",
+		"index 0x%X rd_cnt %d wr_cnt %d size %d data_addr %s",
 		dev->pipe_ep->rx_info.index,
 		sh_buf->rd_count,
 		sh_buf->wr_count,
@@ -108,7 +108,7 @@ void hab_pipe_read_dump(struct physical_channel *pchan)
 
 		snprintf(str, sizeof(str),
 		"it %d: rd %d wr %d va %lX index 0x%X size %d ret %d\n",
-		i, it->rd_cnt, it->wr_cnt, it->va, it->index, it->sz, it->ret);
+		i, it->rd_cnt, it->wr_cnt, (long unsigned int)it->va, it->index, it->sz, it->ret);
 		dump_hab_buf(str, strlen(str)+1);
 	}
 

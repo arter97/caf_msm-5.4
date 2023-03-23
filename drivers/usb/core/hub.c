@@ -45,8 +45,12 @@
 #define USB_PRODUCT_USB5534B			0x5534
 #define USB_VENDOR_CYPRESS			0x04b4
 #define USB_PRODUCT_CY7C65632			0x6570
+#define USB_VENDOR_APTIV			0x2c48
+#define USB_VENDOR_APTIV_OLD			0x2996
+#define USB_APTIV_HUB_QUICK_CMD_RETRY_TIMEOUT	150
 #define HUB_QUIRK_CHECK_PORT_AUTOSUSPEND	0x01
 #define HUB_QUIRK_DISABLE_AUTOSUSPEND		0x02
+#define HUB_QUIRK_SET_ADDR_QUICK_RETRY		0x04
 
 #define USB_TP_TRANSMISSION_DELAY	40	/* ns */
 #define USB_TP_TRANSMISSION_DELAY_MAX	65535	/* ns */
@@ -1891,6 +1895,9 @@ static int hub_probe(struct usb_interface *intf, const struct usb_device_id *id)
 		usb_autopm_get_interface_no_resume(intf);
 	}
 
+	if (id->driver_info & HUB_QUIRK_SET_ADDR_QUICK_RETRY)
+		hub->quirk_set_addr_quick_retry = 1;
+
 	if (hub_configure(hub, &desc->endpoint[0].desc) >= 0)
 		return 0;
 
@@ -2726,6 +2733,7 @@ static unsigned hub_is_wusb(struct usb_hub *hub)
 #define HUB_ROOT_RESET_TIME	60	/* times are in msec */
 #define HUB_SHORT_RESET_TIME	10
 #define HUB_BH_RESET_TIME	50
+#define HUB_APTIV_RESET_TIME	70
 #define HUB_LONG_RESET_TIME	200
 #define HUB_RESET_TIMEOUT	800
 
@@ -2744,6 +2752,20 @@ static bool use_new_scheme(struct usb_device *udev, int retry,
 
 	if (udev->speed >= USB_SPEED_SUPER)
 		return false;
+
+        if (udev->speed <= USB_SPEED_FULL &&
+		(le16_to_cpu(udev->parent->descriptor.idVendor) == 0x2996 ||
+		le16_to_cpu(udev->parent->descriptor.idVendor) == 0x2c48)) {
+		/*
+		 * "New scheme" also causes issues with TI USB Host Controller for
+		 * full-speed devices. Disabling the new scheme will force
+		 * Address Device command to start with BSR=0.
+		 */
+		dev_err(&udev->dev, "(Aptiv) [%04x:%04x] TT fix for TI USB HC\n",
+			le16_to_cpu(udev->parent->descriptor.idVendor),
+			le16_to_cpu(udev->parent->descriptor.idProduct));
+		return false;
+	}
 
 	return USE_NEW_SCHEME(retry, old_scheme_first_port || old_scheme_first);
 }
@@ -2774,6 +2796,9 @@ static int hub_port_wait_reset(struct usb_hub *hub, int port1,
 	u16 portstatus;
 	u16 portchange;
 	u32 ext_portstatus = 0;
+
+	if(hub->quirk_set_addr_quick_retry)
+		delay = HUB_APTIV_RESET_TIME;
 
 	for (delay_time = 0;
 			delay_time < HUB_RESET_TIMEOUT;
@@ -4511,6 +4536,8 @@ EXPORT_SYMBOL_GPL(usb_ep0_reinit);
 static int hub_set_address(struct usb_device *udev, int devnum)
 {
 	int retval;
+	int timeout = USB_CTRL_SET_TIMEOUT;
+	struct usb_hub *hub = usb_hub_to_struct_hub(udev->parent);
 	struct usb_hcd *hcd = bus_to_hcd(udev->bus);
 
 	/*
@@ -4523,12 +4550,19 @@ static int hub_set_address(struct usb_device *udev, int devnum)
 		return 0;
 	if (udev->state != USB_STATE_DEFAULT)
 		return -EINVAL;
-	if (hcd->driver->address_device)
+
+	if(hub->quirk_set_addr_quick_retry)
+		timeout = USB_APTIV_HUB_QUICK_CMD_RETRY_TIMEOUT;
+
+	if (hcd->driver->address_device) {
+		hcd->cmd_delay = timeout;
 		retval = hcd->driver->address_device(hcd, udev);
+		hcd->cmd_delay = 0;
+	}
 	else
 		retval = usb_control_msg(udev, usb_sndaddr0pipe(),
 				USB_REQ_SET_ADDRESS, 0, devnum, 0,
-				NULL, 0, USB_CTRL_SET_TIMEOUT);
+				NULL, 0, timeout);
 	if (retval == 0) {
 		update_devnum(udev, devnum);
 		/* Device now using proper address. */
@@ -5591,6 +5625,16 @@ static const struct usb_device_id hub_id_table[] = {
       .idVendor = USB_VENDOR_CYPRESS,
       .idProduct = USB_PRODUCT_CY7C65632,
       .driver_info = HUB_QUIRK_DISABLE_AUTOSUSPEND},
+    { .match_flags = USB_DEVICE_ID_MATCH_VENDOR
+			| USB_DEVICE_ID_MATCH_INT_CLASS,
+      .idVendor = USB_VENDOR_APTIV,
+      .bInterfaceClass = USB_CLASS_HUB,
+      .driver_info = HUB_QUIRK_SET_ADDR_QUICK_RETRY},
+    { .match_flags = USB_DEVICE_ID_MATCH_VENDOR
+			| USB_DEVICE_ID_MATCH_INT_CLASS,
+      .idVendor = USB_VENDOR_APTIV_OLD,
+      .bInterfaceClass = USB_CLASS_HUB,
+      .driver_info = HUB_QUIRK_SET_ADDR_QUICK_RETRY},
     { .match_flags = USB_DEVICE_ID_MATCH_VENDOR
 			| USB_DEVICE_ID_MATCH_INT_CLASS,
       .idVendor = USB_VENDOR_GENESYS_LOGIC,

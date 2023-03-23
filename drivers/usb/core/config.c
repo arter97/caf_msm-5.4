@@ -357,6 +357,18 @@ static int usb_parse_endpoint(struct device *ddev, int cfgno,
 				n = clamp(fls(d->bInterval), i, j);
 				i = j = n;
 			}
+			/*
+			 * This quirk limits bInterval to 9.
+			 */
+			if ((to_usb_device(ddev)->quirks &
+				USB_QUIRK_LINEAR_FRAME_INTR_BINTERVAL) &&
+				(to_usb_device(ddev)->quirks &
+				USB_QUIRK_LINEAR_UFRAME_INTR_BINTERVAL)) {
+				i = 1;
+				j = 9;
+				n = clamp((int) d->bInterval, i, j);
+				i = j = n;
+			}
 			break;
 		default:		/* USB_SPEED_FULL or _LOW */
 			/*
