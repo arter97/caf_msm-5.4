@@ -2341,14 +2341,10 @@ static void dwc3_stop_active_transfers(struct dwc3 *dwc, bool block_db)
 		if (!(dep->flags & DWC3_EP_ENABLED))
 			continue;
 
-		if (dep->gsi && dep->direction && block_db) {
-			dbg_log_string("block_db with dep:%s", dep->name);
-			dwc3_notify_event(dwc,
-				DWC3_CONTROLLER_NOTIFY_CLEAR_DB, 0);
-		}
-
 		dwc3_remove_requests(dwc, dep);
 	}
+	dwc3_notify_event(dwc,
+			DWC3_CONTROLLER_NOTIFY_CLEAR_DB, 0);
 }
 
 /**
