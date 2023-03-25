@@ -1405,7 +1405,7 @@ int32_t npu_host_get_fw_property(struct npu_device *npu_dev,
 	}
 
 deinit_fw:
-	mutex_lock(&host_ctx->misc_cmd_lock);
+	mutex_unlock(&host_ctx->misc_cmd_lock);
 	fw_deinit(npu_dev, false, true);
 get_prop_exit:
 	kfree(prop_packet);

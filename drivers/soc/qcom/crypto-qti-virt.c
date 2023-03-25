@@ -3,7 +3,7 @@
  * Crypto virtual library for storage encryption.
  *
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -64,9 +64,9 @@ static struct completion send_fbe_req_done;
 
 static int32_t send_fbe_req_hab(void *arg)
 {
-	int ret = 0;
+	int ret = 0, err = 0;
 	uint32_t status_size;
-	uint32_t handle;
+	uint32_t handle = 0;
 	struct fbe_req_args *req_args = (struct fbe_req_args *)arg;
 
 	do {
@@ -106,15 +106,16 @@ static int32_t send_fbe_req_hab(void *arg)
 			break;
 		}
 
-		ret = habmm_socket_close(handle);
-		if (ret) {
-			pr_err("habmm_socket_close failed with ret = %d\n", ret);
-			break;
-		}
 	} while (0);
 
+	if (handle) {
+		err = habmm_socket_close(handle);
+		if (err)
+			pr_err("habmm_socket_close failed with err = %d\n", err);
+	}
+
 	if (req_args)
-		req_args->ret = ret;
+		req_args->ret = ret | err;
 
 	complete(&send_fbe_req_done);
 
