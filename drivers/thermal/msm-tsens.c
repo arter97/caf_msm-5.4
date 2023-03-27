@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2020, 2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/err.h>
@@ -65,34 +66,24 @@ static int tsens_register_interrupts(struct tsens_device *tmdev)
 static int tsens_suspend(struct device *dev)
 {
 	struct tsens_device *tmdev = dev_get_drvdata(dev);
-
-	if (mem_sleep_current != PM_SUSPEND_MEM)
-		return 0;
-
 	return tmdev->ops->suspend(tmdev);
 }
 
 static int tsens_resume(struct device *dev)
 {
 	struct tsens_device *tmdev = dev_get_drvdata(dev);
-
-	if (mem_sleep_current != PM_SUSPEND_MEM)
-		return 0;
-
 	return tmdev->ops->resume(tmdev);
 }
 
 static int tsens_freeze(struct device *dev)
 {
 	struct tsens_device *tmdev = dev_get_drvdata(dev);
-
 	return tmdev->ops->suspend(tmdev);
 }
 
 static int tsens_restore(struct device *dev)
 {
 	struct tsens_device *tmdev = dev_get_drvdata(dev);
-
 	return tmdev->ops->resume(tmdev);
 }
 
