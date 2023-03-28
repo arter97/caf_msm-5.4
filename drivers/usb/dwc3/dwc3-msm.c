@@ -5100,7 +5100,7 @@ static int vbus_regulator_enable(struct dwc3_msm *mdwc, bool on)
 	if (!mdwc->vbus_reg)
 		return 0;
 
-	if (on)
+	if (!on)
 		return regulator_disable(mdwc->vbus_reg);
 
 	return regulator_enable(mdwc->vbus_reg);
