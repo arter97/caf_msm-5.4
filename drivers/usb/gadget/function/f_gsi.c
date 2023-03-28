@@ -2503,7 +2503,7 @@ static int gsi_dynamic_ep_allocation(struct usb_function *f)
 		switch (gsi->prot_id) {
 		case IPA_USB_RMNET:
 		case IPA_USB_ECM:
-			if (__gsi[IPA_USB_RMNET_CV2X]) {
+			if (__gsi[IPA_USB_RMNET_CV2X]->function.fs_descriptors) {
 				if (gsi->d_port.in_ep)
 					usb_gsi_ep_op(gsi->d_port.in_ep,
 						&gsi->d_port.in_request,
@@ -2524,7 +2524,7 @@ static int gsi_dynamic_ep_allocation(struct usb_function *f)
 			}
 		break;
 		case IPA_USB_DIAG:
-			if (!__gsi[IPA_USB_RMNET_CV2X])
+			if (!__gsi[IPA_USB_RMNET_CV2X]->function.fs_descriptors)
 				usb_gsi_ep_op(gsi->d_port.in_ep,
 					&gsi->d_port.in_request,
 					GSI_DYNAMIC_EP_INTR_CALC);
