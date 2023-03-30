@@ -2845,7 +2845,7 @@ static int ethqos_ipa_offload_suspend_be(struct qcom_ethqos *ethqos)
 		ETHQOSERR("IPA Offload Disconnect Successfully for %d\n",
 			  type);
 	}
-
+	priv->hw->dma->stop_tx(priv->ioaddr, eth_ipa_queue_type_to_rx_queue(type));
 	if (ret != 0) {
 		ETHQOSERR("%s: stop_dma_tx failed %d for type %d\n",
 			  __func__, ret, type);
