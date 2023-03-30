@@ -135,13 +135,16 @@ static void send_fbe_req(struct fbe_req_args *arg)
 		return;
 	}
 
-	if (wait_for_completion_interruptible_timeout(
+	if (wait_for_completion_timeout(
 		&send_fbe_req_done, msecs_to_jiffies(HAB_TIMEOUT_MS)) <= 0) {
 		pr_err("%s: timeout hit\n", __func__);
 		kthread_stop(thread);
 		arg->ret = -ETIME;
 		return;
 	}
+
+	if (thread)
+		kthread_stop(thread);
 }
 
 int crypto_qti_virt_ice_get_info(uint32_t *total_num_slots)
@@ -156,8 +159,8 @@ int crypto_qti_virt_ice_get_info(uint32_t *total_num_slots)
 	arg.req.cmd = FBE_GET_MAX_SLOTS;
 	send_fbe_req(&arg);
 	if (arg.ret || arg.response.status < 0) {
-		pr_err("send_fbe_req_v2 failed with ret = %d, max_slots = %d\n",
-		       arg.ret, arg.response.status);
+		pr_err("%s: send_fbe_req_v2 failed with ret = %d, max_slots = %d\n",
+		       __func__, arg.ret, arg.response.status);
 		return -ECOMM;
 	}
 
@@ -176,8 +179,8 @@ static int verify_crypto_capabilities(enum blk_crypto_mode_num crypto_mode,
 	arg.req.data_unit_size = data_unit_size;
 	send_fbe_req(&arg);
 	if (arg.ret || arg.response.status < 0) {
-		pr_err("send_fbe_req_v2 failed with ret = %d, status = %d\n",
-			arg.ret, arg.response.status);
+		pr_err("%s: send_fbe_req_v2 failed with ret = %d, status = %d\n",
+			__func__, arg.ret, arg.response.status);
 		return -EINVAL;
 	}
 
@@ -219,8 +222,8 @@ int crypto_qti_virt_program_key(const struct blk_crypto_key *key,
 	send_fbe_req(&arg);
 
 	if (arg.ret || arg.response.status) {
-		pr_err("send_fbe_req_v2 failed with ret = %d, status = %d\n",
-		       arg.ret, arg.response.status);
+		pr_err("%s: send_fbe_req_v2 failed with ret = %d, status = %d\n",
+		       __func__, arg.ret, arg.response.status);
 		return -ECOMM;
 	}
 
@@ -238,8 +241,8 @@ int crypto_qti_virt_invalidate_key(unsigned int slot)
 	send_fbe_req(&arg);
 
 	if (arg.ret || arg.response.status) {
-		pr_err("send_fbe_req_v2 failed with ret = %d, status = %d\n",
-		       arg.ret, arg.response.status);
+		pr_err("%s: send_fbe_req_v2 failed with ret = %d, status = %d\n",
+		       __func__, arg.ret, arg.response.status);
 		return -ECOMM;
 	}
 
@@ -257,8 +260,8 @@ int crypto_qti_virt_get_crypto_capabilities(unsigned int *crypto_modes_supported
 	send_fbe_req(&arg);
 
 	if (arg.ret || arg.response.status) {
-		pr_err("send_fbe_req_v2 failed with ret = %d, status = %d\n",
-		       arg.ret, arg.response.status);
+		pr_err("%s: send_fbe_req_v2 failed with ret = %d, status = %d\n",
+		       __func__, arg.ret, arg.response.status);
 		return -ECOMM;
 	}
 	memcpy(crypto_modes_supported, &(arg.response.crypto_modes_supported[0]),
@@ -282,8 +285,8 @@ int crypto_qti_virt_derive_raw_secret_platform(const u8 *wrapped_key,
 	send_fbe_req(&arg);
 
 	if (arg.ret || arg.response.status) {
-		pr_err("send_fbe_req_v2 failed with ret = %d, status = %d\n",
-		       arg.ret, arg.response.status);
+		pr_err("%s: send_fbe_req_v2 failed with ret = %d, status = %d\n",
+		       __func__, arg.ret, arg.response.status);
 		return -EINVAL;
 	}
 	memcpy(secret, &(arg.response.secret_key[0]), secret_size);
