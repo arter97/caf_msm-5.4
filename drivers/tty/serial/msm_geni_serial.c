@@ -3125,12 +3125,8 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 		disable_irq(uport->irq);
 	else {
 		msm_geni_serial_power_on(uport);
-		if (msm_port->wakeup_irq > 0) {
-			irq_set_irq_wake(msm_port->wakeup_irq, 0);
-			disable_irq(msm_port->wakeup_irq);
-			free_irq(msm_port->wakeup_irq, uport);
-		}
 		if (msm_port->xfer_mode == GSI_DMA) {
+
 			/* From the framework every time the stop
 			 * rx sequncer will be called before the closing
 			 * of UART port and due to atomic context we can't
@@ -3207,7 +3203,7 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 				"%s: Failed to suspend:%d\n", __func__, ret);
 			}
 		}
-
+		msm_port->edge_count = 0;
 
 		if (!IS_ERR_OR_NULL(msm_port->serial_rsc.geni_gpio_shutdown)) {
 			ret = pinctrl_select_state(msm_port->serial_rsc.geni_pinctrl,
@@ -3393,6 +3389,7 @@ static int msm_geni_serial_startup(struct uart_port *uport)
 			goto exit_startup;
 		}
 	} else if (msm_port->wakeup_irq > 0 && !uart_console(uport)) {
+		irq_set_status_flags(msm_port->wakeup_irq, IRQ_NOAUTOEN);
 		ret = request_irq(msm_port->wakeup_irq, msm_geni_hs_wakeup_isr,
 				IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 				"hs_uart_wakeup", uport);
@@ -4735,9 +4732,18 @@ static int msm_geni_serial_runtime_suspend(struct device *dev)
 		goto exit_runtime_suspend;
 	}
 
-	if (port->wakeup_irq > 0) {
+	/*
+	 * If shutdown is not in progress, check if port
+	 * is in open state before enabling wakeup_irq
+	 */
+	if (!port->shutdown_in_progress &&
+	    port->wakeup_irq > 0  && port->uport.state->port.tty) {
 		port->edge_count = 0;
 		enable_irq(port->wakeup_irq);
+		ret = irq_set_irq_wake(port->wakeup_irq, 1);
+		if (unlikely(ret))
+			dev_err(dev, "%s:Failed to set IRQ wake:%d\n",
+				__func__, ret);
 	}
 	IPC_LOG_MSG(port->ipc_log_pwr, "%s: End\n", __func__);
 	__pm_relax(port->geni_wake);
@@ -4758,8 +4764,17 @@ static int msm_geni_serial_runtime_resume(struct device *dev)
 	 */
 	__pm_relax(port->geni_wake);
 	__pm_stay_awake(port->geni_wake);
-	if (port->wakeup_irq > 0)
+	/*
+	 * check for wakeup_enabled before disabling the wakeup_irq as
+	 * this might be disabled from shutdown as well.
+	 */
+	if (port->wakeup_irq > 0 && port->uport.state->port.tty) {
+		ret = irq_set_irq_wake(port->wakeup_irq, 0);
+		if (unlikely(ret))
+			dev_err(dev, "%s:Failed to unset IRQ wake:%d\n",
+				__func__, ret);
 		disable_irq(port->wakeup_irq);
+	}
 	/*
 	 * Resources On.
 	 * Start Rx.
