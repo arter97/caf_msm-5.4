@@ -3918,7 +3918,7 @@ static int stmmac_rx_jumbo(struct stmmac_priv *priv, u32 queue,
 	unsigned int frame_len = 0;
 	struct sk_buff *skb = NULL;
 	struct dma_desc *np;
-	struct stmmac_rx_buffer *buf;
+	struct stmmac_rx_buffer *buf = NULL;
 
 	/* Check if we need to handle an incomplete
 	 * jumbo frame when first enter here.

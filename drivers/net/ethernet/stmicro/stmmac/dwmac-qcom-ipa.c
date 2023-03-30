@@ -2385,12 +2385,33 @@ static int ethqos_ipa_offload_connect(struct qcom_ethqos *ethqos,
 	struct ipa_perf_profile profile;
 	int ret = 0;
 	int i = 0;
-	struct platform_device *pdev = ethqos->pdev;
-	struct net_device *dev = platform_get_drvdata(pdev);
-	struct stmmac_priv *priv = netdev_priv(dev);
+	struct platform_device *pdev = NULL;
+	struct net_device *dev = NULL;
+	struct stmmac_priv *priv = NULL;
 
 	ETHQOSDBG("begin\n");
 	if (!ethqos) {
+		ETHQOSERR("Null Param\n");
+		ret = -1;
+		return ret;
+	}
+	pdev = ethqos->pdev;
+
+	if (!pdev) {
+		ETHQOSERR("Null Param\n");
+		ret = -1;
+		return ret;
+	}
+	dev = platform_get_drvdata(pdev);
+
+	if (!dev) {
+		ETHQOSERR("Null Param\n");
+		ret = -1;
+		return ret;
+	}
+	priv = netdev_priv(dev);
+
+	if (!priv) {
 		ETHQOSERR("Null Param\n");
 		ret = -1;
 		return ret;
@@ -3260,7 +3281,7 @@ static int ethqos_ipa_uc_ready(struct qcom_ethqos *pdata)
 void ethqos_ipa_offload_event_handler(void *data,
 				      int ev)
 {
-	int type;
+	int type = 0;
 	u32 proto;
 	struct platform_device *pdev;
 	struct net_device *dev;
