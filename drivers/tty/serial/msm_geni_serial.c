@@ -71,7 +71,7 @@
 
 /* SE_UART_RX_TRANS_CFG */
 #define UART_RX_INS_STATUS_BIT	(BIT(2))
-#define UART_RX_PAR_EN		(BIT(3))
+#define UART_RX_PAR_EN		(BIT(4))
 
 /* SE_UART_RX_WORD_LEN */
 #define RX_WORD_LEN_MASK	(GENMASK(9, 0))
@@ -3428,6 +3428,10 @@ static void msm_geni_serial_termios_cfg(struct uart_port *uport,
 		rx_trans_cfg |= UART_RX_PAR_EN;
 		tx_parity_cfg |= PAR_CALC_EN;
 		rx_parity_cfg |= PAR_CALC_EN;
+
+		tx_parity_cfg &= ~PAR_MODE_MSK;
+		rx_parity_cfg &= ~PAR_MODE_MSK;
+
 		if (termios->c_cflag & PARODD) {
 			tx_parity_cfg |= PAR_ODD << PAR_MODE_SHFT;
 			rx_parity_cfg |= PAR_ODD << PAR_MODE_SHFT;
