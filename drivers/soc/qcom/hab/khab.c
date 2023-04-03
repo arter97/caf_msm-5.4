@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include "hab.h"
 #include <linux/module.h>
@@ -8,6 +9,12 @@
 int32_t habmm_socket_open(int32_t *handle, uint32_t mm_ip_id,
 		uint32_t timeout, uint32_t flags)
 {
+	while (unlikely(!READ_ONCE(hab_driver.hab_init_success))) {
+		pr_info_once("opening on mmid %d when hab has not completed init\n",
+					mm_ip_id);
+		schedule();
+	}
+
 	return hab_vchan_open(hab_driver.kctx, mm_ip_id, handle,
 				timeout, flags);
 }

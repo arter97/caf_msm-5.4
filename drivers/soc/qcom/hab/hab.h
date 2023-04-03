@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __HAB_H
 #define __HAB_H
@@ -322,6 +323,8 @@ struct hab_driver {
 	void *hyp_priv; /* hypervisor plug-in storage */
 
 	void *hab_vmm_handle;
+
+	int hab_init_success;
 };
 
 struct virtual_channel {
