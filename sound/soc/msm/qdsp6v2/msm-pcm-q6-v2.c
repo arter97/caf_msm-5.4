@@ -9,7 +9,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 
@@ -765,9 +765,10 @@ static int msm_pcm_open(struct snd_pcm_substream *substream)
 }
 
 static int msm_pcm_playback_copy(struct snd_pcm_substream *substream, int a,
-	unsigned long hwoff, void __user *buf, unsigned long fbytes)
+	snd_pcm_uframes_t hwoff, void __user *buf, snd_pcm_uframes_t frames)
 {
 	int ret = 0;
+	int fbytes = 0;
 	int xfer = 0;
 	char *bufptr = NULL;
 	void *data = NULL;
@@ -778,6 +779,7 @@ static int msm_pcm_playback_copy(struct snd_pcm_substream *substream, int a,
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct msm_audio *prtd = runtime->private_data;
 
+	fbytes = frames_to_bytes(runtime, frames);
 	pr_debug("%s: prtd->out_count = %d\n",
 				__func__, atomic_read(&prtd->out_count));
 
@@ -927,10 +929,11 @@ static int msm_pcm_playback_close(struct snd_pcm_substream *substream)
 }
 
 static int msm_pcm_capture_copy(struct snd_pcm_substream *substream,
-		 int channel, unsigned long hwoff, void __user *buf,
-						 unsigned long fbytes)
+		 int channel, snd_pcm_uframes_t hwoff, void __user *buf,
+						 snd_pcm_uframes_t frames)
 {
 	int ret = 0;
+	int fbytes = 0;
 	int xfer;
 	char *bufptr;
 	void *data = NULL;
@@ -942,6 +945,7 @@ static int msm_pcm_capture_copy(struct snd_pcm_substream *substream,
 
 
 	pr_debug("%s\n", __func__);
+	fbytes = frames_to_bytes(runtime, frames);
 
 	pr_debug("appl_ptr %d\n", (int)runtime->control->appl_ptr);
 	pr_debug("hw_ptr %d\n", (int)runtime->status->hw_ptr);
@@ -1041,14 +1045,14 @@ static int msm_pcm_capture_close(struct snd_pcm_substream *substream)
 }
 
 static int msm_pcm_copy(struct snd_pcm_substream *substream, int a,
-	 unsigned long hwoff, void __user *buf, unsigned long fbytes)
+	 snd_pcm_uframes_t hwoff, void __user *buf, snd_pcm_uframes_t frames)
 {
 	int ret = 0;
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
-		ret = msm_pcm_playback_copy(substream, a, hwoff, buf, fbytes);
+		ret = msm_pcm_playback_copy(substream, a, hwoff, buf, frames);
 	else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
-		ret = msm_pcm_capture_copy(substream, a, hwoff, buf, fbytes);
+		ret = msm_pcm_capture_copy(substream, a, hwoff, buf, frames);
 	return ret;
 }
 
