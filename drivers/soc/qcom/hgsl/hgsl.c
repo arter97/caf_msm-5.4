@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2022, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1432,16 +1433,6 @@ static int hgsl_ctxt_destroy(struct hgsl_priv *priv,
 	bool put_channel = false;
 	struct doorbell_queue *dbq = NULL;
 
-
-	if (!hab_channel) {
-		ret = hgsl_hyp_channel_pool_get(&priv->hyp_priv, 0, &hab_channel);
-		if (ret) {
-			LOGE("Failed to get hab channel %d", ret);
-			goto out;
-		}
-		put_channel = true;
-	}
-
 	ctxt = hgsl_get_context(priv->dev, context_id);
 	if (!ctxt) {
 		LOGE("Invalid context id %d\n", context_id);
@@ -1481,6 +1472,16 @@ static int hgsl_ctxt_destroy(struct hgsl_priv *priv,
 
 	while (!ctxt->destroyed)
 		cpu_relax();
+
+	if (!hab_channel) {
+		ret = hgsl_hyp_channel_pool_get(&priv->hyp_priv, 0, &hab_channel);
+		if (ret) {
+			LOGE("Failed to get hab channel %d", ret);
+			hgsl_free(ctxt);
+			goto out;
+		}
+		put_channel = true;
+	}
 
 	hgsl_hyp_put_shadowts_mem(hab_channel, &ctxt->shadow_ts_node);
 
@@ -1534,7 +1535,7 @@ static int hgsl_ioctl_ctxt_create(struct file *filep, unsigned long arg)
 	ctxt = hgsl_zalloc(sizeof(*ctxt));
 	if (ctxt == NULL) {
 		ret = -ENOMEM;
-		return ret;
+		goto out;
 	}
 
 	if (params.flags & GSL_CONTEXT_FLAG_CLIENT_GENERATED_TS)
@@ -2885,7 +2886,7 @@ static int hgsl_cleanup(struct hgsl_priv *priv)
 
 	mutex_lock(&priv->lock);
 	if ((hab_channel == NULL) &&
-	(!list_empty(&priv->mem_mapped) || !list_empty(&priv->mem_allocated))) {
+			(!list_empty(&priv->mem_mapped) || !list_empty(&priv->mem_allocated))) {
 		ret = hgsl_hyp_channel_pool_get(&priv->hyp_priv, 0, &hab_channel);
 		if (ret)
 			LOGE("Failed to get channel %d", ret);
@@ -2896,11 +2897,9 @@ static int hgsl_cleanup(struct hgsl_priv *priv)
 		ret = hgsl_hyp_mem_unmap_smmu(hab_channel, node_found);
 		if (ret)
 			LOGE("Failed to clean mapped buffer %u, 0x%llx, ret %d",
-				node_found->export_id,
-				node_found->memdesc.gpuaddr, ret);
+					node_found->export_id, node_found->memdesc.gpuaddr, ret);
 		else
-			hgsl_trace_gpu_mem_total(priv,
-				-(node_found->memdesc.size64));
+			hgsl_trace_gpu_mem_total(priv, -(node_found->memdesc.size64));
 		list_del(&node_found->node);
 		hgsl_free(node_found);
 	}
@@ -2908,7 +2907,7 @@ static int hgsl_cleanup(struct hgsl_priv *priv)
 		ret = hgsl_hyp_mem_unmap_smmu(hab_channel, node_found);
 		if (ret)
 			LOGE("Failed to clean mapped buffer %u, 0x%llx, ret %d",
-			node_found->export_id, node_found->memdesc.gpuaddr, ret);
+					node_found->export_id, node_found->memdesc.gpuaddr, ret);
 		list_del(&node_found->node);
 		hgsl_trace_gpu_mem_total(priv, -(node_found->memdesc.size64));
 		hgsl_sharedmem_free(node_found);
