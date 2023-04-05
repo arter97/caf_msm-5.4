@@ -3985,6 +3985,10 @@ jumbo_read_again:
 		np = rx_q->dma_rx + next_entry;
 
 	prefetch(np);
+	if (!buf->page) {
+		pr_err("buf->page is NULL\n");
+		return -EFAULT;
+	}
 	prefetch(page_address(buf->page));
 
 	if (unlikely(jb_status & discard_frame)) {
@@ -4075,6 +4079,10 @@ jumbo_read_again:
 			dma_sync_single_for_cpu(GET_MEM_PDEV_DEV,
 						buf->addr, buf_len,
 						DMA_FROM_DEVICE);
+			if (!skb) {
+				pr_err("skb is NULL\n");
+				return -EFAULT;
+			}
 			skb_copy_to_linear_data_offset(skb,
 						       prev_len,
 						       buf_data -
