@@ -77,7 +77,7 @@
 /* Restart the timer, if amount of datagrams is less than given value */
 #define	CDC_NCM_RESTART_TIMER_DATAGRAM_CNT	3
 #define	CDC_NCM_TIMER_PENDING_CNT		2
-#define CDC_NCM_TIMER_INTERVAL_USEC		400UL
+#define CDC_NCM_TIMER_INTERVAL_USEC		50UL
 #define CDC_NCM_TIMER_INTERVAL_MIN		5UL
 #define CDC_NCM_TIMER_INTERVAL_MAX		(U32_MAX / NSEC_PER_USEC)
 

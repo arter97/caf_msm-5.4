@@ -110,6 +110,7 @@ struct ffs_function {
 	short				*interfaces_nums;
 
 	struct usb_function		function;
+	int                             cur_alt[MAX_CONFIG_INTERFACES];
 };
 
 
@@ -133,6 +134,7 @@ static int __must_check ffs_func_eps_enable(struct ffs_function *func);
 static int ffs_func_bind(struct usb_configuration *,
 			 struct usb_function *);
 static int ffs_func_set_alt(struct usb_function *, unsigned, unsigned);
+static int ffs_func_get_alt(struct usb_function *, unsigned);
 static void ffs_func_disable(struct usb_function *);
 static int ffs_func_setup(struct usb_function *,
 			  const struct usb_ctrlrequest *);
@@ -3611,6 +3613,19 @@ static void ffs_reset_work(struct work_struct *work)
 	ffs_data_reset(ffs);
 }
 
+static int ffs_func_get_alt(struct usb_function *f,
+			unsigned interface)
+{
+	struct ffs_function *func = ffs_func_from_usb(f);
+	int intf;
+
+	intf = ffs_func_revmap_intf(func, interface);
+	if (unlikely(intf < 0))
+		return intf;
+
+	return func->cur_alt[interface];
+}
+
 static int ffs_func_set_alt(struct usb_function *f,
 			    unsigned interface, unsigned alt)
 {
@@ -3627,11 +3642,11 @@ static int ffs_func_set_alt(struct usb_function *f,
 		if (unlikely(intf < 0))
 			return intf;
 	}
-
-	if (ffs->func) {
+	if (ffs->func && ((alt == -1) || (ffs->state != FFS_ACTIVE))) {
 		ffs_func_eps_disable(ffs->func);
 		ffs->func = NULL;
 		/* matching put to allow LPM on disconnect */
+		pr_info("%s() (%s) autopm put\n", __func__, opts->dev->name);
 		if (!strcmp(opts->dev->name, "adb"))
 			usb_gadget_autopm_put_async(ffs->gadget);
 	}
@@ -3656,12 +3671,14 @@ static int ffs_func_set_alt(struct usb_function *f,
 	ret = ffs_func_eps_enable(func);
 	if (likely(ret >= 0)) {
 		ffs_event_add(ffs, FUNCTIONFS_ENABLE);
-		/* Disable USB LPM later on bus_suspend for adb */
+		/* Disable USB LPM later on bus_suspend */
+		pr_info("%s() (%s) autopm get\n", __func__, opts->dev->name);
 		if (!strcmp(opts->dev->name, "adb"))
 			usb_gadget_autopm_get_async(ffs->gadget);
 	}
 
-	ffs_log("exit: ret %d", ret);
+	/*Save Alt Setting number of the Interface*/
+	func->cur_alt[interface] = alt;
 
 	return ret;
 }
@@ -4006,6 +4023,7 @@ static struct usb_function *ffs_alloc(struct usb_function_instance *fi)
 	func->function.bind    = ffs_func_bind;
 	func->function.unbind  = ffs_func_unbind;
 	func->function.set_alt = ffs_func_set_alt;
+	func->function.get_alt = ffs_func_get_alt;
 	func->function.disable = ffs_func_disable;
 	func->function.setup   = ffs_func_setup;
 	func->function.req_match = ffs_func_req_match;

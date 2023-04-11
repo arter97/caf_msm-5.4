@@ -535,7 +535,7 @@ static inline void ncm_reset_values(struct f_ncm *ncm)
 	ncm->port.header_len = 0;
 
 	ncm->port.fixed_out_len = le32_to_cpu(ntb_parameters.dwNtbOutMaxSize);
-	ncm->port.fixed_in_len = NTB_DEFAULT_IN_SIZE;
+	ncm->port.fixed_in_len =  le32_to_cpu(ntb_parameters.dwNtbInMaxSize);
 }
 
 /*
@@ -1029,6 +1029,11 @@ static struct sk_buff *ncm_wrap_ntb(struct gether *port,
 	const int rem = le16_to_cpu(ntb_parameters.wNdpInPayloadRemainder);
 	const int dgram_idx_len = 2 * 2 * opts->dgram_item_len;
 
+	if (ncm->port.fixed_in_len != le32_to_cpu(ntb_parameters.dwNtbInMaxSize))
+		ncm->port.fixed_in_len = le32_to_cpu(ntb_parameters.dwNtbInMaxSize);
+
+	max_size = ncm->port.fixed_in_len;
+
 	if (!skb && !ncm->skb_tx_data)
 		return NULL;
 
@@ -1446,15 +1451,18 @@ static int ncm_bind(struct usb_configuration *c, struct usb_function *f)
 	 * with list_for_each_entry, so we assume no race condition
 	 * with regard to ncm_opts->bound access
 	 */
+	mutex_lock(&ncm_opts->lock);
+	gether_set_gadget(ncm_opts->net, cdev->gadget);
 	if (!ncm_opts->bound) {
-		mutex_lock(&ncm_opts->lock);
-		gether_set_gadget(ncm_opts->net, cdev->gadget);
 		status = gether_register_netdev(ncm_opts->net);
-		mutex_unlock(&ncm_opts->lock);
-		if (status)
+		if (status) {
+			mutex_unlock(&ncm_opts->lock);
 			goto fail;
+		}
 		ncm_opts->bound = true;
 	}
+	mutex_unlock(&ncm_opts->lock);
+
 	us = usb_gstrings_attach(cdev, ncm_strings,
 				 ARRAY_SIZE(ncm_string_defs));
 	if (IS_ERR(us)) {
@@ -1676,13 +1684,20 @@ static void ncm_free(struct usb_function *f)
 static void ncm_unbind(struct usb_configuration *c, struct usb_function *f)
 {
 	struct f_ncm *ncm = func_to_ncm(f);
+	struct f_ncm_opts   *ncm_opts;
 
 	DBG(c->cdev, "ncm unbind\n");
+
+	ncm_opts = container_of(f->fi, struct f_ncm_opts, func_inst);
 
 	hrtimer_cancel(&ncm->task_timer);
 
 	kfree(f->os_desc_table);
 	f->os_desc_n = 0;
+
+	ncm->timer_stopping = true;
+	ncm->netdev = NULL;
+	gether_disconnect(&ncm->port);
 
 	ncm_string_defs[0].id = 0;
 	usb_free_all_descriptors(f);
@@ -1694,6 +1709,10 @@ static void ncm_unbind(struct usb_configuration *c, struct usb_function *f)
 
 	kfree(ncm->notify_req->buf);
 	usb_ep_free_request(ncm->notify, ncm->notify_req);
+
+	mutex_lock(&ncm_opts->lock);
+	SET_NETDEV_DEV(ncm_opts->net, NULL);
+	mutex_unlock(&ncm_opts->lock);
 }
 
 static struct usb_function *ncm_alloc(struct usb_function_instance *fi)

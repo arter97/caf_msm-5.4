@@ -1054,6 +1054,7 @@ static struct inode *f2fs_alloc_inode(struct super_block *sb)
 
 	/* Initialize f2fs-specific inode info */
 	atomic_set(&fi->dirty_pages, 0);
+	atomic_set(&fi->i_compr_blocks, 0);
 	init_rwsem(&fi->i_sem);
 	spin_lock_init(&fi->i_size_lock);
 	INIT_LIST_HEAD(&fi->dirty_list);
@@ -1782,6 +1783,18 @@ restore_flag:
 
 static void f2fs_enable_checkpoint(struct f2fs_sb_info *sbi)
 {
+	int retry = DEFAULT_RETRY_IO_COUNT;
+
+	/* we should flush all the data to keep data consistency */
+	do {
+		sync_inodes_sb(sbi->sb);
+		cond_resched();
+		congestion_wait(BLK_RW_ASYNC, DEFAULT_IO_TIMEOUT);
+	} while (get_pages(sbi, F2FS_DIRTY_DATA) && retry--);
+
+	if (unlikely(retry < 0))
+		f2fs_warn(sbi, "checkpoint=enable has some unwritten data.");
+
 	down_write(&sbi->gc_lock);
 	f2fs_dirty_to_prefree(sbi);
 
@@ -2241,7 +2254,7 @@ int f2fs_quota_sync(struct super_block *sb, int type)
 	struct f2fs_sb_info *sbi = F2FS_SB(sb);
 	struct quota_info *dqopt = sb_dqopt(sb);
 	int cnt;
-	int ret;
+	int ret = 0;
 
 	/*
 	 * Now when everything is written we can discard the pagecache so
@@ -2252,10 +2265,11 @@ int f2fs_quota_sync(struct super_block *sb, int type)
 		if (type != -1 && cnt != type)
 			continue;
 
-		if (!sb_has_quota_active(sb, type))
-			return 0;
+		if (!sb_has_quota_active(sb, cnt))
+			continue;
 
-		inode_lock(dqopt->files[cnt]);
+		if (!f2fs_sb_has_quota_ino(sbi))
+			inode_lock(dqopt->files[cnt]);
 
 		/*
 		 * do_quotactl
@@ -2274,7 +2288,8 @@ int f2fs_quota_sync(struct super_block *sb, int type)
 		up_read(&sbi->quota_sem);
 		f2fs_unlock_op(sbi);
 
-		inode_unlock(dqopt->files[cnt]);
+		if (!f2fs_sb_has_quota_ino(sbi))
+			inode_unlock(dqopt->files[cnt]);
 
 		if (ret)
 			break;
@@ -3904,6 +3919,8 @@ free_node_inode:
 free_stats:
 	f2fs_destroy_stats(sbi);
 free_nm:
+	/* stop discard thread before destroying node manager */
+	f2fs_stop_discard_thread(sbi);
 	f2fs_destroy_node_manager(sbi);
 free_sm:
 	f2fs_destroy_segment_manager(sbi);

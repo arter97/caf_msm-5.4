@@ -312,8 +312,10 @@ static int qnx6_fill_super(struct super_block *s, void *data, int silent)
 		return -ENOMEM;
 	s->s_fs_info = qs;
 
-	/* Superblock always is 512 Byte long */
-	if (!sb_set_blocksize(s, QNX6_SUPERBLOCK_SIZE)) {
+	/* Superblock always is 512 Byte long
+           Handle device Min Block size Greater than 512 byte */
+
+	if (!sb_min_blocksize(s, QNX6_SUPERBLOCK_SIZE)) {
 		pr_err("unable to set blocksize\n");
 		goto outnobh;
 	}
@@ -335,7 +337,7 @@ static int qnx6_fill_super(struct super_block *s, void *data, int silent)
 	/* Check the superblock signatures
 	   start with the first superblock */
 	bh1 = qnx6_check_first_superblock(s,
-		bootblock_offset / QNX6_SUPERBLOCK_SIZE, silent);
+		bootblock_offset >> s->s_blocksize_bits, silent);
 	if (!bh1) {
 		/* try again without bootblock offset */
 		bh1 = qnx6_check_first_superblock(s, 0, silent);

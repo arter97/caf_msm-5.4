@@ -290,6 +290,9 @@ void xhci_ring_cmd_db(struct xhci_hcd *xhci)
 
 static bool xhci_mod_cmd_timer(struct xhci_hcd *xhci, unsigned long delay)
 {
+	if (xhci->cmd_delay)
+	   delay  = xhci->cmd_delay;
+
 	return mod_delayed_work(system_wq, &xhci->cmd_timer, delay);
 }
 
@@ -2938,6 +2941,8 @@ irqreturn_t xhci_irq(struct usb_hcd *hcd)
 		if (event_loop++ < TRBS_PER_SEGMENT / 2)
 			continue;
 		xhci_update_erst_dequeue(xhci, event_ring_deq);
+		event_ring_deq = xhci->event_ring->dequeue;
+
 		event_loop = 0;
 	}
 

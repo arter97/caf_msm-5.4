@@ -1203,7 +1203,7 @@ static void print_ctx_regs(struct arm_smmu_device *smmu, struct arm_smmu_cfg
 
 	dev_err(smmu->dev, "FAR    = 0x%016llx\n",
 		arm_smmu_cb_readq(smmu, idx, ARM_SMMU_CB_FAR));
-	dev_err(smmu->dev, "PAR    = 0x%pK\n",
+	dev_err(smmu->dev, "PAR    = 0x%016llx\n",
 		(void *) arm_smmu_cb_readq(smmu, idx, ARM_SMMU_CB_PAR));
 
 	dev_err(smmu->dev,
@@ -1223,18 +1223,18 @@ static void print_ctx_regs(struct arm_smmu_device *smmu, struct arm_smmu_cfg
 		(fsr & FSR_MULTI) ? "MULTI " : "");
 
 	if (cfg->fmt == ARM_SMMU_CTX_FMT_AARCH32_S) {
-		dev_err(smmu->dev, "TTBR0  = 0x%pK\n",
+		dev_err(smmu->dev, "TTBR0  = 0x%08x\n",
 			(void *) (unsigned long)
 			arm_smmu_cb_read(smmu, idx, ARM_SMMU_CB_TTBR0));
-		dev_err(smmu->dev, "TTBR1  = 0x%pK\n",
+		dev_err(smmu->dev, "TTBR1  = 0x%08x\n",
 			(void *) (unsigned long)
 			arm_smmu_cb_read(smmu, idx, ARM_SMMU_CB_TTBR1));
 	} else {
-		dev_err(smmu->dev, "TTBR0  = 0x%pK\n",
+		dev_err(smmu->dev, "TTBR0  = 0x%016llx\n",
 			(void *) arm_smmu_cb_readq(smmu, idx,
 						   ARM_SMMU_CB_TTBR0));
 		if (stage1)
-			dev_err(smmu->dev, "TTBR1  = 0x%pK\n",
+			dev_err(smmu->dev, "TTBR1  = 0x%016llx\n",
 				(void *) arm_smmu_cb_readq(smmu, idx,
 							   ARM_SMMU_CB_TTBR1));
 	}
