@@ -4606,6 +4606,10 @@ static int dwc3_msm_usb_set_role(struct device *dev, enum usb_role role)
 	 */
 	if (mdwc->drd_state != DRD_STATE_UNDEFINED && cur_role == role) {
 		dbg_log_string("no USB role change");
+		if (mdwc->ss_release_called) {
+			dwc3_msm_clear_dp_only_params(mdwc);
+			mdwc->ss_release_called = false;
+		}
 		return 0;
 	}
 
@@ -4613,7 +4617,7 @@ static int dwc3_msm_usb_set_role(struct device *dev, enum usb_role role)
 		flush_delayed_work(&mdwc->sm_work);
 		dwc->maximum_speed = USB_SPEED_HIGH;
 		if (role == USB_ROLE_NONE) {
-			dwc->maximum_speed = USB_SPEED_UNKNOWN;
+			dwc3_msm_clear_dp_only_params(mdwc);
 			mdwc->ss_release_called = false;
 		}
 	}
@@ -5027,7 +5031,7 @@ static void dwc3_msm_clear_dp_only_params(struct dwc3_msm *mdwc)
 {
 	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
 
-	dwc->maximum_speed = USB_SPEED_UNKNOWN;
+	dwc->maximum_speed = dwc->max_hw_supp_speed;
 
 	usb_redriver_notify_disconnect(mdwc->redriver);
 }
