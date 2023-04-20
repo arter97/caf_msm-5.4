@@ -1585,7 +1585,7 @@ static const struct msm_pingroup scuba_groups[] = {
 };
 
 static const int scuba_reserved_gpios[] = {
-	2, 3, -1
+	-1
 };
 
 static const struct msm_gpio_wakeirq_map scuba_mpm_map[] = {

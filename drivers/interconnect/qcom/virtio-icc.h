@@ -62,7 +62,5 @@ struct virtio_icc_node {
 
 /* Virtio ID of interconnect : 0xC007 */
 #define VIRTIO_ID_INTERCONNECT		49159
-/* Virtio ID of interconnect with Backward compatibility : 0x25 */
-#define VIRTIO_ID_INTERCONNECT_BC	37
 
 #endif /* __LINUX_VIRTIO_ICC_H__ */

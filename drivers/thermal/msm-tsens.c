@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2020, 2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/err.h>
@@ -65,34 +66,24 @@ static int tsens_register_interrupts(struct tsens_device *tmdev)
 static int tsens_suspend(struct device *dev)
 {
 	struct tsens_device *tmdev = dev_get_drvdata(dev);
-
-	if (mem_sleep_current != PM_SUSPEND_MEM)
-		return 0;
-
 	return tmdev->ops->suspend(tmdev);
 }
 
 static int tsens_resume(struct device *dev)
 {
 	struct tsens_device *tmdev = dev_get_drvdata(dev);
-
-	if (mem_sleep_current != PM_SUSPEND_MEM)
-		return 0;
-
 	return tmdev->ops->resume(tmdev);
 }
 
 static int tsens_freeze(struct device *dev)
 {
 	struct tsens_device *tmdev = dev_get_drvdata(dev);
-
 	return tmdev->ops->suspend(tmdev);
 }
 
 static int tsens_restore(struct device *dev)
 {
 	struct tsens_device *tmdev = dev_get_drvdata(dev);
-
 	return tmdev->ops->resume(tmdev);
 }
 
@@ -155,6 +146,9 @@ static int get_device_tree_data(struct platform_device *pdev,
 	int rc = 0;
 	struct resource *res_tsens_mem;
 	u32 zeroc_id;
+	u32 ltvr_id;
+	u32 ltvr_trip_temp;
+	u32 ltvr_clear_temp;
 
 	if (!of_match_node(tsens_table, of_node)) {
 		pr_err("Need to read SoC specific fuse map\n");
@@ -234,6 +228,36 @@ static int get_device_tree_data(struct platform_device *pdev,
 		tmdev->zeroc_sensor_id = (int)zeroc_id;
 	else
 		tmdev->zeroc_sensor_id = MIN_TEMP_DEF_OFFSET;
+
+	tmdev->ltvr_resume_trigger =
+		of_property_read_bool(of_node, "ltvr-resume-trigger");
+
+	tmdev->ltvr_sensor_id = INT_MIN;
+	tmdev->ltvr_trip_temp_delta = INT_MIN;
+	tmdev->ltvr_clear_temp_delta = INT_MIN;
+
+	if (tmdev->ltvr_resume_trigger) {
+		if (!of_property_read_u32(of_node, "ltvr-sensor-id", &ltvr_id))
+			if (ltvr_id < TSENS_MAX_SENSORS)
+				tmdev->ltvr_sensor_id = (int)ltvr_id;
+
+		tmdev->ltvr_status_support =
+			of_property_read_bool(of_node, "ltvr-status-support");
+
+		if (!tmdev->ltvr_status_support) {
+			if (!of_property_read_u32(of_node, "ltvr-trip-temp-delta",
+				&ltvr_trip_temp))
+				tmdev->ltvr_trip_temp_delta = (int)ltvr_trip_temp;
+			if (!of_property_read_u32(of_node, "ltvr-clear-temp-delta",
+				&ltvr_clear_temp))
+				tmdev->ltvr_clear_temp_delta = (int)ltvr_clear_temp;
+		}
+
+		if (tmdev->ltvr_sensor_id < 0 || (!tmdev->ltvr_status_support &&
+			(tmdev->ltvr_trip_temp_delta < 0 || tmdev->ltvr_clear_temp_delta < 0)))
+			tmdev->ltvr_resume_trigger = false;
+	}
+
 
 	tmdev->tsens_reinit_wa =
 		of_property_read_bool(of_node, "tsens-reinit-wa");

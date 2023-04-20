@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2017-2020, 2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __QCOM_TSENS_H__
@@ -220,6 +221,11 @@ struct tsens_device {
 	int				trdy_fail_ctr;
 	struct tsens_sensor		zeroc;
 	u8				zeroc_sensor_id;
+	bool			ltvr_resume_trigger;
+	int				ltvr_sensor_id;
+	bool			ltvr_status_support;
+	int				ltvr_trip_temp_delta;
+	int				ltvr_clear_temp_delta;
 	struct workqueue_struct		*tsens_reinit_work;
 	struct work_struct		therm_fwk_notify;
 	bool				tsens_reinit_wa;

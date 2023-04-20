@@ -21,8 +21,6 @@
 
 /* Virtio ID of FASTRPC : 0xC004 */
 #define VIRTIO_ID_FASTRPC				49156
-/* Virtio ID of FASTRPC for Backward compatibility : 0x22 */
-#define VIRTIO_ID_FASTRPC_BC				34
 /* indicates remote invoke with buffer attributes is supported */
 #define VIRTIO_FASTRPC_F_INVOKE_ATTR			1
 /* indicates remote invoke with CRC is supported */
@@ -60,7 +58,7 @@
  * need to be matched with BE_MINOR_VER. And it will return to 0 when
  * FE_MAJOR_VER is increased.
  */
-#define FE_MINOR_VER 0x4
+#define FE_MINOR_VER 0x5
 #define FE_VERSION (FE_MAJOR_VER << 16 | FE_MINOR_VER)
 #define BE_MAJOR_VER(ver) (((ver) >> 16) & 0xffff)
 
@@ -337,7 +335,6 @@ static int fastrpc_mmap_ioctl(struct fastrpc_file *fl,
 static int fastrpc_setmode_ioctl(unsigned long ioctl_param,
 		struct fastrpc_file *fl)
 {
-	struct fastrpc_apps *me = fl->apps;
 	int err = 0;
 
 	switch ((uint32_t)ioctl_param) {
@@ -346,8 +343,14 @@ static int fastrpc_setmode_ioctl(unsigned long ioctl_param,
 		fl->mode = (uint32_t)ioctl_param;
 		break;
 	case FASTRPC_MODE_SESSION:
-		err = -ENOTTY;
-		dev_err(me->dev, "session mode is not supported\n");
+		if (fl->untrusted_process) {
+			err = -EPERM;
+			ADSPRPC_ERR(
+					"multiple sessions not allowed for untrusted apps\n");
+			break;
+		}
+		fl->sessionid = 1;
+		fl->tgid |= (1 << SESSION_ID_INDEX);
 		break;
 	case FASTRPC_MODE_PROFILE:
 		fl->profile = (uint32_t)ioctl_param;
@@ -954,7 +957,6 @@ static void virt_fastrpc_remove(struct virtio_device *vdev)
 
 const struct virtio_device_id id_table[] = {
 	{ VIRTIO_ID_FASTRPC, VIRTIO_DEV_ANY_ID },
-	{ VIRTIO_ID_FASTRPC_BC, VIRTIO_DEV_ANY_ID },
 	{ 0 },
 };
 

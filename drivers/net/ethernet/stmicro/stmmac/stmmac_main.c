@@ -3408,6 +3408,7 @@ static netdev_tx_t stmmac_tso_xmit(struct sk_buff *skb, struct net_device *dev)
 	/* Manage tx mitigation */
 	tx_q->tx_count_frames += nfrags + 1;
 	if (likely(priv->tx_coal_timer_disable)) {
+		desc = &tx_q->dma_tx[tx_q->cur_tx];
 		tx_q->tx_count_frames = 0;
 		stmmac_set_tx_ic(priv, desc);
 		priv->xstats.tx_set_ic_bit++;
@@ -3917,7 +3918,7 @@ static int stmmac_rx_jumbo(struct stmmac_priv *priv, u32 queue,
 	unsigned int frame_len = 0;
 	struct sk_buff *skb = NULL;
 	struct dma_desc *np;
-	struct stmmac_rx_buffer *buf;
+	struct stmmac_rx_buffer *buf = NULL;
 
 	/* Check if we need to handle an incomplete
 	 * jumbo frame when first enter here.
@@ -3984,6 +3985,10 @@ jumbo_read_again:
 		np = rx_q->dma_rx + next_entry;
 
 	prefetch(np);
+	if (!buf->page) {
+		pr_err("buf->page is NULL\n");
+		return -EFAULT;
+	}
 	prefetch(page_address(buf->page));
 
 	if (unlikely(jb_status & discard_frame)) {
@@ -4074,6 +4079,10 @@ jumbo_read_again:
 			dma_sync_single_for_cpu(GET_MEM_PDEV_DEV,
 						buf->addr, buf_len,
 						DMA_FROM_DEVICE);
+			if (!skb) {
+				pr_err("skb is NULL\n");
+				return -EFAULT;
+			}
 			skb_copy_to_linear_data_offset(skb,
 						       prev_len,
 						       buf_data -
