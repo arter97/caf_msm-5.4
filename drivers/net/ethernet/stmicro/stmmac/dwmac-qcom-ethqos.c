@@ -4838,9 +4838,10 @@ static int qcom_ethqos_hib_restore(struct device *dev)
 		return ret;
 	}
 
-	if (!netif_running(ndev)) {
+	if (!(ndev->flags & IFF_UP)) {
 		rtnl_lock();
-		dev_open(ndev, NULL);
+		ndev->netdev_ops->ndo_open(ndev);
+		ndev->flags |= IFF_UP;
 		rtnl_unlock();
 		ETHQOSINFO("calling open\n");
 	}
@@ -4873,9 +4874,10 @@ static int qcom_ethqos_hib_freeze(struct device *dev)
 
 	ETHQOSINFO("start\n");
 
-	if (netif_running(ndev)) {
+	if (ndev->flags & IFF_UP) {
 		rtnl_lock();
-		dev_close(ndev);
+		ndev->flags &= ~IFF_UP;
+		ndev->netdev_ops->ndo_stop(ndev);
 		rtnl_unlock();
 		ETHQOSINFO("calling netdev off\n");
 	}

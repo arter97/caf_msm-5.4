@@ -2385,12 +2385,33 @@ static int ethqos_ipa_offload_connect(struct qcom_ethqos *ethqos,
 	struct ipa_perf_profile profile;
 	int ret = 0;
 	int i = 0;
-	struct platform_device *pdev = ethqos->pdev;
-	struct net_device *dev = platform_get_drvdata(pdev);
-	struct stmmac_priv *priv = netdev_priv(dev);
+	struct platform_device *pdev = NULL;
+	struct net_device *dev = NULL;
+	struct stmmac_priv *priv = NULL;
 
 	ETHQOSDBG("begin\n");
 	if (!ethqos) {
+		ETHQOSERR("Null Param\n");
+		ret = -1;
+		return ret;
+	}
+	pdev = ethqos->pdev;
+
+	if (!pdev) {
+		ETHQOSERR("Null Param\n");
+		ret = -1;
+		return ret;
+	}
+	dev = platform_get_drvdata(pdev);
+
+	if (!dev) {
+		ETHQOSERR("Null Param\n");
+		ret = -1;
+		return ret;
+	}
+	priv = netdev_priv(dev);
+
+	if (!priv) {
 		ETHQOSERR("Null Param\n");
 		ret = -1;
 		return ret;
@@ -2824,7 +2845,7 @@ static int ethqos_ipa_offload_suspend_be(struct qcom_ethqos *ethqos)
 		ETHQOSERR("IPA Offload Disconnect Successfully for %d\n",
 			  type);
 	}
-
+	priv->hw->dma->stop_tx(priv->ioaddr, eth_ipa_queue_type_to_rx_queue(type));
 	if (ret != 0) {
 		ETHQOSERR("%s: stop_dma_tx failed %d for type %d\n",
 			  __func__, ret, type);
@@ -3013,6 +3034,15 @@ static int ethqos_ipa_offload_resume(struct qcom_ethqos *ethqos,
 	default:
 		ETHQOSINFO("Invalid type for IPA Offload Resume %d\n", type);
 		break;
+	}
+
+	if (!eth_ipa_ctx.ipa_debugfs_exists) {
+		if (!ethqos_ipa_create_debugfs(eth_ipa_ctx.ethqos)) {
+			ETHQOSERR("eMAC Debugfs created\n");
+			eth_ipa_ctx.ipa_debugfs_exists = true;
+		} else {
+			ETHQOSERR("eMAC Debugfs failed\n");
+		}
 	}
 
 	return ret;
@@ -3251,7 +3281,7 @@ static int ethqos_ipa_uc_ready(struct qcom_ethqos *pdata)
 void ethqos_ipa_offload_event_handler(void *data,
 				      int ev)
 {
-	int type;
+	int type = 0;
 	u32 proto;
 	struct platform_device *pdev;
 	struct net_device *dev;
@@ -3327,8 +3357,7 @@ void ethqos_ipa_offload_event_handler(void *data,
 			break;
 
 		/* Link up event is expected only after link down */
-		if (eth_ipa_ctx.ipa_offload_link_down &&
-		    eth_ipa_ctx.ipa_debugfs_exists) {
+		if (eth_ipa_ctx.ipa_offload_link_down) {
 			for (type = 0; type < IPA_QUEUE_MAX; type++)
 				ethqos_ipa_offload_resume(eth_ipa_ctx.ethqos,
 							  type);
