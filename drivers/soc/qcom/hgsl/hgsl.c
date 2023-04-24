@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2022, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -382,7 +383,7 @@ static void hgsl_reg_read(struct reg *reg, unsigned int off,
 	*value = __raw_readl(reg->vaddr + off);
 
 	/* ensure this read finishes before the next one.*/
-	rmb();
+	dma_rmb();
 }
 
 static void hgsl_reg_write(struct reg *reg, unsigned int off,
@@ -400,7 +401,7 @@ static void hgsl_reg_write(struct reg *reg, unsigned int off,
 	 * ensure previous writes post before this one,
 	 * i.e. act like normal writel()
 	 */
-	wmb();
+	dma_wmb();
 	__raw_writel(value, (reg->vaddr + off));
 }
 
@@ -463,7 +464,7 @@ static int db_queue_wait_freewords(struct doorbell_queue *dbq, uint32_t size)
 			HGSL_DBQ_HOST_TO_GVM_HARDRESET_REQ);
 
 		/* ensure read is done before comparison */
-		rmb();
+		dma_rmb();
 
 		if (hard_reset_req == true) {
 			if (db_get_busy_state(dbq->vbase) == true)
@@ -493,7 +494,7 @@ static int db_get_busy_state(void *dbq_base)
 		HGSL_DBQ_GVM_TO_HOST_HARDRESET_DISPATCH_IN_BUSY);
 
 	/* ensure read is done before comparison */
-	rmb();
+	dma_rmb();
 
 	return busy_state;
 }
@@ -507,7 +508,7 @@ static void db_set_busy_state(void *dbq_base, int in_busy)
 		in_busy);
 
 	/* confirm write to memory done */
-	wmb();
+	dma_wmb();
 }
 
 static int db_send_msg(struct hgsl_priv  *priv,
@@ -536,12 +537,12 @@ static int db_send_msg(struct hgsl_priv  *priv,
 	cmds = (struct hgsl_db_cmds *)msg_req->ptr_data;
 	do {
 		hard_reset_req = hgsl_dbq_get_state_info((uint32_t *)dbq->vbase,
-		HGSL_DBQ_METADATA_COOPERATIVE_RESET,
-		HGSL_DBQ_CONTEXT_ANY,
-		HGSL_DBQ_HOST_TO_GVM_HARDRESET_REQ);
+			HGSL_DBQ_METADATA_COOPERATIVE_RESET,
+			HGSL_DBQ_CONTEXT_ANY,
+			HGSL_DBQ_HOST_TO_GVM_HARDRESET_REQ);
 
 		/* ensure read is done before comparison */
-		rmb();
+		dma_rmb();
 
 		if (hard_reset_req) {
 			if (msleep_interruptible(1)) {
@@ -584,6 +585,9 @@ static int db_send_msg(struct hgsl_priv  *priv,
 	dst = dbq->data.vaddr + (wptr << 2);
 	src = msg_req->ptr_data;
 	memcpy(dst, src, (move_dwords << 2));
+
+	/* ensure data is committed before update wptr */
+	dma_wmb();
 
 	wptr = (wptr + msg_size_align) % queue_size_dword;
 	hgsl_dbq_set_state_info((uint32_t *)dbq->vbase,
@@ -782,7 +786,7 @@ static inline uint32_t get_context_retired_ts(struct hgsl_context *ctxt)
 	unsigned int ts = ctxt->shadow_ts->eop;
 
 	/* ensure read is done before comparison */
-	rmb();
+	dma_rmb();
 	return ts;
 }
 
@@ -792,7 +796,7 @@ static inline void set_context_retired_ts(struct hgsl_context *ctxt,
 	ctxt->shadow_ts->eop = ts;
 
 	/* ensure update is done before return */
-	wmb();
+	dma_wmb();
 }
 
 static inline bool _timestamp_retired(struct hgsl_context *ctxt,
@@ -1103,7 +1107,7 @@ static inline void _destroy_context(struct kref *kref)
 	_unmap_shadow(ctxt);
 	ctxt->destroyed = true;
 	/* ensure update is done before return */
-	wmb();
+	dma_wmb();
 }
 
 static struct hgsl_context *hgsl_get_context(struct qcom_hgsl *hgsl,
@@ -1200,7 +1204,7 @@ static int hgsl_read_shadow_timestamp(struct hgsl_context *ctxt,
 			break;
 		}
 		/* ensure read is done before return */
-		rmb();
+		dma_rmb();
 	}
 	LOGD("%d, %u, %u, %u", ret, ctxt->context_id, type, *timestamp);
 	return ret;
@@ -1429,16 +1433,6 @@ static int hgsl_ctxt_destroy(struct hgsl_priv *priv,
 	bool put_channel = false;
 	struct doorbell_queue *dbq = NULL;
 
-
-	if (!hab_channel) {
-		ret = hgsl_hyp_channel_pool_get(&priv->hyp_priv, 0, &hab_channel);
-		if (ret) {
-			LOGE("Failed to get hab channel %d", ret);
-			goto out;
-		}
-		put_channel = true;
-	}
-
 	ctxt = hgsl_get_context(priv->dev, context_id);
 	if (!ctxt) {
 		LOGE("Invalid context id %d\n", context_id);
@@ -1478,6 +1472,16 @@ static int hgsl_ctxt_destroy(struct hgsl_priv *priv,
 
 	while (!ctxt->destroyed)
 		cpu_relax();
+
+	if (!hab_channel) {
+		ret = hgsl_hyp_channel_pool_get(&priv->hyp_priv, 0, &hab_channel);
+		if (ret) {
+			LOGE("Failed to get hab channel %d", ret);
+			hgsl_free(ctxt);
+			goto out;
+		}
+		put_channel = true;
+	}
 
 	hgsl_hyp_put_shadowts_mem(hab_channel, &ctxt->shadow_ts_node);
 
@@ -1531,7 +1535,7 @@ static int hgsl_ioctl_ctxt_create(struct file *filep, unsigned long arg)
 	ctxt = hgsl_zalloc(sizeof(*ctxt));
 	if (ctxt == NULL) {
 		ret = -ENOMEM;
-		return ret;
+		goto out;
 	}
 
 	if (params.flags & GSL_CONTEXT_FLAG_CLIENT_GENERATED_TS)
@@ -2882,7 +2886,7 @@ static int hgsl_cleanup(struct hgsl_priv *priv)
 
 	mutex_lock(&priv->lock);
 	if ((hab_channel == NULL) &&
-	(!list_empty(&priv->mem_mapped) || !list_empty(&priv->mem_allocated))) {
+			(!list_empty(&priv->mem_mapped) || !list_empty(&priv->mem_allocated))) {
 		ret = hgsl_hyp_channel_pool_get(&priv->hyp_priv, 0, &hab_channel);
 		if (ret)
 			LOGE("Failed to get channel %d", ret);
@@ -2893,11 +2897,9 @@ static int hgsl_cleanup(struct hgsl_priv *priv)
 		ret = hgsl_hyp_mem_unmap_smmu(hab_channel, node_found);
 		if (ret)
 			LOGE("Failed to clean mapped buffer %u, 0x%llx, ret %d",
-				node_found->export_id,
-				node_found->memdesc.gpuaddr, ret);
+					node_found->export_id, node_found->memdesc.gpuaddr, ret);
 		else
-			hgsl_trace_gpu_mem_total(priv,
-				-(node_found->memdesc.size64));
+			hgsl_trace_gpu_mem_total(priv, -(node_found->memdesc.size64));
 		list_del(&node_found->node);
 		hgsl_free(node_found);
 	}
@@ -2905,7 +2907,7 @@ static int hgsl_cleanup(struct hgsl_priv *priv)
 		ret = hgsl_hyp_mem_unmap_smmu(hab_channel, node_found);
 		if (ret)
 			LOGE("Failed to clean mapped buffer %u, 0x%llx, ret %d",
-			node_found->export_id, node_found->memdesc.gpuaddr, ret);
+					node_found->export_id, node_found->memdesc.gpuaddr, ret);
 		list_del(&node_found->node);
 		hgsl_trace_gpu_mem_total(priv, -(node_found->memdesc.size64));
 		hgsl_sharedmem_free(node_found);

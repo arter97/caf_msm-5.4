@@ -294,6 +294,7 @@ int npu_host_init(struct npu_device *npu_dev)
 	init_completion(&host_ctx->misc_done);
 	init_completion(&host_ctx->fw_deinit_done);
 	mutex_init(&host_ctx->lock);
+	mutex_init(&host_ctx->misc_cmd_lock);
 	atomic_set(&host_ctx->ipc_trans_id, 1);
 	host_ctx->npu_dev = npu_dev;
 
@@ -317,6 +318,7 @@ void npu_host_deinit(struct npu_device *npu_dev)
 
 	kfree(host_ctx->prop_buf);
 	npu_destroy_wq(host_ctx);
+	mutex_destroy(&host_ctx->misc_cmd_lock);
 	mutex_destroy(&host_ctx->lock);
 }
 
@@ -1289,6 +1291,8 @@ int32_t npu_host_set_fw_property(struct npu_device *npu_dev,
 	for (i = 0; i < num_of_params; i++)
 		prop_packet->prop_param[i] = property->prop_param[i];
 
+	/* protect host_ctx->prop_buf, misc_done */
+	mutex_lock(&host_ctx->misc_cmd_lock);
 	ret = npu_send_misc_cmd(npu_dev, IPC_QUEUE_APPS_EXEC,
 		prop_packet);
 
@@ -1318,6 +1322,7 @@ int32_t npu_host_set_fw_property(struct npu_device *npu_dev,
 		pr_err("set fw property failed %d\n", ret);
 
 deinit_fw:
+	mutex_unlock(&host_ctx->misc_cmd_lock);
 	fw_deinit(npu_dev, false, true);
 set_prop_exit:
 	kfree(prop_packet);
@@ -1359,6 +1364,8 @@ int32_t npu_host_get_fw_property(struct npu_device *npu_dev,
 	for (i = 0; i < num_of_params; i++)
 		prop_packet->prop_param[i] = property->prop_param[i];
 
+	/* protect misc_done, guaranteed misc cmd sequence */
+	mutex_lock(&host_ctx->misc_cmd_lock);
 	ret = npu_send_misc_cmd(npu_dev, IPC_QUEUE_APPS_EXEC,
 		prop_packet);
 	pr_debug("NPU_IPC_CMD_GET_PROPERTY sent status: %d\n", ret);
@@ -1398,6 +1405,7 @@ int32_t npu_host_get_fw_property(struct npu_device *npu_dev,
 	}
 
 deinit_fw:
+	mutex_unlock(&host_ctx->misc_cmd_lock);
 	fw_deinit(npu_dev, false, true);
 get_prop_exit:
 	kfree(prop_packet);

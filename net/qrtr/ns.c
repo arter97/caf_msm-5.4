@@ -439,7 +439,7 @@ static int ctrl_cmd_del_client(struct sockaddr_qrtr *from,
 
 	/* Don't accept spoofed messages */
 	if (from->sq_node != node_id)
-		return -EINVAL;
+		return -EACCES;
 
 	/* Local DEL_CLIENT messages comes from the port being closed */
 	if (from->sq_node == qrtr_ns.local_node && from->sq_port != port)
@@ -549,7 +549,7 @@ static int ctrl_cmd_del_server(struct sockaddr_qrtr *from,
 
 	/* Don't accept spoofed messages */
 	if (from->sq_node != node_id)
-		return -EINVAL;
+		return -EACCES;
 
 	/* Local servers may only unregister themselves */
 	if (from->sq_node == qrtr_ns.local_node && from->sq_port != port)
@@ -736,8 +736,12 @@ static void qrtr_ns_worker(struct kthread_work *work)
 			break;
 		}
 
-		if (ret < 0 && ret != -EACCES)
-			pr_err("failed while handling packet from %d:%d",
+		if (ret == -ENOENT)
+			NS_INFO("cmd:0x%x node or service was not found for packet [0x%x:0x%x]\n",
+				cmd, sq.sq_node, sq.sq_port);
+
+		else if (ret < 0 && ret != -EACCES)
+			pr_err("failed while handling packet from 0x%x:0x%x\n",
 			       sq.sq_node, sq.sq_port);
 
 		else if (ret == -EACCES)

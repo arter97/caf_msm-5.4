@@ -28,10 +28,13 @@ static void dwmac4_core_init(struct mac_device_info *hw,
 
 	value |= GMAC_CORE_INIT;
 
+	if (hw->crc_strip_en)
+		value |= GMAC_CONFIG_CRC;
+
 	if (hw->ps) {
 		value |= GMAC_CONFIG_TE;
 
-		value &= hw->link.speed_mask;
+		value &= ~(hw->link.speed_mask);
 		switch (hw->ps) {
 		case SPEED_1000:
 			value |= hw->link.speed1000;
@@ -215,6 +218,9 @@ static void dwmac4_map_mtl_dma(struct mac_device_info *hw, u32 queue, u32 chan)
 	if (queue == 0 || queue == 4) {
 		value &= ~MTL_RXQ_DMA_Q04MDMACH_MASK;
 		value |= MTL_RXQ_DMA_Q04MDMACH(chan);
+	} else if (queue > 4) {
+		value &= ~MTL_RXQ_DMA_QXMDMACH_MASK(queue - 4);
+		value |= MTL_RXQ_DMA_QXMDMACH(chan, queue - 4);
 	} else {
 		value &= ~MTL_RXQ_DMA_QXMDMACH_MASK(queue);
 		value |= MTL_RXQ_DMA_QXMDMACH(chan, queue);

@@ -67,6 +67,7 @@ enum fw_state {
 
 struct npu_host_ctx {
 	struct mutex lock;
+	struct mutex misc_cmd_lock;
 	void *subsystem_handle;
 	struct npu_device *npu_dev;
 	enum fw_state fw_state;

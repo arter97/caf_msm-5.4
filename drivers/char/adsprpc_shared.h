@@ -73,12 +73,6 @@
 /* Set FastRPC session ID to 1 */
 #define FASTRPC_MODE_SESSION     4
 
-/* INIT a new process or attach to guestos */
-#define FASTRPC_INIT_ATTACH      0
-#define FASTRPC_INIT_CREATE      1
-#define FASTRPC_INIT_CREATE_STATIC  2
-#define FASTRPC_INIT_ATTACH_SENSORS 3
-
 /* Retrives number of input buffers from the scalars parameter */
 #define REMOTE_SCALARS_INBUFS(sc)        (((sc) >> 16) & 0x0ff)
 
@@ -260,6 +254,15 @@ struct fastrpc_ioctl_async_response {
 	uint64_t *perf_dsp;
 	uint32_t handle;
 	uint32_t sc;
+};
+
+/* INIT a new process or attach to guestos */
+enum fastrpc_init_flags {
+	FASTRPC_INIT_NO_CREATE       = -1,
+	FASTRPC_INIT_ATTACH          = 0,
+	FASTRPC_INIT_CREATE          = 1,
+	FASTRPC_INIT_CREATE_STATIC   = 2,
+	FASTRPC_INIT_ATTACH_SENSORS  = 3,
 };
 
 enum fastrpc_invoke2_type {

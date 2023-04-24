@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "adreno.h"
@@ -653,7 +654,6 @@ static size_t snapshot_ib(struct kgsl_device *device, u8 *buf,
 		return 0;
 	}
 
-	/* only do this for IB1 because the IB2's are part of IB1 objects */
 	if (meta->ib1base == obj->gpuaddr) {
 
 		snapshot->ib1dumped = active_ib_is_parsed(obj->gpuaddr,
@@ -673,10 +673,12 @@ static size_t snapshot_ib(struct kgsl_device *device, u8 *buf,
 		}
 	}
 
-
-	if (meta->ib2base == obj->gpuaddr)
+	if (meta->ib2base == obj->gpuaddr) {
 		snapshot->ib2dumped = active_ib_is_parsed(obj->gpuaddr,
 					obj->size, obj->entry->priv);
+			adreno_parse_ib(device, snapshot, obj->entry->priv,
+				obj->gpuaddr, obj->size >> 2);
+	}
 
 	/* Write the sub-header for the section */
 	header->gpuaddr = obj->gpuaddr;

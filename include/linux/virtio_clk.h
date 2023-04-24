@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2019-2021, The Linux Foundation. All rights reserved. */
+/* Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved. */
 
 #ifndef _LINUX_VIRTIO_CLK_H
 #define _LINUX_VIRTIO_CLK_H
@@ -9,8 +10,8 @@
 #include <linux/virtio_config.h>
 #include <linux/virtio_types.h>
 
-/* Virtio ID of clock */
-#define VIRTIO_ID_CLOCK		30	/* virtio clock */
+/* Virtio ID of clock : 0xC000 */
+#define VIRTIO_ID_CLOCK		49152
 
 /* Feature bits */
 #define VIRTIO_CLK_F_RESET	1	/* Support reset */

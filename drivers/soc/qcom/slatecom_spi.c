@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(msg) "slatecom: %s: " msg, __func__
@@ -409,12 +410,8 @@ EXPORT_SYMBOL(slatecom_slatedown_handler);
 static void parse_fifo(uint8_t *data, union slatecom_event_data_type *event_data)
 {
 	uint16_t p_len;
-	uint8_t sub_id;
-	uint32_t evnt_tm;
 	uint16_t event_id;
 	void *evnt_data;
-	struct event *evnt;
-	struct event_list *data_list;
 
 	while (*data != '\0') {
 
@@ -423,23 +420,7 @@ static void parse_fifo(uint8_t *data, union slatecom_event_data_type *event_data
 		p_len = *((uint16_t *) data);
 		data = data + HED_EVENT_SIZE_LEN;
 
-		if (event_id == 0xFFFE) {
-
-			sub_id = *data;
-			evnt_tm = *((uint32_t *)(data+1));
-
-			evnt = kmalloc(sizeof(*evnt), GFP_KERNEL);
-			evnt->sub_id = sub_id;
-			evnt->evnt_tm = evnt_tm;
-			evnt->evnt_data =
-				*(int16_t *)(data + HED_EVENT_DATA_STRT_LEN);
-
-			data_list = kmalloc(sizeof(*data_list), GFP_KERNEL);
-			data_list->evnt = evnt;
-			spin_lock(&lst_setup_lock);
-			list_add_tail(&data_list->list, &pr_lst_hd);
-			spin_unlock(&lst_setup_lock);
-		} else if (event_id == 0x0001) {
+		if (event_id == 0x0001) {
 			evnt_data = kmalloc(p_len, GFP_KERNEL);
 			if (evnt_data != NULL) {
 				memcpy(evnt_data, data, p_len);
@@ -449,6 +430,9 @@ static void parse_fifo(uint8_t *data, union slatecom_event_data_type *event_data
 				send_event(SLATECOM_EVENT_TO_MASTER_FIFO_USED,
 						event_data);
 			}
+		} else if (event_id == 0xc8) {
+			data = data + 12;
+			pr_info("Packet Received = 0x%X, len = %u\n", event_id, p_len);
 		}
 		data = data + p_len;
 	}
@@ -642,7 +626,7 @@ static void wakeup_ahb_read(void *handle)
 	uint8_t cmnd = 0;
 	int ret = 0;
 
-	pr_err("slatecom AHB read to resume\n");
+	pr_info("slatecom AHB read to resume\n");
 	txn_len = 8;
 	cmnd |= SLATE_SPI_AHB_READ_CMD;
 	memcpy(tx_ahb_buf, &cmnd, sizeof(cmnd));
@@ -1549,7 +1533,7 @@ static int slate_spi_probe(struct spi_device *spi)
 
 	slate_irq = gpio_to_irq(irq_gpio);
 	ret = request_threaded_irq(slate_irq, NULL, slate_irq_tasklet_hndlr,
-		IRQF_TRIGGER_HIGH | IRQF_ONESHOT | IRQF_NO_SUSPEND, "qcom-slate_spi", slate_spi);
+		IRQF_TRIGGER_HIGH | IRQF_ONESHOT, "qcom-slate_spi", slate_spi);
 
 	if (ret)
 		goto err_ret;

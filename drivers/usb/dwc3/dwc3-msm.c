@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -435,7 +435,7 @@ static const char * const gsi_op_strings[] = {
 	"ENABLE_GSI", "UPDATE_XFER", "RING_DB",
 	"END_XFER", "GET_CH_INFO", "GET_XFER_IDX", "PREPARE_TRBS",
 	"FREE_TRBS", "SET_CLR_BLOCK_DBL", "CHECK_FOR_SUSP",
-	"EP_DISABLE" };
+	"EP_DISABLE", "EP_UPDATE_DB" };
 
 static const char * const usb_role_strings[] = {
 	"NONE",
@@ -569,6 +569,8 @@ struct dwc3_msm {
 	u64			dummy_gsi_db;
 	dma_addr_t		dummy_gsi_db_dma;
 
+	u64			*dummy_gevntcnt;
+	dma_addr_t		dummy_gevntcnt_dma;
 	struct usb_role_switch *role_switch;
 	bool			ss_release_called;
 	int			orientation_override;
@@ -1273,6 +1275,7 @@ static void gsi_get_channel_info(struct usb_ep *ep,
 	int last_trb_index = 0;
 	struct dwc3	*dwc = dep->dwc;
 	struct usb_gsi_request *request = ch_info->ch_req;
+	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
 
 	/* Provide physical USB addresses for DEPCMD and GEVENTCNT registers */
 	ch_info->depcmd_low_addr = (u32)(dwc->reg_phys +
@@ -1307,14 +1310,26 @@ static void gsi_get_channel_info(struct usb_ep *ep,
 	/* Store last 16 bits of LINK TRB address as per GSI hw requirement */
 	ch_info->last_trb_addr = (dwc3_trb_dma_offset(dep,
 			&dep->trb_pool[last_trb_index - 1]) & 0x0000FFFF);
-	ch_info->gevntcount_low_addr = (u32)(dwc->reg_phys +
-			DWC3_GEVNTCOUNT(request->ep_intr_num));
-	ch_info->gevntcount_hi_addr = 0;
 
-	dev_dbg(dwc->dev,
-	"depcmd_laddr=%x last_trb_addr=%x gevtcnt_laddr=%x gevtcnt_haddr=%x",
-		ch_info->depcmd_low_addr, ch_info->last_trb_addr,
-		ch_info->gevntcount_low_addr, ch_info->gevntcount_hi_addr);
+	/*
+	 * Check if NORMAL EP is used with GSI. In that case USB driver
+	 * processes events and GSI shouldn't access GEVNTCOUNT(0) register.
+	 */
+	if (request->ep_intr_num) {
+		ch_info->gevntcount_low_addr = (u32)(dwc->reg_phys +
+				DWC3_GEVNTCOUNT(request->ep_intr_num));
+		ch_info->gevntcount_hi_addr = 0;
+		dev_err(dwc->dev, "gevtcnt_laddr=%x gevtcnt_haddr=%x\n",
+			ch_info->gevntcount_low_addr, ch_info->gevntcount_hi_addr);
+	} else {
+		ch_info->gevntcount_low_addr = (u32)mdwc->dummy_gevntcnt_dma;
+		ch_info->gevntcount_hi_addr =
+			(u32)((u64)mdwc->dummy_gevntcnt_dma >> 32);
+		dev_err(dwc->dev, "Dummy GEVNTCNT Addr %pK: %llx %x (LSB)\n",
+			mdwc->dummy_gevntcnt,
+			(unsigned long long)mdwc->dummy_gevntcnt_dma,
+			(u32)mdwc->dummy_gevntcnt_dma);
+	}
 }
 
 /**
@@ -1333,10 +1348,17 @@ static int gsi_startxfer_for_ep(struct usb_ep *ep, struct usb_gsi_request *req)
 	struct dwc3	*dwc = dep->dwc;
 
 	memset(&params, 0, sizeof(params));
-	params.param0 = GSI_TRB_ADDR_BIT_53_MASK | GSI_TRB_ADDR_BIT_55_MASK;
-	params.param0 |= upper_32_bits(dwc3_trb_dma_offset(dep,
+
+	/*
+	 * Check if NORMAL EP is used with GSI. In that case USB driver
+	 * updates GSI doorbell and USB GSI wrapper h/w isn't involved.
+	 */
+	if (req->ep_intr_num) {
+		params.param0 = GSI_TRB_ADDR_BIT_53_MASK | GSI_TRB_ADDR_BIT_55_MASK;
+		params.param0 |= upper_32_bits(dwc3_trb_dma_offset(dep,
 						&dep->trb_pool[0])) & 0xffff;
-	params.param0 |= (req->ep_intr_num << 16);
+		params.param0 |= (req->ep_intr_num << 16);
+	}
 	params.param1 = lower_32_bits(dwc3_trb_dma_offset(dep,
 						&dep->trb_pool[0]));
 	cmd = DWC3_DEPCMD_STARTTRANSFER;
@@ -1362,7 +1384,17 @@ static void gsi_store_ringbase_dbl_info(struct usb_ep *ep,
 	struct dwc3_ep *dep = to_dwc3_ep(ep);
 	struct dwc3	*dwc = dep->dwc;
 	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
-	int n = request->ep_intr_num - 1;
+	int n;
+
+	/*
+	 * Check if NORMAL EP is used with GSI. In that case USB driver
+	 * updates GSI doorbell and USB GSI wrapper h/w isn't involved.
+	 */
+	if (!request->ep_intr_num) {
+		dev_err(mdwc->dev, "%s: is no-op for normal EP\n", __func__);
+		return;
+	}
+	n = request->ep_intr_num - 1;
 
 	dwc3_msm_write_reg(mdwc->base, GSI_RING_BASE_ADDR_L(mdwc->gsi_reg, n),
 		lower_32_bits(dwc3_trb_dma_offset(dep, &dep->trb_pool[0])));
@@ -1440,6 +1472,8 @@ static void gsi_ring_db(struct usb_ep *ep, struct usb_gsi_request *request)
 		return;
 	}
 
+	dep->gsi_db_reg_addr = gsi_dbl_address_lsb;
+
 	gsi_dbl_address_msb = ioremap_nocache(request->db_reg_phs_addr_msb,
 				sizeof(u32));
 	if (!gsi_dbl_address_msb) {
@@ -1461,8 +1495,10 @@ static void gsi_ring_db(struct usb_ep *ep, struct usb_gsi_request *request)
 	writel_relaxed(lower_32_bits(trb_dma), gsi_dbl_address_lsb);
 	writel_relaxed(upper_32_bits(trb_dma), gsi_dbl_address_msb);
 
-	iounmap(gsi_dbl_address_lsb);
-	iounmap(gsi_dbl_address_msb);
+	if (!dwc->normal_eps_in_gsi_mode) {
+		iounmap(gsi_dbl_address_lsb);
+		iounmap(gsi_dbl_address_msb);
+	}
 }
 
 /**
@@ -1836,11 +1872,21 @@ static void gsi_configure_ep(struct usb_ep *ep, struct usb_gsi_request *request)
  *
  * @usb_ep - pointer to usb_ep instance.
  */
-static void gsi_enable(struct usb_ep *ep)
+static void gsi_enable(struct usb_ep *ep, struct usb_gsi_request *req)
 {
 	struct dwc3_ep *dep = to_dwc3_ep(ep);
 	struct dwc3 *dwc = dep->dwc;
 	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
+
+	/*
+	 * Check if NORMAL EP is used with GSI. In that case USB driver
+	 * updates GSI doorbell and USB GSI wrapper h/w isn't involved.
+	 */
+	if (!req->ep_intr_num) {
+		dev_err(mdwc->dev, "%s: is no-op for normal EP\n", __func__);
+		return;
+	}
+
 
 	dwc3_msm_write_reg_field(mdwc->base, GSI_GENERAL_CFG_REG(mdwc->gsi_reg),
 		GSI_CLK_EN_MASK, 1);
@@ -1861,7 +1907,7 @@ static void gsi_enable(struct usb_ep *ep)
  * to set or clear the doorbell bit
  */
 static void gsi_set_clear_dbell(struct usb_ep *ep,
-					bool block_db)
+					bool block_db, struct usb_gsi_request *req)
 {
 
 	struct dwc3_ep *dep = to_dwc3_ep(ep);
@@ -1869,6 +1915,12 @@ static void gsi_set_clear_dbell(struct usb_ep *ep,
 	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
 
 	dbg_log_string("block_db(%d)", block_db);
+
+	/* Nothing to be done if NORMAL EP is used with GSI */
+	if (!req->ep_intr_num) {
+		dev_err(mdwc->dev, "%s: is no-op for normal EP\n", __func__);
+		return;
+	}
 	dwc3_msm_write_reg_field(mdwc->base, GSI_GENERAL_CFG_REG(mdwc->gsi_reg),
 		BLOCK_GSI_WR_GO_MASK, block_db);
 }
@@ -1932,6 +1984,19 @@ static inline int usb_gsi_ep_op_allow(struct usb_ep *ep, void *op_data, enum gsi
 	return 1;
 }
 
+static void dwc3_msm_gsi_db_update(struct dwc3_ep *dep, dma_addr_t offset)
+{
+	struct dwc3 *dwc = dep->dwc;
+	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
+
+	if (!dep->gsi_db_reg_addr)
+		dev_err(mdwc->dev, "Failed to update GSI DBL\n");
+
+	writel_relaxed(offset, dep->gsi_db_reg_addr);
+	dev_dbg(mdwc->dev, "Writing TRB addr: %pa to %pK\n",
+		&offset, dep->gsi_db_reg_addr);
+}
+
 /**
  * Performs GSI operations or GSI EP related operations.
  *
@@ -1952,6 +2017,7 @@ int usb_gsi_ep_op(struct usb_ep *ep, void *op_data, enum gsi_ep_op op)
 	struct gsi_channel_info *ch_info;
 	bool block_db;
 	unsigned long flags;
+	dma_addr_t offset;
 
 	dbg_log_string("%s(%d):%s", ep->name, dep->number >> 1,
 			gsi_op_to_string(op));
@@ -1988,7 +2054,8 @@ int usb_gsi_ep_op(struct usb_ep *ep, void *op_data, enum gsi_ep_op op)
 		gsi_store_ringbase_dbl_info(ep, request);
 		break;
 	case GSI_EP_OP_ENABLE_GSI:
-		gsi_enable(ep);
+		request = (struct usb_gsi_request *)op_data;
+		gsi_enable(ep, request);
 		break;
 	case GSI_EP_OP_GET_CH_INFO:
 		ch_info = (struct gsi_channel_info *)op_data;
@@ -2011,7 +2078,8 @@ int usb_gsi_ep_op(struct usb_ep *ep, void *op_data, enum gsi_ep_op op)
 		break;
 	case GSI_EP_OP_SET_CLR_BLOCK_DBL:
 		block_db = *((bool *)op_data);
-		gsi_set_clear_dbell(ep, block_db);
+		request = (struct usb_gsi_request *)op_data;
+		gsi_set_clear_dbell(ep, block_db, request);
 		break;
 	case GSI_EP_OP_CHECK_FOR_SUSPEND:
 		ret = gsi_check_ready_to_suspend(mdwc);
@@ -2019,15 +2087,44 @@ int usb_gsi_ep_op(struct usb_ep *ep, void *op_data, enum gsi_ep_op op)
 	case GSI_EP_OP_DISABLE:
 		ret = ep->ops->disable(ep);
 		break;
+	case GSI_EP_OP_UPDATE_DB:
+		offset = *(dma_addr_t *)op_data;
+		dwc3_msm_gsi_db_update(dep, offset);
+		break;
 	case GSI_DYNAMIC_EP_INTR_CALC:
 		/*
 		 * Some targets have more number of H/w accelerated EP's
 		 * in order to support them, need to increase GSI
 		 * interrupts, this case will do the same.
+		 *
+		 * e.g If target supports 5 HW EPs
+		 *
+		 * ((dwc->num_gsi_eps - 1) - ((dwc->num_eps - 1) - dep->number))
+		 * 5 - (31 - 27) = 1
+		 *
 		 */
 		request = (struct usb_gsi_request *)op_data;
-		request->ep_intr_num =
-			(dwc->num_gsi_eps - ((dwc->num_eps - 1) - dep->number));
+
+		/*
+		 * Check if normal_eps_in_gsi_mode property is present
+		 * which indicates 1IN + 1OUT SW EPs will be used in GSI mode.
+		 * Though SW EPs will be used but the calculation
+		 * part will be same as used for HW EP interrupt no.
+		 * assignment.
+		 */
+		if (dwc->normal_eps_in_gsi_mode) {
+			request->ep_intr_num =
+				((dwc->num_gsi_eps + 2) -
+					((dwc->num_eps - 1) - dep->number));
+
+		} else {
+			request->ep_intr_num =
+				((dwc->num_gsi_eps) - ((dwc->num_eps - 1) - dep->number));
+		}
+		break;
+	case GSI_SW_EP_PATH:
+		request = (struct usb_gsi_request *)op_data;
+		request->ep_intr_num = 0;
 		break;
 	default:
 		dev_err(mdwc->dev, "%s: Invalid opcode GSI EP\n", __func__);
@@ -2036,6 +2133,23 @@ int usb_gsi_ep_op(struct usb_ep *ep, void *op_data, enum gsi_ep_op op)
 	return ret;
 }
 EXPORT_SYMBOL(usb_gsi_ep_op);
+
+/*
+ * Wrapper to check if device supports normal eps in GSI mode.
+ *
+ * @return 1 if device supports the fucntionality.
+ */
+
+bool gsi_normal_ep_support(struct usb_gadget *gadget)
+{
+	struct dwc3 *dwc = gadget_to_dwc(gadget);
+	bool ret = false;
+
+	if (dwc->normal_eps_in_gsi_mode)
+		ret = true;
+	return ret;
+}
+EXPORT_SYMBOL(gsi_normal_ep_support);
 
 /* Return true if host is supporting remote wakeup functionality. */
 bool usb_get_remote_wakeup_status(struct usb_gadget *gadget)
@@ -2512,6 +2626,17 @@ static void dwc3_gsi_event_buf_alloc(struct dwc3 *dwc)
 		dev_err(dwc->dev, "failed to map dummy doorbell buffer\n");
 		mdwc->dummy_gsi_db_dma = (dma_addr_t)NULL;
 	}
+
+	/*
+	 * Set-up dummy GEVNTCOUNT address to be passed on to GSI for
+	 * normal (non HW-accelerated) EPs.
+	 */
+	mdwc->dummy_gevntcnt = kzalloc(sizeof(*mdwc->dummy_gevntcnt), GFP_KERNEL);
+	if (!mdwc->dummy_gevntcnt) {
+		mdwc->dummy_gevntcnt_dma = (dma_addr_t)NULL;
+		dev_err(dwc->dev, "failed to allocate memory\n");
+	}
+	 mdwc->dummy_gevntcnt_dma = virt_to_phys(mdwc->dummy_gevntcnt);
 }
 
 static void handle_gsi_buffer_setup_event(struct dwc3 *dwc)
@@ -2596,11 +2721,15 @@ static void handle_gsi_buffer_free_event(struct dwc3 *dwc)
 			dma_free_coherent(dwc->sysdev, evt->length,
 						evt->buf, evt->dma);
 	}
+	if (mdwc->dummy_gevntcnt_dma) {
+		dma_unmap_single(dwc->sysdev, mdwc->dummy_gevntcnt_dma,
+				sizeof(mdwc->dummy_gevntcnt),
+				DMA_FROM_DEVICE);
+		 mdwc->dummy_gevntcnt_dma = (dma_addr_t)NULL;
+	}
 	if (mdwc->dummy_gsi_db_dma) {
-		dma_unmap_single(dwc->sysdev, mdwc->dummy_gsi_db_dma,
-				 sizeof(mdwc->dummy_gsi_db),
-				 DMA_FROM_DEVICE);
 		mdwc->dummy_gsi_db_dma = (dma_addr_t)NULL;
+		kfree(mdwc->dummy_gevntcnt);
 	}
 }
 
@@ -2891,6 +3020,8 @@ static bool dwc3_msm_ssphy_autosuspend(struct dwc3_msm *mdwc, int idx)
 	u32 reg = 0;
 	bool suspended = false;
 
+	BUG_ON((idx < 0) || (idx >= 4));
+
 	/* Clear previous P3 events */
 	dwc3_msm_write_reg(mdwc->base, PWR_EVNT_IRQ_STAT_REG[idx],
 		PWR_EVNT_POWERDOWN_IN_P3_MASK | PWR_EVNT_POWERDOWN_OUT_P3_MASK);
@@ -2921,6 +3052,7 @@ static void dwc3_msm_hsphy_prepare_suspend(struct dwc3_msm *mdwc, int idx)
 	unsigned long timeout;
 	u32 reg = 0;
 
+	BUG_ON((idx < 0) || (idx >= 4));
 	dwc3_msm_write_reg(mdwc->base, PWR_EVNT_IRQ_STAT_REG[idx],
 		PWR_EVNT_LPM_IN_L2_MASK | PWR_EVNT_LPM_OUT_L2_MASK);
 
@@ -4064,7 +4196,7 @@ static irqreturn_t msm_dwc3_pwr_irq(int irq, void *data)
 	if (mdwc->drd_state == DRD_STATE_PERIPHERAL_SUSPEND) {
 		dev_info(mdwc->dev, "USB Resume start\n");
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
-		place_marker("M - USB device resume started");
+		update_marker("M - USB device resume started");
 #endif
 	}
 
@@ -4968,7 +5100,7 @@ static int vbus_regulator_enable(struct dwc3_msm *mdwc, bool on)
 	if (!mdwc->vbus_reg)
 		return 0;
 
-	if (on)
+	if (!on)
 		return regulator_disable(mdwc->vbus_reg);
 
 	return regulator_enable(mdwc->vbus_reg);
@@ -6497,7 +6629,7 @@ static int dwc3_msm_pm_resume(struct device *dev)
 			mdwc->drd_state == DRD_STATE_PERIPHERAL_SUSPEND) {
 		dev_info(mdwc->dev, "USB Resume start\n");
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
-		place_marker("M - USB device resume started");
+		update_marker("M - USB device resume started");
 #endif
 	}
 
@@ -6674,6 +6806,7 @@ MODULE_SOFTDEP("pre: phy-generic phy-msm-snps-hs phy-msm-ssusb-qmp eud");
 
 static int dwc3_msm_init(void)
 {
+	dwc3_msm_kretprobe_init();
 	return platform_driver_register(&dwc3_msm_driver);
 }
 module_init(dwc3_msm_init);
@@ -6681,5 +6814,6 @@ module_init(dwc3_msm_init);
 static void __exit dwc3_msm_exit(void)
 {
 	platform_driver_unregister(&dwc3_msm_driver);
+	dwc3_msm_kretprobe_exit();
 }
 module_exit(dwc3_msm_exit);

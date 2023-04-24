@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/cdev.h>
@@ -39,7 +40,8 @@
 /* indicates multi-buffer per command is supported */
 #define VIRTIO_NPU_F_MULTI_BUF	1
 
-#define VIRTIO_ID_NPU           35
+/* Virtio ID of NPU : 0xC005 */
+#define VIRTIO_ID_NPU           49157
 
 #define NPU_MAX_STATS_BUF_SIZE	16384
 #define NPU_MAX_PATCH_NUM       160
