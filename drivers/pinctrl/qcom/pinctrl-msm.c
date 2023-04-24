@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013, Sony Mobile Communications AB.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -926,6 +927,13 @@ static void msm_gpio_irq_enable(struct irq_data *d)
 	if (test_bit(d->hwirq, pctrl->skip_wake_irqs))
 		return;
 
+	if (is_gpio_dual_edge(d, &dir_conn_irq)) {
+		dir_conn_data = irq_get_irq_data(dir_conn_irq);
+		if (!dir_conn_data)
+			return;
+		dir_conn_data->chip->irq_unmask(dir_conn_data);
+	}
+
 	msm_gpio_irq_clear_unmask(d, true);
 }
 
@@ -951,6 +959,13 @@ static void msm_gpio_irq_disable(struct irq_data *d)
 		if (pctrl->mpm_wake_ctl)
 			msm_gpio_mpm_wake_set(d->hwirq, false);
 		return;
+	}
+
+	if (is_gpio_dual_edge(d, &dir_conn_irq)) {
+		dir_conn_data = irq_get_irq_data(dir_conn_irq);
+		if (!dir_conn_data)
+			return;
+		dir_conn_data->chip->irq_mask(dir_conn_data);
 	}
 
 	msm_gpio_irq_mask(d);
