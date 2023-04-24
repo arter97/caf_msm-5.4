@@ -50,6 +50,9 @@
 #define CNSS_BDF_TYPE_DEFAULT		CNSS_BDF_ELF
 #define CNSS_TIME_SYNC_PERIOD_DEFAULT	900000
 
+static int ssr_count;
+#define SSR_MAX_COUNT 5
+
 #ifdef CONFIG_CNSS_SUPPORT_DUAL_DEV
 #define CNSS_MAX_DEV_NUM		2
 static struct cnss_plat_data *plat_env[CNSS_MAX_DEV_NUM];
@@ -1389,8 +1392,10 @@ static void cnss_recovery_work_handler(struct work_struct *work)
 	struct cnss_plat_data *plat_priv =
 		container_of(work, struct cnss_plat_data, recovery_work);
 
-	if (!plat_priv->recovery_enabled)
-		panic("subsys-restart: Resetting the SoC wlan crashed\n");
+	if (!plat_priv->recovery_enabled) {
+		cnss_pr_dbg("subsys-restart: Resetting the SoC wlan crashed\n");
+		CNSS_ASSERT(0);
+	}
 
 	cnss_bus_dev_shutdown(plat_priv);
 	cnss_bus_dev_ramdump(plat_priv);
@@ -1597,6 +1602,13 @@ void cnss_schedule_recovery(struct device *dev,
 	if (test_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state) ||
 	    test_bit(CNSS_DRIVER_IDLE_SHUTDOWN, &plat_priv->driver_state)) {
 		cnss_pr_dbg("Driver unload or idle shutdown is in progress, ignore schedule recovery\n");
+		return;
+	}
+
+	ssr_count++;
+	cnss_pr_dbg("%s ssr_count=%d\n", __func__, ssr_count);
+	if (ssr_count > SSR_MAX_COUNT) {
+		cnss_pr_dbg("stop ssr since serious error happen\n");
 		return;
 	}
 

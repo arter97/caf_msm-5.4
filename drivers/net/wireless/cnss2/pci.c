@@ -1338,8 +1338,10 @@ static void cnss_pci_handle_linkdown(struct cnss_pci_data *pci_priv)
 	unsigned long flags;
 
 	if (test_bit(ENABLE_PCI_LINK_DOWN_PANIC,
-		     &plat_priv->ctrl_params.quirks))
-		panic("cnss: PCI link is down\n");
+		     &plat_priv->ctrl_params.quirks)) {
+		cnss_pr_dbg("cnss: PCI link is down\n");
+		CNSS_ASSERT(0);
+	}
 
 	spin_lock_irqsave(&pci_link_down_lock, flags);
 	if (pci_priv->pci_link_down_ind) {
@@ -4126,7 +4128,8 @@ int cnss_pci_alloc_fw_mem(struct cnss_pci_data *pci_priv)
 			if (!fw_mem[i].va) {
 				cnss_pr_err("Failed to allocate memory for FW, size: 0x%zx, type: %u\n",
 					    fw_mem[i].size, fw_mem[i].type);
-				BUG();
+				CNSS_ASSERT(0);
+				return -ENOMEM;
 			}
 		}
 	}
