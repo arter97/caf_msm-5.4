@@ -1989,8 +1989,10 @@ static void dwc3_msm_gsi_db_update(struct dwc3_ep *dep, dma_addr_t offset)
 	struct dwc3 *dwc = dep->dwc;
 	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
 
-	if (!dep->gsi_db_reg_addr)
+	if (!dep->gsi_db_reg_addr) {
 		dev_err(mdwc->dev, "Failed to update GSI DBL\n");
+		return;
+	}
 
 	writel_relaxed(offset, dep->gsi_db_reg_addr);
 	dev_dbg(mdwc->dev, "Writing TRB addr: %pa to %pK\n",
