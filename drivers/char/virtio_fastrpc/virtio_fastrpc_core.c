@@ -346,8 +346,11 @@ static void context_free(struct fastrpc_invoke_ctx *ctx)
 	spin_unlock(&fl->hlock);
 
 	mutex_lock(&fl->map_mutex);
-	for (i = 0; i < nbufs; i++)
+	for (i = 0; i < nbufs; i++) {
+		if (ctx->maps[i] && ctx->maps[i]->ctx_refs)
+			ctx->maps[i]->ctx_refs--;
 		fastrpc_mmap_free(fl, ctx->maps[i], 0);
+	}
 	mutex_unlock(&fl->map_mutex);
 
 	if (ctx->msg) {
@@ -718,7 +721,7 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 	struct virt_invoke_msg *vmsg;
 	int inbufs = REMOTE_SCALARS_INBUFS(ctx->sc);
 	int outbufs = REMOTE_SCALARS_OUTBUFS(ctx->sc);
-	int i, err = 0, bufs, handles, total;
+	int i, j, err = 0, bufs, handles, total;
 	remote_arg_t *lpra = ctx->lpra;
 	int *fds = ctx->fds;
 	struct virt_fastrpc_buf *rpra;
@@ -754,6 +757,8 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 			err = fastrpc_mmap_create(fl, fds[i], attrs[i],
 					(uintptr_t)lpra[i].buf.pv,
 					len, 0, &maps[i]);
+			if (maps[i])
+				maps[i]->ctx_refs++;
 			mutex_unlock(&fl->map_mutex);
 			if (err)
 				goto bail;
@@ -774,7 +779,14 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 		if (fds && (fds[i] != -1) && attrs) {
 			err = fastrpc_mmap_create(fl, fds[i], attrs[i],
 					0, 0, dmaflags, &maps[i]);
+			if (!err && maps[i])
+				maps[i]->ctx_refs++;
 			if (err) {
+				for (j = bufs; j < i; j++) {
+					if (maps[j] && maps[j]->ctx_refs)
+						maps[j]->ctx_refs--;
+					fastrpc_mmap_free(fl, maps[j], 0);
+				}
 				mutex_unlock(&fl->map_mutex);
 				goto bail;
 			}
@@ -1068,6 +1080,8 @@ static int put_args(struct fastrpc_invoke_ctx *ctx)
 	for (i = inbufs; i < bufs; i++) {
 		if (maps[i]) {
 			mutex_lock(&fl->map_mutex);
+			if (maps[i]->ctx_refs)
+				maps[i]->ctx_refs--;
 			fastrpc_mmap_free(fl, maps[i], 0);
 			mutex_unlock(&fl->map_mutex);
 			maps[i] = NULL;
@@ -1095,8 +1109,11 @@ static int put_args(struct fastrpc_invoke_ctx *ctx)
 			if (!fdlist[i])
 				break;
 			if (!fastrpc_mmap_find(fl, (int)fdlist[i], 0, 0,
-						0, 0, &mmap))
+						0, 0, &mmap)) {
+				if (mmap && mmap->ctx_refs)
+					mmap->ctx_refs--;
 				fastrpc_mmap_free(fl, mmap, 0);
+			}
 		}
 	}
 	mutex_unlock(&fl->map_mutex);
