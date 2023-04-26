@@ -29,6 +29,7 @@ struct fastrpc_mmap {
 	 * such as FASTRPC_ATTR_KEEP_MAP.
 	 */
 	unsigned int attr;
+	int ctx_refs; /* Indicates reference count for context map */
 };
 
 struct fastrpc_buf {
