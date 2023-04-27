@@ -6044,9 +6044,13 @@ static int cnss_pci_of_reserved_mem_device_init(struct cnss_pci_data *pci_priv)
 	 * attached to platform device of_node.
 	 */
 	ret = of_reserved_mem_device_init(dev_pci);
-	if (ret)
-		cnss_pr_err("Failed to init reserved mem device, err = %d\n",
-			    ret);
+	if (ret) {
+		if (ret == -EINVAL)
+			cnss_pr_vdbg("Ignore, no specific reserved-memory assigned\n");
+		else
+			cnss_pr_err("Failed to init reserved mem device, err = %d\n",
+				    ret);
+	}
 	if (dev_pci->cma_area)
 		cnss_pr_dbg("CMA area is %s\n",
 			    cma_get_name(dev_pci->cma_area));
