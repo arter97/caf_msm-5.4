@@ -1907,8 +1907,7 @@ static void gsi_enable(struct usb_ep *ep, struct usb_gsi_request *req)
  * @request - pointer to GSI request. In this case num_bufs is used as a bool
  * to set or clear the doorbell bit
  */
-static void gsi_set_clear_dbell(struct usb_ep *ep,
-					bool block_db, struct usb_gsi_request *req)
+static void gsi_set_clear_dbell(struct usb_ep *ep, bool block_db)
 {
 
 	struct dwc3_ep *dep = to_dwc3_ep(ep);
@@ -1918,7 +1917,7 @@ static void gsi_set_clear_dbell(struct usb_ep *ep,
 	dbg_log_string("block_db(%d)", block_db);
 
 	/* Nothing to be done if NORMAL EP is used with GSI */
-	if (!req->ep_intr_num) {
+	if (ep->is_sw_path) {
 		dev_err(mdwc->dev, "%s: is no-op for normal EP\n", __func__);
 		return;
 	}
@@ -2079,8 +2078,7 @@ int usb_gsi_ep_op(struct usb_ep *ep, void *op_data, enum gsi_ep_op op)
 		break;
 	case GSI_EP_OP_SET_CLR_BLOCK_DBL:
 		block_db = *((bool *)op_data);
-		request = (struct usb_gsi_request *)op_data;
-		gsi_set_clear_dbell(ep, block_db, request);
+		gsi_set_clear_dbell(ep, block_db);
 		break;
 	case GSI_EP_OP_CHECK_FOR_SUSPEND:
 		ret = gsi_check_ready_to_suspend(mdwc);
@@ -2122,10 +2120,12 @@ int usb_gsi_ep_op(struct usb_ep *ep, void *op_data, enum gsi_ep_op op)
 			request->ep_intr_num =
 				((dwc->num_gsi_eps) - ((dwc->num_eps - 1) - dep->number));
 		}
+		ep->is_sw_path = false;
 		break;
 	case GSI_SW_EP_PATH:
 		request = (struct usb_gsi_request *)op_data;
 		request->ep_intr_num = 0;
+		ep->is_sw_path = true;
 		break;
 	default:
 		dev_err(mdwc->dev, "%s: Invalid opcode GSI EP\n", __func__);
