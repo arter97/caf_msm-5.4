@@ -104,6 +104,7 @@
 #define PCIE20_PARF_BDF_TRANSLATE_CFG	(0x24C)
 #define PCIE20_PARF_SID_OFFSET	(0x234)
 #define PCIE20_PARF_BDF_TRANSLATE_N (0x250)
+#define PCIE20_PARF_SLV_ADDR_MSB_CTRL	(0x2C0)
 
 #define PCIE20_ELBI_SYS_CTRL (0x04)
 #define PCIE20_ELBI_SYS_STTS (0x08)
@@ -817,6 +818,7 @@ struct msm_pcie_dev_t {
 	bool common_clk_en;
 	bool clk_power_manage_en;
 	bool aux_clk_sync;
+	bool pcie_slv_msb_bit;
 	bool aer_enable;
 	uint32_t smmu_sid_base;
 	uint32_t link_check_max_count;
@@ -4763,6 +4765,10 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev)
 	if (dev->tcsr_config)
 		pcie_tcsr_init(dev);
 
+	/* Enable Slave address input MSB bit to Constant 0 */
+	if (dev->pcie_slv_msb_bit)
+		msm_pcie_write_reg(dev->parf, PCIE20_PARF_SLV_ADDR_MSB_CTRL, 0x2);
+
 	/* init PCIe PHY */
 	ret = pcie_phy_init(dev);
 	if (ret)
@@ -6254,6 +6260,10 @@ static int msm_pcie_probe(struct platform_device *pdev)
 	PCIE_DBG(pcie_dev, "AUX clock is %s synchronous to Core clock.\n",
 		pcie_dev->aux_clk_sync ? "" : "not");
 
+	pcie_dev->pcie_slv_msb_bit = of_property_read_bool(of_node,
+			"qcom,pcie-slv-msb-bit");
+	PCIE_DBG(pcie_dev, "PCIe Slave address MSB control bit is %s set\n",
+			pcie_dev->pcie_slv_msb_bit ? "" : "not");
 	of_property_read_u32(of_node, "qcom,smmu-sid-base",
 				&pcie_dev->smmu_sid_base);
 	PCIE_DBG(pcie_dev, "RC%d: qcom,smmu-sid-base: 0x%x.\n",
