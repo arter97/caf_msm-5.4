@@ -187,6 +187,9 @@ static unsigned int calculate_marker_charsum(const char *name)
 	unsigned int sum = 0;
 	int len = strlen(name);
 
+	if (!len)
+		return 0;
+
 	do {
 		sum += (unsigned int)name[--len];
 	} while (len);
