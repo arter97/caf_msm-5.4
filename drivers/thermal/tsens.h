@@ -226,6 +226,8 @@ struct tsens_device {
 	bool			ltvr_status_support;
 	int				ltvr_trip_temp_delta;
 	int				ltvr_clear_temp_delta;
+	bool			tm_disable_on_suspend;
+	atomic_t			in_suspend;
 	struct workqueue_struct		*tsens_reinit_work;
 	struct work_struct		therm_fwk_notify;
 	bool				tsens_reinit_wa;
