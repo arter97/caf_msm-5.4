@@ -3985,8 +3985,8 @@ jumbo_read_again:
 		np = rx_q->dma_rx + next_entry;
 
 	prefetch(np);
-	if (!buf->page) {
-		pr_err("buf->page is NULL\n");
+	if (!buf || !buf->page) {
+		pr_err("buf or buf->page is NULL\n");
 		return -EFAULT;
 	}
 	prefetch(page_address(buf->page));
