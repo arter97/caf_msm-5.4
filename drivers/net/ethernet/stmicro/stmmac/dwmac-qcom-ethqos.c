@@ -2032,7 +2032,6 @@ static void read_rgmii_io_macro_node_setting(struct device_node *np_hw, struct q
 		ETHQOSDBG("default rgmii_tx_drv\n");
 		ethqos->io_macro.rgmii_tx_drv = 0;
 	}
-
 }
 
 static void qcom_ethqos_bringup_iface(struct work_struct *work)
@@ -4344,6 +4343,9 @@ static int _qcom_ethqos_probe(void *arg)
 	}
 	ETHQOSINFO("emac-phy-off-suspend = %d\n",
 		   ethqos->current_phy_mode);
+
+	plat_dat->mdio_reset = of_property_read_bool(pdev->dev.of_node,
+						     "mdio-reset");
 	ethqos->ioaddr = (&stmmac_res)->addr;
 	if (ethqos->io_macro.rgmii_tx_drv)
 		ethqos_update_rgmii_tx_drv_strength(ethqos);
