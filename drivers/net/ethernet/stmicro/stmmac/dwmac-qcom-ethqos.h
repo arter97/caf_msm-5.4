@@ -1005,6 +1005,7 @@ struct qcom_ethqos {
 	struct work_struct eth_ssr;
 	unsigned long action;
 	bool driver_load_fail;
+	bool skip_ipa_autoresume;
 };
 
 struct pps_cfg {

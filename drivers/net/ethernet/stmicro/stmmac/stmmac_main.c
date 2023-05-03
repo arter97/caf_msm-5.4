@@ -2904,6 +2904,9 @@ static int stmmac_hw_setup(struct net_device *dev, bool init_ptp)
 	if (priv->dma_cap.vlins)
 		stmmac_enable_vlan(priv, priv->hw, STMMAC_VLAN_INSERT);
 
+	if (priv->hw_offload_enabled)
+		ethqos_ipa_offload_event_handler(priv, EV_DMA_RESET);
+
 	/* Start the ball rolling... */
 	stmmac_start_all_dma(priv);
 

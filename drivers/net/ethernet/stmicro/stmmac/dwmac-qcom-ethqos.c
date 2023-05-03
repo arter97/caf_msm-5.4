@@ -4346,6 +4346,8 @@ static int _qcom_ethqos_probe(void *arg)
 
 	plat_dat->mdio_reset = of_property_read_bool(pdev->dev.of_node,
 						     "mdio-reset");
+	ethqos->skip_ipa_autoresume = of_property_read_bool(pdev->dev.of_node,
+							    "skip-ipa-autoresume");
 	ethqos->ioaddr = (&stmmac_res)->addr;
 	if (ethqos->io_macro.rgmii_tx_drv)
 		ethqos_update_rgmii_tx_drv_strength(ethqos);
@@ -4697,7 +4699,8 @@ static int qcom_ethqos_resume(struct device *dev)
 		ETHQOSINFO("Loopback EN Disabled\n");
 	}
 
-	ethqos_ipa_offload_event_handler(NULL, EV_DPM_RESUME);
+	if (!ethqos->skip_ipa_autoresume)
+		ethqos_ipa_offload_event_handler(NULL, EV_DPM_RESUME);
 
 	place_marker("M - Ethernet Resume End");
 
