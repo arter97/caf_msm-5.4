@@ -56,7 +56,7 @@ static struct boot_stats __iomem *boot_stats;
 
 struct boot_marker {
 	char marker_name[MARKER_STRING_WIDTH];
-	unsigned long long timer_value;
+	u64 timer_value;
 	struct list_head list;
 	struct hlist_node hash;
 	spinlock_t slock;
@@ -327,7 +327,7 @@ static ssize_t bootkpi_reader(struct file *fp, struct kobject *obj,
 		size_t count)
 {
 	struct boot_marker *marker;
-	unsigned long ts_whole_num, ts_precision;
+	u64 ts_whole_num, ts_precision;
 	static char *kpi_buf;
 	static int temp;
 	int ret = 0;
