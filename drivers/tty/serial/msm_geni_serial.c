@@ -4344,6 +4344,84 @@ static int msm_geni_serial_read_dtsi(struct platform_device *pdev,
 	return ret;
 }
 
+/*
+ * msm_geni_check_stop_engine() - Check GENI status and stop the
+ * primary/secondary sequencer if it is active.
+ *
+ * @uport: pointer to uart port
+ *
+ * Return: None
+ */
+static void msm_geni_check_stop_engine(struct uart_port *uport)
+{
+	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
+	unsigned int geni_status, timeout = 0, is_irq_masked;
+
+	geni_status = readl_relaxed(uport->membase + SE_GENI_STATUS);
+	if (geni_status & M_GENI_CMD_ACTIVE) {
+		port->m_cmd_done = false;
+		port->m_cmd = true;
+		reinit_completion(&port->m_cmd_timeout);
+		is_irq_masked = msm_serial_try_disable_interrupts(uport);
+		geni_cancel_m_cmd(uport->membase);
+
+		timeout = geni_wait_for_cmd_done(uport, is_irq_masked);
+		if (timeout) {
+			IPC_LOG_MSG(port->ipc_log_misc,
+				    "%s: TX Cancel cmd failed, geni_status:0x%x\n",
+				__func__, geni_read_reg_nolog(uport->membase, SE_GENI_STATUS));
+			port->m_cmd_done = false;
+			reinit_completion(&port->m_cmd_timeout);
+			/* Give abort command as cancel command failed */
+			geni_abort_m_cmd(uport->membase);
+
+			timeout = geni_wait_for_cmd_done(uport, is_irq_masked);
+			if (timeout) {
+				IPC_LOG_MSG(port->ipc_log_misc,
+					    "%s: TX abort cmd failed, geni_status:0x%x\n",
+					     __func__, geni_read_reg_nolog(uport->membase,
+					SE_GENI_STATUS));
+			} else {
+				IPC_LOG_MSG(port->ipc_log_misc, "%s: TX abort cmd done\n",
+					    __func__);
+			}
+		} else {
+			IPC_LOG_MSG(port->ipc_log_misc, "%s: TX Cancel cmd done\n", __func__);
+		}
+	} else if (geni_status & S_GENI_CMD_ACTIVE) {
+		port->s_cmd_done = false;
+		port->s_cmd = true;
+		reinit_completion(&port->s_cmd_timeout);
+		is_irq_masked = msm_serial_try_disable_interrupts(uport);
+		geni_cancel_s_cmd(uport->membase);
+
+		timeout = geni_wait_for_cmd_done(uport, is_irq_masked);
+		if (timeout) {
+			IPC_LOG_MSG(port->ipc_log_misc,
+				    "%s: RX Cancel cmd failed, geni_status:0x%x\n",
+				     __func__, geni_read_reg_nolog(uport->membase,
+				     SE_GENI_STATUS));
+			port->s_cmd_done = false;
+			reinit_completion(&port->s_cmd_timeout);
+			/* Give abort command as cancel command failed */
+			geni_abort_s_cmd(uport->membase);
+
+			timeout = geni_wait_for_cmd_done(uport, is_irq_masked);
+			if (timeout) {
+				IPC_LOG_MSG(port->ipc_log_misc,
+					    "%s: RX abort cmd failed, geni_status:0x%x\n",
+					    __func__, geni_read_reg_nolog(uport->membase,
+					    SE_GENI_STATUS));
+			} else {
+				IPC_LOG_MSG(port->ipc_log_misc, "%s: RX abort cmd done\n",
+					    __func__);
+			}
+		} else {
+			IPC_LOG_MSG(port->ipc_log_misc, "%s: RX cancel cmd done\n", __func__);
+		}
+	}
+}
+
 static int msm_geni_serial_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -4512,6 +4590,9 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	if (ret)
 		dev_err(&pdev->dev, "Failed to register uart_port: %d\n",
 				ret);
+
+	msm_geni_check_stop_engine(uport);
+
 	/*
 	 * Remove proxy vote from QUP core which was kept from common driver
 	 * probe on behalf of earlycon
