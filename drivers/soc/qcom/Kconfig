@@ -1374,7 +1374,7 @@ config QTI_HW_KEY_MANAGER
 config QCOM_RTIC
 	bool "Enable Qualcomm Technologies, Inc. RTIC feature"
 	depends on QGKI
-	default y if QGKI
+	default n if QGKI
 	help
 	  This option enables QCOM Real Time Integrity Check feature. This
 	  will trigger RTIC kernel MP.s (measurement parameters) generation
