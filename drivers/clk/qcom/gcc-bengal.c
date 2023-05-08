@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021, 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk-provider.h>
@@ -990,7 +990,7 @@ static const struct freq_tbl ftbl_gcc_camss_ope_clk_src[] = {
 	F(200000000, P_GPLL8_OUT_MAIN, 2, 0, 0),
 	F(266600000, P_GPLL8_OUT_MAIN, 1, 0, 0),
 	F(465000000, P_GPLL8_OUT_MAIN, 1, 0, 0),
-	F(580000000, P_GPLL8_OUT_EARLY, 1, 0, 0),
+	F(576000000, P_GPLL9_OUT_MAIN, 1, 0, 0),
 	{ }
 };
 
