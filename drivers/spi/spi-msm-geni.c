@@ -2763,7 +2763,6 @@ static int spi_geni_suspend(struct device *dev)
 		}
 	}
 #endif
-
 	if (!pm_runtime_status_suspended(dev)) {
 		struct spi_master *spi = get_spi_master(dev);
 		struct spi_geni_master *geni_mas = spi_master_get_devdata(spi);
@@ -2775,6 +2774,53 @@ static int spi_geni_suspend(struct device *dev)
 			if (ret) {
 				GENI_SE_ERR(geni_mas->ipc, true, dev,
 					"Force suspend Failed:%d", ret);
+			} else {
+				pm_runtime_disable(dev);
+				pm_runtime_set_suspended(dev);
+				pm_runtime_enable(dev);
+			}
+		} else {
+			ret = -EBUSY;
+		}
+	}
+	geni_se_ssc_clk_enable(&geni_mas->spi_rsc, false);
+	return ret;
+}
+
+static int spi_geni_hib_suspend(struct device *dev)
+{
+	int ret = 0;
+	struct spi_master *spi = get_spi_master(dev);
+	struct spi_geni_master *geni_mas = spi_master_get_devdata(spi);
+
+	if (geni_mas->is_xfer_in_progress) {
+		if (!pm_runtime_status_suspended(dev)) {
+			GENI_SE_ERR(geni_mas->ipc, true, dev,
+				    ":%s: runtime PM is active\n", __func__);
+			ret = -EBUSY;
+			return ret;
+		}
+		return ret;
+	}
+
+	/* for GSI mode, GSI channels re-config required for Hibernation */
+	if (geni_mas->gsi_mode) {
+		geni_mas->is_deep_sleep = true;
+		GENI_SE_ERR(geni_mas->ipc, true, dev,
+			    "%s: GSI channels re-config required for hibernation", __func__);
+	}
+
+	if (!pm_runtime_status_suspended(dev)) {
+		struct spi_master *spi = get_spi_master(dev);
+		struct spi_geni_master *geni_mas = spi_master_get_devdata(spi);
+
+		if (list_empty(&spi->queue) && !spi->cur_msg) {
+			GENI_SE_ERR(geni_mas->ipc, true, dev,
+				    "%s: Force suspend", __func__);
+			ret = spi_geni_runtime_suspend(dev);
+			if (ret) {
+				GENI_SE_ERR(geni_mas->ipc, true, dev,
+					    "Force suspend Failed:%d", ret);
 			} else {
 				pm_runtime_disable(dev);
 				pm_runtime_set_suspended(dev);
@@ -2804,6 +2850,11 @@ static int spi_geni_resume(struct device *dev)
 }
 
 static int spi_geni_suspend(struct device *dev)
+{
+	return 0;
+}
+
+static int spi_geni_hib_suspend(struct device *dev)
 {
 	return 0;
 }
@@ -2887,7 +2938,12 @@ static void ssr_spi_force_resume(struct device *dev)
 static const struct dev_pm_ops spi_geni_pm_ops = {
 	SET_RUNTIME_PM_OPS(spi_geni_runtime_suspend,
 					spi_geni_runtime_resume, NULL)
-	SET_SYSTEM_SLEEP_PM_OPS(spi_geni_suspend, spi_geni_resume)
+	.suspend	= spi_geni_suspend,
+	.resume		= spi_geni_resume,
+	.freeze		= spi_geni_hib_suspend,
+	.thaw		= spi_geni_resume,
+	.poweroff	= spi_geni_suspend,
+	.restore	= spi_geni_resume,
 };
 
 static const struct of_device_id spi_geni_dt_match[] = {
