@@ -1500,8 +1500,6 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 	}
 	cnss_bus_device_crashed(plat_priv);
 
-	return 0;
-
 self_recovery:
 	cnss_pr_dbg("Going for self recovery\n");
 	cnss_bus_dev_shutdown(plat_priv);
