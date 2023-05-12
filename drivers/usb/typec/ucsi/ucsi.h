@@ -280,6 +280,7 @@ struct ucsi {
 #define ACK_PENDING	2
 
 	struct usb_role_switch *usb_role_sw;
+	enum usb_role role;
 };
 
 #define UCSI_MAX_SVID		5

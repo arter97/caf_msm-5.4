@@ -34,8 +34,8 @@
 #define CRYPTO_UD_VOLNAME			"userdata"
 #define CRYPTO_ICE_FDE_LEGACY_UFS	"UFS ICE Full Disk Encryption    "
 #define CRYPTO_ICE_FDE_LEGACY_EMMC	"SDCC ICE Full Disk Encryption   "
-#define CRYPTO_ICE_UFS_DEV_NAME		"ufshcd-qcom"
-#define CRYPTO_ICE_EMMC_DEV_NAME	"sdhci_msm"
+#define UFS_CE		10
+#define SDCC_CE		20
 #define QSEECOM_KEY_ID_EXISTS		-65
 
 
@@ -660,6 +660,13 @@ static ssize_t crypto_qti_ice_part_cfg_store(struct kobject *kobj,
 	ssize_t ret = count;
 	int op_result = -EFAULT;
 
+	/*
+	 * the decr_bypass/encr_bypass attribute can be configured
+	 * from userspace side, only "0" or "1" are accepted.
+	 */
+	if (count > 2)
+		return -EINVAL;
+
 	if (!strcmp(attr->attr.name, "decr_bypass"))
 		op_result = kstrtobool(buf, &cfg->decr_bypass);
 	else if (!strcmp(attr->attr.name, "encr_bypass"))
@@ -764,7 +771,6 @@ static int crypto_qti_ice_add_new_partition(struct ice_device *ice_dev,
 		goto out;
 	}
 
-
 	elem->key_slot = slot;
 	elem->add_partition_result = new_key;
 	list_add_tail(&elem->list, new_pos);
@@ -851,9 +857,6 @@ static ssize_t add_partition_store(struct device *dev,
 			key_res = qseecom_create_key_in_slot(
 				QSEECOM_KM_USAGE_UFS_ICE_DISK_ENCRYPTION,
 				slot, CRYPTO_ICE_FDE_LEGACY_UFS, NULL);
-		} else {
-			//Key is already generated and set,contune
-			key_res == QSEECOM_KEY_ID_EXISTS;
 		}
 #else
 		key_res = qseecom_create_key_in_slot(QSEECOM_KM_USAGE_UFS_ICE_DISK_ENCRYPTION,
@@ -1635,11 +1638,32 @@ static int crypto_qti_ice_init(struct ice_device *ice_dev,
 
 	return crypto_qti_ice_finish_init(ice_dev);
 }
+
+static int crypto_qti_storage_type(unsigned int *s_type)
+{
+	char boot[20] = {'\0'};
+	char *match = (char *)strnstr(saved_command_line,
+				"androidboot.bootdevice=",
+				strlen(saved_command_line));
+	if (match) {
+		memcpy(boot, (match + strlen("androidboot.bootdevice=")),
+			sizeof(boot) - 1);
+		if (strnstr(boot, "ufs", strlen(boot)))
+			*s_type = UFS_CE;
+		else if (strnstr(boot, "sdhci", strlen(boot)))
+			*s_type = SDCC_CE;
+
+		return 0;
+	}
+	return -EINVAL;
+}
+
 static int crypto_qti_ice_init_fde_node(struct device *dev)
 {
 
 	struct ice_device *ice_dev = NULL;
 	int rc = 0;
+	unsigned int storage_type = 0;
 
 	if (!dev) {
 		pr_err("%s: Invalid platform_device passed\n",
@@ -1649,7 +1673,13 @@ static int crypto_qti_ice_init_fde_node(struct device *dev)
 
 	//Only one ice device is supported , remove the extra one(DTS has more than one node)
 
-	if (!strcmp(CRYPTO_ICE_UFS_DEV_NAME, dev_driver_string(dev))) {
+	rc = crypto_qti_storage_type(&storage_type);
+	if (rc) {
+		pr_err("storage type not set %d\n", storage_type);
+		return rc;
+	}
+
+	if (storage_type == UFS_CE) {
 		//ufs found , remove eMMC node if exists
 		ice_dev = crypto_qti_get_ice_device_from_storage_type("sdcc");
 		if (ice_dev) {
@@ -1665,7 +1695,7 @@ static int crypto_qti_ice_init_fde_node(struct device *dev)
 		ice_dev = crypto_qti_get_ice_device_from_storage_type("ufs");
 	}
 
-	if (!strcmp(CRYPTO_ICE_EMMC_DEV_NAME, dev_driver_string(dev))) {
+	if (storage_type == SDCC_CE) {
 		ice_dev = crypto_qti_get_ice_device_from_storage_type("ufs");
 		if (ice_dev) {
 			//eMMC found , remove UFS node if exists
@@ -1691,6 +1721,10 @@ static int crypto_qti_ice_init_fde_node(struct device *dev)
 		return -EINVAL;
 	}
 
+	if (ice_dev->fde_partitions != NULL)
+		goto out;
+
+
 	//Create a Kset for the encrypted partitions
 	ice_dev->fde_partitions = kset_create_and_add("fde_partitions", NULL, &ice_dev->pdev->kobj);
 	if (ice_dev->fde_partitions == NULL) {
@@ -1712,7 +1746,6 @@ static int crypto_qti_ice_init_fde_node(struct device *dev)
 
 	/* Set up partition config folder in sysfs */
 	ice_dev->partitions_kobj_type.release = crypto_qti_ice_release_kobj;
-
 	goto out;
 
 err_ice_dev:

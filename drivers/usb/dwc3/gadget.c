@@ -2341,14 +2341,10 @@ static void dwc3_stop_active_transfers(struct dwc3 *dwc, bool block_db)
 		if (!(dep->flags & DWC3_EP_ENABLED))
 			continue;
 
-		if (dep->gsi && dep->direction && block_db) {
-			dbg_log_string("block_db with dep:%s", dep->name);
-			dwc3_notify_event(dwc,
-				DWC3_CONTROLLER_NOTIFY_CLEAR_DB, 0);
-		}
-
 		dwc3_remove_requests(dwc, dep);
 	}
+	dwc3_notify_event(dwc,
+			DWC3_CONTROLLER_NOTIFY_CLEAR_DB, 0);
 }
 
 /**
@@ -3324,7 +3320,13 @@ static int dwc3_gadget_ep_cleanup_completed_request(struct dwc3_ep *dep,
 	 * processed by the core. Hence do not reclaim it until
 	 * it is processed by the core.
 	 */
-	if (req->trb->ctrl & DWC3_TRB_CTRL_HWO) {
+	/*
+	 * If sg transfer are in progress, avoid checking
+	 * HWO bit here as these will get cleared during
+	 * ep reclaim.
+	 */
+	if ((req->trb->ctrl & DWC3_TRB_CTRL_HWO)
+		       && (req->num_queued_sgs == 0))	{
 		dbg_event(0xFF, "PEND TRB", dep->number);
 		return 1;
 	}

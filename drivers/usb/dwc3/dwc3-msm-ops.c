@@ -22,10 +22,11 @@
  * if it is point to the link TRB, wrap around to the beginning. The
  * link TRB is always at the last TRB entry.
  */
-static void dwc3_msm_ep_inc_trb(u8 *index)
+
+static void dwc3_msm_ep_inc_trb(struct dwc3_ep *dep, u8 *index)
 {
 	(*index)++;
-	if (*index == (DWC3_TRB_NUM - 1))
+	if (*index == (dep->num_trbs - 1))
 		*index = 0;
 }
 
@@ -53,7 +54,7 @@ static int entry_dwc3_gadget_endpoint_transfer_in_progress
 		 * So, if 'n'th TRB got completed then ring doorbell with (n+1) TRB.
 		 */
 
-		dwc3_msm_ep_inc_trb(&dep->trb_dequeue);
+		dwc3_msm_ep_inc_trb(dep, &dep->trb_dequeue);
 		trb = &dep->trb_pool[dep->trb_dequeue];
 		offset = dwc3_trb_dma_offset(dep, trb);
 		usb_gsi_ep_op(ep, (void *)&offset, GSI_EP_OP_UPDATE_DB);

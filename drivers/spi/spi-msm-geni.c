@@ -377,24 +377,19 @@ static void spi_setup_word_len(struct spi_geni_master *mas, u32 mode,
 	 */
 	if (!(mas->tx_fifo_width % bits_per_word))
 		pack_words = mas->tx_fifo_width / bits_per_word;
+
 	se_config_packing(mas->base, bits_per_word, pack_words, msb_first);
-
-	/*
-	 * Don't configure SPI word length for SPI Slave it is an optional
-	 * property for SPI Slave. H/W will take care of SPI slave word
-	 * if SPI_SLAVE_EN bit is set.
-	 */
-
-	if (!spi->slave) {
-		word_len &= ~WORD_LEN_MSK;
+	word_len &= ~WORD_LEN_MSK;
+	if (spi->slave)
+		word_len |= (bits_per_word & WORD_LEN_MSK);
+	else
 		word_len |= ((bits_per_word - MIN_WORD_LEN) & WORD_LEN_MSK);
-		geni_write_reg(word_len, mas->base, SE_SPI_WORD_LEN);
-	}
-	se_get_packing_config(bits_per_word, pack_words, msb_first,
-							&cfg0, &cfg1);
+
+	geni_write_reg(word_len, mas->base, SE_SPI_WORD_LEN);
+	se_get_packing_config(bits_per_word, pack_words, msb_first, &cfg0, &cfg1);
 	GENI_SE_DBG(mas->ipc, false, mas->dev,
-		"%s: cfg0 %lu cfg1 %lu bpw %d pack_words %d\n", __func__,
-		cfg0, cfg1, bits_per_word, pack_words);
+		    "%s: SPI-slave: %d cfg0: 0x%x cfg1: 0x%x bpw: %d pack_words: %d word_len: %d\n",
+		    __func__, spi->slave, cfg0, cfg1, bits_per_word, pack_words, word_len);
 }
 
 static int setup_fifo_params(struct spi_device *spi_slv,
@@ -786,6 +781,12 @@ static int spi_geni_lock_bus(struct spi_master *spi)
 	/* Issue TX */
 	mas->gsi_lock_unlock->tx_cookie =
 			dmaengine_submit(mas->gsi_lock_unlock->tx_desc);
+	if (dma_submit_error(mas->gsi_lock_unlock->tx_cookie)) {
+		dev_err(mas->dev, "%s: dmaengine_submit failed (%d)\n",
+			__func__, mas->gsi_lock_unlock->tx_cookie);
+		ret = -EINVAL;
+		goto err_spi_geni_lock_bus;
+	}
 	dma_async_issue_pending(mas->tx);
 
 	timeout = wait_for_completion_timeout(&mas->tx_cb,
@@ -843,6 +844,12 @@ static void spi_geni_unlock_bus(struct spi_master *spi)
 	/* Issue TX */
 	mas->gsi_lock_unlock->tx_cookie =
 			dmaengine_submit(mas->gsi_lock_unlock->tx_desc);
+	if (dma_submit_error(mas->gsi_lock_unlock->tx_cookie)) {
+		dev_err(mas->dev, "%s: dmaengine_submit failed (%d)\n",
+			__func__, mas->gsi_lock_unlock->tx_cookie);
+		ret = -EINVAL;
+		goto err_spi_geni_unlock_bus;
+	}
 	dma_async_issue_pending(mas->tx);
 
 	timeout = wait_for_completion_timeout(&mas->tx_cb,
@@ -998,9 +1005,22 @@ static int setup_gsi_xfer(struct spi_transfer *xfer,
 					&mas->gsi[mas->num_xfers].desc_cb;
 	mas->gsi[mas->num_xfers].tx_cookie =
 			dmaengine_submit(mas->gsi[mas->num_xfers].tx_desc);
-	if (cmd & SPI_RX_ONLY)
+	if (dma_submit_error(mas->gsi[mas->num_xfers].tx_cookie)) {
+		dev_err(mas->dev, "%s: dmaengine_submit failed (%d)\n",
+			__func__, mas->gsi[mas->num_xfers].tx_cookie);
+		dmaengine_terminate_all(mas->tx);
+		return -EINVAL;
+	}
+	if (cmd & SPI_RX_ONLY) {
 		mas->gsi[mas->num_xfers].rx_cookie =
 			dmaengine_submit(mas->gsi[mas->num_xfers].rx_desc);
+		if (dma_submit_error(mas->gsi[mas->num_xfers].rx_cookie)) {
+			dev_err(mas->dev, "%s: dmaengine_submit failed (%d)\n",
+				__func__, mas->gsi[mas->num_xfers].rx_cookie);
+			dmaengine_terminate_all(mas->rx);
+			return -EINVAL;
+		}
+	}
 	dma_async_issue_pending(mas->tx);
 	if (cmd & SPI_RX_ONLY)
 		dma_async_issue_pending(mas->rx);

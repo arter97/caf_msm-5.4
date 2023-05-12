@@ -2503,7 +2503,7 @@ static int gsi_dynamic_ep_allocation(struct usb_function *f)
 		switch (gsi->prot_id) {
 		case IPA_USB_RMNET:
 		case IPA_USB_ECM:
-			if (__gsi[IPA_USB_RMNET_CV2X]) {
+			if (__gsi[IPA_USB_RMNET_CV2X]->function.fs_descriptors) {
 				if (gsi->d_port.in_ep)
 					usb_gsi_ep_op(gsi->d_port.in_ep,
 						&gsi->d_port.in_request,
@@ -2524,7 +2524,7 @@ static int gsi_dynamic_ep_allocation(struct usb_function *f)
 			}
 		break;
 		case IPA_USB_DIAG:
-			if (!__gsi[IPA_USB_RMNET_CV2X])
+			if (!__gsi[IPA_USB_RMNET_CV2X]->function.fs_descriptors)
 				usb_gsi_ep_op(gsi->d_port.in_ep,
 					&gsi->d_port.in_request,
 					GSI_DYNAMIC_EP_INTR_CALC);
@@ -2534,14 +2534,25 @@ static int gsi_dynamic_ep_allocation(struct usb_function *f)
 					GSI_SW_EP_PATH);
 		break;
 		case IPA_USB_RMNET_CV2X:
-			if (gsi->d_port.in_ep)
-				usb_gsi_ep_op(gsi->d_port.in_ep,
-					&gsi->d_port.in_request,
-					GSI_DYNAMIC_EP_INTR_CALC);
-			if (gsi->d_port.out_ep)
-				usb_gsi_ep_op(gsi->d_port.out_ep,
-					&gsi->d_port.out_request,
-					GSI_DYNAMIC_EP_INTR_CALC);
+			/*
+			 * If V2X is present next to RMNET in composition
+			 * sequence then hardcode the EP interrupters.
+			 */
+			if (__gsi[IPA_USB_RMNET]->data_interface_up) {
+				if (gsi->d_port.in_ep)
+					gsi->d_port.in_request.ep_intr_num = 2;
+				if (gsi->d_port.out_ep)
+					gsi->d_port.out_request.ep_intr_num = 3;
+			} else {
+				if (gsi->d_port.in_ep)
+					usb_gsi_ep_op(gsi->d_port.in_ep,
+						&gsi->d_port.in_request,
+						GSI_DYNAMIC_EP_INTR_CALC);
+				if (gsi->d_port.out_ep)
+					usb_gsi_ep_op(gsi->d_port.out_ep,
+						&gsi->d_port.out_request,
+						GSI_DYNAMIC_EP_INTR_CALC);
+			}
 		break;
 		default:
 			log_event_dbg("%s: Data interface not supported\n", __func__);
@@ -3050,6 +3061,7 @@ fail:
 	if (gsi->c_port.notify_req) {
 		kfree(gsi->c_port.notify_req->buf);
 		usb_ep_free_request(gsi->c_port.notify, gsi->c_port.notify_req);
+		gsi->c_port.notify_req = NULL;
 	}
 	/* we might as well release our claims on endpoints */
 	if (gsi->c_port.notify)
@@ -3521,6 +3533,7 @@ static void gsi_unbind(struct usb_configuration *c, struct usb_function *f)
 	if (gsi->c_port.notify) {
 		kfree(gsi->c_port.notify_req->buf);
 		usb_ep_free_request(gsi->c_port.notify, gsi->c_port.notify_req);
+		gsi->c_port.notify_req = NULL;
 	}
 }
 
