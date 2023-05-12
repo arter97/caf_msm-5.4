@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/init.h>
@@ -12,7 +13,7 @@
 #include <linux/of_device.h>
 #include <linux/netdevice.h>
 #include <linux/rtnetlink.h>
-#define PATH_SIZE	32
+#define PATH_SIZE	64
 #define SLOT_STR_LENGTH 3
 #define MAX_STR_SIZE 255
 
