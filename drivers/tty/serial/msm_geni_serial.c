@@ -3149,6 +3149,9 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 			if (msm_port->gsi->rx_c) {
 				IPC_LOG_MSG(msm_port->ipc_log_misc,
 					"%s:GSI DMA-Rx ch\n", __func__);
+				if (msm_port->rx_wq)
+					flush_workqueue(msm_port->rx_wq);
+
 				for (i = 0; i < 4; i++) {
 					geni_se_iommu_free_buf(rx_dev,
 							&msm_port->dma_addr[i],
@@ -3162,6 +3165,9 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 				IPC_LOG_MSG(msm_port->ipc_log_misc,
 					"%s:GSI DMA-Tx ch\n", __func__);
 				msm_geni_serial_stop_tx(uport);
+				if (msm_port->tx_wq)
+					flush_workqueue(msm_port->tx_wq);
+
 				if (msm_port->tx_dma) {
 					geni_se_iommu_unmap_buf(tx_dev,
 								&msm_port->tx_dma,
