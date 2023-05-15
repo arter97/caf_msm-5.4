@@ -193,6 +193,7 @@ struct spi_geni_master {
 	bool is_deep_sleep; /* For deep sleep restore the config similar to the probe. */
 	bool is_dma_err;
 	bool is_dma_not_done;
+	bool is_hib_done;
 };
 
 static void spi_slv_setup(struct spi_geni_master *mas);
@@ -2420,6 +2421,7 @@ static int spi_geni_probe(struct platform_device *pdev)
 	geni_mas->slave_cross_connected =
 		of_property_read_bool(pdev->dev.of_node, "slv-cross-connected");
 	spi->mode_bits = (SPI_CPOL | SPI_CPHA | SPI_LOOP | SPI_CS_HIGH);
+	geni_mas->is_hib_done = false;
 	spi->bits_per_word_mask = SPI_BPW_RANGE_MASK(4, 32);
 	spi->num_chipselect = SPI_NUM_CHIPSELECT;
 	spi->prepare_transfer_hardware = spi_geni_prepare_transfer_hardware;
@@ -2667,6 +2669,17 @@ exit_rt_resume:
 			return ret;
 		}
 	}
+
+	if (spi->slave) {
+		if (geni_mas->is_hib_done && !geni_mas->slave_setup) {
+			GENI_SE_ERR(geni_mas->ipc, false, geni_mas->dev,
+					"%s: perform spi-slv setup\n", __func__);
+			spi_slv_setup(geni_mas);
+			geni_mas->slave_setup = true;
+			geni_mas->is_hib_done = false;
+		}
+	}
+
 	if (geni_mas->gsi_mode)
 		ret = spi_geni_gpi_suspend_resume(geni_mas, false);
 
@@ -2779,8 +2792,22 @@ static int spi_geni_hib_suspend(struct device *dev)
 			ret = -EBUSY;
 		}
 	}
+	geni_mas->is_hib_done = false;
 	geni_se_ssc_clk_enable(&geni_mas->spi_rsc, false);
 	return ret;
+}
+
+static int spi_geni_hib_resume(struct device *dev)
+{
+	struct spi_master *spi = get_spi_master(dev);
+	struct spi_geni_master *geni_mas = spi_master_get_devdata(spi);
+
+	GENI_SE_ERR(geni_mas->ipc, true, dev,
+			"%s:\n", __func__);
+	geni_mas->slave_setup = false;
+	geni_se_ssc_clk_enable(&geni_mas->spi_rsc, true);
+	geni_mas->is_hib_done = true;
+	return 0;
 }
 #else
 static int spi_geni_runtime_suspend(struct device *dev)
@@ -2804,6 +2831,10 @@ static int spi_geni_suspend(struct device *dev)
 }
 
 static int spi_geni_hib_suspend(struct device *dev)
+{
+	return 0;
+}
+static int spi_geni_hib_resume(struct device *dev)
 {
 	return 0;
 }
@@ -2856,7 +2887,7 @@ static const struct dev_pm_ops spi_geni_pm_ops = {
 	.freeze		= spi_geni_hib_suspend,
 	.thaw		= spi_geni_resume,
 	.poweroff	= spi_geni_suspend,
-	.restore	= spi_geni_resume,
+	.restore	= spi_geni_hib_resume,
 };
 
 static const struct of_device_id spi_geni_dt_match[] = {
