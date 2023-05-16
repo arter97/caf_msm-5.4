@@ -1544,9 +1544,6 @@ static int cti_probe(struct amba_device *adev, const struct amba_id *id)
 	if (coresight_fuse_access_disabled())
 		return -EPERM;
 
-	desc.name = coresight_alloc_device_name(&cti_devs, dev);
-	if (!desc.name)
-		return -ENOMEM;
 	pdata = coresight_get_platform_data(dev);
 	if (IS_ERR(pdata))
 		return PTR_ERR(pdata);
@@ -1567,8 +1564,19 @@ static int cti_probe(struct amba_device *adev, const struct amba_id *id)
 		drvdata->cpu = coresight_get_cpu(dev);
 		if (drvdata->cpu < 0)
 			return drvdata->cpu;
-	}
+	} else
+		drvdata->cpu = -1;
 	of_node_put(cpu_node);
+
+	if (drvdata->cpu >= 0)
+		desc.name = devm_kasprintf(dev, GFP_KERNEL,
+						"coresight-cti-cpu%d", drvdata->cpu);
+	else
+		desc.name = coresight_alloc_device_name(&cti_devs, dev);
+
+	if (!desc.name)
+		return -ENOMEM;
+
 	spin_lock_init(&drvdata->spinlock);
 
 	mutex_init(&drvdata->mutex);
