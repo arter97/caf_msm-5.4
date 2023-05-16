@@ -255,7 +255,7 @@ static int ipc_write(struct platform_device *pdev, char *buf,
 	spin_unlock_irqrestore(&ipc_dev->lock, flags);
 
 retry_write:
-	if (ipc_dev->current_state == IPC_DISCONNECTED) {
+	if (!ipc_dev->connected) {
 		pr_err("%s: Interface disconnected, cannot queue req\n",
 		       __func__);
 		ipc_dev->pending_writes--;
@@ -347,7 +347,7 @@ static int ipc_read(struct platform_device *pdev, char *buf, unsigned int count)
 	spin_unlock_irqrestore(&ipc_dev->lock, flags);
 
 retry_read:
-	if (ipc_dev->current_state == IPC_DISCONNECTED) {
+	if (!ipc_dev->connected) {
 		pr_err("%s: Interface disconnected, cannot queue req\n",
 		       __func__);
 		ipc_dev->pending_reads--;
@@ -430,6 +430,7 @@ static void ipc_function_work(struct work_struct *w)
 		if (!ctxt->connected)
 			break;
 
+		ctxt->current_state = IPC_CONNECTED;
 		ctxt->pdev = platform_device_alloc("ipc_bridge", -1);
 		if (!ctxt->pdev)
 			goto pdev_fail;
@@ -453,6 +454,7 @@ static void ipc_function_work(struct work_struct *w)
 		if (ctxt->connected)
 			break;
 
+		ctxt->current_state = IPC_DISCONNECTED;
 		wake_up(&ctxt->state_wq);
 		platform_device_unregister(ctxt->pdev);
 		break;
@@ -619,7 +621,6 @@ static int ipc_set_alt(struct usb_function *f, unsigned int intf,
 	spin_lock_irqsave(&ctxt->lock, flags);
 	ctxt->connected = 1;
 	ctxt->online = 1;
-	ctxt->current_state = IPC_CONNECTED;
 	spin_unlock_irqrestore(&ctxt->lock, flags);
 	schedule_work(&ctxt->func_work);
 
@@ -635,7 +636,6 @@ static void ipc_disable(struct usb_function *f)
 	spin_lock_irqsave(&ctxt->lock, flags);
 	ctxt->online = 0;
 	ctxt->connected = 0;
-	ctxt->current_state = IPC_DISCONNECTED;
 	spin_unlock_irqrestore(&ctxt->lock, flags);
 	schedule_work(&ctxt->func_work);
 
