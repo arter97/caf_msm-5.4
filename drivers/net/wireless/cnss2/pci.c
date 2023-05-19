@@ -6218,30 +6218,6 @@ static bool cnss_should_suspend_pwroff(struct pci_dev *pci_dev)
 }
 #endif
 
-static void cnss_pci_suspend_pwroff(struct pci_dev *pci_dev)
-{
-	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(pci_dev);
-	int rc_num = pci_dev->bus->domain_nr;
-	struct cnss_plat_data *plat_priv = cnss_get_plat_priv_by_rc_num(rc_num);
-	int ret = 0;
-	bool suspend_pwroff = cnss_should_suspend_pwroff(pci_dev);
-
-	if (suspend_pwroff) {
-		ret = cnss_suspend_pci_link(pci_priv);
-		if (ret)
-			cnss_pr_err("Failed to suspend PCI link, err = %d\n",
-				    ret);
-
-		if (pci_dev->device == QCA6390_DEVICE_ID)
-			cnss_disable_redundant_vreg(plat_priv);
-
-		cnss_power_off_device(plat_priv);
-	} else {
-		cnss_pr_dbg("bus suspend and dev power off disabled for [%x]\n",
-			    pci_dev->device);
-	}
-}
-
 #ifdef CONFIG_CNSS2_ENUM_WITH_LOW_SPEED
 static void
 cnss_pci_downgrade_rc_speed(struct cnss_plat_data *plat_priv, u32 rc_num)
@@ -6270,6 +6246,23 @@ cnss_pci_restore_rc_speed(struct cnss_pci_data *pci_priv)
 				    plat_priv->rc_num, ret);
 	}
 }
+
+static void
+cnss_pci_link_retrain_trigger(struct cnss_pci_data *pci_priv)
+{
+	int ret;
+
+	/* suspend/resume will trigger retain to re-establish link speed */
+	ret = cnss_suspend_pci_link(pci_priv);
+	if (ret)
+		cnss_pr_err("Failed to suspend PCI link, err = %d\n", ret);
+
+	ret = cnss_resume_pci_link(pci_priv);
+	if (ret)
+		cnss_pr_err("Failed to resume PCI link, err = %d\n", ret);
+
+	cnss_pci_get_link_status(pci_priv);
+}
 #else
 static void
 cnss_pci_downgrade_rc_speed(struct cnss_plat_data *plat_priv, u32 rc_num)
@@ -6280,7 +6273,37 @@ static void
 cnss_pci_restore_rc_speed(struct cnss_pci_data *pci_priv)
 {
 }
+
+static void
+cnss_pci_link_retrain_trigger(struct cnss_pci_data *pci_priv)
+{
+}
 #endif
+
+static void cnss_pci_suspend_pwroff(struct pci_dev *pci_dev)
+{
+	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(pci_dev);
+	int rc_num = pci_dev->bus->domain_nr;
+	struct cnss_plat_data *plat_priv = cnss_get_plat_priv_by_rc_num(rc_num);
+	int ret = 0;
+	bool suspend_pwroff = cnss_should_suspend_pwroff(pci_dev);
+
+	if (suspend_pwroff) {
+		ret = cnss_suspend_pci_link(pci_priv);
+		if (ret)
+			cnss_pr_err("Failed to suspend PCI link, err = %d\n",
+				    ret);
+
+		if (pci_dev->device == QCA6390_DEVICE_ID)
+			cnss_disable_redundant_vreg(plat_priv);
+
+		cnss_power_off_device(plat_priv);
+	} else {
+		cnss_pr_dbg("dev power off disabled for [%x]\n",
+			    pci_dev->device);
+		cnss_pci_link_retrain_trigger(pci_priv);
+	}
+}
 
 static int cnss_pci_probe(struct pci_dev *pci_dev,
 			  const struct pci_device_id *id)
