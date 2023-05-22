@@ -2185,7 +2185,7 @@ static ssize_t npu_debug_bist_write(struct file *file,
 
 	buf[count] = 0;	/* end of string */
 
-	arg_cnt = sscanf(buf, "%s %x", subcmd_str, &loop_cnt);
+	arg_cnt = sscanf(buf, "%63s %x", subcmd_str, &loop_cnt);
 	if ((arg_cnt == 1) || (loop_cnt <= 0))
 		loop_cnt = 1;
 
