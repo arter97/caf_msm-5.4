@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2017, 2019 Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1900,12 +1901,7 @@ static int msm_lsm_ioctl(struct snd_pcm_substream *substream,
 
 		dev_dbg(rtd->dev,
 			"%s: SNDRV_LSM_EVENT_STATUS_V3\n", __func__);
-		if (!arg) {
-			dev_err(rtd->dev,
-				"%s: Invalid params event_status_v3\n",
-				__func__);
-			return -EINVAL;
-		}
+
 		if (copy_from_user(&userarg, arg, sizeof(userarg))) {
 			dev_err(rtd->dev,
 				"%s: err copyuser event_status_v3\n",
