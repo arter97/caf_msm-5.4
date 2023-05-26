@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk-provider.h>
@@ -3361,6 +3362,8 @@ static const struct qcom_reset_map gcc_sm6150_resets[] = {
 	[GCC_USB20_SEC_BCR] = { 0xa6000 },
 	[GCC_USB3PHY_PHY_PRIM_SP0_BCR] = { 0x50008 },
 	[GCC_USB3_PHY_PRIM_SP0_BCR] = { 0x50000 },
+	[GCC_SDCC1_BCR] = { 0x12000 },
+	[GCC_SDCC2_BCR] = { 0x14000 },
 };
 
 
