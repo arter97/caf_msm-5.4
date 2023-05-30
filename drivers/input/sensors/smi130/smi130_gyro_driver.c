@@ -139,6 +139,8 @@
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
 #include <linux/of_irq.h>
+#include <linux/timer.h>
+#include <linux/jiffies.h>
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
@@ -146,6 +148,9 @@
 
 #include "smi130_gyro.h"
 #include "bs_log.h"
+
+static struct timer_list pm_mode_timer;
+static bool is_gyro_ready = true;
 
 /* sensor specific */
 #define SENSOR_NAME "smi130_gyro"
@@ -867,6 +872,7 @@ static inline int smi130_check_gyro_early_buff_enable_flag(
 static void smi130_check_gyro_enable_flag(
 		struct smi_gyro_client_data *client_data, unsigned long data)
 {
+	client_data->gyro_buffer_smi130_samples = false;
 	if (data == SMI130_GYRO_MODE_NORMAL)
 		client_data->gyro_enable = true;
 	else
@@ -924,6 +930,10 @@ static ssize_t smi_gyro_store_op_mode(struct device *dev,
 	if (err)
 		return count;
 
+	if (op_mode == 0) {
+		is_gyro_ready = false;
+		mod_timer(&pm_mode_timer, jiffies + msecs_to_jiffies(200));
+	}
 	mutex_lock(&client_data->mutex_op_mode);
 
 	err = SMI_GYRO_CALL_API(set_mode)(op_mode);
@@ -1929,10 +1939,20 @@ static irqreturn_t smi130_gyro_irq_work_func(int irq, void *handle)
 static irqreturn_t smi_gyro_irq_handler(int irq, void *handle)
 {
 	struct smi_gyro_client_data *client_data = handle;
+	if (!is_gyro_ready) {
+		PINFO("Senosr gyro not ready, discard data of first 200ms period after active");
+		return 0;
+	}
 	client_data->timestamp= smi130_gyro_get_alarm_timestamp();
 	return IRQ_WAKE_THREAD;
 }
 #endif
+
+static void pm_mode_callback(struct timer_list *t)
+{
+	is_gyro_ready = true;
+}
+
 static int smi_gyro_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	int err = 0;
@@ -2095,6 +2115,7 @@ static int smi_gyro_probe(struct i2c_client *client, const struct i2c_device_id 
 		PINFO("request handle failed\n");
 #endif
 
+	timer_setup(&pm_mode_timer, pm_mode_callback, 0);
 	err = smi130_gyro_early_buff_init(client_data);
 	if (err != 1)
 		return err;
@@ -2257,6 +2278,7 @@ static int smi_gyro_remove(struct i2c_client *client)
 		smi_gyro_input_destroy(client_data);
 		kfree(client_data);
 		smi_gyro_client = NULL;
+		del_timer(&pm_mode_timer);
 	}
 
 	return err;
