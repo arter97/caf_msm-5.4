@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(msg) "slatersb: %s: " msg, __func__
@@ -149,6 +150,10 @@ void slatersb_rx_msg(void *data, int len)
 	struct slatersb_priv *dev =
 		container_of(slatersb_drv, struct slatersb_priv, lhndl);
 
+	if (len > SLATERSB_GLINK_INTENT_SIZE) {
+		pr_err("Invalid slatersb glink intent size\n");
+		return;
+	}
 	dev->slate_resp_cmplt = true;
 	wake_up(&dev->link_state_wait);
 	memcpy(dev->rx_buf, data, len);
