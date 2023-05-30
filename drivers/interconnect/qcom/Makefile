@@ -3,6 +3,7 @@
 qnoc-direwolf-objs			:= direwolf.o
 qnoc-holi-objs			:= holi.o
 qnoc-monaco-objs			:= monaco.o
+qnoc-mdm9x07-objs			:= mdm9x07.o
 qnoc-qcs404-objs			:= qcs404.o
 qnoc-qcs405-objs			:= qcs405.o
 qnoc-scshrike-objs			:= scshrike.o
@@ -30,6 +31,7 @@ obj-$(CONFIG_INTERCONNECT_QCOM_DIREWOLF) += qnoc-direwolf.o
 obj-$(CONFIG_INTERCONNECT_QCOM_HOLI) += qnoc-holi.o
 obj-$(CONFIG_INTERCONNECT_QCOM_OSM_L3) += osm-l3.o
 obj-$(CONFIG_INTERCONNECT_QCOM_MONACO) += qnoc-monaco.o
+obj-$(CONFIG_INTERCONNECT_QCOM_MDM9X07) += qnoc-mdm9x07.o
 obj-$(CONFIG_INTERCONNECT_QCOM_QCS404) += qnoc-qcs404.o
 obj-$(CONFIG_INTERCONNECT_QCOM_QCS405) += qnoc-qcs405.o
 obj-$(CONFIG_INTERCONNECT_QCOM_SCSHRIKE) += qnoc-scshrike.o
