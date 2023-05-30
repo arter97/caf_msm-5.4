@@ -672,6 +672,7 @@ static const struct soc_id soc_id[] = {
 	{ 415, "LAHAINA" },
 	{ 439, "LAHAINAP" },
 	{ 449, "SC_DIREWOLF"},
+	{ 455, "QRB5165" },
 	{ 456, "LAHAINA-ATP" },
 	{ 460, "SA_DIREWOLF_IVI"},
 	{ 461, "SA_DIREWOLF_ADAS"},
