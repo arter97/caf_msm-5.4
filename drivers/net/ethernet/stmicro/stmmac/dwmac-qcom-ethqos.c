@@ -187,7 +187,6 @@ u16 dwmac_qcom_select_queue(struct net_device *dev,
 			  txqueue_select);
 		WARN_ON(1);
 	}
-	ETHQOSDBG("tx_queue %d\n", txqueue_select);
 	return txqueue_select;
 }
 
