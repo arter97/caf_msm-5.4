@@ -270,6 +270,7 @@ struct msm_geni_serial_port {
 	bool s_cmd_done;
 	bool m_cmd;
 	bool s_cmd;
+	bool wakeup_enabled;
 	struct completion m_cmd_timeout;
 	struct completion s_cmd_timeout;
 	spinlock_t rx_lock;
@@ -4198,6 +4199,7 @@ static int msm_geni_serial_get_irq_pinctrl(struct platform_device *pdev,
 					__func__, ret);
 			return ret;
 		}
+		dev_port->wakeup_enabled = false;
 	} else if (dev_port->wakeup_irq > 0 && !uart_console(uport)) {
 		irq_set_status_flags(dev_port->wakeup_irq, IRQ_NOAUTOEN);
 		ret = devm_request_irq(uport->dev, dev_port->wakeup_irq,
@@ -4209,6 +4211,7 @@ static int msm_geni_serial_get_irq_pinctrl(struct platform_device *pdev,
 								__func__, ret);
 			return ret;
 		}
+		dev_port->wakeup_enabled = false;
 	}
 
 	return ret;
@@ -4737,6 +4740,7 @@ static int msm_geni_serial_runtime_suspend(struct device *dev)
 		if (unlikely(ret))
 			dev_err(dev, "%s:Failed to set IRQ wake:%d\n",
 				__func__, ret);
+		port->wakeup_enabled = true;
 	}
 	IPC_LOG_MSG(port->ipc_log_pwr, "%s: End\n", __func__);
 	__pm_relax(port->geni_wake);
@@ -4761,12 +4765,14 @@ static int msm_geni_serial_runtime_resume(struct device *dev)
 	 * check for wakeup_enabled before disabling the wakeup_irq as
 	 * this might be disabled from shutdown as well.
 	 */
-	if (port->wakeup_irq > 0 && port->uport.state->port.tty) {
+	if (port->wakeup_irq > 0 && port->wakeup_enabled
+			&& port->uport.state->port.tty) {
 		ret = irq_set_irq_wake(port->wakeup_irq, 0);
 		if (unlikely(ret))
 			dev_err(dev, "%s:Failed to unset IRQ wake:%d\n",
 				__func__, ret);
 		disable_irq(port->wakeup_irq);
+		port->wakeup_enabled = false;
 	}
 	/*
 	 * Resources On.
