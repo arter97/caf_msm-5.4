@@ -32,7 +32,6 @@
 #include <uapi/linux/msm_geni_serial.h>
 #include <soc/qcom/boot_stats.h>
 #include <linux/suspend.h>
-#include <linux/syscore_ops.h>
 
 /* UART specific GENI registers */
 #define SE_UART_LOOPBACK_CFG		(0x22C)
@@ -290,7 +289,6 @@ struct msm_geni_serial_port {
 	bool resuming_from_deep_sleep;
 };
 
-static struct uart_port *uart_console_uport = NULL;
 static const struct uart_ops msm_geni_serial_pops;
 static struct uart_driver msm_geni_console_driver;
 static struct uart_driver msm_geni_serial_hs_driver;
@@ -3221,7 +3219,6 @@ static int msm_geni_serial_port_setup(struct uart_port *uport)
 		 * Make an unconditional cancel on the main sequencer to reset
 		 * it else we could end up in data loss scenarios.
 		 */
-		uart_console_uport = uport;
 		msm_port->xfer_mode = FIFO_MODE;
 		msm_serial_try_disable_interrupts(uport);
 		msm_geni_serial_poll_tx_done(uport);
@@ -4273,16 +4270,6 @@ static int msm_geni_serial_read_dtsi(struct platform_device *pdev,
 	return ret;
 }
 
-static void uart_console_syscore_resume(void)
-{
-	if (!uart_console_uport)
-		return;
-	msm_geni_serial_port_setup(uart_console_uport);
-}
-struct syscore_ops uart_console_syscore_ops = {
-	.resume		= uart_console_syscore_resume,
-};
-
 static int msm_geni_serial_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -4465,10 +4452,6 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 		snprintf(boot_marker, sizeof(boot_marker),
 			"M - DRIVER GENI_HS_UART_%d Ready", line);
 	place_marker(boot_marker);
-
-	if(is_console) {
-		register_syscore_ops(&uart_console_syscore_ops);
-	}
 
 exit_geni_serial_probe:
 	IPC_LOG_MSG(dev_port->ipc_log_misc, "%s: ret:%d\n",
