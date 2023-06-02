@@ -902,6 +902,7 @@ struct msm_pcie_dev_t {
 
 	bool drv_supported;
 	bool nogdsc_retention;
+	bool sleep_disabled;
 
 	void (*rumi_init)(struct msm_pcie_dev_t *pcie_dev);
 
@@ -6500,6 +6501,11 @@ static int msm_pcie_probe(struct platform_device *pdev)
 	PCIE_DBG(pcie_dev, "GDSC retention is %s supported\n",
 		pcie_dev->nogdsc_retention ? "not" : "");
 
+	pcie_dev->sleep_disabled = of_property_read_bool(of_node,
+					"qcom,sleep-disabled");
+	PCIE_DBG(pcie_dev, "pcie link sleep is %s supported\n",
+		pcie_dev->sleep_disabled ? "not" : "");
+
 	msm_pcie_i2c_ctrl_init(pcie_dev);
 
 	msm_pcie_sysfs_init(pcie_dev);
@@ -7560,6 +7566,13 @@ static void msm_pcie_fixup_suspend(struct pci_dev *dev)
 		!pci_is_root_bus(dev->bus))
 		return;
 
+	if (pcie_dev->sleep_disabled) {
+		PCIE_DBG(pcie_dev,
+			"RC%d: Skip fixup suspend because of device limitations\n",
+			pcie_dev->rc_idx);
+		return;
+	}
+
 	spin_lock_irqsave(&pcie_dev->cfg_lock,
 				pcie_dev->irqsave_flags);
 	if (pcie_dev->disable_pc) {
@@ -7639,6 +7652,13 @@ static void msm_pcie_fixup_resume(struct pci_dev *dev)
 
 	PCIE_DBG(pcie_dev, "RC%d\n", pcie_dev->rc_idx);
 
+	if (pcie_dev->sleep_disabled) {
+		PCIE_DBG(pcie_dev,
+			"RC%d: Skip fixup resume because of device limitations\n",
+			pcie_dev->rc_idx);
+		return;
+	}
+
 	if ((pcie_dev->link_status != MSM_PCIE_LINK_DISABLED) ||
 		pcie_dev->user_suspend || !pci_is_root_bus(dev->bus))
 		return;
@@ -7661,6 +7681,13 @@ static void msm_pcie_fixup_resume_early(struct pci_dev *dev)
 	struct msm_pcie_dev_t *pcie_dev = PCIE_BUS_PRIV_DATA(dev->bus);
 
 	PCIE_DBG(pcie_dev, "RC%d\n", pcie_dev->rc_idx);
+
+	if (pcie_dev->sleep_disabled) {
+		PCIE_DBG(pcie_dev,
+			"RC%d: Skip fixup resume early because of device limitations\n",
+			pcie_dev->rc_idx);
+		return;
+	}
 
 	if ((pcie_dev->link_status != MSM_PCIE_LINK_DISABLED) ||
 		pcie_dev->user_suspend || !pci_is_root_bus(dev->bus))
