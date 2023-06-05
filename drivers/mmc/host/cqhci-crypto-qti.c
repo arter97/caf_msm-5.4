@@ -40,6 +40,9 @@ static struct cqhci_host_crypto_variant_ops __maybe_unused cqhci_crypto_qti_vari
 #endif
 };
 
+#ifdef CONFIG_Q2S_OTA
+static bool cmdq_use_default_du_size = true;
+#endif
 static bool ice_cap_idx_valid(struct cqhci_host *host,
 					unsigned int cap_idx)
 {
@@ -48,12 +51,25 @@ static bool ice_cap_idx_valid(struct cqhci_host *host,
 
 static uint8_t get_data_unit_size_mask(unsigned int data_unit_size)
 {
+#ifdef CONFIG_Q2S_OTA
+	unsigned int du_size;
+#endif
+
 	if (data_unit_size < MINIMUM_DUN_SIZE ||
 		data_unit_size > MAXIMUM_DUN_SIZE ||
 	    !is_power_of_2(data_unit_size))
 		return 0;
-
+#ifndef CONFIG_Q2S_OTA
 	return data_unit_size / MINIMUM_DUN_SIZE;
+#else
+	if (cmdq_use_default_du_size)
+		du_size = MINIMUM_DUN_SIZE;
+	else
+		du_size =  data_unit_size;
+
+	return du_size / MINIMUM_DUN_SIZE;
+#endif
+
 }
 
 void cqhci_crypto_qti_enable(struct cqhci_host *host)
@@ -127,9 +143,10 @@ static int cqhci_crypto_qti_keyslot_evict(struct keyslot_manager *ksm,
 	pm_runtime_get_sync(&host->mmc->card->dev);
 
 	if (!cqhci_is_crypto_enabled(host) ||
-	    !cqhci_keyslot_valid(host, slot))
+	    !cqhci_keyslot_valid(host, slot)) {
 		pm_runtime_put_sync(&host->mmc->card->dev);
 		return -EINVAL;
+	}
 
 	err = crypto_qti_keyslot_evict(host->crypto_vops->priv, slot);
 	if (err)
@@ -385,11 +402,24 @@ int cqhci_crypto_qti_prep_desc(struct cqhci_host *host, struct mmc_request *mrq,
 
 	if (!cqhci_keyslot_valid(host, bc->bc_keyslot))
 		return -EINVAL;
-
+	#ifdef CONFIG_Q2S_OTA
+		if (bc->is_ext4)
+			cmdq_use_default_du_size = true;
+	#endif
 	if (ice_ctx) {
+	#ifndef CONFIG_Q2S_OTA
 		*ice_ctx = DATA_UNIT_NUM(bc->bc_dun[0]) |
-			   CRYPTO_CONFIG_INDEX(bc->bc_keyslot) |
-			   CRYPTO_ENABLE(true);
+		CRYPTO_CONFIG_INDEX(bc->bc_keyslot) |
+		CRYPTO_ENABLE(true);
+	#else
+		if (bc->is_ext4)
+			*ice_ctx = DATA_UNIT_NUM(req->__sector);
+		else
+			*ice_ctx = DATA_UNIT_NUM(bc->bc_dun[0]);
+
+		*ice_ctx = *ice_ctx | CRYPTO_CONFIG_INDEX(bc->bc_keyslot) |
+			    CRYPTO_ENABLE(true);
+	#endif
 	}
 
 	return 0;

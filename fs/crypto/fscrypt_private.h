@@ -380,6 +380,10 @@ fscrypt_is_key_prepared(struct fscrypt_prepared_key *prep_key,
 	return smp_load_acquire(&prep_key->tfm) != NULL;
 }
 
+#ifdef CONFIG_Q2S_OTA
+extern int fscrypt_find_storage_type(char **device);
+#endif
+
 #else /* CONFIG_FS_ENCRYPTION_INLINE_CRYPT */
 
 static inline int fscrypt_select_encryption_impl(struct fscrypt_info *ci,
@@ -426,6 +430,13 @@ fscrypt_is_key_prepared(struct fscrypt_prepared_key *prep_key,
 {
 	return smp_load_acquire(&prep_key->tfm) != NULL;
 }
+
+#ifdef CONFIG_Q2S_OTA
+static inline int fscrypt_find_storage_type(char **device)
+{
+	return -EOPNOTSUPP;
+}
+#endif
 #endif /* !CONFIG_FS_ENCRYPTION_INLINE_CRYPT */
 
 /* keyring.c */

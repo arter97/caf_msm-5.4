@@ -388,9 +388,9 @@ int ufshcd_prepare_lrbp_crypto_spec(struct ufs_hba *hba,
 
 	if (WARN_ON(!ufshcd_is_crypto_enabled(hba))) {
 		/*
-		 * Upper layer asked us to do inline encryption
-		 * but that isn't enabled, so we fail this request.
-		 */
+	 	* Upper layer asked us to do inline encryption
+	 	* but that isn't enabled, so we fail this request.
+	 	*/
 		return -EINVAL;
 	}
 	if (!ufshcd_keyslot_valid(hba, bc->bc_keyslot))
@@ -398,8 +398,16 @@ int ufshcd_prepare_lrbp_crypto_spec(struct ufs_hba *hba,
 
 	lrbp->crypto_enable = true;
 	lrbp->crypto_key_slot = bc->bc_keyslot;
+#ifndef CONFIG_Q2S_OTA
 	lrbp->data_unit_num = bc->bc_dun[0];
-
+#else
+	if (bc->is_ext4) {
+		lrbp->data_unit_num = (u64)cmd->request->bio->bi_iter.bi_sector;
+		lrbp->data_unit_num >>= 3;
+	} else {
+		lrbp->data_unit_num = bc->bc_dun[0];
+	}
+#endif
 	return 0;
 }
 EXPORT_SYMBOL_GPL(ufshcd_prepare_lrbp_crypto_spec);

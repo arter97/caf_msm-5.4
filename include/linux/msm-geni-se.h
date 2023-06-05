@@ -89,6 +89,7 @@ struct se_rsc_ssr {
  * @clk_perf_tbl:	Table of clock frequency input to Serial Engine clock.
  * @skip_bw_vote:	Used for PMIC over i2c use case to skip the BW vote.
  * @se_rsc_ssr:		Pointer to Geni resource SSR structure.
+ * @is_list_add;	To synchronize list add and del.
  */
 struct se_geni_rsc {
 	struct device *ctrl_dev;
@@ -113,6 +114,7 @@ struct se_geni_rsc {
 	unsigned long *clk_perf_tbl;
 	bool skip_bw_vote;
 	struct se_rsc_ssr rsc_ssr;
+	bool is_list_add;
 };
 
 #define PINCTRL_DEFAULT	"default"
@@ -909,6 +911,18 @@ void geni_se_dump_dbg_regs(struct se_geni_rsc *rsc, void __iomem *base,
  * probe on behalf of earlycon usecase.
  */
 void geni_se_remove_earlycon_icc_vote(struct device *dev);
+
+/**
+ * geni_se_ssc_clk_enable() - Enable or disable core/core2x clk based on flag.
+ * @_dev:		Pointer to the SE's device.
+ * @enable:		Bool parameter to turn on/off the SSC clock.
+ *
+ * This function is used to enable or disable the core or core2x clock.
+ *
+ * Return:	None
+ */
+void geni_se_ssc_clk_enable(struct se_geni_rsc *rsc, bool enable);
+
 #else
 static inline unsigned int geni_read_reg_nolog(void __iomem *base, int offset)
 {
@@ -1100,5 +1114,8 @@ static void geni_se_rx_dma_start(void __iomem *base, int rx_len,
 {
 }
 
+static void geni_se_ssc_clk_enable(struct se_geni_rsc *rsc, bool enable)
+{
+}
 #endif
 #endif

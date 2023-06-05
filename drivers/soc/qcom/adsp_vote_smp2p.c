@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -17,27 +17,6 @@
 
 static struct qcom_smem_state *state;
 static struct dentry *dent_adsp_vote, *adsp_vote;
-
-static int adsp_vote_pm_notifier(struct notifier_block *nb,
-				  unsigned long event, void *unused)
-{
-	switch (event) {
-	case PM_SUSPEND_PREPARE:
-		pr_info("ADSP unvoting over smp2p initiated\n");
-		qcom_smem_state_update_bits(state, AWAKE_BITS, ADSP_UNVOTE);
-		break;
-	case PM_POST_SUSPEND:
-		pr_info("ADSP voting over smp2p initiated\n");
-		qcom_smem_state_update_bits(state, AWAKE_BITS, ADSP_VOTE);
-		break;
-	}
-
-	return NOTIFY_DONE;
-}
-
-static struct notifier_block adsp_vote_pm_nb = {
-	.notifier_call = adsp_vote_pm_notifier,
-};
 
 static int adsp_manual_vote_op(void *data, u64 vote)
 {
@@ -66,13 +45,6 @@ static int adsp_vote_smp2p_probe(struct platform_device *pdev)
 		return PTR_ERR(state);
 	}
 
-	ret = register_pm_notifier(&adsp_vote_pm_nb);
-	if (ret) {
-		dev_err(dev, "%s: power state notif error %d\n", __func__, ret);
-		return ret;
-	}
-	pr_info("ADSP vote device is registered successfully\n");
-
 	dent_adsp_vote = debugfs_create_dir("adsp_vote_smp2p", NULL);
 	if (IS_ERR_OR_NULL(dent_adsp_vote)) {
 		dev_err(&pdev->dev, "%s:  debugfs create dir failed %d\n",
@@ -96,11 +68,33 @@ static const struct of_device_id adsp_vote_match_table[] = {
 	{},
 };
 
+static int send_adsp_manual_unvote(struct device *dev)
+{
+	pr_info("ADSP unvoting over smp2p initiated\n");
+	qcom_smem_state_update_bits(state, AWAKE_BITS, ADSP_UNVOTE);
+
+	return 0;
+}
+
+static int send_adsp_manual_vote(struct device *dev)
+{
+	pr_info("ADSP voting over smp2p initiated\n");
+	qcom_smem_state_update_bits(state, AWAKE_BITS, ADSP_VOTE);
+
+	return 0;
+}
+
+static const struct dev_pm_ops adsp_manual_vote_dev_pm_ops = {
+	SET_NOIRQ_SYSTEM_SLEEP_PM_OPS(send_adsp_manual_unvote,
+                         send_adsp_manual_vote)
+};
+
 static struct platform_driver adsp_vote_smp2p_driver = {
 	.probe = adsp_vote_smp2p_probe,
 	.driver = {
 		.name = "adsp_vote_smp2p",
 		.of_match_table = adsp_vote_match_table,
+		.pm = &adsp_manual_vote_dev_pm_ops,
 	},
 };
 

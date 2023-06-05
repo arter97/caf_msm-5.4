@@ -42,12 +42,37 @@ static void fscrypt_get_devices(struct super_block *sb, int num_devs,
 		sb->s_cop->get_devices(sb, devs);
 }
 
+#ifdef CONFIG_Q2S_OTA
+#define SDHCI "sdhci"
+
+int fscrypt_find_storage_type(char **device)
+{
+	char boot[20] = {'\0'};
+	char *match = (char *)strnstr(saved_command_line,
+				      "androidboot.bootdevice=",
+				      strlen(saved_command_line));
+	if (match) {
+		memcpy(boot, (match + strlen("androidboot.bootdevice=")),
+			sizeof(boot) - 1);
+
+		if (strnstr(boot, "sdhci", strlen(boot)))
+			*device = SDHCI;
+
+		return 0;
+	}
+	return -EINVAL;
+}
+EXPORT_SYMBOL(fscrypt_find_storage_type);
+#endif
+
 static unsigned int fscrypt_get_dun_bytes(const struct fscrypt_info *ci)
 {
 	struct super_block *sb = ci->ci_inode->i_sb;
 	unsigned int flags = fscrypt_policy_flags(&ci->ci_policy);
 	int ino_bits = 64, lblk_bits = 64;
-
+#ifdef CONFIG_Q2S_OTA
+	char *s_type = "ufs";
+#endif
 	if (flags & FSCRYPT_POLICY_FLAG_DIRECT_KEY)
 		return offsetofend(union fscrypt_iv, nonce);
 
@@ -56,7 +81,16 @@ static unsigned int fscrypt_get_dun_bytes(const struct fscrypt_info *ci)
 
 	if (flags & FSCRYPT_POLICY_FLAG_IV_INO_LBLK_32)
 		return sizeof(__le32);
-
+#ifdef CONFIG_Q2S_OTA
+	if (fscrypt_policy_contents_mode(&ci->ci_policy) ==
+	    FSCRYPT_MODE_PRIVATE) {
+		fscrypt_find_storage_type(&s_type);
+		if (!strcmp(s_type, "sdhci"))
+			return sizeof(__le32);
+		else
+			return sizeof(__le64);
+	}
+#endif
 	/* Default case: IVs are just the file logical block number */
 	if (sb->s_cop->get_ino_and_lblk_bits)
 		sb->s_cop->get_ino_and_lblk_bits(sb, &ino_bits, &lblk_bits);
@@ -325,6 +359,12 @@ void fscrypt_set_bio_crypt_ctx(struct bio *bio, const struct inode *inode,
 
 	fscrypt_generate_dun(ci, first_lblk, dun);
 	bio_crypt_set_ctx(bio, &ci->ci_key.blk_key->base, dun, gfp_mask);
+#ifdef CONFIG_Q2S_OTA
+	if ((fscrypt_policy_contents_mode(&ci->ci_policy) ==
+	    FSCRYPT_MODE_PRIVATE) &&
+	    (!strcmp(inode->i_sb->s_type->name, "ext4")))
+		bio->bi_crypt_context->is_ext4 = true;
+#endif
 }
 EXPORT_SYMBOL_GPL(fscrypt_set_bio_crypt_ctx);
 

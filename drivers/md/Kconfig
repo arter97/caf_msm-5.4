@@ -642,4 +642,10 @@ config DM_BOW
 
 	  If unsure, say N.
 
+config Q2S_OTA
+	bool "Q to S OTA"
+	default n
+	---help---
+	  Enabling this will pick fbev1 changes which is required for Q to S OTA Update.
+
 endif # MD

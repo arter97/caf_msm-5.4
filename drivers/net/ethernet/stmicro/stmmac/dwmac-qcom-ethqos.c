@@ -1071,6 +1071,23 @@ static int ethqos_configure(struct qcom_ethqos *ethqos)
 		if (!retry)
 			dev_err(&ethqos->pdev->dev,
 				"Timeout while waiting for DLL lock\n");
+
+		/* Disable CK_OUT_EN */
+		rgmii_updatel(ethqos, SDCC_DLL_CONFIG_CK_OUT_EN,
+			      0,
+			      SDCC_HC_REG_DLL_CONFIG);
+
+		/* Wait for CK_OUT_EN clear */
+		do {
+			val = rgmii_readl(ethqos, SDCC_HC_REG_DLL_CONFIG);
+			val &= SDCC_DLL_CONFIG_CK_OUT_EN;
+			if (!val)
+				break;
+			usleep_range(1000, 1500);
+			retry--;
+		} while (retry > 0);
+		if (!retry)
+			dev_err(&ethqos->pdev->dev, "Clear CK_OUT_EN timedout\n");
 	}
 	return 0;
 }
@@ -2289,22 +2306,12 @@ static ssize_t read_rgmii_reg_dump(struct file *file,
 				   loff_t *ppos)
 {
 	struct qcom_ethqos *ethqos = file->private_data;
-	struct platform_device *pdev;
-	struct net_device *dev;
 	unsigned int len = 0, buf_len = 2000;
 	char *buf;
 	ssize_t ret_cnt;
 	int rgmii_data = 0;
 
 	if (!ethqos) {
-		ETHQOSERR("NULL Pointer\n");
-		return -EINVAL;
-	}
-
-	pdev = ethqos->pdev;
-	dev = platform_get_drvdata(pdev);
-
-	if (!dev->phydev) {
 		ETHQOSERR("NULL Pointer\n");
 		return -EINVAL;
 	}
@@ -4591,9 +4598,10 @@ static int qcom_ethqos_hib_restore(struct device *dev)
 		return ret;
 	}
 
-	if (!netif_running(ndev)) {
+	if (!(ndev->flags & IFF_UP)) {
 		rtnl_lock();
-		dev_open(ndev, NULL);
+		ndev->netdev_ops->ndo_open(ndev);
+		ndev->flags |= IFF_UP;
 		rtnl_unlock();
 		ETHQOSINFO("calling open\n");
 	}
@@ -4626,9 +4634,10 @@ static int qcom_ethqos_hib_freeze(struct device *dev)
 
 	ETHQOSINFO("start\n");
 
-	if (netif_running(ndev)) {
+	if (ndev->flags & IFF_UP) {
 		rtnl_lock();
-		dev_close(ndev);
+		ndev->flags &= ~IFF_UP;
+		ndev->netdev_ops->ndo_stop(ndev);
 		rtnl_unlock();
 		ETHQOSINFO("calling netdev off\n");
 	}

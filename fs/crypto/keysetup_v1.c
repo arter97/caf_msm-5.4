@@ -25,13 +25,21 @@
 #include <keys/user-type.h>
 #include <linux/hashtable.h>
 #include <linux/scatterlist.h>
+#ifdef CONFIG_Q2S_OTA
 #include <linux/bio-crypt-ctx.h>
+#include <linux/siphash.h>
+#include <crypto/sha.h>
+#endif
 
 #include "fscrypt_private.h"
 
 /* Table of keys referenced by DIRECT_KEY policies */
 static DEFINE_HASHTABLE(fscrypt_direct_keys, 6); /* 6 bits = 64 buckets */
 static DEFINE_SPINLOCK(fscrypt_direct_keys_lock);
+
+#ifdef CONFIG_Q2S_OTA
+static struct crypto_shash *essiv_hash_tfm;
+#endif
 
 /*
  * v1 key derivation function.  This generates the derived key by encrypting the
@@ -84,6 +92,37 @@ out:
 	return res;
 }
 
+#ifdef CONFIG_Q2S_OTA
+static int fscrypt_do_sha256(const u8 *src, int srclen, u8 *dst)
+{
+	struct crypto_shash *tfm = READ_ONCE(essiv_hash_tfm);
+
+	/* init hash transform on demand */
+	if (unlikely(!tfm)) {
+		struct crypto_shash *prev_tfm;
+
+		tfm = crypto_alloc_shash("sha256", 0, 0);
+		if (IS_ERR(tfm)) {
+			fscrypt_warn(NULL,
+				     "error allocating SHA-256 transform: %ld",
+				     PTR_ERR(tfm));
+			return PTR_ERR(tfm);
+		}
+		prev_tfm = cmpxchg(&essiv_hash_tfm, NULL, tfm);
+		if (prev_tfm) {
+			crypto_free_shash(tfm);
+			tfm = prev_tfm;
+		}
+	}
+
+	{
+		SHASH_DESC_ON_STACK(desc, tfm);
+
+		desc->tfm = tfm;
+		return crypto_shash_digest(desc, src, srclen, dst);
+	}
+}
+#endif
 /*
  * Search the current task's subscribed keyrings for a "logon" key with
  * description prefix:descriptor, and if found acquire a read lock on it and
@@ -269,31 +308,57 @@ static int setup_v1_file_key_derived(struct fscrypt_info *ci,
 {
 	u8 *derived_key;
 	int err;
+#ifdef CONFIG_Q2S_OTA
 	int i;
 	union {
 		u8 bytes[FSCRYPT_MAX_HW_WRAPPED_KEY_SIZE];
 		u32 words[FSCRYPT_MAX_HW_WRAPPED_KEY_SIZE / sizeof(u32)];
 	} key_new;
-
 	memset(key_new.bytes, 0, FSCRYPT_MAX_HW_WRAPPED_KEY_SIZE);
-
+#endif
 	/*Support legacy ice based content encryption mode*/
+#ifndef CONFIG_Q2S_OTA
+	if ((fscrypt_policy_contents_mode(&ci->ci_policy) ==
+	    FSCRYPT_MODE_PRIVATE) &&
+	    fscrypt_using_inline_encryption(ci)) {
+		err = fscrypt_prepare_inline_crypt_key(&ci->ci_key,
+			raw_master_key,
+			ci->ci_mode->keysize,
+			false,
+			ci);
+		return err;
+	}
+#else
 	if ((fscrypt_policy_contents_mode(&ci->ci_policy) ==
 					  FSCRYPT_MODE_PRIVATE) &&
 					  fscrypt_using_inline_encryption(ci)) {
-		ci->ci_owns_key = true;
+		if (ci->ci_policy.v1.flags &
+		    FSCRYPT_POLICY_FLAG_IV_INO_LBLK_32) {
+			union {
+				siphash_key_t k;
+				u8 bytes[SHA256_DIGEST_SIZE];
+			} ino_hash_key;
+
+			/* hashed_ino = SipHash(key=SHA256(master_key),
+			 * data=i_ino)
+			 */
+			err = fscrypt_do_sha256(raw_master_key,
+						ci->ci_mode->keysize / 2,
+						ino_hash_key.bytes);
+			if (err)
+				return err;
+			ci->ci_hashed_ino = siphash_1u64(ci->ci_inode->i_ino,
+							 &ino_hash_key.k);
+		}
 		memcpy(key_new.bytes, raw_master_key, ci->ci_mode->keysize);
 
 		for (i = 0; i < ARRAY_SIZE(key_new.words); i++)
 			__cpu_to_be32s(&key_new.words[i]);
 
-		err = fscrypt_prepare_inline_crypt_key(&ci->ci_key,
-						       key_new.bytes,
-						       ci->ci_mode->keysize,
-						       false,
-						       ci);
+		err = setup_v1_file_key_direct(ci, key_new.bytes);
 		return err;
 	}
+#endif
 	/*
 	 * This cannot be a stack buffer because it will be passed to the
 	 * scatterlist crypto API during derive_key_aes().
