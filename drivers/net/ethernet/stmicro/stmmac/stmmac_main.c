@@ -2904,6 +2904,9 @@ static int stmmac_hw_setup(struct net_device *dev, bool init_ptp)
 	if (priv->dma_cap.vlins)
 		stmmac_enable_vlan(priv, priv->hw, STMMAC_VLAN_INSERT);
 
+	if (priv->hw_offload_enabled)
+		ethqos_ipa_offload_event_handler(priv, EV_DMA_RESET);
+
 	/* Start the ball rolling... */
 	stmmac_start_all_dma(priv);
 
@@ -3918,7 +3921,7 @@ static int stmmac_rx_jumbo(struct stmmac_priv *priv, u32 queue,
 	unsigned int frame_len = 0;
 	struct sk_buff *skb = NULL;
 	struct dma_desc *np;
-	struct stmmac_rx_buffer *buf;
+	struct stmmac_rx_buffer *buf = NULL;
 
 	/* Check if we need to handle an incomplete
 	 * jumbo frame when first enter here.
@@ -3985,6 +3988,10 @@ jumbo_read_again:
 		np = rx_q->dma_rx + next_entry;
 
 	prefetch(np);
+	if (!buf || !buf->page) {
+		pr_err("buf or buf->page is NULL\n");
+		return -EFAULT;
+	}
 	prefetch(page_address(buf->page));
 
 	if (unlikely(jb_status & discard_frame)) {
@@ -4075,6 +4082,10 @@ jumbo_read_again:
 			dma_sync_single_for_cpu(GET_MEM_PDEV_DEV,
 						buf->addr, buf_len,
 						DMA_FROM_DEVICE);
+			if (!skb) {
+				pr_err("skb is NULL\n");
+				return -EFAULT;
+			}
 			skb_copy_to_linear_data_offset(skb,
 						       prev_len,
 						       buf_data -

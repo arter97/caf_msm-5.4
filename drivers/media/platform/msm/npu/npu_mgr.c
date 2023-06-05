@@ -1322,6 +1322,7 @@ int32_t npu_host_set_fw_property(struct npu_device *npu_dev,
 		pr_err("set fw property failed %d\n", ret);
 
 deinit_fw:
+	host_ctx->misc_pending = false;
 	mutex_unlock(&host_ctx->misc_cmd_lock);
 	fw_deinit(npu_dev, false, true);
 set_prop_exit:
@@ -1405,7 +1406,8 @@ int32_t npu_host_get_fw_property(struct npu_device *npu_dev,
 	}
 
 deinit_fw:
-	mutex_lock(&host_ctx->misc_cmd_lock);
+	host_ctx->misc_pending = false;
+	mutex_unlock(&host_ctx->misc_cmd_lock);
 	fw_deinit(npu_dev, false, true);
 get_prop_exit:
 	kfree(prop_packet);

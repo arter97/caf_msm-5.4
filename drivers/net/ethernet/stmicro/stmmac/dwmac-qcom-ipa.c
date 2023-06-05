@@ -1728,8 +1728,13 @@ static ssize_t read_ipa_offload_status(struct device *dev,
 					read_queue_type(type));
 		}
 	} else {
-		return scnprintf(user_buf, BUFF_SZ,
-			"Cannot read status, No PHY link");
+		for (type = 0; type < IPA_QUEUE_MAX; type++) {
+			if (!eth_ipa_ctx.ipa_offload_conn)
+				len += scnprintf((user_buf + len),
+					(BUFF_SZ - len),
+					"IPA Offload suspended for type: %s\n",
+					read_queue_type(type));
+		}
 	}
 	if (len > buf_len)
 		len = buf_len;
@@ -1779,7 +1784,7 @@ static ssize_t suspend_resume_ipa_offload(struct device *dev,
 	if (kstrtos8(user_buf, 0, &input))
 		return -EFAULT;
 
-	if (qcom_ethqos_is_phy_link_up(ethqos)) {
+	if (!eth_ipa_ctx.ipa_offload_link_down) {
 		if (input == 0) {
 			ethqos_ipa_offload_event_handler(&qtype1,
 							 EV_USR_RESUME);
@@ -1802,7 +1807,14 @@ static ssize_t suspend_resume_ipa_offload(struct device *dev,
 							 EV_USR_RESUME);
 		}
 	} else {
-		ETHQOSERR("Operation not permitted, No PHY link");
+		if (input == 0) {
+			ethqos_ipa_offload_event_handler(NULL,
+							 EV_CACHE_RESUME);
+		} else if (input == 1) {
+			ethqos_ipa_offload_event_handler(NULL,
+							 EV_CACHE_SUSPEND);
+		}
+		ETHQOSINFO("No PHY link");
 	}
 
 	return count;
@@ -2385,12 +2397,33 @@ static int ethqos_ipa_offload_connect(struct qcom_ethqos *ethqos,
 	struct ipa_perf_profile profile;
 	int ret = 0;
 	int i = 0;
-	struct platform_device *pdev = ethqos->pdev;
-	struct net_device *dev = platform_get_drvdata(pdev);
-	struct stmmac_priv *priv = netdev_priv(dev);
+	struct platform_device *pdev = NULL;
+	struct net_device *dev = NULL;
+	struct stmmac_priv *priv = NULL;
 
 	ETHQOSDBG("begin\n");
 	if (!ethqos) {
+		ETHQOSERR("Null Param\n");
+		ret = -1;
+		return ret;
+	}
+	pdev = ethqos->pdev;
+
+	if (!pdev) {
+		ETHQOSERR("Null Param\n");
+		ret = -1;
+		return ret;
+	}
+	dev = platform_get_drvdata(pdev);
+
+	if (!dev) {
+		ETHQOSERR("Null Param\n");
+		ret = -1;
+		return ret;
+	}
+	priv = netdev_priv(dev);
+
+	if (!priv) {
 		ETHQOSERR("Null Param\n");
 		ret = -1;
 		return ret;
@@ -2824,7 +2857,7 @@ static int ethqos_ipa_offload_suspend_be(struct qcom_ethqos *ethqos)
 		ETHQOSERR("IPA Offload Disconnect Successfully for %d\n",
 			  type);
 	}
-
+	priv->hw->dma->stop_tx(priv->ioaddr, eth_ipa_queue_type_to_rx_queue(type));
 	if (ret != 0) {
 		ETHQOSERR("%s: stop_dma_tx failed %d for type %d\n",
 			  __func__, ret, type);
@@ -3013,6 +3046,15 @@ static int ethqos_ipa_offload_resume(struct qcom_ethqos *ethqos,
 	default:
 		ETHQOSINFO("Invalid type for IPA Offload Resume %d\n", type);
 		break;
+	}
+
+	if (!eth_ipa_ctx.ipa_debugfs_exists) {
+		if (!ethqos_ipa_create_debugfs(eth_ipa_ctx.ethqos)) {
+			ETHQOSERR("eMAC Debugfs created\n");
+			eth_ipa_ctx.ipa_debugfs_exists = true;
+		} else {
+			ETHQOSERR("eMAC Debugfs failed\n");
+		}
 	}
 
 	return ret;
@@ -3251,7 +3293,7 @@ static int ethqos_ipa_uc_ready(struct qcom_ethqos *pdata)
 void ethqos_ipa_offload_event_handler(void *data,
 				      int ev)
 {
-	int type;
+	int type = 0;
 	u32 proto;
 	struct platform_device *pdev;
 	struct net_device *dev;
@@ -3310,8 +3352,10 @@ void ethqos_ipa_offload_event_handler(void *data,
 		    eth_ipa_ctx.ipa_offload_link_down ||
 		    (eth_ipa_ctx.ipa_offload_susp[IPA_QUEUE_BE] &&
 		    eth_ipa_ctx.ipa_offload_susp[IPA_QUEUE_CV2X]) ||
-		    !eth_ipa_ctx.ipa_offload_conn)
+		    !eth_ipa_ctx.ipa_offload_conn) {
+		    eth_ipa_ctx.ipa_offload_link_down = true;
 			break;
+		}
 
 		for (type = 0; type < IPA_QUEUE_MAX; type++)
 			ethqos_ipa_offload_suspend(eth_ipa_ctx.ethqos,
@@ -3323,12 +3367,13 @@ void ethqos_ipa_offload_event_handler(void *data,
 		if (!eth_ipa_ctx.emac_dev_ready ||
 		    !eth_ipa_ctx.ipa_uc_ready ||
 		    (eth_ipa_ctx.ipa_offload_susp[IPA_QUEUE_BE] &&
-		    eth_ipa_ctx.ipa_offload_susp[IPA_QUEUE_CV2X]))
+		    eth_ipa_ctx.ipa_offload_susp[IPA_QUEUE_CV2X])) {
+			eth_ipa_ctx.ipa_offload_link_down = false;
 			break;
+		}
 
 		/* Link up event is expected only after link down */
-		if (eth_ipa_ctx.ipa_offload_link_down &&
-		    eth_ipa_ctx.ipa_debugfs_exists) {
+		if (eth_ipa_ctx.ipa_offload_link_down) {
 			for (type = 0; type < IPA_QUEUE_MAX; type++)
 				ethqos_ipa_offload_resume(eth_ipa_ctx.ethqos,
 							  type);
@@ -3417,6 +3462,9 @@ void ethqos_ipa_offload_event_handler(void *data,
 		}
 
 		ethqos_disable_ipa_offload(eth_ipa_ctx.ethqos);
+
+		eth_ipa_ctx.ipa_offload_susp[IPA_QUEUE_BE] = false;
+		eth_ipa_ctx.ipa_offload_susp[IPA_QUEUE_CV2X] = false;
 
 		/* reset link down on dev close */
 		eth_ipa_ctx.ipa_offload_link_down = false;
@@ -3510,6 +3558,25 @@ void ethqos_ipa_offload_event_handler(void *data,
 		} else {
 			*(int *)data = false;
 		}
+
+		break;
+	case EV_DMA_RESET:
+		pdev = (eth_ipa_ctx.ethqos)->pdev;
+		dev = platform_get_drvdata(pdev);
+		priv = netdev_priv(dev);
+		if (!eth_ipa_ctx.ipa_offload_conn)
+			priv->hw->mac->map_mtl_to_dma(priv->hw, EMAC_QUEUE_0, EMAC_CHANNEL_1);
+		break;
+	case EV_CACHE_RESUME:
+			/* Reset flag here to allow connection of pipes on next PHY link up*/
+			eth_ipa_ctx.ipa_offload_susp[IPA_QUEUE_BE] = false;
+			eth_ipa_ctx.ipa_offload_susp[IPA_QUEUE_CV2X] = false;
+
+		break;
+	case EV_CACHE_SUSPEND:
+			/* set flag here to avoid connection of pipes on next PHY link up*/
+			eth_ipa_ctx.ipa_offload_susp[IPA_QUEUE_BE] = true;
+			eth_ipa_ctx.ipa_offload_susp[IPA_QUEUE_CV2X] = true;
 
 		break;
 	case EV_INVALID:

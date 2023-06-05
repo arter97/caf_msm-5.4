@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2022, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1292,8 +1293,6 @@ static int hgsl_ioctl_get_shadowts_mem(struct file *filep, unsigned long arg)
 	}
 
 	if (copy_to_user(USRPTR(arg), &params, sizeof(params))) {
-		dma_buf_put(dma_buf);
-		put_unused_fd(params.fd);
 		ret = -EFAULT;
 	}
 
@@ -1432,16 +1431,6 @@ static int hgsl_ctxt_destroy(struct hgsl_priv *priv,
 	bool put_channel = false;
 	struct doorbell_queue *dbq = NULL;
 
-
-	if (!hab_channel) {
-		ret = hgsl_hyp_channel_pool_get(&priv->hyp_priv, 0, &hab_channel);
-		if (ret) {
-			LOGE("Failed to get hab channel %d", ret);
-			goto out;
-		}
-		put_channel = true;
-	}
-
 	ctxt = hgsl_get_context(priv->dev, context_id);
 	if (!ctxt) {
 		LOGE("Invalid context id %d\n", context_id);
@@ -1481,6 +1470,16 @@ static int hgsl_ctxt_destroy(struct hgsl_priv *priv,
 
 	while (!ctxt->destroyed)
 		cpu_relax();
+
+	if (!hab_channel) {
+		ret = hgsl_hyp_channel_pool_get(&priv->hyp_priv, 0, &hab_channel);
+		if (ret) {
+			LOGE("Failed to get hab channel %d", ret);
+			hgsl_free(ctxt);
+			goto out;
+		}
+		put_channel = true;
+	}
 
 	hgsl_hyp_put_shadowts_mem(hab_channel, &ctxt->shadow_ts_node);
 
@@ -1534,7 +1533,7 @@ static int hgsl_ioctl_ctxt_create(struct file *filep, unsigned long arg)
 	ctxt = hgsl_zalloc(sizeof(*ctxt));
 	if (ctxt == NULL) {
 		ret = -ENOMEM;
-		return ret;
+		goto out;
 	}
 
 	if (params.flags & GSL_CONTEXT_FLAG_CLIENT_GENERATED_TS)
@@ -1804,7 +1803,6 @@ static int hgsl_ioctl_mem_alloc(struct file *filep, unsigned long arg)
 	struct qcom_hgsl *hgsl = priv->dev;
 	int ret = 0;
 	struct hgsl_mem_node *mem_node = NULL;
-	struct hgsl_ioctl_mem_map_smmu_params map_params;
 	struct hgsl_hab_channel_t *hab_channel = NULL;
 
 	ret = hgsl_hyp_channel_pool_get(&priv->hyp_priv, 0, &hab_channel);
@@ -1831,45 +1829,43 @@ static int hgsl_ioctl_mem_alloc(struct file *filep, unsigned long arg)
 		goto out;
 	}
 
-	mem_node->fd = -1;
 	mem_node->flags = params.flags;
 
 	ret = hgsl_sharedmem_alloc(hgsl->dev, params.sizebytes, params.flags, mem_node);
 	if (ret)
 		goto out;
-	memset(&map_params, 0, sizeof(map_params));
-	map_params.fd = mem_node->fd;
-	map_params.memtype = mem_node->memtype;
-	map_params.flags = params.flags;
-	map_params.size = params.sizebytes;
-	map_params.offset = 0;
-	ret = hgsl_hyp_mem_map_smmu(hab_channel, &map_params, mem_node);
+
+	ret = hgsl_hyp_mem_map_smmu(hab_channel, mem_node->memdesc.size, 0, mem_node);
 	LOGD("%d, %d, gpuaddr 0x%llx",
 		ret, mem_node->export_id, mem_node->memdesc.gpuaddr);
+	if (ret)
+		goto out;
 
-	params.fd = mem_node->fd;
-	if (!ret) {
-		if (copy_to_user(USRPTR(arg), &params, sizeof(params))) {
-			ret = -EFAULT;
-			goto out;
-		}
-		if (copy_to_user(USRPTR(params.memdesc),
-			&mem_node->memdesc, sizeof(mem_node->memdesc))) {
-			ret = -EFAULT;
-			goto out;
-		}
-		mutex_lock(&priv->lock);
-		list_add(&mem_node->node, &priv->mem_allocated);
-		mutex_unlock(&priv->lock);
-		hgsl_trace_gpu_mem_total(priv, mem_node->memdesc.size64);
+	params.fd = dma_buf_fd(mem_node->dma_buf, O_CLOEXEC);
+
+	if (params.fd < 0) {
+		LOGE("dma_buf_fd failed, size 0x%x", mem_node->memdesc.size);
+		ret = -EINVAL;
+		goto out;
 	}
+	get_dma_buf(mem_node->dma_buf);
+
+	if (copy_to_user(USRPTR(arg), &params, sizeof(params))) {
+		ret = -EFAULT;
+		goto out;
+	}
+	if (copy_to_user(USRPTR(params.memdesc),
+		&mem_node->memdesc, sizeof(mem_node->memdesc))) {
+		ret = -EFAULT;
+		goto out;
+	}
+	mutex_lock(&priv->lock);
+	list_add(&mem_node->node, &priv->mem_allocated);
+	mutex_unlock(&priv->lock);
+	hgsl_trace_gpu_mem_total(priv, mem_node->memdesc.size64);
 
 out:
 	if (ret && mem_node) {
-		if (mem_node->fd >= 0) {
-			dma_buf_put(mem_node->dma_buf);
-			put_unused_fd(mem_node->fd);
-		}
 		hgsl_hyp_mem_unmap_smmu(hab_channel, mem_node);
 		hgsl_sharedmem_free(mem_node);
 	}
@@ -2020,7 +2016,9 @@ static int hgsl_ioctl_mem_map_smmu(struct file *filep, unsigned long arg)
 
 	params.size = PAGE_ALIGN(params.size);
 	mem_node->flags = params.flags;
-	ret = hgsl_hyp_mem_map_smmu(hab_channel, &params, mem_node);
+	mem_node->fd = params.fd;
+	mem_node->memtype = params.memtype;
+	ret = hgsl_hyp_mem_map_smmu(hab_channel, params.size, params.offset, mem_node);
 
 	if (ret == 0) {
 		if (copy_to_user(USRPTR(arg), &params, sizeof(params))) {
@@ -2885,7 +2883,7 @@ static int hgsl_cleanup(struct hgsl_priv *priv)
 
 	mutex_lock(&priv->lock);
 	if ((hab_channel == NULL) &&
-	(!list_empty(&priv->mem_mapped) || !list_empty(&priv->mem_allocated))) {
+			(!list_empty(&priv->mem_mapped) || !list_empty(&priv->mem_allocated))) {
 		ret = hgsl_hyp_channel_pool_get(&priv->hyp_priv, 0, &hab_channel);
 		if (ret)
 			LOGE("Failed to get channel %d", ret);
@@ -2896,11 +2894,9 @@ static int hgsl_cleanup(struct hgsl_priv *priv)
 		ret = hgsl_hyp_mem_unmap_smmu(hab_channel, node_found);
 		if (ret)
 			LOGE("Failed to clean mapped buffer %u, 0x%llx, ret %d",
-				node_found->export_id,
-				node_found->memdesc.gpuaddr, ret);
+					node_found->export_id, node_found->memdesc.gpuaddr, ret);
 		else
-			hgsl_trace_gpu_mem_total(priv,
-				-(node_found->memdesc.size64));
+			hgsl_trace_gpu_mem_total(priv, -(node_found->memdesc.size64));
 		list_del(&node_found->node);
 		hgsl_free(node_found);
 	}
@@ -2908,7 +2904,7 @@ static int hgsl_cleanup(struct hgsl_priv *priv)
 		ret = hgsl_hyp_mem_unmap_smmu(hab_channel, node_found);
 		if (ret)
 			LOGE("Failed to clean mapped buffer %u, 0x%llx, ret %d",
-			node_found->export_id, node_found->memdesc.gpuaddr, ret);
+					node_found->export_id, node_found->memdesc.gpuaddr, ret);
 		list_del(&node_found->node);
 		hgsl_trace_gpu_mem_total(priv, -(node_found->memdesc.size64));
 		hgsl_sharedmem_free(node_found);

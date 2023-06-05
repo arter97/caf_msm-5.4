@@ -660,6 +660,13 @@ static ssize_t crypto_qti_ice_part_cfg_store(struct kobject *kobj,
 	ssize_t ret = count;
 	int op_result = -EFAULT;
 
+	/*
+	 * the decr_bypass/encr_bypass attribute can be configured
+	 * from userspace side, only "0" or "1" are accepted.
+	 */
+	if (count > 2)
+		return -EINVAL;
+
 	if (!strcmp(attr->attr.name, "decr_bypass"))
 		op_result = kstrtobool(buf, &cfg->decr_bypass);
 	else if (!strcmp(attr->attr.name, "encr_bypass"))
@@ -764,7 +771,6 @@ static int crypto_qti_ice_add_new_partition(struct ice_device *ice_dev,
 		goto out;
 	}
 
-
 	elem->key_slot = slot;
 	elem->add_partition_result = new_key;
 	list_add_tail(&elem->list, new_pos);
@@ -851,9 +857,6 @@ static ssize_t add_partition_store(struct device *dev,
 			key_res = qseecom_create_key_in_slot(
 				QSEECOM_KM_USAGE_UFS_ICE_DISK_ENCRYPTION,
 				slot, CRYPTO_ICE_FDE_LEGACY_UFS, NULL);
-		} else {
-			//Key is already generated and set,contune
-			key_res == QSEECOM_KEY_ID_EXISTS;
 		}
 #else
 		key_res = qseecom_create_key_in_slot(QSEECOM_KM_USAGE_UFS_ICE_DISK_ENCRYPTION,

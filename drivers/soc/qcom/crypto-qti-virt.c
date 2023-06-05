@@ -3,7 +3,7 @@
  * Crypto virtual library for storage encryption.
  *
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -64,9 +64,9 @@ static struct completion send_fbe_req_done;
 
 static int32_t send_fbe_req_hab(void *arg)
 {
-	int ret = 0;
+	int ret = 0, err = 0;
 	uint32_t status_size;
-	uint32_t handle;
+	uint32_t handle = 0;
 	struct fbe_req_args *req_args = (struct fbe_req_args *)arg;
 
 	do {
@@ -106,15 +106,16 @@ static int32_t send_fbe_req_hab(void *arg)
 			break;
 		}
 
-		ret = habmm_socket_close(handle);
-		if (ret) {
-			pr_err("habmm_socket_close failed with ret = %d\n", ret);
-			break;
-		}
 	} while (0);
 
+	if (handle) {
+		err = habmm_socket_close(handle);
+		if (err)
+			pr_err("habmm_socket_close failed with err = %d\n", err);
+	}
+
 	if (req_args)
-		req_args->ret = ret;
+		req_args->ret = ret | err;
 
 	complete(&send_fbe_req_done);
 
@@ -134,13 +135,16 @@ static void send_fbe_req(struct fbe_req_args *arg)
 		return;
 	}
 
-	if (wait_for_completion_interruptible_timeout(
+	if (wait_for_completion_timeout(
 		&send_fbe_req_done, msecs_to_jiffies(HAB_TIMEOUT_MS)) <= 0) {
 		pr_err("%s: timeout hit\n", __func__);
 		kthread_stop(thread);
 		arg->ret = -ETIME;
 		return;
 	}
+
+	if (thread)
+		kthread_stop(thread);
 }
 
 int crypto_qti_virt_ice_get_info(uint32_t *total_num_slots)
@@ -155,8 +159,8 @@ int crypto_qti_virt_ice_get_info(uint32_t *total_num_slots)
 	arg.req.cmd = FBE_GET_MAX_SLOTS;
 	send_fbe_req(&arg);
 	if (arg.ret || arg.response.status < 0) {
-		pr_err("send_fbe_req_v2 failed with ret = %d, max_slots = %d\n",
-		       arg.ret, arg.response.status);
+		pr_err("%s: send_fbe_req_v2 failed with ret = %d, max_slots = %d\n",
+		       __func__, arg.ret, arg.response.status);
 		return -ECOMM;
 	}
 
@@ -175,8 +179,8 @@ static int verify_crypto_capabilities(enum blk_crypto_mode_num crypto_mode,
 	arg.req.data_unit_size = data_unit_size;
 	send_fbe_req(&arg);
 	if (arg.ret || arg.response.status < 0) {
-		pr_err("send_fbe_req_v2 failed with ret = %d, status = %d\n",
-			arg.ret, arg.response.status);
+		pr_err("%s: send_fbe_req_v2 failed with ret = %d, status = %d\n",
+			__func__, arg.ret, arg.response.status);
 		return -EINVAL;
 	}
 
@@ -218,8 +222,8 @@ int crypto_qti_virt_program_key(const struct blk_crypto_key *key,
 	send_fbe_req(&arg);
 
 	if (arg.ret || arg.response.status) {
-		pr_err("send_fbe_req_v2 failed with ret = %d, status = %d\n",
-		       arg.ret, arg.response.status);
+		pr_err("%s: send_fbe_req_v2 failed with ret = %d, status = %d\n",
+		       __func__, arg.ret, arg.response.status);
 		return -ECOMM;
 	}
 
@@ -237,8 +241,8 @@ int crypto_qti_virt_invalidate_key(unsigned int slot)
 	send_fbe_req(&arg);
 
 	if (arg.ret || arg.response.status) {
-		pr_err("send_fbe_req_v2 failed with ret = %d, status = %d\n",
-		       arg.ret, arg.response.status);
+		pr_err("%s: send_fbe_req_v2 failed with ret = %d, status = %d\n",
+		       __func__, arg.ret, arg.response.status);
 		return -ECOMM;
 	}
 
@@ -256,8 +260,8 @@ int crypto_qti_virt_get_crypto_capabilities(unsigned int *crypto_modes_supported
 	send_fbe_req(&arg);
 
 	if (arg.ret || arg.response.status) {
-		pr_err("send_fbe_req_v2 failed with ret = %d, status = %d\n",
-		       arg.ret, arg.response.status);
+		pr_err("%s: send_fbe_req_v2 failed with ret = %d, status = %d\n",
+		       __func__, arg.ret, arg.response.status);
 		return -ECOMM;
 	}
 	memcpy(crypto_modes_supported, &(arg.response.crypto_modes_supported[0]),
@@ -281,8 +285,8 @@ int crypto_qti_virt_derive_raw_secret_platform(const u8 *wrapped_key,
 	send_fbe_req(&arg);
 
 	if (arg.ret || arg.response.status) {
-		pr_err("send_fbe_req_v2 failed with ret = %d, status = %d\n",
-		       arg.ret, arg.response.status);
+		pr_err("%s: send_fbe_req_v2 failed with ret = %d, status = %d\n",
+		       __func__, arg.ret, arg.response.status);
 		return -EINVAL;
 	}
 	memcpy(secret, &(arg.response.secret_key[0]), secret_size);
