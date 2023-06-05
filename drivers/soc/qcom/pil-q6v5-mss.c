@@ -205,6 +205,7 @@ static int modem_powerup(const struct subsys_desc *subsys)
 			pil_shutdown(&drv->q6->desc);
 			pil_disable_all_irqs(drv);
 	}
+	return 0;
 }
 
 static void modem_crash_shutdown(const struct subsys_desc *subsys)
