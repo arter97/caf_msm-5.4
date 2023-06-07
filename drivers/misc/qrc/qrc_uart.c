@@ -139,9 +139,7 @@ static int qrcuart_init(struct qrc_dev *dev)
 static void qrcuart_uninit(struct qrc_dev *dev)
 {
 	struct qrcuart *qrc = qrc_get_data(dev);
-
-	if (&qrc->qrc_rx_fifo)
-		kfifo_free(&qrc->qrc_rx_fifo);
+	kfifo_free(&qrc->qrc_rx_fifo);
 }
 
 /*put data from kfifo to qrc fifo */
@@ -262,9 +260,10 @@ static int qrc_uart_probe(struct serdev_device *serdev)
 	qrcuart_setup(qdev);
 	ret = qrcuart_init(qdev);
 	if (ret) {
-		qrcuart_uninit(qdev);
 		pr_err("qrcuart: Fail to init qrc structure\n");
-		goto free;
+		kfree(qdev);
+		kfree(qrc);
+		return ret;
 	}
 	serdev_device_set_drvdata(serdev, qrc);
 	serdev_device_set_client_ops(serdev, &qrc_serdev_ops);
@@ -289,6 +288,7 @@ static int qrc_uart_probe(struct serdev_device *serdev)
 	return 0;
 
 free:
+	qrcuart_uninit(qdev);
 	kfree(qdev);
 	kfree(qrc);
 	return ret;
