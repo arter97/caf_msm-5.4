@@ -135,6 +135,7 @@ obj-$(CONFIG_QCOM_AOP_SET_DDR) += aop-set-ddr.o
 obj-$(CONFIG_CPU_V7) += idle-v7.o
 obj-$(CONFIG_DUMP_XBL_LOG) += dump_boot_log.o
 obj-$(CONFIG_QCOM_CX_IPEAK) += cx_ipeak.o
+obj-$(CONFIG_MSM_BAM_DMUX) += bam_dmux.o
 # GNSS driver
 obj-$(CONFIG_GNSS_SIRF)		+= gnsssirf/
 obj-$(CONFIG_MSM_SEB) += slate_events_bridge.o
