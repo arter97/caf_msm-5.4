@@ -2852,7 +2852,6 @@ static bool handle_rx_dma_xfer(u32 s_irq_status, struct uart_port *uport)
 				     uport->icount.frame);
 			msm_geni_update_uart_error_code(msm_port,
 				UART_ERROR_RX_FRAME_ERROR);
-			drop_rx = true;
 		}
 
 		if (dma_rx_status & UART_DMA_RX_BREAK) {
