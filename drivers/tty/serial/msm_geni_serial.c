@@ -2647,8 +2647,11 @@ static int msm_geni_serial_handle_dma_rx(struct uart_port *uport, bool drop_rx)
 	/* Check RX buffer data for faulty pattern*/
 	check_rx_buf((char *)msm_port->rx_buf, uport, rx_bytes);
 
-	if (drop_rx)
+	if (drop_rx) {
+		dump_ipc(msm_port->ipc_log_rx, "Dropping DMA Rx",
+			 (char *)msm_port->rx_buf, 0, rx_bytes);
 		goto exit_handle_dma_rx;
+	}
 
 	tport = &uport->state->port;
 	ret = tty_insert_flip_string(tport, (unsigned char *)(msm_port->rx_buf),
