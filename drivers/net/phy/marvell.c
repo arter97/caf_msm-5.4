@@ -31,6 +31,7 @@
 #include <linux/marvell_phy.h>
 #include <linux/bitfield.h>
 #include <linux/of.h>
+#include <linux/delay.h>
 
 #include <linux/io.h>
 #include <asm/irq.h>
@@ -658,6 +659,14 @@ static int marvell_config_init(struct phy_device *phydev)
 
 	/* Set registers from marvell,reg-init DT property */
 	return marvell_of_reg_init(phydev);
+}
+
+static int mv2220_config_init(struct phy_device *phydev)
+{
+	/* Check that the PHY interface type is compatible */
+	if (phydev->interface != PHY_INTERFACE_MODE_RGMII)
+		return -ENODEV;
+	return 0;
 }
 
 static int m88e1116r_config_init(struct phy_device *phydev)
@@ -2088,6 +2097,182 @@ static int m88e6390_hwmon_probe(struct phy_device *phydev)
 }
 #endif
 
+static void mv2220_1000M_config_init(struct phy_device *phydev)
+{
+	int	phydata_read = 0;
+	struct mii_bus *bus = phydev->mdio.bus;
+
+	phydata_read = bus->read(bus, MV88Q2220_PMA_PMD_REG_ADDR, 0x0834);
+	phydata_read = (phydata_read & 0xFFF0) | 0x0001;
+	bus->write(bus, MV88Q2220_PMA_PMD_REG_ADDR, 0x0834, phydata_read);
+
+	//software initialization for 1000Base-T1
+	phydata_read = 0;
+	phydata_read = bus->read(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, 0xfdec);
+	bus->write(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, 0xfdec, 0xDBF7);
+	phydata_read = bus->read(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, 0xfdec);
+
+	bus->write(bus, MV88Q2220_INIT_SEQ_REG_ADDR, 0x8032, 0x0);
+	bus->write(bus, MV88Q2220_INIT_SEQ_REG_ADDR, 0x8031, 0x0a01);
+	bus->write(bus, MV88Q2220_INIT_SEQ_REG_ADDR, 0x8031, 0x0c01);
+	bus->write(bus, MV88Q2220_INIT_SEQ_REG_ADDR, 0x8032, 0x0);
+	bus->write(bus, MV88Q2220_INIT_SEQ_REG_ADDR, 0x8031, 0x0a02);
+	bus->write(bus, MV88Q2220_INIT_SEQ_REG_ADDR, 0x8031, 0x0c02);
+	bus->write(bus, MV88Q2220_INIT_SEQ_REG_ADDR, 0x8032, 0x2020);
+	bus->write(bus, MV88Q2220_INIT_SEQ_REG_ADDR, 0x8031, 0x0a28);
+	bus->write(bus, MV88Q2220_INIT_SEQ_REG_ADDR, 0x8031, 0x0c28);
+	bus->write(bus, MV88Q2220_INIT_SEQ_REG_ADDR, 0x8032, 0x0000);
+	bus->write(bus, MV88Q2220_INIT_SEQ_REG_ADDR, 0x8031, 0x0a27);
+	bus->write(bus, MV88Q2220_INIT_SEQ_REG_ADDR, 0x8031, 0x0c27);
+	bus->write(bus, MV88Q2220_INIT_SEQ_REG_ADDR, 0x8032, 0x3846);
+	bus->write(bus, MV88Q2220_INIT_SEQ_REG_ADDR, 0x8031, 0x0a2c);
+	bus->write(bus, MV88Q2220_INIT_SEQ_REG_ADDR, 0x8031, 0x0c2c);
+	bus->write(bus, MV88Q2220_INIT_SEQ_REG_ADDR, 0x8032, 0x3846);
+	bus->write(bus, MV88Q2220_INIT_SEQ_REG_ADDR, 0x8031, 0x0a35);
+	bus->write(bus, MV88Q2220_INIT_SEQ_REG_ADDR, 0x8031, 0x0c35);
+	bus->write(bus, MV88Q2220_INIT_SEQ_REG_ADDR, 0x8032, 0x0007);
+	bus->write(bus, MV88Q2220_INIT_SEQ_REG_ADDR, 0x8031, 0x0a1c);
+	bus->write(bus, MV88Q2220_INIT_SEQ_REG_ADDR, 0x8031, 0x0c1c);
+
+	bus->write(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, 0xfe60, 0x5e);
+	bus->write(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, 0xfc30, 0x3434);
+	bus->write(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, 0xfc31, 0x3434);
+	bus->write(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, 0xfe49, 0x807);
+	bus->write(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, 0xfe50, 0xf28);
+	bus->write(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, 0xfe4a, 0x12B);
+	bus->write(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, 0xfe4b, 0x1D34);
+	bus->write(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, 0xfe07, 0x224A);
+	bus->write(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, 0xfe73, 0x420C);
+	bus->write(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, 0xfe05, 0x7572);
+	bus->write(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, 0x800c, 0x2E);
+	bus->write(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, 0xfc10, 0x0000);
+	bus->write(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, 0xfc11, 0x0034);
+	bus->write(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, 0xfc12, 0x000c);
+	bus->write(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, 0xfc13, 0x001f);
+
+	//pcs dump Only required for 1000BT
+	phydata_read = 0;
+	phydata_read = bus->read(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, 0x0901);
+	phydata_read = bus->read(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, 0x0902);
+}
+
+static int mv2220_softReset(struct phy_device *phydev)
+{
+	int phydata_read;
+	int tout = 10;
+	struct mii_bus *bus = phydev->mdio.bus;
+
+	bus->write(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, 0x0900,
+		MV88Q2220_PMA_REG_RESET);
+	bus->write(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, 0xFFE4,
+		0x000C);
+	msleep(20);
+	while (tout--) {
+		phydata_read = bus->read(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, 0x0900);
+
+		if (phydata_read != 0)
+			pr_debug("%s: soft reset 0x0900 failed : %d\n", __func__, phydata_read);
+
+		if (0x0000 == (phydata_read & 0x8000))
+			break;
+	}
+
+	return 0;
+}
+
+static int m2220_check_phy_link_status(struct phy_device *phydev)
+{
+	int ret = 0;
+	struct mii_bus *bus = phydev->mdio.bus;
+
+	/* Read twice: register latches low value */
+	ret = bus->read(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, 0x0901);
+	ret = bus->read(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, 0x0901);
+
+	return (0x0 != (ret & MV88Q2220_FLAG_LINK_CHECK)) ? 1 : 0;
+}
+
+bool m2220_latched_phy_link_status(struct phy_device *phydev)
+{
+	int ret = 0;
+	struct mii_bus *bus = phydev->mdio.bus;
+
+	ret =  bus->read(bus, MV88Q2220_INIT_SEQ_REG_ADDR, 0x0201);
+
+	return (0x0 != (ret & MV88Q2220_FLAG_LINK_CHECK)) ? true : false;
+}
+
+static void m2220_set_rgmii_config(struct phy_device *phydev)
+{
+	int regdata = 0;
+	int valreg = 0;
+	struct mii_bus *bus = phydev->mdio.bus;
+
+	//software initialization for 1000Base-T1
+	//ePHY RCLK no delay 4.A001.14 = 0(default 1), TCLK enable delay 4.A001.15 = 1(default 0)
+	regdata = 0x0;
+	regdata = bus->read(bus, MV88Q2220_RGMII_REG_ADDR, 0xA001);
+	pr_info("%s: Read 0xA001 value %d\n", __func__, regdata);
+	regdata &= (~0x4000);  //RCLK no delay
+	regdata |= (0x8000);	 //TCLK add delay
+	bus->write(bus, MV88Q2220_RGMII_REG_ADDR, 0xA001, regdata);
+
+	//RGMII Software Reset needed to take RCLK, TCLK delay changes into effect
+	regdata = 0x0;
+	regdata = bus->read(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, 0x8000);
+	regdata |= (0x8000);	 //TCLK add delay (SW reset)
+	bus->write(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, MV88Q2220_PMA_REG_RESET, regdata);
+	msleep(50);
+
+	regdata = bus->read(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, MV88Q2220_PMA_REG_RESET);
+	//reset is not self-clearing
+	regdata &= ~(0x8000);
+	bus->write(bus, MV88Q2220_CONTROL_PCS_REG_ADDR, MV88Q2220_PMA_REG_RESET, regdata);
+	msleep(50);
+
+	/* config for setting speed as 1000 */
+	valreg  |= 0x0040;
+	valreg  &= ~(0x2000);
+	bus->write(bus, MV88Q2220_PMA_PMD_REG_ADDR, 0x0000, valreg);
+	msleep(100);
+
+	//sws reset
+	bus->write(bus, MV88Q2220_PMA_PMD_REG_ADDR, 0x0000, MV88Q2220_PMA_REG_RESET);
+	valreg = 0;
+	valreg |= (0x1000);
+	bus->write(bus, MV88Q2220_INIT_SEQ_REG_ADDR, 0x0200, valreg);
+	msleep(100);
+	//sws reset
+	bus->write(bus, MV88Q2220_INIT_SEQ_REG_ADDR, 0x0200, MV88Q2220_PMA_REG_RESET);
+}
+
+static int mv2220_hw_init(struct phy_device *phydev)
+{
+	int link_status;
+
+	pr_debug("%s: 2220 hw init\n", __func__);
+	/* RGMII-to-1000BASE-X mode initialization */
+	mv2220_1000M_config_init(phydev);
+	mv2220_softReset(phydev);
+	msleep(100);
+	link_status = m2220_check_phy_link_status(phydev);
+	m2220_latched_phy_link_status(phydev);
+	m2220_set_rgmii_config(phydev);
+	pr_debug("%s: 2220 complete\n", __func__);
+
+	return 0;
+}
+
+static int mv2220_read_status(struct phy_device *phydev)
+{
+	phydev->speed = SPEED_1000;
+	phydev->duplex = DUPLEX_FULL;
+	phydev->link = m2220_check_phy_link_status(phydev);
+	phydev->autoneg = AUTONEG_DISABLE;
+
+	return 0;
+}
+
 static int marvell_probe(struct phy_device *phydev)
 {
 	struct marvell_priv *priv;
@@ -2098,6 +2283,18 @@ static int marvell_probe(struct phy_device *phydev)
 
 	phydev->priv = priv;
 
+	return 0;
+}
+
+static int mv2220_probe(struct phy_device *phydev)
+{
+	int err;
+
+	err = marvell_probe(phydev);
+	if (err)
+		return err;
+
+	mv2220_hw_init(phydev);
 	return 0;
 }
 
@@ -2451,6 +2648,16 @@ static struct phy_driver marvell_drivers[] = {
 		.get_tunable = m88e1540_get_tunable,
 		.set_tunable = m88e1540_set_tunable,
 	},
+	{
+		.phy_id = MARVELL_PHY_ID_88Q2220,
+		.phy_id_mask = MARVELL_PHY_ID_MASK,
+		.name = "mv88q2220",
+		.probe = &mv2220_probe,
+		.soft_reset = &mv2220_softReset,
+		.config_init = &mv2220_config_init,
+		.read_status = &mv2220_read_status,
+	},
+
 };
 
 module_phy_driver(marvell_drivers);
@@ -2470,6 +2677,7 @@ static struct mdio_device_id __maybe_unused marvell_tbl[] = {
 	{ MARVELL_PHY_ID_88E1540, MARVELL_PHY_ID_MASK },
 	{ MARVELL_PHY_ID_88E1545, MARVELL_PHY_ID_MASK },
 	{ MARVELL_PHY_ID_88E3016, MARVELL_PHY_ID_MASK },
+	{ MARVELL_PHY_ID_88Q2220, MARVELL_PHY_ID_MASK },
 	{ MARVELL_PHY_ID_88E6341_FAMILY, MARVELL_PHY_ID_MASK },
 	{ MARVELL_PHY_ID_88E6390_FAMILY, MARVELL_PHY_ID_MASK },
 	{ }

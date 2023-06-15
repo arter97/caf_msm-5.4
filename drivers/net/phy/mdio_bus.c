@@ -525,9 +525,13 @@ struct phy_device *mdiobus_scan(struct mii_bus *bus, int addr)
 	int err;
 
 	phydev = get_phy_device(bus, addr, false);
-	if (IS_ERR(phydev))
+	if (IS_ERR(phydev)) {
+		phydev = get_phy_device(bus, addr, true);
+		if (IS_ERR(phydev)) {
+			pr_err("phydev failed for c22 & c45 both\n");
 		return phydev;
-
+		}
+	}
 	/*
 	 * For DT, see if the auto-probed phy has a correspoding child
 	 * in the bus node, and set the of_node pointer in this case.

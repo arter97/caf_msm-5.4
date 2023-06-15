@@ -132,6 +132,7 @@ static inline int smi230_check_gyro_early_buff_enable_flag(
 static void smi230_check_gyro_enable_flag(
 		struct smi230_client_data *client_data, unsigned long data)
 {
+	client_data->gyro_buffer_smi230_samples = false;
 	if (data == 0)
 		client_data->gyro_enable = true;
 	else
@@ -240,7 +241,7 @@ static ssize_t smi230_gyro_store_pwr_cfg(struct device *dev,
 		p_smi230_dev->gyro_cfg.power = SMI230_GYRO_PM_NORMAL;
 		err = smi230_gyro_set_power_mode(p_smi230_dev);
 		client_data->timestamp_old = smi230_gyro_get_alarm_timestamp();
-		mod_timer(&pm_mode_timer, jiffies + msecs_to_jiffies(600));
+		mod_timer(&pm_mode_timer, jiffies + msecs_to_jiffies(200));
 	}
 	else if (pwr_cfg == 1) {
 		p_smi230_dev->gyro_cfg.power = SMI230_GYRO_PM_SUSPEND;
@@ -724,7 +725,7 @@ static int smi230_gyro_early_buff_init(struct smi230_client_data *client_data)
 	smi230_gyro_set_power_mode(p_smi230_dev);
 	client_data->timestamp_old = smi230_gyro_get_alarm_timestamp();
 	is_gyro_ready = false;
-	mod_timer(&pm_mode_timer, jiffies + msecs_to_jiffies(600));
+	mod_timer(&pm_mode_timer, jiffies + msecs_to_jiffies(200));
 
 	return 1;
 clean_exit2:

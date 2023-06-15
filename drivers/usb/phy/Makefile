@@ -30,3 +30,4 @@ obj-$(CONFIG_USB_MSM_SSPHY_QMP)		+= phy-msm-ssusb-qmp.o
 obj-$(CONFIG_MSM_HSUSB_PHY)		+= phy-msm-snps-hs.o
 obj-$(CONFIG_USB_MSM_SSPHY)		+= phy-msm-ssusb.o
 obj-$(CONFIG_MSM_SNPS_FEMTO_PHY)	+= phy-qcom-snps-28nm-hs.o
+obj-$(CONFIG_USB_MSM_OTG)               += phy-msm-usb.o

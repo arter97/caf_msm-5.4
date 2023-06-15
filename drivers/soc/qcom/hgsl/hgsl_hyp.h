@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef GSL_HYP_INCLUDED
@@ -450,15 +451,8 @@ int hgsl_hyp_get_shadowts_mem(struct hgsl_hab_channel_t *hab_channel,
 int hgsl_hyp_put_shadowts_mem(struct hgsl_hab_channel_t *hab_channel,
 	struct hgsl_mem_node *mem_node);
 
-int hgsl_hyp_mem_alloc(struct hgsl_hyp_priv_t *priv,
-	struct hgsl_ioctl_mem_alloc_params *hgsl_params,
-	struct hgsl_mem_node *mem_node);
-
-int hgsl_hyp_mem_free(struct hgsl_hyp_priv_t *priv,
-	struct hgsl_mem_node *mem_node);
-
 int hgsl_hyp_mem_map_smmu(struct hgsl_hab_channel_t *hab_channel,
-	struct hgsl_ioctl_mem_map_smmu_params *hgsl_params,
+	uint64_t size, uint64_t offset,
 	struct hgsl_mem_node *mem_node);
 
 int hgsl_hyp_mem_unmap_smmu(struct hgsl_hab_channel_t *hab_channel,

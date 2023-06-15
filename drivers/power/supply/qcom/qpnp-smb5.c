@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/debugfs.h>
@@ -209,6 +209,7 @@ struct smb_dt_props {
 	bool			hvdcp_disable;
 	bool			hvdcp_autonomous;
 	bool			adc_based_aicl;
+	bool			use_init_work;
 	int			sec_charger_config;
 	int			auto_recharge_soc;
 	int			auto_recharge_vbat_mv;
@@ -228,6 +229,7 @@ struct smb5 {
 	unsigned int		nchannels;
 	struct iio_channel	*iio_chans;
 	struct iio_chan_spec	*iio_chan_ids;
+	struct work_struct	smb5_init_work;
 };
 
 static int __debug_mask;
@@ -467,6 +469,9 @@ static int smb5_parse_dt_misc(struct smb5 *chip, struct device_node *node)
 
 	chip->dt.no_battery = of_property_read_bool(node,
 						"qcom,batteryless-platform");
+
+	chip->dt.use_init_work = of_property_read_bool(node,
+						"qcom,use-init-work");
 
 	if (of_find_property(node, "qcom,thermal-mitigation", &byte_len)) {
 		chg->thermal_mitigation = devm_kzalloc(chg->dev, byte_len,
@@ -3025,6 +3030,56 @@ static int smb5_init_votes(struct smb5 *chip)
 		dev_err(chg->dev, "Couldn't enable charging rc=%d\n", rc);
 
 	return rc;
+
+}
+
+static void smb5_init_work(struct work_struct *work)
+{
+	int rc = 0;
+	struct smb5 *chip = container_of(work, struct smb5,
+						smb5_init_work);
+
+	rc = smb5_determine_initial_status(chip);
+	if (rc < 0) {
+		pr_err("Couldn't determine initial status rc=%d\n",
+			rc);
+		goto cleanup;
+	}
+
+	rc = smb5_request_interrupts(chip);
+	if (rc < 0) {
+		pr_err("Couldn't request interrupts rc=%d\n", rc);
+		goto cleanup;
+	}
+
+	rc = smb5_post_init(chip);
+	if (rc < 0) {
+		pr_err("Failed in post init rc=%d\n", rc);
+		goto free_irq;
+	}
+
+	rc = sysfs_create_groups(&chip->chg.dev->kobj, smb5_groups);
+	if (rc < 0) {
+		pr_err("Couldn't create sysfs files rc=%d\n", rc);
+		goto free_irq;
+	}
+
+	rc = smb5_show_charger_status(chip);
+	if (rc < 0) {
+		pr_err("Failed in getting charger status rc=%d\n", rc);
+		goto free_irq;
+	}
+
+	device_init_wakeup(chip->chg.dev, true);
+
+	pr_info("QPNP SMB5 probed successfully\n");
+
+	return;
+
+free_irq:
+	smb5_free_interrupts(&chip->chg);
+cleanup:
+	smblib_deinit(&chip->chg);
 }
 
 static int smb5_probe(struct platform_device *pdev)
@@ -3184,6 +3239,13 @@ static int smb5_probe(struct platform_device *pdev)
 	if (rc < 0) {
 		pr_err("Couldn't initialize typec class rc=%d\n", rc);
 		goto cleanup;
+	}
+
+	if (chip->dt.use_init_work) {
+		INIT_WORK(&chip->smb5_init_work, smb5_init_work);
+		schedule_work(&chip->smb5_init_work);
+		smb5_create_debugfs(chip);
+		return rc;
 	}
 
 	rc = smb5_determine_initial_status(chip);
