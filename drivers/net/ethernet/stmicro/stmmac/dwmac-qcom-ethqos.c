@@ -2434,6 +2434,8 @@ static int _qcom_ethqos_probe(void *arg)
 	}
 
 	plat_dat->stmmac_emb_smmu_ctx = emac_emb_smmu_ctx;
+	if (of_device_is_compatible(np, "qcom,qcs404-ethqos"))
+		plat_dat->rx_clk_runs_in_lpi = 1;
 
 	ret = stmmac_dvr_probe(&pdev->dev, plat_dat, &stmmac_res);
 	if (ret)
