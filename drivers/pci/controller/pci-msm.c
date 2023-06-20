@@ -104,6 +104,7 @@
 #define PCIE20_PARF_BDF_TRANSLATE_CFG	(0x24C)
 #define PCIE20_PARF_SID_OFFSET	(0x234)
 #define PCIE20_PARF_BDF_TRANSLATE_N (0x250)
+#define PCIE20_PARF_SLV_ADDR_MSB_CTRL	(0x2C0)
 
 #define PCIE20_ELBI_SYS_CTRL (0x04)
 #define PCIE20_ELBI_SYS_STTS (0x08)
@@ -817,6 +818,7 @@ struct msm_pcie_dev_t {
 	bool common_clk_en;
 	bool clk_power_manage_en;
 	bool aux_clk_sync;
+	bool pcie_slv_msb_bit;
 	bool aer_enable;
 	uint32_t smmu_sid_base;
 	uint32_t link_check_max_count;
@@ -900,6 +902,7 @@ struct msm_pcie_dev_t {
 
 	bool drv_supported;
 	bool nogdsc_retention;
+	bool sleep_disabled;
 
 	void (*rumi_init)(struct msm_pcie_dev_t *pcie_dev);
 
@@ -4763,6 +4766,10 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev)
 	if (dev->tcsr_config)
 		pcie_tcsr_init(dev);
 
+	/* Enable Slave address input MSB bit to Constant 0 */
+	if (dev->pcie_slv_msb_bit)
+		msm_pcie_write_reg(dev->parf, PCIE20_PARF_SLV_ADDR_MSB_CTRL, 0x2);
+
 	/* init PCIe PHY */
 	ret = pcie_phy_init(dev);
 	if (ret)
@@ -6071,6 +6078,12 @@ static int msm_pcie_setup_drv(struct msm_pcie_dev_t *pcie_dev,
 
 	msm_pcie_setup_drv_msg(&drv_info->drv_enable, drv_info->dev_id,
 				MSM_PCIE_DRV_CMD_ENABLE);
+	if (pcie_dev->gdsc_clk_drv_ss_nonvotable) {
+		drv_info->drv_enable.pkt.dword[2] =
+					drv_info->l1ss_timeout_us / 1000;
+		PCIE_DBG(pcie_dev, "PCIe: RC%d: DRV L1ss timeout set to: %dus\n",
+			pcie_dev->rc_idx, drv_info->drv_enable.pkt.dword[2]);
+	}
 
 	msm_pcie_setup_drv_msg(&drv_info->drv_disable, drv_info->dev_id,
 				MSM_PCIE_DRV_CMD_DISABLE);
@@ -6248,6 +6261,10 @@ static int msm_pcie_probe(struct platform_device *pdev)
 	PCIE_DBG(pcie_dev, "AUX clock is %s synchronous to Core clock.\n",
 		pcie_dev->aux_clk_sync ? "" : "not");
 
+	pcie_dev->pcie_slv_msb_bit = of_property_read_bool(of_node,
+			"qcom,pcie-slv-msb-bit");
+	PCIE_DBG(pcie_dev, "PCIe Slave address MSB control bit is %s set\n",
+			pcie_dev->pcie_slv_msb_bit ? "" : "not");
 	of_property_read_u32(of_node, "qcom,smmu-sid-base",
 				&pcie_dev->smmu_sid_base);
 	PCIE_DBG(pcie_dev, "RC%d: qcom,smmu-sid-base: 0x%x.\n",
@@ -6483,6 +6500,11 @@ static int msm_pcie_probe(struct platform_device *pdev)
 					"qcom,nogdsc-retention");
 	PCIE_DBG(pcie_dev, "GDSC retention is %s supported\n",
 		pcie_dev->nogdsc_retention ? "not" : "");
+
+	pcie_dev->sleep_disabled = of_property_read_bool(of_node,
+					"qcom,sleep-disabled");
+	PCIE_DBG(pcie_dev, "pcie link sleep is %s supported\n",
+		pcie_dev->sleep_disabled ? "not" : "");
 
 	msm_pcie_i2c_ctrl_init(pcie_dev);
 
@@ -7544,6 +7566,13 @@ static void msm_pcie_fixup_suspend(struct pci_dev *dev)
 		!pci_is_root_bus(dev->bus))
 		return;
 
+	if (pcie_dev->sleep_disabled) {
+		PCIE_DBG(pcie_dev,
+			"RC%d: Skip fixup suspend because of device limitations\n",
+			pcie_dev->rc_idx);
+		return;
+	}
+
 	spin_lock_irqsave(&pcie_dev->cfg_lock,
 				pcie_dev->irqsave_flags);
 	if (pcie_dev->disable_pc) {
@@ -7623,6 +7652,13 @@ static void msm_pcie_fixup_resume(struct pci_dev *dev)
 
 	PCIE_DBG(pcie_dev, "RC%d\n", pcie_dev->rc_idx);
 
+	if (pcie_dev->sleep_disabled) {
+		PCIE_DBG(pcie_dev,
+			"RC%d: Skip fixup resume because of device limitations\n",
+			pcie_dev->rc_idx);
+		return;
+	}
+
 	if ((pcie_dev->link_status != MSM_PCIE_LINK_DISABLED) ||
 		pcie_dev->user_suspend || !pci_is_root_bus(dev->bus))
 		return;
@@ -7645,6 +7681,13 @@ static void msm_pcie_fixup_resume_early(struct pci_dev *dev)
 	struct msm_pcie_dev_t *pcie_dev = PCIE_BUS_PRIV_DATA(dev->bus);
 
 	PCIE_DBG(pcie_dev, "RC%d\n", pcie_dev->rc_idx);
+
+	if (pcie_dev->sleep_disabled) {
+		PCIE_DBG(pcie_dev,
+			"RC%d: Skip fixup resume early because of device limitations\n",
+			pcie_dev->rc_idx);
+		return;
+	}
 
 	if ((pcie_dev->link_status != MSM_PCIE_LINK_DISABLED) ||
 		pcie_dev->user_suspend || !pci_is_root_bus(dev->bus))

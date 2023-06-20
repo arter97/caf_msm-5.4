@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef	_DWMAC_QCOM_ETH_IPA_OFFLOAD_H
@@ -72,6 +72,8 @@ static inline void ethqos_ipa_offload_event_handler(void *data, int ev)
 #define EV_IPA_HANDLE_TX_INTR (EV_IPA_HANDLE_RX_INTR + 1)
 #define EV_IPA_SSR_DOWN (EV_IPA_HANDLE_TX_INTR + 1)
 #define EV_IPA_SSR_UP (EV_IPA_SSR_DOWN + 1)
-#define EV_IPA_OFFLOAD_MAX (EV_IPA_HANDLE_TX_INTR + 1)
-
+#define EV_DMA_RESET (EV_IPA_SSR_UP + 1)
+#define EV_CACHE_SUSPEND (EV_DMA_RESET + 1)
+#define EV_CACHE_RESUME (EV_CACHE_SUSPEND + 1)
+#define EV_IPA_OFFLOAD_MAX (EV_CACHE_RESUME + 1)
 #endif

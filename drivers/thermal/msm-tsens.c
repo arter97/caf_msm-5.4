@@ -124,6 +124,9 @@ static const struct of_device_id tsens_table[] = {
 	{	.compatible = "qcom,qcs405-tsens",
 		.data = &data_tsens14xx_405,
 	},
+	{	.compatible = "qcom,mdm9607-tsens",
+		.data = &data_tsens14xx_9607,
+	},
 	{}
 };
 MODULE_DEVICE_TABLE(of, tsens_table);
@@ -257,7 +260,12 @@ static int get_device_tree_data(struct platform_device *pdev,
 			(tmdev->ltvr_trip_temp_delta < 0 || tmdev->ltvr_clear_temp_delta < 0)))
 			tmdev->ltvr_resume_trigger = false;
 	}
-
+	/*
+	 * Disable all the tsens thermal zones except
+	 * thermal zone for sensor ltvr_sensor_id on suspend.
+	 */
+	tmdev->tm_disable_on_suspend =
+		of_property_read_bool(of_node, "tm-disable-on-suspend");
 
 	tmdev->tsens_reinit_wa =
 		of_property_read_bool(of_node, "tsens-reinit-wa");

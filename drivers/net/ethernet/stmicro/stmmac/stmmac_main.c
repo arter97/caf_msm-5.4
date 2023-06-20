@@ -859,8 +859,10 @@ static void stmmac_validate(struct phylink_config *config,
 	int tx_cnt = priv->plat->tx_queues_to_use;
 	int max_speed = priv->plat->max_speed;
 
-	phylink_set(mac_supported, 10baseT_Half);
-	phylink_set(mac_supported, 10baseT_Full);
+	if (!priv->plat->c45_marvell_en) {
+		phylink_set(mac_supported, 10baseT_Half);
+		phylink_set(mac_supported, 10baseT_Full);
+	}
 	phylink_set(mac_supported, 100baseT_Half);
 	phylink_set(mac_supported, 100baseT_Full);
 	phylink_set(mac_supported, 1000baseT_Half);
@@ -900,7 +902,8 @@ static void stmmac_validate(struct phylink_config *config,
 
 	/* Half-Duplex can only work with single queue */
 	if (tx_cnt > 1) {
-		phylink_set(mask, 10baseT_Half);
+		if (!priv->plat->c45_marvell_en)
+			phylink_set(mask, 10baseT_Half);
 		phylink_set(mask, 100baseT_Half);
 		phylink_set(mask, 1000baseT_Half);
 	}
@@ -1040,7 +1043,8 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 
 	stmmac_mac_set(priv, priv->ioaddr, true);
 	if (phy && priv->dma_cap.eee) {
-		priv->eee_active = phy_init_eee(phy, 1) >= 0;
+		priv->eee_active =
+			phy_init_eee(phy, !priv->plat->rx_clk_runs_in_lpi) >= 0;
 		priv->eee_enabled = stmmac_eee_init(priv);
 		stmmac_set_eee_pls(priv, priv->hw, true);
 	}
@@ -1140,13 +1144,18 @@ static int stmmac_init_phy(struct net_device *dev)
 	if (!node || ret) {
 		int addr = priv->plat->phy_addr;
 
+		if (addr < 0) {
+			netdev_err(priv->dev, "no phy found\n");
+			return -ENODEV;
+		}
+
 		priv->phydev = mdiobus_get_phy(priv->mii, addr);
 		if (!priv->phydev) {
 			netdev_err(priv->dev, "no phy at addr %d\n", addr);
 			return -ENODEV;
 		}
 
-		if (!priv->plat->mac2mac_en) {
+		if (!priv->plat->mac2mac_en && !priv->plat->c45_marvell_en) {
 			if (((priv->phydev->phy_id &
 			    priv->phydev->drv->phy_id_mask) == MICREL_PHY_ID) &&
 				!priv->plat->phy_intr_en) {
@@ -1158,7 +1167,8 @@ static int stmmac_init_phy(struct net_device *dev)
 			}
 		}
 
-		if (priv->plat->phy_intr_en_extn_stm && priv->plat->phy_intr_en) {
+		if (priv->plat->phy_intr_en_extn_stm && priv->plat->phy_intr_en &&
+		    !priv->plat->c45_marvell_en) {
 			priv->phydev->irq = PHY_IGNORE_INTERRUPT;
 			priv->phydev->interrupts =  PHY_INTERRUPT_ENABLED;
 		}
@@ -1166,7 +1176,8 @@ static int stmmac_init_phy(struct net_device *dev)
 		ret = phylink_connect_phy(priv->phylink, priv->phydev);
 
 #ifndef DEFER_ENABLE_INTERRUPTS
-		if (priv->plat->phy_intr_en_extn_stm && priv->plat->phy_intr_en) {
+		if (priv->plat->phy_intr_en_extn_stm && priv->plat->phy_intr_en &&
+		    !priv->plat->c45_marvell_en) {
 			if (priv->phydev->drv->ack_interrupt &&
 			    !priv->phydev->drv->ack_interrupt(priv->phydev)) {
 				pr_info(" qcom-ethqos: %s ack_interrupt successful aftre connect\n",
@@ -2904,6 +2915,9 @@ static int stmmac_hw_setup(struct net_device *dev, bool init_ptp)
 	if (priv->dma_cap.vlins)
 		stmmac_enable_vlan(priv, priv->hw, STMMAC_VLAN_INSERT);
 
+	if (priv->hw_offload_enabled)
+		ethqos_ipa_offload_event_handler(priv, EV_DMA_RESET);
+
 	/* Start the ball rolling... */
 	stmmac_start_all_dma(priv);
 
@@ -3985,6 +3999,10 @@ jumbo_read_again:
 		np = rx_q->dma_rx + next_entry;
 
 	prefetch(np);
+	if (!buf || !buf->page) {
+		pr_err("buf or buf->page is NULL\n");
+		return -EFAULT;
+	}
 	prefetch(page_address(buf->page));
 
 	if (unlikely(jb_status & discard_frame)) {
@@ -4075,6 +4093,10 @@ jumbo_read_again:
 			dma_sync_single_for_cpu(GET_MEM_PDEV_DEV,
 						buf->addr, buf_len,
 						DMA_FROM_DEVICE);
+			if (!skb) {
+				pr_err("skb is NULL\n");
+				return -EFAULT;
+			}
 			skb_copy_to_linear_data_offset(skb,
 						       prev_len,
 						       buf_data -

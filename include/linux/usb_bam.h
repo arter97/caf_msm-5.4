@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2011-2017, 2019 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _USB_BAM_H_
@@ -16,6 +17,7 @@
 /* Supported USB controllers*/
 enum usb_ctrl {
 	USB_CTRL_UNUSED = 0,
+	CI_CTRL,        /* ChipIdea controller */
 	NUM_CTRL,
 };
 

@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __QCOM_MPM_H__
@@ -22,4 +23,5 @@ extern const struct mpm_pin mpm_monaco_gic_chip_data[];
 extern const struct mpm_pin mpm_qcs405_gic_chip_data[];
 extern const struct mpm_pin mpm_scuba_gic_chip_data[];
 extern const struct mpm_pin mpm_bengal_gic_chip_data[];
+extern const struct mpm_pin mpm_mdm9607_gic_chip_data[];
 #endif /* __QCOM_MPM_H__ */

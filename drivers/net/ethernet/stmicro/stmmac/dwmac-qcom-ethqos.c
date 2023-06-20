@@ -47,6 +47,7 @@ int open_not_called;
 #define PHY_LOOPBACK_10 0x4100
 #define PHY_OFF_SYSFS_DEV_ATTR_PERMS 0644
 #define BUFF_SZ 256
+
 static void ethqos_rgmii_io_macro_loopback(struct qcom_ethqos *ethqos,
 					   int mode);
 static int phy_digital_loopback_config(struct qcom_ethqos *ethqos, int speed, int config);
@@ -175,7 +176,7 @@ u16 dwmac_qcom_select_queue(struct net_device *dev,
 	} else {
 		/* VLAN tagged IP packet or any other non vlan packets (PTP)*/
 		txqueue_select = ALL_OTHER_TX_TRAFFIC_IPA_DISABLED;
-		if (priv->tx_queue[txqueue_select].skip_sw)
+		if (plat_dat->c45_marvell_en || priv->tx_queue[txqueue_select].skip_sw)
 			txqueue_select = ALL_OTHER_TRAFFIC_TX_CHANNEL;
 	}
 
@@ -187,7 +188,6 @@ u16 dwmac_qcom_select_queue(struct net_device *dev,
 			  txqueue_select);
 		WARN_ON(1);
 	}
-	ETHQOSDBG("tx_queue %d\n", txqueue_select);
 	return txqueue_select;
 }
 
@@ -686,9 +686,15 @@ void emac_rgmii_io_macro_config_1G(struct qcom_ethqos *ethqos)
 		      RGMII_CONFIG_PROG_SWAP, RGMII_IO_MACRO_CONFIG);
 	rgmii_updatel(ethqos, RGMII_CONFIG2_DATA_DIVIDE_CLK_SEL,
 		      0, RGMII_IO_MACRO_CONFIG2);
-	rgmii_updatel(ethqos, RGMII_CONFIG2_TX_CLK_PHASE_SHIFT_EN,
-		      RGMII_CONFIG2_TX_CLK_PHASE_SHIFT_EN,
-		      RGMII_IO_MACRO_CONFIG2);
+
+	if (plat_dat->c45_marvell_en)
+		rgmii_updatel(ethqos, RGMII_CONFIG2_TX_CLK_PHASE_SHIFT_EN,
+			      0, RGMII_IO_MACRO_CONFIG2);
+	else
+		rgmii_updatel(ethqos, RGMII_CONFIG2_TX_CLK_PHASE_SHIFT_EN,
+			      RGMII_CONFIG2_TX_CLK_PHASE_SHIFT_EN,
+			      RGMII_IO_MACRO_CONFIG2);
+
 	rgmii_updatel(ethqos, RGMII_CONFIG2_RSVD_CONFIG15,
 		      0, RGMII_IO_MACRO_CONFIG2);
 	rgmii_updatel(ethqos, RGMII_CONFIG2_RX_PROG_SWAP,
@@ -696,8 +702,12 @@ void emac_rgmii_io_macro_config_1G(struct qcom_ethqos *ethqos)
 		      RGMII_IO_MACRO_CONFIG2);
 
 	/* Set PRG_RCLK_DLY to 115 */
-	rgmii_updatel(ethqos, SDCC_DDR_CONFIG_PRG_RCLK_DLY,
-		      115, SDCC_HC_REG_DDR_CONFIG);
+	if (plat_dat->c45_marvell_en)
+		rgmii_updatel(ethqos, SDCC_DDR_CONFIG_PRG_RCLK_DLY,
+			      104, SDCC_HC_REG_DDR_CONFIG);
+	else
+		rgmii_updatel(ethqos, SDCC_DDR_CONFIG_PRG_RCLK_DLY,
+			      115, SDCC_HC_REG_DDR_CONFIG);
 	rgmii_updatel(ethqos, SDCC_DDR_CONFIG_PRG_DLY_EN,
 		      SDCC_DDR_CONFIG_PRG_DLY_EN,
 		      SDCC_HC_REG_DDR_CONFIG);
@@ -718,9 +728,14 @@ void emac_rgmii_io_macro_config_100M(struct qcom_ethqos *ethqos)
 		      0, RGMII_IO_MACRO_CONFIG);
 	rgmii_updatel(ethqos, RGMII_CONFIG2_DATA_DIVIDE_CLK_SEL,
 		      0, RGMII_IO_MACRO_CONFIG2);
-	rgmii_updatel(ethqos, RGMII_CONFIG2_TX_CLK_PHASE_SHIFT_EN,
-		      RGMII_CONFIG2_TX_CLK_PHASE_SHIFT_EN,
-		      RGMII_IO_MACRO_CONFIG2);
+
+	if (plat_dat->c45_marvell_en)
+		rgmii_updatel(ethqos, RGMII_CONFIG2_TX_CLK_PHASE_SHIFT_EN,
+			      0, RGMII_IO_MACRO_CONFIG2);
+	else
+		rgmii_updatel(ethqos, RGMII_CONFIG2_TX_CLK_PHASE_SHIFT_EN,
+			      RGMII_CONFIG2_TX_CLK_PHASE_SHIFT_EN,
+			      RGMII_IO_MACRO_CONFIG2);
 	rgmii_updatel(ethqos, RGMII_CONFIG_MAX_SPD_PRG_2,
 		      BIT(6), RGMII_IO_MACRO_CONFIG);
 	rgmii_updatel(ethqos, RGMII_CONFIG2_RSVD_CONFIG15,
@@ -2032,7 +2047,6 @@ static void read_rgmii_io_macro_node_setting(struct device_node *np_hw, struct q
 		ETHQOSDBG("default rgmii_tx_drv\n");
 		ethqos->io_macro.rgmii_tx_drv = 0;
 	}
-
 }
 
 static void qcom_ethqos_bringup_iface(struct work_struct *work)
@@ -4257,6 +4271,7 @@ static int _qcom_ethqos_probe(void *arg)
 
 	plat_dat->bsp_priv = ethqos;
 	plat_dat->fix_mac_speed = ethqos_fix_mac_speed;
+	plat_dat->c45_marvell_en = of_property_read_bool(np, "qcom,c45_marvell");
 	plat_dat->tx_select_queue = dwmac_qcom_select_queue;
 	if (of_property_read_bool(pdev->dev.of_node,
 				  "disable-intr-mod"))
@@ -4344,11 +4359,18 @@ static int _qcom_ethqos_probe(void *arg)
 	}
 	ETHQOSINFO("emac-phy-off-suspend = %d\n",
 		   ethqos->current_phy_mode);
+
+	plat_dat->mdio_reset = of_property_read_bool(pdev->dev.of_node,
+						     "mdio-reset");
+	ethqos->skip_ipa_autoresume = of_property_read_bool(pdev->dev.of_node,
+							    "skip-ipa-autoresume");
 	ethqos->ioaddr = (&stmmac_res)->addr;
 	if (ethqos->io_macro.rgmii_tx_drv)
 		ethqos_update_rgmii_tx_drv_strength(ethqos);
 	ethqos_update_mdio_drv_strength(ethqos, np);
 	ethqos_mac_rec_init(ethqos);
+	if (of_device_is_compatible(np, "qcom,qcs404-ethqos"))
+		plat_dat->rx_clk_runs_in_lpi = 1;
 
 	ret = stmmac_dvr_probe(&pdev->dev, plat_dat, &stmmac_res);
 	if (ret)
@@ -4695,7 +4717,8 @@ static int qcom_ethqos_resume(struct device *dev)
 		ETHQOSINFO("Loopback EN Disabled\n");
 	}
 
-	ethqos_ipa_offload_event_handler(NULL, EV_DPM_RESUME);
+	if (!ethqos->skip_ipa_autoresume)
+		ethqos_ipa_offload_event_handler(NULL, EV_DPM_RESUME);
 
 	place_marker("M - Ethernet Resume End");
 
@@ -4954,7 +4977,7 @@ static void __exit qcom_ethqos_exit_module(void)
  * to do something with the code that the module provides.
  */
 
-arch_initcall(qcom_ethqos_init_module)
+module_init(qcom_ethqos_init_module)
 
 /*!
  * \brief Macro to register the driver un-registration function.

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -308,9 +309,11 @@ int fsa4480_reg_notifier(struct notifier_block *nb,
 	 * as part of the init sequence check if there is a connected
 	 * USB C analog adapter
 	 */
-	dev_dbg(fsa_priv->dev, "%s: verify if USB adapter is already inserted\n",
-		__func__);
-	rc = fsa4480_usbc_analog_setup_switches(fsa_priv);
+	if (atomic_read(&(fsa_priv->usbc_mode)) == TYPEC_ACCESSORY_AUDIO) {
+		dev_dbg(fsa_priv->dev, "%s: verify if USB adapter is already inserted\n",
+			__func__);
+		rc = fsa4480_usbc_analog_setup_switches(fsa_priv);
+	}
 	regmap_update_bits(fsa_priv->regmap, FSA4480_SWITCH_CONTROL, 0x07,
 			   fsa_priv->switch_control);
 	return rc;
