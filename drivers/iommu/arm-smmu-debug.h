@@ -87,7 +87,8 @@ u32 arm_smmu_debug_tcu_testbus_select(phys_addr_t phys_addr,
 u32 arm_smmu_debug_tcu_testbus_output(phys_addr_t phys_addr);
 void arm_smmu_debug_dump_tbu_testbus(struct device *dev, void __iomem *tbu_base,
 			int tbu_testbus_sel);
-void arm_smmu_debug_dump_tcu_testbus(struct device *dev, phys_addr_t phys_addr,
+void arm_smmu_debug_dump_tcu_testbus(struct arm_smmu_device *smmu,
+			struct device *dev, phys_addr_t phys_addr,
 			void __iomem *tcu_base, int tcu_testbus_sel);
 void arm_smmu_debug_set_tnx_tcr_cntl(void __iomem *tbu_base, u64 val);
 u64 arm_smmu_debug_get_tnx_tcr_cntl(void __iomem *tbu_base);

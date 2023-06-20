@@ -756,7 +756,7 @@ static void arm_smmu_testbus_dump(struct arm_smmu_device *smmu, u16 sid)
 							tbu->base,
 							tbu_testbus_sel);
 		else
-			arm_smmu_debug_dump_tcu_testbus(smmu->dev,
+			arm_smmu_debug_dump_tcu_testbus(smmu, smmu->dev,
 							smmu->phys_addr,
 							data->tcu_base,
 							tcu_testbus_sel);
