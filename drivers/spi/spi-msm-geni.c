@@ -2957,11 +2957,35 @@ static void ssr_spi_force_resume(struct device *dev)
 {
 	struct spi_master *spi = get_spi_master(dev);
 	struct spi_geni_master *mas = spi_master_get_devdata(spi);
+	int ret = 0;
 
 	mutex_lock(&mas->spi_ssr.ssr_lock);
-	mas->spi_ssr.is_ssr_down = false;
 	spi_geni_irq_enable(mas, true);
-	se_geni_clks_on(&mas->spi_rsc);
+
+	if (pm_runtime_status_suspended(mas->dev)) {
+		GENI_SE_DBG(mas->ipc, false, mas->dev,
+			    "%s: the device is in suspended state\n", __func__);
+		if (pm_runtime_enabled(mas->dev)) {
+			ret = pm_runtime_get_sync(mas->dev);
+			if (ret < 0) {
+				GENI_SE_ERR(mas->ipc, true, mas->dev,
+					    "%s:pm_runtime_get_sync failed %d\n",
+					    __func__, ret);
+				WARN_ON_ONCE(1);
+				pm_runtime_put_noidle(mas->dev);
+				/* Set device in suspended since resume failed */
+				pm_runtime_set_suspended(mas->dev);
+			}
+		} else {
+			GENI_SE_ERR(mas->ipc, true, mas->dev,
+				    "%s: System PM runtime is not enabled\n",
+				    __func__);
+			mutex_unlock(&mas->spi_ssr.ssr_lock);
+			return;
+		}
+	}
+
+	mas->spi_ssr.is_ssr_down = false;
 	GENI_SE_DBG(mas->ipc, false, mas->dev, "force resume done\n");
 	mutex_unlock(&mas->spi_ssr.ssr_lock);
 }
