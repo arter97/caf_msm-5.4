@@ -4135,6 +4135,8 @@ static int _qcom_ethqos_probe(void *arg)
 	if (ethqos->io_macro.rgmii_tx_drv)
 		ethqos_update_rgmii_tx_drv_strength(ethqos);
 	ethqos_mac_rec_init(ethqos);
+	if (of_device_is_compatible(np, "qcom,qcs404-ethqos"))
+		plat_dat->rx_clk_runs_in_lpi = 1;
 
 	ret = stmmac_dvr_probe(&pdev->dev, plat_dat, &stmmac_res);
 	if (ret)
