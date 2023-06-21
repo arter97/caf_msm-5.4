@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/bitmap.h>
@@ -287,6 +287,7 @@ struct msm_geni_serial_port {
 	bool console_rx_wakeup;
 	struct ktermios *current_termios;
 	bool resuming_from_deep_sleep;
+	bool skip_pinctrl_settings;
 };
 
 static const struct uart_ops msm_geni_serial_pops;
@@ -3944,11 +3945,20 @@ static void msm_geni_serial_hs_pm(struct uart_port *uport,
 	if (old_state == UART_PM_STATE_UNDEFINED)
 		old_state = UART_PM_STATE_OFF;
 
-	if (new_state == UART_PM_STATE_ON && old_state == UART_PM_STATE_OFF)
-		se_geni_resources_on(&msm_port->serial_rsc);
-	else if (new_state == UART_PM_STATE_OFF &&
-			old_state == UART_PM_STATE_ON)
-		se_geni_resources_off(&msm_port->serial_rsc);
+	if (new_state == UART_PM_STATE_ON && old_state == UART_PM_STATE_OFF) {
+		if (!msm_port->is_console && msm_port->skip_pinctrl_settings)
+			se_geni_clks_on(&msm_port->serial_rsc);
+		else
+			se_geni_resources_on(&msm_port->serial_rsc);
+	} else if (new_state == UART_PM_STATE_OFF && old_state == UART_PM_STATE_ON) {
+		if (!msm_port->is_console && msm_port->skip_pinctrl_settings) {
+			se_geni_clks_off(&msm_port->serial_rsc);
+			msm_port->skip_pinctrl_settings = false;
+		} else {
+			se_geni_resources_off(&msm_port->serial_rsc);
+		}
+	}
+
 }
 
 static const struct uart_ops msm_geni_console_pops = {
@@ -4507,6 +4517,9 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	 */
 	if (!is_console)
 		spin_lock_init(&dev_port->rx_lock);
+
+	if (!dev_port->is_console)
+		dev_port->skip_pinctrl_settings = true;
 
 	ret = uart_add_one_port(drv, uport);
 	if (ret)

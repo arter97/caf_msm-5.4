@@ -3631,8 +3631,8 @@ static int ffs_func_set_alt(struct usb_function *f,
 {
 	struct ffs_function *func = ffs_func_from_usb(f);
 	struct ffs_data *ffs = func->ffs;
-	struct f_fs_opts *opts =
-		container_of(f->fi, struct f_fs_opts, func_inst);
+
+
 	int ret = 0, intf;
 
 	ffs_log("enter: alt %d", (int)alt);
@@ -3645,10 +3645,10 @@ static int ffs_func_set_alt(struct usb_function *f,
 	if (ffs->func && ((alt == -1) || (ffs->state != FFS_ACTIVE))) {
 		ffs_func_eps_disable(ffs->func);
 		ffs->func = NULL;
-		/* matching put to allow LPM on disconnect */
-		pr_info("%s() (%s) autopm put\n", __func__, opts->dev->name);
-		if (!strcmp(opts->dev->name, "adb"))
-			usb_gadget_autopm_put_async(ffs->gadget);
+
+
+
+
 	}
 
 	if (ffs->state == FFS_DEACTIVATED) {
@@ -3669,16 +3669,11 @@ static int ffs_func_set_alt(struct usb_function *f,
 
 	ffs->func = func;
 	ret = ffs_func_eps_enable(func);
-	if (likely(ret >= 0)) {
+	if (likely(ret >= 0)){ 
 		ffs_event_add(ffs, FUNCTIONFS_ENABLE);
-		/* Disable USB LPM later on bus_suspend */
-		pr_info("%s() (%s) autopm get\n", __func__, opts->dev->name);
-		if (!strcmp(opts->dev->name, "adb"))
-			usb_gadget_autopm_get_async(ffs->gadget);
+		/*Save Alt Setting number of the Interface*/
+		func->cur_alt[interface] = alt;
 	}
-
-	/*Save Alt Setting number of the Interface*/
-	func->cur_alt[interface] = alt;
 
 	return ret;
 }
@@ -3690,7 +3685,7 @@ static void ffs_func_disable(struct usb_function *f)
 
 	ffs_log("enter");
 	ffs_func_set_alt(f, 0, (unsigned)-1);
-	ffs_log("exit");
+
 }
 
 static int ffs_func_setup(struct usb_function *f,
