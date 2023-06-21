@@ -50,6 +50,7 @@ struct msm_rng_device {
 	struct clk *prng_clk;
 	struct mutex rng_lock;
 	struct icc_path *icc_path;
+	bool suspended;
 };
 
 static struct msm_rng_device msm_rng_device_info;
@@ -108,7 +109,7 @@ static int msm_rng_direct_read(struct msm_rng_device *msm_rng_dev,
 		}
 	}
 	/* enable PRNG clock */
-	if (msm_rng_dev->prng_clk) {
+	if ((msm_rng_dev->prng_clk) && (!msm_rng_dev->suspended)) {
 		ret = clk_prepare_enable(msm_rng_dev->prng_clk);
 		if (ret) {
 			pr_err("failed to enable prng clock\n");
@@ -139,7 +140,7 @@ static int msm_rng_direct_read(struct msm_rng_device *msm_rng_dev,
 				break;
 		}
 
-	} while (currsize < max);
+	} while ((currsize < max) && !msm_rng_dev->suspended);
 
 	/* vote to turn off clock */
 	if (msm_rng_dev->prng_clk)
@@ -162,7 +163,9 @@ static int msm_rng_read(struct hwrng *rng, void *data, size_t max, bool wait)
 	int rv = 0;
 
 	msm_rng_dev = (struct msm_rng_device *)rng->priv;
-	rv = msm_rng_direct_read(msm_rng_dev, data, max);
+
+	if (!msm_rng_dev->suspended)
+		rv = msm_rng_direct_read(msm_rng_dev, data, max);
 
 	return rv;
 }
@@ -405,7 +408,13 @@ static int qrng_get_random(struct crypto_rng *tfm, const u8 *src,
 		rv = -ERESTARTSYS;
 		goto err_exit;
 	}
-	sizeread = msm_rng_direct_read(msm_rng_dev_cached, rdata, dlen);
+	if (!msm_rng_dev_cached->suspended)
+		sizeread = msm_rng_direct_read(msm_rng_dev_cached, rdata, dlen);
+	else {
+		mutex_unlock(&cached_rng_lock);
+		pr_info("%s: device is in suspend. returning -EFAULT\n", __func__);
+		goto err_exit;
+	}
 
 	if (sizeread == dlen)
 		rv = 0;
@@ -418,6 +427,26 @@ err_exit:
 
 static int qrng_reset(struct crypto_rng *tfm, const u8 *seed, unsigned int slen)
 {
+	return 0;
+}
+
+static int msm_rng_suspend(struct device *dev)
+{
+	struct msm_rng_device *msm_rng_dev = dev_get_drvdata(dev);
+
+	msm_rng_dev->suspended = true;
+	pr_info("%s: Suspended MSM RNG driver\n", __func__);
+
+	return 0;
+}
+
+static int msm_rng_resume(struct device *dev)
+{
+	struct msm_rng_device *msm_rng_dev = dev_get_drvdata(dev);
+
+	msm_rng_dev->suspended = false;
+	pr_info("%s: Resumed MSM RNG driver\n", __func__);
+
 	return 0;
 }
 
@@ -439,12 +468,17 @@ static const struct of_device_id qrng_match[] = {
 	{},
 };
 
+static const struct dev_pm_ops msm_rng_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(msm_rng_suspend, msm_rng_resume)
+};
+
 static struct platform_driver rng_driver = {
 	.probe      = msm_rng_probe,
 	.remove     = msm_rng_remove,
 	.driver     = {
 		.name   = DRIVER_NAME,
 		.of_match_table = qrng_match,
+		.pm = &msm_rng_pm_ops,
 	},
 };
 
