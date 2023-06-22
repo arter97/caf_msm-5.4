@@ -276,6 +276,10 @@ static struct pll_vco alpha_pll_vco[] = {
 	{ 750000000, 1500000000, 1 },
 };
 
+static struct pll_vco alpha_pll_vco1[] = {
+	{ 700000000, 1400000000, 1 },
+};
+
 /* Initial configuration for 1094.4 */
 static const struct alpha_pll_config apcs_cpu_pll_config = {
 	.l = 0x4E,
@@ -479,6 +483,7 @@ static const struct of_device_id match_table[] = {
 	{ .compatible = "qcom,qcs404-apsscc" },
 	{ .compatible = "qcom,sdx55-apsscc" },
 	{ .compatible = "qcom,sdxpoorwills-apsscc" },
+	{ .compatible = "qcom,mdm9607-apsscc" },
 	{}
 };
 
@@ -500,6 +505,7 @@ static void cpucc_clk_get_speed_bin(struct platform_device *pdev, int *bin,
 	struct resource *res;
 	u32 pte_efuse, valid;
 	void __iomem *base;
+	bool is_mdm9607;
 
 	*bin = 0;
 	*version = 0;
@@ -520,6 +526,13 @@ static void cpucc_clk_get_speed_bin(struct platform_device *pdev, int *bin,
 
 	pte_efuse = readl_relaxed(base);
 	iounmap(base);
+
+	is_mdm9607 = of_device_is_compatible(pdev->dev.of_node, "qcom,mdm9607-apsscc");
+	if (is_mdm9607) {
+		*bin = (pte_efuse >> 0x2) & 0x7;
+		dev_info(&pdev->dev, "PVS version: %d bin: %d\n", *version, *bin);
+		return;
+	}
 
 	*bin = pte_efuse & 0x7;
 	valid = ((pte_efuse >> 3) & 0x1) ? ((pte_efuse >> 3) & 0x1) : 0;
@@ -707,6 +720,30 @@ static void cpucc_sdxnightjar_fixup(void)
 	clk_alpha_pll_configure(&apcs_cpu_pll, apcs_cpu_pll.clkr.regmap,
 				&apcs_cpu_alpha_pll_config);
 }
+
+static void cpucc_mdm9607_fixup(void)
+{
+	apcs_cpu_pll.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_DEFAULT];
+	apcs_cpu_pll.vco_table = alpha_pll_vco1;
+	apcs_cpu_pll.num_vco = sizeof(alpha_pll_vco1);
+
+	apcs_cpu_pll.clkr.hw.init = &apcs_cpu_pll_sdxnightjar;
+	apcs_cpu_pll.clkr.vdd_data.rate_max[VDD_MIN] = 0;
+	apcs_cpu_pll.clkr.vdd_data.rate_max[VDD_LOW] = 1400000000;
+	apcs_cpu_pll.clkr.vdd_data.rate_max[VDD_LOW_L1] = 0;
+	apcs_cpu_pll.clkr.vdd_data.rate_max[VDD_NOMINAL] = 0;
+
+	/* GPLL0 as safe source Index */
+	apcs_mux_clk.safe_src = 1;
+	apcs_mux_clk.safe_div = 1;
+
+	apcs_mux_clk.clk_nb.notifier_call = cpucc_notifier_cb;
+
+	apcs_cpu_alpha_pll_config.l = 0x34;
+	apcs_cpu_alpha_pll_config.vco_val = 0;
+	apcs_cpu_alpha_pll_config.main_output_mask = 0;
+}
+
 
 static void cpucc_qcs404_fixup(void)
 {
@@ -905,7 +942,7 @@ static int cpucc_driver_probe(struct platform_device *pdev)
 	struct clk_hw_onecell_data *data;
 	struct device *dev = &pdev->dev;
 	int i, ret, cpu;
-	bool is_sdxnightjar, is_qcs404, is_sdx55, is_sdxpoorwills;
+	bool is_sdxnightjar, is_qcs404, is_sdx55, is_sdxpoorwills, is_mdm9607;
 	unsigned long xo_rate;
 	u32 l_val;
 
@@ -921,6 +958,8 @@ static int cpucc_driver_probe(struct platform_device *pdev)
 						 "qcom,sdx55-apsscc");
 	is_sdxpoorwills = of_device_is_compatible(pdev->dev.of_node,
 						 "qcom,sdxpoorwills-apsscc");
+	is_mdm9607 = of_device_is_compatible(pdev->dev.of_node,
+						 "qcom,mdm9607-apsscc");
 	if (is_sdxnightjar) {
 		l_val = apcs_cpu_alpha_pll_config.l;
 		cpucc_sdxnightjar_fixup();
@@ -933,6 +972,9 @@ static int cpucc_driver_probe(struct platform_device *pdev)
 	} else if (is_sdxpoorwills) {
 		l_val = apcs_cpu_alpha_pll_config_sdxpoorwills.l;
 		cpucc_sdxpoorwills_fixup();
+	} else if (is_mdm9607) {
+		cpucc_mdm9607_fixup();
+		l_val = apcs_cpu_alpha_pll_config.l;
 	} else {
 		l_val = apcs_cpu_pll_config.l;
 		clk_lucid_5lpe_pll_configure(&apcs_cpu_pll, apcs_cpu_pll.clkr.regmap,
@@ -962,7 +1004,7 @@ static int cpucc_driver_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	if (is_sdxnightjar || is_qcs404) {
+	if (is_sdxnightjar || is_qcs404 || is_mdm9607) {
 		ret = clk_notifier_register(apcs_mux_clk.clkr.hw.clk,
 							&apcs_mux_clk.clk_nb);
 		if (ret) {
