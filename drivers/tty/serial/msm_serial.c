@@ -31,6 +31,7 @@
 #include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/wait.h>
+#include <linux/interconnect.h>
 
 #define UART_MR1			0x0000
 
@@ -182,9 +183,20 @@ struct msm_port {
 	bool			break_detected;
 	struct msm_dma		tx_dma;
 	struct msm_dma		rx_dma;
+	/* BLSP UART required ICC BUS voting */
+	struct icc_path		*icc_path;
 };
 
 #define UART_TO_MSM(uart_port)	container_of(uart_port, struct msm_port, uart)
+
+/* Interconnect path bandwidths (each times 1000 bytes per second) */
+#define BLSP_MEMORY_AVG  500
+#define BLSP_MEMORY_PEAK 800
+
+static void msm_clk_bus_unprepare(struct msm_port *msm_uport);
+static int msm_clk_bus_prepare(struct msm_port *msm_uport);
+static int msm_clk_bus_vote(struct msm_port *msm_uport);
+static void msm_clk_bus_unvote(struct msm_port *msm_uport);
 
 static
 void msm_write(struct uart_port *port, unsigned int val, unsigned int off)
@@ -1172,18 +1184,6 @@ static int msm_startup(struct uart_port *port)
 	snprintf(msm_port->name, sizeof(msm_port->name),
 		 "msm_serial%d", port->line);
 
-	/*
-	 * UART clk must be kept enabled to
-	 * avoid losing received character
-	 */
-	ret = clk_prepare_enable(msm_port->clk);
-	if (ret)
-		return ret;
-
-	ret = clk_prepare_enable(msm_port->pclk);
-	if (ret)
-		goto err_pclk;
-
 	msm_serial_set_mnd_regs(port);
 
 	if (likely(port->fifosize > 12))
@@ -1221,11 +1221,6 @@ err_irq:
 	if (msm_port->is_uartdm)
 		msm_release_dma(msm_port);
 
-	clk_disable_unprepare(msm_port->pclk);
-	clk_disable_unprepare(msm_port->clk);
-err_pclk:
-	clk_disable_unprepare(msm_port->clk);
-
 	return ret;
 }
 
@@ -1238,9 +1233,6 @@ static void msm_shutdown(struct uart_port *port)
 
 	if (msm_port->is_uartdm)
 		msm_release_dma(msm_port);
-
-	clk_disable_unprepare(msm_port->pclk);
-	clk_disable_unprepare(msm_port->clk);
 
 	free_irq(port->irq, port);
 }
@@ -1403,23 +1395,25 @@ static void msm_power(struct uart_port *port, unsigned int state,
 		      unsigned int oldstate)
 {
 	struct msm_port *msm_port = UART_TO_MSM(port);
+	int ret;
+
+	if (oldstate == state)
+		return;
 
 	switch (state) {
-	case 0:
+	case UART_PM_STATE_ON:
 		/*
 		 * UART clk must be kept enabled to
 		 * avoid losing received character
 		 */
-		if (clk_prepare_enable(msm_port->clk))
-			return;
-		if (clk_prepare_enable(msm_port->pclk)) {
-			clk_disable_unprepare(msm_port->clk);
-			return;
-		}
+		ret = msm_clk_bus_prepare(msm_port);
+		if (ret)
+			break;
+		msm_clk_bus_vote(msm_port);
 		break;
-	case 3:
-		clk_disable_unprepare(msm_port->clk);
-		clk_disable_unprepare(msm_port->pclk);
+	case UART_PM_STATE_OFF:
+		msm_clk_bus_unvote(msm_port);
+		msm_clk_bus_unprepare(msm_port);
 		break;
 	default:
 		pr_err("msm_serial: Unknown PM state %d\n", state);
@@ -1527,6 +1521,58 @@ static void msm_poll_put_char(struct uart_port *port, unsigned char c)
 	msm_write(port, imr, UART_IMR);
 }
 #endif
+
+static void msm_clk_bus_unprepare(struct msm_port *msm_uport)
+{
+	clk_disable_unprepare(msm_uport->clk);
+	if (msm_uport->pclk)
+		clk_disable_unprepare(msm_uport->pclk);
+}
+
+static int msm_clk_bus_prepare(struct msm_port *msm_uport)
+{
+	int rc;
+
+	/* Turn on core clk and iface clk */
+	if (msm_uport->pclk) {
+		rc = clk_prepare_enable(msm_uport->pclk);
+		if (rc) {
+			dev_err(msm_uport->uart.dev,
+					"Could not turn on pclk [%d]\n", rc);
+			return rc;
+		}
+	}
+	rc = clk_prepare_enable(msm_uport->clk);
+	if (rc) {
+		dev_err(msm_uport->uart.dev,
+				"Could not turn on core clk [%d]\n", rc);
+		if (msm_uport->pclk)
+			clk_disable_unprepare(msm_uport->pclk);
+	}
+	return rc;
+}
+
+static int msm_clk_bus_vote(struct msm_port *msm_uport)
+{
+	int rc;
+
+	if (msm_uport->icc_path) {
+		rc = icc_set_bw(msm_uport->icc_path,
+				BLSP_MEMORY_AVG, BLSP_MEMORY_PEAK);
+		if (rc) {
+			dev_err(msm_uport->uart.dev,
+				"%s(): Error in seting bw [%d]\n", __func__, rc);
+			return rc;
+		}
+	}
+	return 0;
+}
+
+static void msm_clk_bus_unvote(struct msm_port *msm_uport)
+{
+	if (msm_uport->icc_path)
+		icc_set_bw(msm_uport->icc_path, 0, 0);
+}
 
 static struct uart_ops msm_uart_pops = {
 	.tx_empty = msm_tx_empty,
@@ -1787,6 +1833,7 @@ static int msm_serial_probe(struct platform_device *pdev)
 	const struct of_device_id *id;
 	int irq, line;
 	bool flag = false;
+	int ret;
 
 	if (pdev->dev.of_node)
 		line = of_alias_get_id(pdev->dev.of_node, "serial");
@@ -1829,8 +1876,28 @@ static int msm_serial_probe(struct platform_device *pdev)
 		}
 	}
 
+	msm_port->icc_path = of_icc_get(&pdev->dev, "blsp-ddr");
+	if (IS_ERR_OR_NULL(msm_port->icc_path)) {
+		ret = msm_port->icc_path ?
+			PTR_ERR(msm_port->icc_path) : -EINVAL;
+		dev_err(&pdev->dev, "%s(): failed to get ICC path: %d\n", __func__, ret);
+		msm_port->icc_path = NULL;
+		return -ENXIO;
+	}
+
 	port->uartclk = clk_get_rate(msm_port->clk);
 	dev_info(&pdev->dev, "uartclk = %d\n", port->uartclk);
+
+	ret = msm_clk_bus_prepare(msm_port);
+	if (ret) {
+		dev_err(&pdev->dev, "%s(): failed to prepare clk: %d\n", __func__, ret);
+		return -ENXIO;
+	}
+	ret = msm_clk_bus_vote(msm_port);
+	if (ret) {
+		dev_err(&pdev->dev, "%s(): failed to vote: %d\n", __func__, ret);
+		return -ENXIO;
+	}
 
 	resource = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (unlikely(!resource)) {
@@ -1858,8 +1925,11 @@ static int msm_serial_probe(struct platform_device *pdev)
 static int msm_serial_remove(struct platform_device *pdev)
 {
 	struct uart_port *port = platform_get_drvdata(pdev);
+	struct msm_port *msm_port = UART_TO_MSM(port);
 
 	uart_remove_one_port(&msm_uart_driver, port);
+	msm_clk_bus_unvote(msm_port);
+	msm_clk_bus_unprepare(msm_port);
 
 	return 0;
 }
@@ -1926,7 +1996,7 @@ static void __exit msm_serial_exit(void)
 	uart_unregister_driver(&msm_uart_driver);
 }
 
-module_init(msm_serial_init);
+subsys_initcall(msm_serial_init);
 module_exit(msm_serial_exit);
 
 MODULE_AUTHOR("Robert Love <rlove@google.com>");
