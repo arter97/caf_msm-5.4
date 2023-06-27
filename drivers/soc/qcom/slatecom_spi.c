@@ -1663,15 +1663,21 @@ static int slatecom_pm_suspend(struct device *dev)
 		return -ECANCELED;
 	}
 
-	atomic_set(&state, SLATECOM_STATE_SUSPEND);
 	atomic_set(&slate_is_runtime_suspend, 0);
 
 	free_irq(slate_irq, slate_spi);
 	ret = request_threaded_irq(slate_irq, NULL, slate_irq_tasklet_hndlr_during_suspend,
 		IRQF_TRIGGER_RISING | IRQF_ONESHOT, "qcom-slate_spi", slate_spi);
 
+	if (atomic_read(&slate_is_spi_active)) {
+		SLATECOM_ERR("Slate interrupted, abort suspend\n");
+		return -ECANCELED;
+	}
+
 	SLATECOM_INFO("suspended\n");
-	return (atomic_read(&slate_is_spi_active)) ? -ECANCELED : 0;
+
+	atomic_set(&state, SLATECOM_STATE_SUSPEND);
+	return 0;
 }
 
 static int slatecom_pm_resume(struct device *dev)

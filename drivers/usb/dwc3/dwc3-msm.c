@@ -1863,6 +1863,7 @@ static void gsi_configure_ep(struct usb_ep *ep, struct usb_gsi_request *request)
 		reg = dwc3_msm_read_reg(mdwc->base, DWC3_DALEPENA);
 		reg |= DWC3_DALEPENA_EP(dep->number);
 		dwc3_msm_write_reg(mdwc->base, DWC3_DALEPENA, reg);
+		dep->trb_dequeue = 0;
 	}
 
 }
@@ -1906,8 +1907,7 @@ static void gsi_enable(struct usb_ep *ep, struct usb_gsi_request *req)
  * @request - pointer to GSI request. In this case num_bufs is used as a bool
  * to set or clear the doorbell bit
  */
-static void gsi_set_clear_dbell(struct usb_ep *ep,
-					bool block_db, struct usb_gsi_request *req)
+static void gsi_set_clear_dbell(struct usb_ep *ep, bool block_db)
 {
 
 	struct dwc3_ep *dep = to_dwc3_ep(ep);
@@ -1917,7 +1917,7 @@ static void gsi_set_clear_dbell(struct usb_ep *ep,
 	dbg_log_string("block_db(%d)", block_db);
 
 	/* Nothing to be done if NORMAL EP is used with GSI */
-	if (!req->ep_intr_num) {
+	if (ep->is_sw_path) {
 		dev_err(mdwc->dev, "%s: is no-op for normal EP\n", __func__);
 		return;
 	}
@@ -1989,8 +1989,10 @@ static void dwc3_msm_gsi_db_update(struct dwc3_ep *dep, dma_addr_t offset)
 	struct dwc3 *dwc = dep->dwc;
 	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
 
-	if (!dep->gsi_db_reg_addr)
+	if (!dep->gsi_db_reg_addr) {
 		dev_err(mdwc->dev, "Failed to update GSI DBL\n");
+		return;
+	}
 
 	writel_relaxed(offset, dep->gsi_db_reg_addr);
 	dev_dbg(mdwc->dev, "Writing TRB addr: %pa to %pK\n",
@@ -2078,8 +2080,7 @@ int usb_gsi_ep_op(struct usb_ep *ep, void *op_data, enum gsi_ep_op op)
 		break;
 	case GSI_EP_OP_SET_CLR_BLOCK_DBL:
 		block_db = *((bool *)op_data);
-		request = (struct usb_gsi_request *)op_data;
-		gsi_set_clear_dbell(ep, block_db, request);
+		gsi_set_clear_dbell(ep, block_db);
 		break;
 	case GSI_EP_OP_CHECK_FOR_SUSPEND:
 		ret = gsi_check_ready_to_suspend(mdwc);
@@ -2121,10 +2122,12 @@ int usb_gsi_ep_op(struct usb_ep *ep, void *op_data, enum gsi_ep_op op)
 			request->ep_intr_num =
 				((dwc->num_gsi_eps) - ((dwc->num_eps - 1) - dep->number));
 		}
+		ep->is_sw_path = false;
 		break;
 	case GSI_SW_EP_PATH:
 		request = (struct usb_gsi_request *)op_data;
 		request->ep_intr_num = 0;
+		ep->is_sw_path = true;
 		break;
 	default:
 		dev_err(mdwc->dev, "%s: Invalid opcode GSI EP\n", __func__);
@@ -4605,6 +4608,10 @@ static int dwc3_msm_usb_set_role(struct device *dev, enum usb_role role)
 	 */
 	if (mdwc->drd_state != DRD_STATE_UNDEFINED && cur_role == role) {
 		dbg_log_string("no USB role change");
+		if (mdwc->ss_release_called) {
+			dwc3_msm_clear_dp_only_params(mdwc);
+			mdwc->ss_release_called = false;
+		}
 		return 0;
 	}
 
@@ -4612,7 +4619,7 @@ static int dwc3_msm_usb_set_role(struct device *dev, enum usb_role role)
 		flush_delayed_work(&mdwc->sm_work);
 		dwc->maximum_speed = USB_SPEED_HIGH;
 		if (role == USB_ROLE_NONE) {
-			dwc->maximum_speed = USB_SPEED_UNKNOWN;
+			dwc3_msm_clear_dp_only_params(mdwc);
 			mdwc->ss_release_called = false;
 		}
 	}
@@ -5026,7 +5033,7 @@ static void dwc3_msm_clear_dp_only_params(struct dwc3_msm *mdwc)
 {
 	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
 
-	dwc->maximum_speed = USB_SPEED_UNKNOWN;
+	dwc->maximum_speed = dwc->max_hw_supp_speed;
 
 	usb_redriver_notify_disconnect(mdwc->redriver);
 }

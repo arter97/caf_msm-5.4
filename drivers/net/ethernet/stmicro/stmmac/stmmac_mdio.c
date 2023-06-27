@@ -268,7 +268,7 @@ int stmmac_mdio_reset(struct mii_bus *bus)
 
 	active_high = false;
 
-	if (priv->plat->early_eth)
+	if (priv->plat->early_eth && !priv->plat->mdio_reset)
 		return 0;
 
 #ifdef CONFIG_OF

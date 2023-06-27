@@ -222,5 +222,6 @@ struct plat_stmmacenet_data {
 	bool sph_disable;
 	unsigned int jumbo_mtu;
 	bool crc_strip_en;
+	bool mdio_reset;
 };
 #endif

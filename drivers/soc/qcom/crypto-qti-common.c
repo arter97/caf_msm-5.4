@@ -857,9 +857,6 @@ static ssize_t add_partition_store(struct device *dev,
 			key_res = qseecom_create_key_in_slot(
 				QSEECOM_KM_USAGE_UFS_ICE_DISK_ENCRYPTION,
 				slot, CRYPTO_ICE_FDE_LEGACY_UFS, NULL);
-		} else {
-			//Key is already generated and set,contune
-			key_res == QSEECOM_KEY_ID_EXISTS;
 		}
 #else
 		key_res = qseecom_create_key_in_slot(QSEECOM_KM_USAGE_UFS_ICE_DISK_ENCRYPTION,

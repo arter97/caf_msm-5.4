@@ -187,7 +187,6 @@ u16 dwmac_qcom_select_queue(struct net_device *dev,
 			  txqueue_select);
 		WARN_ON(1);
 	}
-	ETHQOSDBG("tx_queue %d\n", txqueue_select);
 	return txqueue_select;
 }
 
@@ -2032,7 +2031,6 @@ static void read_rgmii_io_macro_node_setting(struct device_node *np_hw, struct q
 		ETHQOSDBG("default rgmii_tx_drv\n");
 		ethqos->io_macro.rgmii_tx_drv = 0;
 	}
-
 }
 
 static void qcom_ethqos_bringup_iface(struct work_struct *work)
@@ -4344,6 +4342,11 @@ static int _qcom_ethqos_probe(void *arg)
 	}
 	ETHQOSINFO("emac-phy-off-suspend = %d\n",
 		   ethqos->current_phy_mode);
+
+	plat_dat->mdio_reset = of_property_read_bool(pdev->dev.of_node,
+						     "mdio-reset");
+	ethqos->skip_ipa_autoresume = of_property_read_bool(pdev->dev.of_node,
+							    "skip-ipa-autoresume");
 	ethqos->ioaddr = (&stmmac_res)->addr;
 	if (ethqos->io_macro.rgmii_tx_drv)
 		ethqos_update_rgmii_tx_drv_strength(ethqos);
@@ -4695,7 +4698,8 @@ static int qcom_ethqos_resume(struct device *dev)
 		ETHQOSINFO("Loopback EN Disabled\n");
 	}
 
-	ethqos_ipa_offload_event_handler(NULL, EV_DPM_RESUME);
+	if (!ethqos->skip_ipa_autoresume)
+		ethqos_ipa_offload_event_handler(NULL, EV_DPM_RESUME);
 
 	place_marker("M - Ethernet Resume End");
 
@@ -4954,7 +4958,7 @@ static void __exit qcom_ethqos_exit_module(void)
  * to do something with the code that the module provides.
  */
 
-arch_initcall(qcom_ethqos_init_module)
+module_init(qcom_ethqos_init_module)
 
 /*!
  * \brief Macro to register the driver un-registration function.
