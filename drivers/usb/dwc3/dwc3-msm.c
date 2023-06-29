@@ -435,7 +435,7 @@ static const char * const gsi_op_strings[] = {
 	"ENABLE_GSI", "UPDATE_XFER", "RING_DB",
 	"END_XFER", "GET_CH_INFO", "GET_XFER_IDX", "PREPARE_TRBS",
 	"FREE_TRBS", "SET_CLR_BLOCK_DBL", "CHECK_FOR_SUSP",
-	"EP_DISABLE" };
+	"EP_DISABLE", "EP_UPDATE_DB" };
 
 static const char * const usb_role_strings[] = {
 	"NONE",
@@ -1472,6 +1472,8 @@ static void gsi_ring_db(struct usb_ep *ep, struct usb_gsi_request *request)
 		return;
 	}
 
+	dep->gsi_db_reg_addr = gsi_dbl_address_lsb;
+
 	gsi_dbl_address_msb = ioremap_nocache(request->db_reg_phs_addr_msb,
 				sizeof(u32));
 	if (!gsi_dbl_address_msb) {
@@ -1493,8 +1495,10 @@ static void gsi_ring_db(struct usb_ep *ep, struct usb_gsi_request *request)
 	writel_relaxed(lower_32_bits(trb_dma), gsi_dbl_address_lsb);
 	writel_relaxed(upper_32_bits(trb_dma), gsi_dbl_address_msb);
 
-	iounmap(gsi_dbl_address_lsb);
-	iounmap(gsi_dbl_address_msb);
+	if (!dwc->normal_eps_in_gsi_mode) {
+		iounmap(gsi_dbl_address_lsb);
+		iounmap(gsi_dbl_address_msb);
+	}
 }
 
 /**
@@ -1859,6 +1863,7 @@ static void gsi_configure_ep(struct usb_ep *ep, struct usb_gsi_request *request)
 		reg = dwc3_msm_read_reg(mdwc->base, DWC3_DALEPENA);
 		reg |= DWC3_DALEPENA_EP(dep->number);
 		dwc3_msm_write_reg(mdwc->base, DWC3_DALEPENA, reg);
+		dep->trb_dequeue = 0;
 	}
 
 }
@@ -1902,8 +1907,7 @@ static void gsi_enable(struct usb_ep *ep, struct usb_gsi_request *req)
  * @request - pointer to GSI request. In this case num_bufs is used as a bool
  * to set or clear the doorbell bit
  */
-static void gsi_set_clear_dbell(struct usb_ep *ep,
-					bool block_db, struct usb_gsi_request *req)
+static void gsi_set_clear_dbell(struct usb_ep *ep, bool block_db)
 {
 
 	struct dwc3_ep *dep = to_dwc3_ep(ep);
@@ -1913,7 +1917,7 @@ static void gsi_set_clear_dbell(struct usb_ep *ep,
 	dbg_log_string("block_db(%d)", block_db);
 
 	/* Nothing to be done if NORMAL EP is used with GSI */
-	if (!req->ep_intr_num) {
+	if (ep->is_sw_path) {
 		dev_err(mdwc->dev, "%s: is no-op for normal EP\n", __func__);
 		return;
 	}
@@ -1980,6 +1984,21 @@ static inline int usb_gsi_ep_op_allow(struct usb_ep *ep, void *op_data, enum gsi
 	return 1;
 }
 
+static void dwc3_msm_gsi_db_update(struct dwc3_ep *dep, dma_addr_t offset)
+{
+	struct dwc3 *dwc = dep->dwc;
+	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
+
+	if (!dep->gsi_db_reg_addr) {
+		dev_err(mdwc->dev, "Failed to update GSI DBL\n");
+		return;
+	}
+
+	writel_relaxed(offset, dep->gsi_db_reg_addr);
+	dev_dbg(mdwc->dev, "Writing TRB addr: %pa to %pK\n",
+		&offset, dep->gsi_db_reg_addr);
+}
+
 /**
  * Performs GSI operations or GSI EP related operations.
  *
@@ -2000,6 +2019,7 @@ int usb_gsi_ep_op(struct usb_ep *ep, void *op_data, enum gsi_ep_op op)
 	struct gsi_channel_info *ch_info;
 	bool block_db;
 	unsigned long flags;
+	dma_addr_t offset;
 
 	dbg_log_string("%s(%d):%s", ep->name, dep->number >> 1,
 			gsi_op_to_string(op));
@@ -2060,14 +2080,17 @@ int usb_gsi_ep_op(struct usb_ep *ep, void *op_data, enum gsi_ep_op op)
 		break;
 	case GSI_EP_OP_SET_CLR_BLOCK_DBL:
 		block_db = *((bool *)op_data);
-		request = (struct usb_gsi_request *)op_data;
-		gsi_set_clear_dbell(ep, block_db, request);
+		gsi_set_clear_dbell(ep, block_db);
 		break;
 	case GSI_EP_OP_CHECK_FOR_SUSPEND:
 		ret = gsi_check_ready_to_suspend(mdwc);
 		break;
 	case GSI_EP_OP_DISABLE:
 		ret = ep->ops->disable(ep);
+		break;
+	case GSI_EP_OP_UPDATE_DB:
+		offset = *(dma_addr_t *)op_data;
+		dwc3_msm_gsi_db_update(dep, offset);
 		break;
 	case GSI_DYNAMIC_EP_INTR_CALC:
 		/*
@@ -2099,10 +2122,12 @@ int usb_gsi_ep_op(struct usb_ep *ep, void *op_data, enum gsi_ep_op op)
 			request->ep_intr_num =
 				((dwc->num_gsi_eps) - ((dwc->num_eps - 1) - dep->number));
 		}
+		ep->is_sw_path = false;
 		break;
 	case GSI_SW_EP_PATH:
 		request = (struct usb_gsi_request *)op_data;
 		request->ep_intr_num = 0;
+		ep->is_sw_path = true;
 		break;
 	default:
 		dev_err(mdwc->dev, "%s: Invalid opcode GSI EP\n", __func__);
@@ -4174,7 +4199,7 @@ static irqreturn_t msm_dwc3_pwr_irq(int irq, void *data)
 	if (mdwc->drd_state == DRD_STATE_PERIPHERAL_SUSPEND) {
 		dev_info(mdwc->dev, "USB Resume start\n");
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
-		place_marker("M - USB device resume started");
+		update_marker("M - USB device resume started");
 #endif
 	}
 
@@ -4583,6 +4608,10 @@ static int dwc3_msm_usb_set_role(struct device *dev, enum usb_role role)
 	 */
 	if (mdwc->drd_state != DRD_STATE_UNDEFINED && cur_role == role) {
 		dbg_log_string("no USB role change");
+		if (mdwc->ss_release_called) {
+			dwc3_msm_clear_dp_only_params(mdwc);
+			mdwc->ss_release_called = false;
+		}
 		return 0;
 	}
 
@@ -4590,7 +4619,7 @@ static int dwc3_msm_usb_set_role(struct device *dev, enum usb_role role)
 		flush_delayed_work(&mdwc->sm_work);
 		dwc->maximum_speed = USB_SPEED_HIGH;
 		if (role == USB_ROLE_NONE) {
-			dwc->maximum_speed = USB_SPEED_UNKNOWN;
+			dwc3_msm_clear_dp_only_params(mdwc);
 			mdwc->ss_release_called = false;
 		}
 	}
@@ -5004,7 +5033,7 @@ static void dwc3_msm_clear_dp_only_params(struct dwc3_msm *mdwc)
 {
 	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
 
-	dwc->maximum_speed = USB_SPEED_UNKNOWN;
+	dwc->maximum_speed = dwc->max_hw_supp_speed;
 
 	usb_redriver_notify_disconnect(mdwc->redriver);
 }
@@ -5078,7 +5107,7 @@ static int vbus_regulator_enable(struct dwc3_msm *mdwc, bool on)
 	if (!mdwc->vbus_reg)
 		return 0;
 
-	if (on)
+	if (!on)
 		return regulator_disable(mdwc->vbus_reg);
 
 	return regulator_enable(mdwc->vbus_reg);
@@ -6607,7 +6636,7 @@ static int dwc3_msm_pm_resume(struct device *dev)
 			mdwc->drd_state == DRD_STATE_PERIPHERAL_SUSPEND) {
 		dev_info(mdwc->dev, "USB Resume start\n");
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
-		place_marker("M - USB device resume started");
+		update_marker("M - USB device resume started");
 #endif
 	}
 
@@ -6784,6 +6813,7 @@ MODULE_SOFTDEP("pre: phy-generic phy-msm-snps-hs phy-msm-ssusb-qmp eud");
 
 static int dwc3_msm_init(void)
 {
+	dwc3_msm_kretprobe_init();
 	return platform_driver_register(&dwc3_msm_driver);
 }
 module_init(dwc3_msm_init);
@@ -6791,5 +6821,6 @@ module_init(dwc3_msm_init);
 static void __exit dwc3_msm_exit(void)
 {
 	platform_driver_unregister(&dwc3_msm_driver);
+	dwc3_msm_kretprobe_exit();
 }
 module_exit(dwc3_msm_exit);

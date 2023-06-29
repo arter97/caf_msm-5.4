@@ -939,7 +939,7 @@ static int __init customize_machine(void)
 
 	return 0;
 }
-arch_initcall(customize_machine);
+subsys_initcall(customize_machine);
 
 static int __init init_machine_late(void)
 {

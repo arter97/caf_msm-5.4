@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/cpu.h>
@@ -100,6 +100,11 @@ static int cpucc_clk_determine_rate(struct clk_hw *hw, struct clk_rate_request *
 	int ret;
 
 	xo_hw = clk_hw_get_parent_by_index(hw, P_BI_TCXO);
+	if (!xo_hw) {
+		pr_err("Can't find parent for index %u\n", P_BI_TCXO);
+		return -EINVAL;
+	}
+
 	if (rate == clk_hw_get_rate(xo_hw)) {
 		req->best_parent_hw = xo_hw;
 		req->best_parent_rate = rate;
@@ -109,6 +114,11 @@ static int cpucc_clk_determine_rate(struct clk_hw *hw, struct clk_rate_request *
 	}
 
 	gpll0_hw = clk_hw_get_parent_by_index(hw, P_GPLL0);
+	if (!gpll0_hw) {
+		pr_err("Can't find parent for index %u\n", P_GPLL0);
+		return -EINVAL;
+	}
+
 	div = DIV_ROUND_UP((2 * (clk_hw_get_rate(gpll0_hw))), rate) - 1;
 
 	rrate = cpucc_calc_rate(clk_hw_get_rate(gpll0_hw), 0, 0, 0, div);
@@ -189,6 +199,11 @@ static unsigned long cpucc_clk_recalc_rate(struct clk_hw *hw,
 	for (i = 0; i < num_parents; i++) {
 		if (src == cpuclk->parent_map[i].cfg) {
 			parent = clk_hw_get_parent_by_index(hw, i);
+			if (!parent) {
+				pr_err("Can't find parent for index %u\n", i);
+				return -EINVAL;
+			}
+
 			parent_rate = clk_hw_get_rate(parent);
 			return cpucc_calc_rate(parent_rate, 0, 0, 0, div);
 		}

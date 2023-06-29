@@ -211,6 +211,7 @@ struct usb_ep_caps {
  * @driver_data:for use by the gadget driver.
  * @address: used to identify the endpoint when finding descriptor that
  *	matches connection speed
+ * @is_sw_path: When true, functions using normal Eps.
  * @desc: endpoint descriptor.  This pointer is set before the endpoint is
  *	enabled and remains valid until the endpoint is disabled.
  * @comp_desc: In case of SuperSpeed support, this is the endpoint companion
@@ -236,6 +237,7 @@ struct usb_ep {
 	unsigned		mult:2;
 	unsigned		maxburst:5;
 	u8			address;
+	bool			is_sw_path;
 	const struct usb_endpoint_descriptor	*desc;
 	const struct usb_ss_ep_comp_descriptor	*comp_desc;
 };

@@ -450,7 +450,7 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 			trace_suspend_resume(TPS("machine_suspend"),
 				state, true);
 			error = suspend_ops->enter(state);
-			place_marker("M - Start System Resume");
+			update_marker("M - Start System Resume");
 			trace_suspend_resume(TPS("machine_suspend"),
 				state, false);
 		} else if (*wakeup) {
@@ -626,7 +626,7 @@ int pm_suspend(suspend_state_t state)
 
 	pr_info("suspend entry (%s)\n", mem_sleep_labels[state]);
 	if (state == PM_SUSPEND_MEM)
-		place_marker("M - Low Power Mode Start");
+		update_marker("M - Low Power Mode Start");
 	error = enter_state(state);
 	if (error) {
 		suspend_stats.fail++;
@@ -634,7 +634,7 @@ int pm_suspend(suspend_state_t state)
 	} else {
 		suspend_stats.success++;
 		if (state == PM_SUSPEND_MEM)
-			place_marker("M - Low Power Mode Complete");
+			update_marker("M - Low Power Mode Complete");
 	}
 	pr_info("suspend exit\n");
 	return error;

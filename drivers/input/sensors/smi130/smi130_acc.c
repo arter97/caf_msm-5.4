@@ -4126,9 +4126,6 @@ static int smi130_acc_read_temperature(struct i2c_client *client,
 static inline int smi130_check_acc_early_buff_enable_flag(
 		struct smi130_acc_data *client_data)
 {
-	if (client_data->acc_buffer_smi130_samples)
-		return 1;
-	else
 		return 0;
 }
 static void smi130_check_acc_enable_flag(struct smi130_acc_data *client_data,

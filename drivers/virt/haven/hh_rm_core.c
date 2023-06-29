@@ -525,7 +525,7 @@ static int hh_rm_send_request(u32 message_id,
 		return -E2BIG;
 	}
 
-	msg = kzalloc(HH_RM_MAX_MSG_SIZE_BYTES, GFP_KERNEL);
+	msg = kzalloc(HH_MSGQ_MAX_MSG_SIZE_BYTES, GFP_KERNEL);
 	if (!msg)
 		return -ENOMEM;
 
@@ -542,7 +542,7 @@ static int hh_rm_send_request(u32 message_id,
 			payload_size = buff_size_remaining;
 		}
 
-		memset(msg, 0, HH_RM_MAX_MSG_SIZE_BYTES);
+		memset(msg, 0, HH_MSGQ_MAX_MSG_SIZE_BYTES);
 		/* Fill header */
 		hdr = msg;
 
@@ -662,10 +662,16 @@ void *hh_rm_call(hh_rm_msgid_t message_id,
 			     connection->payload, connection->size,
 			     false);
 
+
 	ret = connection->payload;
 	*resp_buff_size = connection->size;
 
+
 out:
+	mutex_lock(&hh_rm_call_idr_lock);
+	idr_remove(&hh_rm_call_idr, connection->seq);
+	mutex_unlock(&hh_rm_call_idr_lock);
+
 	kfree(connection);
 	return ret;
 }

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only
  *
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __VIRTIO_FASTRPC_CORE_H__
 #define __VIRTIO_FASTRPC_CORE_H__
@@ -96,6 +96,7 @@ struct fastrpc_file {
 	int pd;
 	int tgid_open;	/* Process ID during device open */
 	bool untrusted_process;
+	int sessionid;
 	int procattrs;
 	int file_close;
 	int dsp_proc_init;
@@ -174,4 +175,10 @@ int fastrpc_internal_invoke2(struct fastrpc_file *fl,
 				struct fastrpc_ioctl_invoke2 *inv2);
 
 void fastrpc_queue_completed_async_job(struct fastrpc_invoke_ctx *ctx);
+
+int fastrpc_internal_mem_map(struct fastrpc_file *fl,
+				struct fastrpc_ioctl_mem_map *ud);
+
+int fastrpc_internal_mem_unmap(struct fastrpc_file *fl,
+				struct fastrpc_ioctl_mem_unmap *ud);
 #endif /*__VIRTIO_FASTRPC_CORE_H__*/

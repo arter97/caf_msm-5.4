@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -1209,7 +1209,7 @@ static const struct msm_pingroup sa515m_groups[] = {
 
 static const struct msm_gpio_wakeirq_map sa515m_pdc_map[] = {
 	{ 53, 20 }, { 57, 21 }, { 64, 22 }, { 77, 23 }, { 90, 24 },
-	{ 103, 25},
+	{ 103, 25}, { 84, 26 },
 };
 
 static struct msm_dir_conn sa515m_dir_conn[] = {

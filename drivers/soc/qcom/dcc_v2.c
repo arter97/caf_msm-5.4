@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -2177,7 +2177,7 @@ static int __init dcc_init(void)
 {
 	return platform_driver_register(&dcc_driver);
 }
-pure_initcall(dcc_init);
+late_initcall(dcc_init);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("MSM data capture and compare engine");

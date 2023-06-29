@@ -365,6 +365,7 @@ struct ufs_qcom_host {
 	int ufs_dev_types;
 
 	bool disable_lpm;
+	bool limit_rate_ufs3;
 	struct qcom_bus_scale_data *qbsd;
 	struct ufs_vreg *vddp_ref_clk;
 	struct ufs_vreg *vccq_parent;

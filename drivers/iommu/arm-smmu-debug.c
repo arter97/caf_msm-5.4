@@ -178,12 +178,11 @@ static void arm_smmu_debug_program_tcu_testbus(struct device *dev,
 	}
 }
 
-void arm_smmu_debug_dump_tcu_testbus(struct device *dev, phys_addr_t phys_addr,
+void arm_smmu_debug_dump_tcu_testbus(struct arm_smmu_device *smmu,
+			struct device *dev, phys_addr_t phys_addr,
 			void __iomem *tcu_base,	int tcu_testbus_sel)
 {
 	int i;
-	struct iommu_fwspec *fwspec = dev_iommu_fwspec_get(dev);
-	struct arm_smmu_device *smmu = fwspec_smmu(fwspec);
 
 	if (tcu_testbus_sel & TCU_CACHE_TESTBUS_SEL) {
 		dev_info(dev, "Dumping TCU cache testbus:\n");

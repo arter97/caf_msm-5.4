@@ -161,6 +161,7 @@ config QCOM_RIMPS
 config QCOM_LLCC
 	tristate "Qualcomm Technologies, Inc. LLCC driver"
 	depends on ARCH_QCOM || COMPILE_TEST
+	select REGMAP_MMIO
 	help
 	  Qualcomm Technologies, Inc. platform specific
 	  Last Level Cache Controller(LLCC) driver. This provides interfaces
@@ -1539,6 +1540,15 @@ config QCOM_ADSP_VOTE_SMP2P
 		unvote during system power transition.
 		This driver can be used to manually release and acquire the ADSP vote
 		from debugfs interface.
+
+config MSM_BAM_DMUX
+	bool "BAM Data Mux Driver"
+	depends on SPS
+	help
+	  Support Muxed Data Channels over BAM interface.
+	  BAM has a limited number of pipes.  This driver
+	  provides a means to support more logical channels
+	  via muxing than BAM could without muxing.
 
 config QCOM_SECURE_HIBERNATION
 	bool "Add security support to hibernation"

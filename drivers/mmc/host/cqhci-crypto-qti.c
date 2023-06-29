@@ -127,15 +127,13 @@ static int cqhci_crypto_qti_keyslot_evict(struct keyslot_manager *ksm,
 	pm_runtime_get_sync(&host->mmc->card->dev);
 
 	if (!cqhci_is_crypto_enabled(host) ||
-	    !cqhci_keyslot_valid(host, slot))
-		pm_runtime_put_sync(&host->mmc->card->dev);
+	    !cqhci_keyslot_valid(host, slot)) {
 		return -EINVAL;
+	}
 
 	err = crypto_qti_keyslot_evict(host->crypto_vops->priv, slot);
 	if (err)
 		pr_err("%s: failed with error %d\n", __func__, err);
-
-	pm_runtime_put_sync(&host->mmc->card->dev);
 
 	return err;
 }

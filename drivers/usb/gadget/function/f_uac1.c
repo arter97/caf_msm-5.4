@@ -698,6 +698,8 @@ static int f_audio_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 	struct device *dev = &gadget->dev;
 	struct f_uac1 *uac1 = func_to_uac1(f);
 	int ret = 0;
+	struct f_uac1_opts *audio_opts =
+		container_of(f->fi, struct f_uac1_opts, func_inst);
 
 	/* No i/f has more than 2 alt settings */
 	if (alt > 1) {
@@ -721,6 +723,10 @@ static int f_audio_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 			ret = u_audio_start_capture(&uac1->g_audio);
 		else
 			u_audio_stop_capture(&uac1->g_audio);
+		audio_opts->c_status = alt;
+#ifdef CONFIG_USB_CONFIGFS_UEVENT
+		schedule_work(&audio_opts->work);
+#endif
 	} else if (intf == uac1->as_in_intf) {
 		uac1->as_in_alt = alt;
 
@@ -728,6 +734,10 @@ static int f_audio_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 			ret = u_audio_start_playback(&uac1->g_audio);
 		else
 			u_audio_stop_playback(&uac1->g_audio);
+		audio_opts->p_status = alt;
+#ifdef CONFIG_USB_CONFIGFS_UEVENT
+		schedule_work(&audio_opts->work);
+#endif
 	} else {
 		dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
 		return -EINVAL;
@@ -760,10 +770,18 @@ static int f_audio_get_alt(struct usb_function *f, unsigned intf)
 static void f_audio_disable(struct usb_function *f)
 {
 	struct f_uac1 *uac1 = func_to_uac1(f);
+	struct f_uac1_opts *audio_opts =
+		container_of(f->fi, struct f_uac1_opts, func_inst);
 
 	uac1->as_out_alt = 0;
 	uac1->as_in_alt = 0;
 
+	audio_opts->p_status = 0;//alt;
+	audio_opts->c_status = 0; //alt;
+
+#ifdef CONFIG_USB_CONFIGFS_UEVENT
+	schedule_work(&audio_opts->work);
+#endif
 	u_audio_stop_playback(&uac1->g_audio);
 	u_audio_stop_capture(&uac1->g_audio);
 }
@@ -799,6 +817,19 @@ static int f_audio_validate_opts(struct g_audio *audio, struct device *dev)
 
 	return 0;
 }
+
+#ifdef CONFIG_USB_CONFIGFS_UEVENT
+static void f_uac1_audio_status_change_work(struct work_struct *data)
+{
+	struct f_uac1_opts *audio_opts =
+		container_of(data, struct f_uac1_opts, work);
+	char *envp[2] = { "UAC1_STATE=Changed", NULL };
+
+	kobject_uevent_env(&audio_opts->device->kobj,
+			KOBJ_CHANGE, envp);
+	pr_debug("%s:uac1 state changed\n", __func__);
+}
+#endif
 
 /* audio function driver setup/binding */
 static int f_audio_bind(struct usb_configuration *c, struct usb_function *f)
@@ -1171,6 +1202,25 @@ CONFIGFS_ATTR_RO(f_uac1_opts_, mic_volume);
 CONFIGFS_ATTR_RO(f_uac1_opts_, speaker_mute);
 CONFIGFS_ATTR_RO(f_uac1_opts_, mic_mute);
 
+#define UAC1_ATTRIBUTE_RO(name)                                         \
+	static ssize_t f_uac1_opts_##name##_show(                       \
+			struct config_item *item,                       \
+			char *page)                                     \
+{                                                                       \
+	struct f_uac1_opts *opts = to_f_uac1_opts(item);                \
+	int result;                                                     \
+									\
+	mutex_lock(&opts->lock);                                        \
+	result = scnprintf(page, PAGE_SIZE, "%u\n", opts->name);        \
+	mutex_unlock(&opts->lock);                                      \
+									\
+	return result;                                                  \
+}                                                                       \
+CONFIGFS_ATTR_RO(f_uac1_opts_, name)
+
+UAC1_ATTRIBUTE_RO(c_status);
+UAC1_ATTRIBUTE_RO(p_status);
+
 static struct configfs_attribute *f_uac1_attrs[] = {
 	&f_uac1_opts_attr_c_chmask,
 	&f_uac1_opts_attr_c_srate,
@@ -1184,6 +1234,8 @@ static struct configfs_attribute *f_uac1_attrs[] = {
 	&f_uac1_opts_attr_speaker_mute,
 	&f_uac1_opts_attr_mic_mute,
 	&f_uac1_opts_attr_ep_maxp_size,
+	&f_uac1_opts_attr_c_status,
+	&f_uac1_opts_attr_p_status,
 	NULL,
 };
 
@@ -1198,6 +1250,10 @@ static void f_audio_free_inst(struct usb_function_instance *f)
 	struct f_uac1_opts *opts;
 
 	opts = container_of(f, struct f_uac1_opts, func_inst);
+#ifdef CONFIG_USB_CONFIGFS_UEVENT
+	device_destroy(opts->device->class, opts->device->devt);
+	cancel_work_sync(&opts->work);
+#endif
 	kfree(opts);
 }
 
@@ -1223,6 +1279,10 @@ static struct usb_function_instance *f_audio_alloc_inst(void)
 	opts->p_ssize = UAC1_DEF_PSSIZE;
 	opts->req_number = UAC1_DEF_REQ_NUM;
 	opts->ep_maxp_size = UAC1_OUT_EP_MAX_PACKET_SIZE;
+#ifdef CONFIG_USB_CONFIGFS_UEVENT
+	INIT_WORK(&opts->work, f_uac1_audio_status_change_work);
+	opts->device = create_function_device("f_uac1");
+#endif
 	return &opts->func_inst;
 }
 

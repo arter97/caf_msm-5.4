@@ -42,8 +42,6 @@
 
 /* Virtio ID of NPU : 0xC005 */
 #define VIRTIO_ID_NPU           49157
-/* Virtio ID of NPU for Backward compatibility : 0x23 */
-#define VIRTIO_ID_NPU_BC	35
 
 #define NPU_MAX_STATS_BUF_SIZE	16384
 #define NPU_MAX_PATCH_NUM       160
@@ -2551,7 +2549,6 @@ static void virt_npu_remove(struct virtio_device *vdev)
 
 static struct virtio_device_id id_table[] = {
 	{ VIRTIO_ID_NPU, VIRTIO_DEV_ANY_ID },
-	{ VIRTIO_ID_NPU_BC, VIRTIO_DEV_ANY_ID },
 	{ 0 },
 };
 
