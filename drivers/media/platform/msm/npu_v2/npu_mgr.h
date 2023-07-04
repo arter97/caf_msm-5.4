@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _NPU_MGR_H
@@ -84,6 +84,7 @@ struct npu_network {
 	atomic_t ref_cnt;
 	bool is_valid;
 	bool is_active;
+	bool is_unloading;
 	bool fw_error;
 	struct npu_client *client;
 	struct list_head cmd_list;
