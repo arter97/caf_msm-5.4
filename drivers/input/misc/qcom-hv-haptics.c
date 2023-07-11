@@ -14,6 +14,7 @@
 #include <linux/interrupt.h>
 #include <linux/jiffies.h>
 #include <linux/kernel.h>
+#include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/nvmem-consumer.h>
 #include <linux/of.h>
@@ -2225,11 +2226,14 @@ static int haptics_load_custom_effect(struct haptics_chip *chip,
 	 * Before allocating samples buffer, free the old sample
 	 * buffer first if it's not been freed.
 	 */
-	kfree(fifo->samples);
+	kvfree(fifo->samples);
 	fifo->samples = kcalloc(custom_data.length, sizeof(u8), GFP_KERNEL);
 	if (!fifo->samples) {
-		rc = -ENOMEM;
-		goto unlock;
+		fifo->samples = vmalloc(custom_data.length);
+		if (!fifo->samples) {
+			rc = -ENOMEM;
+			goto unlock;
+		}
 	}
 
 	if (copy_from_user(fifo->samples,
@@ -2274,7 +2278,7 @@ static int haptics_load_custom_effect(struct haptics_chip *chip,
 	mutex_unlock(&chip->play.lock);
 	return 0;
 cleanup:
-	kfree(fifo->samples);
+	kvfree(fifo->samples);
 	fifo->samples = NULL;
 unlock:
 	mutex_unlock(&chip->play.lock);
@@ -2507,7 +2511,7 @@ static int haptics_stop_fifo_play(struct haptics_chip *chip)
 		return rc;
 
 	haptics_fifo_empty_irq_config(chip, false);
-	kfree(chip->custom_effect->fifo->samples);
+	kvfree(chip->custom_effect->fifo->samples);
 	chip->custom_effect->fifo->samples = NULL;
 
 	atomic_set(&chip->play.fifo_status.is_busy, 0);
