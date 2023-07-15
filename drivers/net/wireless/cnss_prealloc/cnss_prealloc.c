@@ -14,7 +14,7 @@
 
 static DEFINE_SPINLOCK(alloc_lock);
 
-#ifdef CONFIG_SLUB_DEBUG
+#if defined(CONFIG_SLUB_DEBUG) && defined(CONFIG_TRACING)
 #define WCNSS_MAX_STACK_TRACE			64
 #endif
 
@@ -24,7 +24,7 @@ struct wcnss_prealloc {
 	int occupied;
 	size_t size;
 	void *ptr;
-#ifdef CONFIG_SLUB_DEBUG
+#if defined(CONFIG_SLUB_DEBUG) && defined(CONFIG_TRACING)
 	unsigned long stack_trace[WCNSS_MAX_STACK_TRACE];
 	struct stack_trace trace;
 #endif
@@ -128,7 +128,7 @@ void wcnss_prealloc_deinit(void)
 	}
 }
 
-#ifdef CONFIG_SLUB_DEBUG
+#if defined(CONFIG_SLUB_DEBUG) && defined(CONFIG_TRACING)
 static void wcnss_prealloc_save_stack_trace(struct wcnss_prealloc *entry)
 {
 	struct stack_trace *trace = &entry->trace;
@@ -189,7 +189,7 @@ int wcnss_prealloc_put(void *ptr)
 }
 EXPORT_SYMBOL(wcnss_prealloc_put);
 
-#ifdef CONFIG_SLUB_DEBUG
+#if defined(CONFIG_SLUB_DEBUG) && defined(CONFIG_TRACING)
 void wcnss_prealloc_check_memory_leak(void)
 {
 	int i, j = 0;
