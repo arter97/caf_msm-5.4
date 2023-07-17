@@ -3769,21 +3769,12 @@ static int ufs_qcom_probe(struct platform_device *pdev)
  */
 static int ufs_qcom_remove(struct platform_device *pdev)
 {
-	struct ufs_hba *hba =  platform_get_drvdata(pdev);
-	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
-	struct ufs_qcom_qos_req *r = host->ufs_qos;
-	struct qos_cpu_group *qcg = NULL;
-	int i;
-
-	if (r && r->qcg)
-		qcg = r->qcg;
-	else
-		dev_err(&pdev->dev, "ufs_qcom_remove qcg is null\n");
-
-	pm_runtime_get_sync(&(pdev)->dev);
-	for (i = 0; qcg != NULL && i < r->num_groups; i++, qcg++)
-		remove_group_qos(qcg);
-	ufshcd_remove(hba);
+	/*
+	 * In order to support Graceful shutdown,
+	 * when remove is called, we will actually do shutdown
+	 */
+	ufshcd_pltfrm_shutdown(pdev);
+	dev_info(&pdev->dev, "shutdown is ready\n");
 	return 0;
 }
 
