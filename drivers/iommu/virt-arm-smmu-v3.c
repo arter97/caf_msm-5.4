@@ -242,6 +242,7 @@ static int virt_arm_smmu_domain_finalise_s1(struct virt_arm_smmu_domain *smmu_do
 	cfg->cd.ttbr	= pgtbl_cfg->arm_lpae_s1_cfg.ttbr[0];
 	cfg->cd.tcr	= pgtbl_cfg->arm_lpae_s1_cfg.tcr;
 	cfg->cd.mair	= pgtbl_cfg->arm_lpae_s1_cfg.mair[0];
+
 	return 0;
 
 out_free_asid:
@@ -284,6 +285,7 @@ static void virt_arm_smmu_write_ctx_desc(struct virt_arm_smmu_device *smmu,
 	cfg->cdptr[1] = cpu_to_le64(val);
 
 	cfg->cdptr[3] = cpu_to_le64(cfg->cd.mair);
+
 }
 
 static const struct iommu_flush_ops virt_arm_smmu_flush_ops;
@@ -497,18 +499,39 @@ static phys_addr_t virt_arm_smmu_iova_to_phys(struct iommu_domain *domain, dma_a
 	return ops->iova_to_phys(ops, iova);
 }
 
+static unsigned long get_sid_from_smmu_domain(struct virt_arm_smmu_domain *smmu_domain)
+{
+	struct virt_arm_smmu_master *master;
+	unsigned long flags;
+	u64 sid;
+	u16 i;
+
+	spin_lock_irqsave(&smmu_domain->devices_lock, flags);
+	list_for_each_entry(master, &smmu_domain->devices, domain_head) {
+		for (i = 0; i < master->num_sids; i++) {
+			if (master->domain == smmu_domain)
+				sid = master->ste_cfg->sid;
+		}
+	}
+	spin_unlock_irqrestore(&smmu_domain->devices_lock, flags);
+
+	return sid;
+}
+
 static void virt_arm_smmu_tlb_inv_sync(unsigned long iova, size_t size,
 				   size_t granule, bool leaf,
 				   struct virt_arm_smmu_domain *smmu_domain)
 {
 	u32 asid;
+	u64 sid;
 
 	if (!size)
 		return;
 	asid = smmu_domain->s1_cfg.cd.asid;
+	sid = get_sid_from_smmu_domain(smmu_domain);
 
-	if (qcom_scm_paravirt_tlb_inv(asid))
-		pr_err("SCM called failed for TLB inv: asid:0x%lx\n", asid);
+	if (qcom_scm_paravirt_tlb_inv(asid, sid))
+		pr_err("SCM called failed for TLB inv: asid:0x%x and sid is 0x%x\n", asid, sid);
 }
 
 
@@ -517,9 +540,11 @@ static void virt_arm_smmu_tlb_inv_context(void *cookie)
 
 	struct virt_arm_smmu_domain *smmu_domain = cookie;
 	u32 asid = smmu_domain->s1_cfg.cd.asid;
+	u64 sid;
 
-	if (qcom_scm_paravirt_tlb_inv(asid))
-		pr_err("SCM called failed for TLB inv: asid:0x%lxi\n", asid);
+	sid = get_sid_from_smmu_domain(smmu_domain);
+	if (qcom_scm_paravirt_tlb_inv(asid, sid))
+		pr_err("SCM called failed for TLB inv: asid:0x%x and sid is 0x%x\n", asid, sid);
 }
 
 static void virt_arm_smmu_iotlb_sync(struct iommu_domain *domain,
@@ -592,6 +617,7 @@ static int virt_arm_smmu_write_strtab_ent(struct virt_arm_smmu_master *master,
 			FIELD_PREP(STRTAB_STE_0_CFG, STRTAB_STE_0_CFG_S1_TRANS);
 	}
 	WRITE_ONCE(ste_cfg->ste[0], cpu_to_le64(val));
+
 	if (qcom_scm_paravirt_smmu_attach(ste_cfg->sid, 0, ste_cfg->stedma,
 		(STRTAB_STE_DWORDS << 3), s1_cfg->cdptr_dma, (CTXDESC_CD_DWORDS << 3))) {
 		pr_err("SCM call failed to attach for SID:0x%lx\n", ste_cfg->sid);

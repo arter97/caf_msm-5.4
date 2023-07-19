@@ -2907,7 +2907,7 @@ int __qcom_scm_paravirt_smmu_attach(struct device *dev, u64 sid,
 	return ret ? : desc.res[0];
 }
 
-int __qcom_scm_paravirt_tlb_inv(struct device *dev, u64 asid)
+int __qcom_scm_paravirt_tlb_inv(struct device *dev, u64 asid, u64 sid)
 {
 	struct qcom_scm_desc desc = {
 		.svc = QCOM_SCM_SVC_SMMU_PROGRAM,
@@ -2916,8 +2916,9 @@ int __qcom_scm_paravirt_tlb_inv(struct device *dev, u64 asid)
 	};
 	int ret;
 
+
 	desc.args[0] = SMMU_PARAVIRT_OP_INVAL_ASID;
-	desc.args[1] = 0;
+	desc.args[1] = sid;
 	desc.args[2] = asid;
 	desc.args[3] = 0;
 	desc.args[4] = 0;
