@@ -36,6 +36,7 @@
 #include "dwmac-qcom-ethqos.h"
 #include "stmmac_ptp.h"
 #include "dwmac-qcom-ipa-offload.h"
+#include <linux/dwmac-qcom-eth-autosar.h>
 
 void *ipc_emac_log_ctxt;
 void __iomem *tlmm_rgmii_pull_ctl1_base;
@@ -4280,6 +4281,7 @@ static int _qcom_ethqos_probe(void *arg)
 		plat_dat->get_plat_tx_coal_frames =  dwmac_qcom_get_plat_tx_coal_frames;
 	plat_dat->has_gmac4 = 1;
 	plat_dat->tso_en = of_property_read_bool(np, "snps,tso");
+	plat_dat->autosar_en = of_property_read_bool(np, "qcom,autosar");
 	plat_dat->force_thresh_dma_mode_q0_en =
 		of_property_read_bool(np,
 				      "snps,force_thresh_dma_mode_q0");
@@ -4294,7 +4296,10 @@ static int _qcom_ethqos_probe(void *arg)
 	plat_dat->is_gpio_phy_reset = ethqos->is_gpio_phy_reset;
 	plat_dat->handle_mac_err = dwmac_qcom_handle_mac_err;
 	plat_dat->rgmii_loopback_cfg = rgmii_loopback_config;
-
+#ifdef CONFIG_DWMAC_QCOM_ETH_AUTOSAR
+	plat_dat->handletxcompletion = ethwrapper_handletxcompletion;
+	plat_dat->handlericompletion = ethwrapper_handlericompletion;
+#endif
 	/* Get rgmii interface speed for mac2c from device tree */
 	if (of_property_read_u32(np, "mac2mac-rgmii-speed",
 				&plat_dat->mac2mac_rgmii_speed))
@@ -4920,6 +4925,262 @@ static int qcom_ethqos_hib_freeze(struct device *dev)
 	return ret;
 }
 
+void qcom_ethqos_getcursystime(struct timespec64 *ts)
+{
+	struct stmmac_priv *priv = NULL;
+	u64 systime, ns, sec0, sec1;
+	void __iomem *ioaddr;
+
+	priv = qcom_ethqos_get_priv(pethqos);
+	if (!priv) {
+		pr_err("\nInvalid priv\n");
+		return;
+	}
+	ioaddr = priv->ptpaddr;
+
+	if (!ioaddr) {
+		pr_err("\nIncorrect memory address\n");
+		return;
+	}
+
+	/* Get the TSS value */
+	sec1 = readl_relaxed(ioaddr + PTP_STSR);
+	do {
+		sec0 = sec1;
+		/* Get the TSSS value */
+		ns = readl_relaxed(ioaddr + PTP_STNSR);
+		/* Get the TSS value */
+		sec1 = readl_relaxed(ioaddr + PTP_STSR);
+	} while (sec0 != sec1);
+	/* systime in ns */
+	systime = ns + (sec1 * 1000000000ULL);
+
+	*ts = ns_to_timespec64(ns);
+}
+
+int qcom_ethqos_enable_hw_timestamp(struct hwtstamp_config *config)
+{
+	u32 snap_type_sel = 0;
+	u32 ptp_over_ipv4_udp = 0;
+	u32 ptp_over_ipv6_udp = 0;
+	u32 ptp_over_ethernet = 0;
+	u32 ts_master_en = 0;
+	u32 ts_event_en = 0;
+	u32 ptp_v2 = 0;
+	u32 av_8021asm_en = 0;
+	u32 value = 0;
+	u32 tstamp_all = 0;
+	bool xmac;
+	u32 sec_inc = 0;
+	u64 temp = 0;
+	struct timespec64 now;
+	struct stmmac_priv *priv;
+
+	priv = qcom_ethqos_get_priv(pethqos);
+	xmac = priv->plat->has_gmac4 || priv->plat->has_xgmac;
+
+	if (!(priv->dma_cap.time_stamp || priv->adv_ts)) {
+		netdev_alert(priv->dev, "No support for HW time stamping\n");
+		priv->hwts_tx_en = 0;
+		priv->hwts_rx_en = 0;
+
+		return -EOPNOTSUPP;
+	}
+
+	if (qcom_ethqos_ipa_enabled() &&
+	    config->rx_filter == HWTSTAMP_FILTER_ALL) {
+		netdev_alert(priv->dev,
+			     "No hw timestamping since ipa is enabled\n");
+		return -EOPNOTSUPP;
+	}
+
+	/* reserved for future extensions */
+	if (config->flags)
+		return -EINVAL;
+
+	if (config->tx_type != HWTSTAMP_TX_OFF &&
+	    config->tx_type != HWTSTAMP_TX_ON)
+		return -ERANGE;
+
+	if (priv->adv_ts) {
+		switch (config->rx_filter) {
+		case HWTSTAMP_FILTER_NONE:
+			/* time stamp no incoming packet at all */
+			config->rx_filter = HWTSTAMP_FILTER_NONE;
+			break;
+
+		case HWTSTAMP_FILTER_PTP_V1_L4_EVENT:
+			/* PTP v1, UDP, any kind of event packet */
+			config->rx_filter = HWTSTAMP_FILTER_PTP_V1_L4_EVENT;
+			/* 'xmac' hardware can support Sync, Pdelay_Req and
+			 * Pdelay_resp by setting bit14 and bits17/16 to 01
+			 * This leaves Delay_Req timestamps out.
+			 * Enable all events *and* general purpose message
+			 * timestamping
+			 */
+			snap_type_sel = PTP_TCR_SNAPTYPSEL_1;
+			ptp_over_ipv4_udp = PTP_TCR_TSIPV4ENA;
+			ptp_over_ipv6_udp = PTP_TCR_TSIPV6ENA;
+			break;
+
+		case HWTSTAMP_FILTER_PTP_V1_L4_SYNC:
+			/* PTP v1, UDP, Sync packet */
+			config->rx_filter = HWTSTAMP_FILTER_PTP_V1_L4_SYNC;
+			/* take time stamp for SYNC messages only */
+			ts_event_en = PTP_TCR_TSEVNTENA;
+
+			ptp_over_ipv4_udp = PTP_TCR_TSIPV4ENA;
+			ptp_over_ipv6_udp = PTP_TCR_TSIPV6ENA;
+			break;
+
+		case HWTSTAMP_FILTER_PTP_V1_L4_DELAY_REQ:
+			/* PTP v1, UDP, Delay_req packet */
+			config->rx_filter = HWTSTAMP_FILTER_PTP_V1_L4_DELAY_REQ;
+			/* take time stamp for Delay_Req messages only */
+			ts_master_en = PTP_TCR_TSMSTRENA;
+			ts_event_en = PTP_TCR_TSEVNTENA;
+
+			ptp_over_ipv4_udp = PTP_TCR_TSIPV4ENA;
+			ptp_over_ipv6_udp = PTP_TCR_TSIPV6ENA;
+			break;
+
+		case HWTSTAMP_FILTER_PTP_V2_L4_EVENT:
+			/* PTP v2, UDP, any kind of event packet */
+			config->rx_filter = HWTSTAMP_FILTER_PTP_V2_L4_EVENT;
+			ptp_v2 = PTP_TCR_TSVER2ENA;
+			/* take time stamp for all event messages */
+			snap_type_sel = PTP_TCR_SNAPTYPSEL_1;
+
+			ptp_over_ipv4_udp = PTP_TCR_TSIPV4ENA;
+			ptp_over_ipv6_udp = PTP_TCR_TSIPV6ENA;
+			break;
+
+		case HWTSTAMP_FILTER_PTP_V2_L4_SYNC:
+			/* PTP v2, UDP, Sync packet */
+			config->rx_filter = HWTSTAMP_FILTER_PTP_V2_L4_SYNC;
+			ptp_v2 = PTP_TCR_TSVER2ENA;
+			/* take time stamp for SYNC messages only */
+			ts_event_en = PTP_TCR_TSEVNTENA;
+
+			ptp_over_ipv4_udp = PTP_TCR_TSIPV4ENA;
+			ptp_over_ipv6_udp = PTP_TCR_TSIPV6ENA;
+			break;
+
+		case HWTSTAMP_FILTER_PTP_V2_L4_DELAY_REQ:
+			/* PTP v2, UDP, Delay_req packet */
+			config->rx_filter = HWTSTAMP_FILTER_PTP_V2_L4_DELAY_REQ;
+			ptp_v2 = PTP_TCR_TSVER2ENA;
+			/* take time stamp for Delay_Req messages only */
+			ts_master_en = PTP_TCR_TSMSTRENA;
+			ts_event_en = PTP_TCR_TSEVNTENA;
+
+			ptp_over_ipv4_udp = PTP_TCR_TSIPV4ENA;
+			ptp_over_ipv6_udp = PTP_TCR_TSIPV6ENA;
+			break;
+
+		case HWTSTAMP_FILTER_PTP_V2_EVENT:
+			/* PTP v2/802.AS1 any layer, any kind of event packet */
+			config->rx_filter = HWTSTAMP_FILTER_PTP_V2_EVENT;
+			ptp_v2 = PTP_TCR_TSVER2ENA;
+			snap_type_sel = PTP_TCR_SNAPTYPSEL_1;
+			if (priv->synopsys_id < DWMAC_CORE_4_10)
+				ts_event_en = PTP_TCR_TSEVNTENA;
+			ptp_over_ipv4_udp = PTP_TCR_TSIPV4ENA;
+			ptp_over_ipv6_udp = PTP_TCR_TSIPV6ENA;
+			ptp_over_ethernet = PTP_TCR_TSIPENA;
+			av_8021asm_en = PTP_TCR_AV8021ASMEN;
+			break;
+
+		case HWTSTAMP_FILTER_PTP_V2_SYNC:
+			/* PTP v2/802.AS1, any layer, Sync packet */
+			config->rx_filter = HWTSTAMP_FILTER_PTP_V2_SYNC;
+			ptp_v2 = PTP_TCR_TSVER2ENA;
+			/* take time stamp for SYNC messages only */
+			ts_event_en = PTP_TCR_TSEVNTENA;
+
+			ptp_over_ipv4_udp = PTP_TCR_TSIPV4ENA;
+			ptp_over_ipv6_udp = PTP_TCR_TSIPV6ENA;
+			ptp_over_ethernet = PTP_TCR_TSIPENA;
+			av_8021asm_en = PTP_TCR_AV8021ASMEN;
+			break;
+
+		case HWTSTAMP_FILTER_PTP_V2_DELAY_REQ:
+			/* PTP v2/802.AS1, any layer, Delay_req packet */
+			config->rx_filter = HWTSTAMP_FILTER_PTP_V2_DELAY_REQ;
+			ptp_v2 = PTP_TCR_TSVER2ENA;
+			/* take time stamp for Delay_Req messages only */
+			ts_master_en = PTP_TCR_TSMSTRENA;
+			ts_event_en = PTP_TCR_TSEVNTENA;
+
+			ptp_over_ipv4_udp = PTP_TCR_TSIPV4ENA;
+			ptp_over_ipv6_udp = PTP_TCR_TSIPV6ENA;
+			ptp_over_ethernet = PTP_TCR_TSIPENA;
+			av_8021asm_en = PTP_TCR_AV8021ASMEN;
+			break;
+
+		case HWTSTAMP_FILTER_NTP_ALL:
+		case HWTSTAMP_FILTER_ALL:
+			/* time stamp any incoming packet */
+			config->rx_filter = HWTSTAMP_FILTER_ALL;
+			tstamp_all = PTP_TCR_TSENALL;
+			break;
+
+		default:
+			return -ERANGE;
+		}
+	} else {
+		switch (config->rx_filter) {
+		case HWTSTAMP_FILTER_NONE:
+			config->rx_filter = HWTSTAMP_FILTER_NONE;
+			break;
+		default:
+			/* PTP v1, UDP, any kind of event packet */
+			config->rx_filter = HWTSTAMP_FILTER_PTP_V1_L4_EVENT;
+			break;
+		}
+	}
+
+	priv->hwts_rx_en = ((config->rx_filter == HWTSTAMP_FILTER_NONE) ? 0 : 1);
+	priv->hwts_tx_en = config->tx_type == HWTSTAMP_TX_ON;
+
+	if (!priv->hwts_tx_en && !priv->hwts_rx_en) {
+		stmmac_config_hw_tstamping(priv, priv->ptpaddr, 0);
+	} else {
+		value = (PTP_TCR_TSENA | PTP_TCR_TSCFUPDT | PTP_TCR_TSCTRLSSR |
+			 tstamp_all | ptp_v2 | ptp_over_ethernet |
+			 ptp_over_ipv6_udp | ptp_over_ipv4_udp | ts_event_en |
+			 ts_master_en | snap_type_sel | av_8021asm_en);
+		stmmac_config_hw_tstamping(priv, priv->ptpaddr, value);
+
+		/* program Sub Second Increment reg */
+		stmmac_config_sub_second_increment(priv,
+						   priv->ptpaddr, priv->plat->clk_ptp_req_rate,
+						   xmac, &sec_inc);
+
+		/* Store sub second increment and flags for later use */
+		priv->sub_second_inc = sec_inc;
+		priv->systime_flags = value;
+
+		/* calculate default added value:
+		 * formula is :
+		 * addend = (2^32)/freq_div_ratio;
+		 * where, freq_div_ratio = 1e9ns/sec_inc
+		 */
+		temp = (u64)((u64)priv->plat->clk_ptp_req_rate << 32);
+		priv->default_addend = div_u64(temp, priv->plat->clk_ptp_rate);
+		stmmac_config_addend(priv, priv->ptpaddr, priv->default_addend);
+
+		/* initialize system time */
+		ktime_get_real_ts64(&now);
+
+		/* lower 32 bits of tv_sec are safe until y2106 */
+		stmmac_init_systime(priv, priv->ptpaddr,
+				    (u32)now.tv_sec, now.tv_nsec);
+	}
+
+	memcpy(&priv->tstamp_config, &config, sizeof(struct hwtstamp_config));
+	return 0;
+}
 MODULE_DEVICE_TABLE(of, qcom_ethqos_match);
 
 static const struct dev_pm_ops qcom_ethqos_pm_ops = {
