@@ -194,6 +194,7 @@ struct spi_geni_master {
 	bool is_dma_err;
 	bool is_dma_not_done;
 	u32 xfer_timeout_offset;
+	bool is_hib_done;
 };
 
 static void spi_slv_setup(struct spi_geni_master *mas);
@@ -2469,6 +2470,7 @@ static int spi_geni_probe(struct platform_device *pdev)
 	}
 
 	geni_mas->is_deep_sleep = false;
+	geni_mas->is_hib_done = false;
 	spi->mode_bits = (SPI_CPOL | SPI_CPHA | SPI_LOOP | SPI_CS_HIGH | SPI_LSB_FIRST);
 	spi->bits_per_word_mask = SPI_BPW_RANGE_MASK(4, 32);
 	spi->num_chipselect = SPI_NUM_CHIPSELECT;
@@ -2718,6 +2720,17 @@ exit_rt_resume:
 			return ret;
 		}
 	}
+
+	if (spi->slave) {
+		if (geni_mas->is_hib_done && !geni_mas->slave_setup) {
+			GENI_SE_ERR(geni_mas->ipc, false, geni_mas->dev,
+					"%s: perform spi-slv setup\n", __func__);
+			spi_slv_setup(geni_mas);
+			geni_mas->slave_setup = true;
+			geni_mas->is_hib_done = false;
+		}
+	}
+
 	if (geni_mas->gsi_mode)
 		ret = spi_geni_gpi_suspend_resume(geni_mas, false);
 
@@ -2763,7 +2776,6 @@ static int spi_geni_suspend(struct device *dev)
 		}
 	}
 #endif
-
 	if (!pm_runtime_status_suspended(dev)) {
 		struct spi_master *spi = get_spi_master(dev);
 		struct spi_geni_master *geni_mas = spi_master_get_devdata(spi);
@@ -2787,6 +2799,67 @@ static int spi_geni_suspend(struct device *dev)
 	geni_se_ssc_clk_enable(&geni_mas->spi_rsc, false);
 	return ret;
 }
+
+static int spi_geni_hib_suspend(struct device *dev)
+{
+	int ret = 0;
+	struct spi_master *spi = get_spi_master(dev);
+	struct spi_geni_master *geni_mas = spi_master_get_devdata(spi);
+
+	if (geni_mas->is_xfer_in_progress) {
+		if (!pm_runtime_status_suspended(dev)) {
+			GENI_SE_ERR(geni_mas->ipc, true, dev,
+				    ":%s: runtime PM is active\n", __func__);
+			ret = -EBUSY;
+			return ret;
+		}
+		return ret;
+	}
+
+	/* for GSI mode, GSI channels re-config required for Hibernation */
+	if (geni_mas->gsi_mode) {
+		geni_mas->is_deep_sleep = true;
+		GENI_SE_ERR(geni_mas->ipc, true, dev,
+			    "%s: GSI channels re-config required for hibernation", __func__);
+	}
+
+	if (!pm_runtime_status_suspended(dev)) {
+		struct spi_master *spi = get_spi_master(dev);
+		struct spi_geni_master *geni_mas = spi_master_get_devdata(spi);
+
+		if (list_empty(&spi->queue) && !spi->cur_msg) {
+			GENI_SE_ERR(geni_mas->ipc, true, dev,
+				    "%s: Force suspend", __func__);
+			ret = spi_geni_runtime_suspend(dev);
+			if (ret) {
+				GENI_SE_ERR(geni_mas->ipc, true, dev,
+					    "Force suspend Failed:%d", ret);
+			} else {
+				pm_runtime_disable(dev);
+				pm_runtime_set_suspended(dev);
+				pm_runtime_enable(dev);
+			}
+		} else {
+			ret = -EBUSY;
+		}
+	}
+	geni_mas->is_hib_done = false;
+	geni_se_ssc_clk_enable(&geni_mas->spi_rsc, false);
+	return ret;
+}
+
+static int spi_geni_hib_resume(struct device *dev)
+{
+	struct spi_master *spi = get_spi_master(dev);
+	struct spi_geni_master *geni_mas = spi_master_get_devdata(spi);
+
+	GENI_SE_ERR(geni_mas->ipc, true, dev,
+			"%s:\n", __func__);
+	geni_mas->slave_setup = false;
+	geni_se_ssc_clk_enable(&geni_mas->spi_rsc, true);
+	geni_mas->is_hib_done = true;
+	return 0;
+}
 #else
 static int spi_geni_runtime_suspend(struct device *dev)
 {
@@ -2804,6 +2877,15 @@ static int spi_geni_resume(struct device *dev)
 }
 
 static int spi_geni_suspend(struct device *dev)
+{
+	return 0;
+}
+
+static int spi_geni_hib_suspend(struct device *dev)
+{
+	return 0;
+}
+static int spi_geni_hib_resume(struct device *dev)
 {
 	return 0;
 }
@@ -2875,11 +2957,35 @@ static void ssr_spi_force_resume(struct device *dev)
 {
 	struct spi_master *spi = get_spi_master(dev);
 	struct spi_geni_master *mas = spi_master_get_devdata(spi);
+	int ret = 0;
 
 	mutex_lock(&mas->spi_ssr.ssr_lock);
-	mas->spi_ssr.is_ssr_down = false;
 	spi_geni_irq_enable(mas, true);
-	se_geni_clks_on(&mas->spi_rsc);
+
+	if (pm_runtime_status_suspended(mas->dev)) {
+		GENI_SE_DBG(mas->ipc, false, mas->dev,
+			    "%s: the device is in suspended state\n", __func__);
+		if (pm_runtime_enabled(mas->dev)) {
+			ret = pm_runtime_get_sync(mas->dev);
+			if (ret < 0) {
+				GENI_SE_ERR(mas->ipc, true, mas->dev,
+					    "%s:pm_runtime_get_sync failed %d\n",
+					    __func__, ret);
+				WARN_ON_ONCE(1);
+				pm_runtime_put_noidle(mas->dev);
+				/* Set device in suspended since resume failed */
+				pm_runtime_set_suspended(mas->dev);
+			}
+		} else {
+			GENI_SE_ERR(mas->ipc, true, mas->dev,
+				    "%s: System PM runtime is not enabled\n",
+				    __func__);
+			mutex_unlock(&mas->spi_ssr.ssr_lock);
+			return;
+		}
+	}
+
+	mas->spi_ssr.is_ssr_down = false;
 	GENI_SE_DBG(mas->ipc, false, mas->dev, "force resume done\n");
 	mutex_unlock(&mas->spi_ssr.ssr_lock);
 }
@@ -2887,7 +2993,12 @@ static void ssr_spi_force_resume(struct device *dev)
 static const struct dev_pm_ops spi_geni_pm_ops = {
 	SET_RUNTIME_PM_OPS(spi_geni_runtime_suspend,
 					spi_geni_runtime_resume, NULL)
-	SET_SYSTEM_SLEEP_PM_OPS(spi_geni_suspend, spi_geni_resume)
+	.suspend	= spi_geni_suspend,
+	.resume		= spi_geni_resume,
+	.freeze		= spi_geni_hib_suspend,
+	.thaw		= spi_geni_resume,
+	.poweroff	= spi_geni_suspend,
+	.restore	= spi_geni_hib_resume,
 };
 
 static const struct of_device_id spi_geni_dt_match[] = {

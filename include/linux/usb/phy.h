@@ -15,6 +15,10 @@
 #include <linux/usb.h>
 #include <uapi/linux/usb/charger.h>
 
+#define ENABLE_DP_MANUAL_PULLUP BIT(0)
+#define ENABLE_SECONDARY_PHY    BIT(1)
+#define PHY_SOFT_CONNECT        BIT(12)
+
 enum usb_phy_interface {
 	USBPHY_INTERFACE_MODE_UNKNOWN,
 	USBPHY_INTERFACE_MODE_UTMI,
@@ -47,6 +51,7 @@ enum usb_otg_state {
 	OTG_STATE_B_IDLE,
 	OTG_STATE_B_SRP_INIT,
 	OTG_STATE_B_PERIPHERAL,
+	OTG_STATE_B_SUSPEND,
 
 	/* extra dual-role default-b states */
 	OTG_STATE_B_WAIT_ACON,
@@ -155,6 +160,10 @@ struct usb_phy {
 	 * manually detect the charger type.
 	 */
 	enum usb_charger_type (*charger_detect)(struct usb_phy *x);
+
+	/* for notification of usb_phy_dbg_events */
+	void    (*dbg_event)(struct usb_phy *x,
+			char *event, int msg1, int msg2);
 };
 
 /* for board-specific init logic */

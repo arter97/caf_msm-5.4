@@ -2,6 +2,7 @@
 /*
  * Copyright (c) 2016-2017, Linaro Ltd
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/idr.h>
@@ -2260,6 +2261,7 @@ static int qcom_glink_remove_device(struct device *dev, void *data)
 void qcom_glink_native_remove(struct qcom_glink *glink)
 {
 	struct glink_channel *channel;
+	int size;
 	int cid;
 	int ret;
 
@@ -2295,6 +2297,10 @@ void qcom_glink_native_remove(struct qcom_glink *glink)
 	kthread_stop(glink->task);
 	qcom_glink_pipe_reset(glink);
 	mbox_free_channel(glink->mbox_chan);
+	size = of_property_count_u32_elems(glink->dev->of_node, "cpu-affinity");
+	if (size > 0 && irq_set_affinity_hint(glink->irq, NULL))
+		dev_err(glink->dev, "failed to clear irq affinity\n");
+
 }
 EXPORT_SYMBOL_GPL(qcom_glink_native_remove);
 

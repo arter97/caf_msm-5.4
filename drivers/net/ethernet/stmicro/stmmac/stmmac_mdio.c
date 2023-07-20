@@ -16,8 +16,10 @@
 #include <linux/mii.h>
 #include <linux/of_mdio.h>
 #include <linux/phy.h>
+#include <linux/marvell_phy.h>
 #include <linux/property.h>
 #include <linux/slab.h>
+#include <linux/delay.h>
 
 #include "dwxgmac2.h"
 #include "stmmac.h"
@@ -253,6 +255,33 @@ static int stmmac_mdio_write(struct mii_bus *bus, int phyaddr, int phyreg,
 				  100, 10000);
 }
 
+int mdio_read_indirect(struct mii_bus *bus, int devaddr, int phyreg)
+{
+	int phyaddr = 0;
+	int val;
+
+	/*Setting Device Address & Address Offset*/
+	stmmac_mdio_write(bus, phyaddr, MII_MMD_CTRL, devaddr);
+	stmmac_mdio_write(bus, phyaddr, MII_MMD_DATA, phyreg);
+	/* Setting function as data, no post increment*/
+	stmmac_mdio_write(bus, phyaddr, MII_MMD_CTRL, (devaddr | (1 << 14)));
+	val = stmmac_mdio_read(bus, phyaddr, MII_MMD_DATA);
+
+	return val;
+}
+
+int mdio_write_indirect(struct mii_bus *bus, int devaddr, int phyreg, u16 phydata)
+{
+	int phyaddr = 0;
+
+	stmmac_mdio_write(bus, phyaddr, MII_MMD_CTRL, devaddr);
+	stmmac_mdio_write(bus, phyaddr, MII_MMD_DATA, phyreg);
+	stmmac_mdio_write(bus, phyaddr, MII_MMD_CTRL, (devaddr | (1 << 14)));
+	stmmac_mdio_write(bus, phyaddr, MII_MMD_DATA, phydata);
+
+	return 0;
+}
+
 /**
  * stmmac_mdio_reset
  * @bus: points to the mii_bus structure
@@ -326,6 +355,7 @@ int stmmac_mdio_register(struct net_device *ndev)
 	struct device_node *mdio_node = priv->plat->mdio_node;
 	struct device *dev = ndev->dev.parent;
 	int addr, found, max_addr;
+	int phydata_read;
 
 	if (!mdio_bus_data)
 		return 0;
@@ -358,6 +388,10 @@ int stmmac_mdio_register(struct net_device *ndev)
 		if (priv->plat->phy_addr > MII_XGMAC_MAX_C22ADDR)
 			dev_err(dev, "Unsupported phy_addr (max=%d)\n",
 					MII_XGMAC_MAX_C22ADDR);
+	} else if (priv->plat->c45_marvell_en) {
+		new_bus->read = &mdio_read_indirect;
+		new_bus->write = &mdio_write_indirect;
+		max_addr = PHY_MAX_ADDR;
 	} else {
 		new_bus->read = &stmmac_mdio_read;
 		new_bus->write = &stmmac_mdio_write;
@@ -388,6 +422,27 @@ int stmmac_mdio_register(struct net_device *ndev)
 
 		if (!phydev || phydev->phy_id == 0xffff || phydev->phy_id == 0)
 			continue;
+		if (priv->plat->c45_marvell_en) {
+			ssleep(1);
+
+			phydata_read = mdio_read_indirect(new_bus,
+							  MV88Q2220_PMA_PMD_REG_ADDR, 0x0003);
+			pr_info("%s: Indirect Phy_FindPhy for phy_indx:%d, PHY revision  : 0x%08X\n",
+				__func__, addr, phydata_read);
+
+			if (phydata_read != 0x0000 && phydata_read != 0xffff) {
+				pr_info("%s:AIR Marvel PHY detected at :%d\n", __func__, addr);
+				phydata_read = (phydata_read >> 4) & 0x3F;
+				if (phydata_read == MV88Q2220_PHY_MODEL) {
+					pr_info("MARVELL 88Q2220 ePhy is connected, Model num: 0x%02X\n",
+						phydata_read);
+					priv->plat->phy_addr = addr;
+					phy_attached_info(phydev);
+					found = 1;
+					break;
+				}
+			}
+		}
 
 		/*
 		 * If an IRQ was provided to be assigned after

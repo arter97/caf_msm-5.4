@@ -89,7 +89,7 @@ int dwc3_msm_kretprobe_init(void)
 	for (i = 0; i < ARRAY_SIZE(dwc3_msm_probes) ; i++) {
 		ret = register_kretprobe(&dwc3_msm_probes[i]);
 		if (ret < 0)
-			pr_err("register_kretprobe failed for %s, returned %d\n",
+			pr_debug("register_kretprobe failed for %s, returned %d\n",
 					dwc3_msm_probes[i].kp.symbol_name, ret);
 	}
 
