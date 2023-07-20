@@ -1199,6 +1199,11 @@ static int stmmac_init_phy(struct net_device *dev)
 			priv->phydev->irq = PHY_POLL;
 		}
 #endif
+	} else if (!ret && node) {
+		if (dev->phydev) {
+			priv->phydev = dev->phydev;
+			priv->plat->phy_addr = priv->phydev->mdio.addr;
+		}
 	}
 
 	return ret;
