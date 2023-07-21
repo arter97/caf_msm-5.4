@@ -29,8 +29,6 @@
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/major.h>
-#include <linux/delay.h>
-
 #include "ubi.h"
 
 /* Maximum length of the 'mtd=' parameter */
@@ -1245,8 +1243,7 @@ static struct mtd_info * __init open_mtd_device(const char *mtd_dev)
 static int __init ubi_init(void)
 {
 	int err, i, k;
-	printk("MDM9x07 ubi_init 1\n");
-	msleep(2000);
+
 	/* Ensure that EC and VID headers have correct size */
 	BUILD_BUG_ON(sizeof(struct ubi_ec_hdr) != 64);
 	BUILD_BUG_ON(sizeof(struct ubi_vid_hdr) != 64);
@@ -1335,7 +1332,6 @@ static int __init ubi_init(void)
 			goto out_detach;
 	}
 
-	printk("MDM9x07 ubi_init End\n");
 	return 0;
 
 out_detach:
