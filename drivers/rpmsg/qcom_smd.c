@@ -621,7 +621,7 @@ static bool qcom_smd_channel_intr(struct qcom_smd_channel *channel)
 	}
 
 	/* Indicate that we have seen and updated tail */
-	SET_RX_CHANNEL_FLAG(channel, fTAIL, 1);
+	SET_TX_CHANNEL_FLAG(channel, fTAIL, 1);
 
 	/* Signal the remote that we've consumed the data (if requested) */
 	if (!GET_RX_CHANNEL_FLAG(channel, fBLOCKREADINTR)) {
@@ -820,9 +820,9 @@ static int qcom_smd_channel_open(struct qcom_smd_channel *channel,
 	int ret;
 
 	/*
-	 * Packets are maximum 4k, but reduce if the fifo is smaller
+	 * Packets are maximum 8k, but reduce if the fifo is smaller
 	 */
-	bb_size = min(channel->fifo_size, SZ_4K);
+	bb_size = min(channel->fifo_size, SZ_8K);
 	channel->bounce_buffer = kmalloc(bb_size, GFP_KERNEL);
 	if (!channel->bounce_buffer)
 		return -ENOMEM;
@@ -1592,7 +1592,7 @@ static int __init qcom_smd_init(void)
 {
 	return platform_driver_register(&qcom_smd_driver);
 }
-subsys_initcall(qcom_smd_init);
+postcore_initcall(qcom_smd_init);
 
 static void __exit qcom_smd_exit(void)
 {
