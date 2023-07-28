@@ -4381,6 +4381,8 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	struct sdhci_msm_host *msm_host;
 	struct resource *core_memres;
 	int ret;
+	struct resource *tlmm_memres = NULL;
+	void __iomem *tlmm_mem;
 	u16 host_version, core_minor;
 	u32 core_version, config;
 	u8 core_major;
@@ -4500,6 +4502,20 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 			ret = PTR_ERR(msm_host->core_mem);
 			goto vreg_deinit;
 		}
+	}
+	tlmm_memres = platform_get_resource_byname(pdev,
+			IORESOURCE_MEM, "tlmm_mem");
+	if (tlmm_memres) {
+		tlmm_mem = devm_ioremap(&pdev->dev, tlmm_memres->start,
+				resource_size(tlmm_memres));
+		if (!tlmm_mem) {
+			dev_err(&pdev->dev, "Failed to remap tlmm registers\n");
+			ret = -ENOMEM;
+			goto vreg_deinit;
+		}
+		writel_relaxed(readl_relaxed(tlmm_mem) | 0x2, tlmm_mem);
+		dev_dbg(&pdev->dev, "tlmm reg %pa value 0x%08x\n",
+				&tlmm_memres->start, readl_relaxed(tlmm_mem));
 	}
 
 	/* Toggle wlan_en pin to reset SDIO card to correct state */
