@@ -165,6 +165,14 @@ int qcom_scm_sec_wdog_trigger(void)
 }
 EXPORT_SYMBOL(qcom_scm_sec_wdog_trigger);
 
+#ifdef CONFIG_TLB_CONF_HANDLER
+int qcom_scm_tlb_conf_handler(unsigned long addr)
+{
+	return __qcom_scm_tlb_conf_handler(__scm->dev, addr);
+}
+EXPORT_SYMBOL(qcom_scm_tlb_conf_handler);
+#endif
+
 /**
  * qcom_scm_disable_sdi() - Disable SDI
  */
@@ -510,9 +518,9 @@ int qcom_scm_paravirt_smmu_attach(u64 sid, u64 asid,
 }
 EXPORT_SYMBOL(qcom_scm_paravirt_smmu_attach);
 
-int qcom_scm_paravirt_tlb_inv(u64 asid)
+int qcom_scm_paravirt_tlb_inv(u64 asid, u64 sid)
 {
-	return __qcom_scm_paravirt_tlb_inv(__scm ? __scm->dev : NULL, asid);
+	return __qcom_scm_paravirt_tlb_inv(__scm ? __scm->dev : NULL, asid, sid);
 }
 EXPORT_SYMBOL(qcom_scm_paravirt_tlb_inv);
 

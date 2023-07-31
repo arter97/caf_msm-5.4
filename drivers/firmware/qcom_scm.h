@@ -28,6 +28,9 @@ extern void __qcom_scm_cpu_power_down(struct device *dev, u32 flags);
 extern void __qcom_scm_cpu_hp(struct device *dev, u32 flags);
 extern int __qcom_scm_sec_wdog_deactivate(struct device *dev);
 extern int __qcom_scm_sec_wdog_trigger(struct device *dev);
+#ifdef CONFIG_TLB_CONF_HANDLER
+extern int __qcom_scm_tlb_conf_handler(struct device *dev, unsigned long addr);
+#endif
 extern void __qcom_scm_disable_sdi(struct device *dev);
 extern int __qcom_scm_set_remote_state(struct device *dev, u32 state, u32 id);
 extern int __qcom_scm_spin_cpu(struct device *dev);
@@ -264,7 +267,7 @@ extern int __qcom_scm_paravirt_smmu_attach(struct device *dev, u64 sid,
 				    u64 asid, u64 ste_pa, u64 ste_size,
 				    u64 cd_pa, u64 cd_size);
 
-extern int __qcom_scm_paravirt_tlb_inv(struct device *dev, u64 asid);
+extern int __qcom_scm_paravirt_tlb_inv(struct device *dev, u64 asid, u64 sid);
 
 extern int __qcom_scm_paravirt_smmu_detach(struct device *dev,
 						u64 sid);

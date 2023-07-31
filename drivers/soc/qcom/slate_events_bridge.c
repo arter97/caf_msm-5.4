@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/delay.h>
@@ -459,6 +460,10 @@ void handle_rx_event(struct seb_priv *dev, void *rx_event_buf, int len)
 	struct seb_buf_list *rx_notif = NULL;
 	unsigned long flags;
 
+	if (len < sizeof(struct gmi_header)) {
+		pr_err("Invalid rx_event_buffer length\n");
+		return;
+	}
 	event_header = (struct gmi_header *)rx_event_buf;
 
 	if (event_header->opcode == GMI_SLATE_EVENT_RSB ||
@@ -476,6 +481,7 @@ void handle_rx_event(struct seb_priv *dev, void *rx_event_buf, int len)
 
 		seb_send_input(evnt);
 		kfree(evnt);
+		return;
 	} else if (event_header->opcode == GMI_SLATE_EVENT_TOUCH) {
 		return;
 	}
@@ -508,6 +514,10 @@ void seb_rx_msg(void *data, int len)
 
 	wake_up(&dev->link_state_wait);
 	if (dev->wait_for_resp) {
+		if (len > SEB_GLINK_INTENT_SIZE) {
+			pr_err("Invalid seb rx buffer length\n");
+			return;
+		}
 		memcpy(dev->rx_buf, data, len);
 	} else {
 		/* Handle the event received from Slate */

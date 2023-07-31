@@ -28,7 +28,6 @@
 #include <linux/reset.h>
 #include <linux/extcon.h>
 #include <linux/power_supply.h>
-#include <soc/qcom/scm.h>
 
 #include <linux/usb.h>
 #include <linux/usb/otg.h>
@@ -42,7 +41,6 @@
 #include <linux/regulator/machine.h>
 #include <linux/sched/clock.h>
 #include <linux/usb_bam.h>
-#include <linux/msm-bus.h>
 
 /**
  * Requested USB votes for BUS bandwidth
@@ -125,8 +123,6 @@ enum msm_usb_phy_type {
  * @pmic_id_irq: IRQ number assigned for PMIC USB ID line.
  * @disable_reset_on_disconnect: perform USB PHY and LINK reset
  *              on USB cable disconnection.
- * @pnoc_errata_fix: workaround needed for PNOC hardware bug that
- *              affects USB performance.
  * @enable_lpm_on_suspend: Enable the USB core to go into Low
  *              Power Mode, when USB bus is suspended but cable
  *              is connected.
@@ -173,7 +169,6 @@ struct msm_otg_platform_data {
 	enum msm_usb_phy_type phy_type;
 	int pmic_id_irq;
 	bool disable_reset_on_disconnect;
-	bool pnoc_errata_fix;
 	bool enable_lpm_on_dev_suspend;
 	bool core_clk_always_on_workaround;
 	bool delay_lpm_on_disconnect;
@@ -222,6 +217,8 @@ struct msm_otg_platform_data {
 
 #define PM_QOS_SAMPLE_SEC	2
 #define PM_QOS_THRESHOLD	400
+
+#define POWER_SUPPLY_PROP_REAL_TYPE 67
 
 enum msm_otg_phy_reg_mode {
 	USB_PHY_REG_OFF,
@@ -538,7 +535,7 @@ static int ulpi_read(struct usb_phy *phy, u32 reg)
 	}
 
 	if (cnt >= ULPI_IO_TIMEOUT_USEC) {
-		dev_err(phy->dev, "%s: timeout %08x\n", __func__
+		dev_err(phy->dev, "%s: timeout %08x\n", __func__,
 			readl_relaxed(USB_ULPI_VIEWPORT));
 		dev_err(phy->dev, "PORTSC: %08x USBCMD: %08x\n",
 			readl_relaxed(USB_PORTSC), readl_relaxed(USB_USBCMD));
@@ -1932,7 +1929,7 @@ static void msm_otg_notify_charger(struct msm_otg *motg, unsigned int mA)
 	pval.intval = 1000 * mA;
 
 set_prop:
-	if (power_supply_set_property(psy, POWER_SUPPLY_PROP_SDP_CURRENT_MAX,
+	if (power_supply_set_property(psy, POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,
 								&pval)) {
 		dev_dbg(motg->phy.dev, "power supply error when setting property\n");
 		return;
@@ -3625,28 +3622,6 @@ struct msm_otg_scm_cmd_buf {
 	unsigned int mem_type;
 } __attribute__ ((__packed__));
 
-static void msm_otg_pnoc_errata_fix(struct msm_otg *motg)
-{
-	int ret;
-	struct msm_otg_platform_data *pdata = motg->pdata;
-	struct msm_otg_scm_cmd_buf cmd_buf;
-
-	if (!pdata->pnoc_errata_fix)
-		return;
-
-	dev_dbg(motg->phy.dev, "applying fix for pnoc h/w issue\n");
-
-	cmd_buf.device_id = MSM_OTG_DEVICE_ID;
-	cmd_buf.vmid_idx = MSM_OTG_VMID_IDX;
-	cmd_buf.mem_type = MSM_OTG_MEM_TYPE;
-
-	ret = scm_call(SCM_SVC_MP, MSM_OTG_CMD_ID, &cmd_buf,
-				sizeof(cmd_buf), NULL, 0);
-
-	if (ret)
-		dev_err(motg->phy.dev, "scm command failed to update VMIDMT\n");
-}
-
 static u64 msm_otg_dma_mask = DMA_BIT_MASK(32);
 static struct platform_device *msm_otg_add_pdev(
 		struct platform_device *ofdev, const char *name)
@@ -3843,8 +3818,6 @@ struct msm_otg_platform_data *msm_otg_dt_to_pdata(struct platform_device *pdev)
 				&pdata->phy_type);
 	pdata->disable_reset_on_disconnect = of_property_read_bool(node,
 				"qcom,hsusb-otg-disable-reset");
-	pdata->pnoc_errata_fix = of_property_read_bool(node,
-				"qcom,hsusb-otg-pnoc-errata-fix");
 	pdata->enable_lpm_on_dev_suspend = of_property_read_bool(node,
 				"qcom,hsusb-otg-lpm-on-dev-suspend");
 	pdata->core_clk_always_on_workaround = of_property_read_bool(node,
@@ -4326,9 +4299,6 @@ static int msm_otg_probe(struct platform_device *pdev)
 		goto free_ldo_init;
 	}
 	clk_prepare_enable(motg->core_clk);
-
-	/* Check if USB mem_type change is needed to workaround PNOC hw issue */
-	msm_otg_pnoc_errata_fix(motg);
 
 	writel_relaxed(0, USB_USBINTR);
 	writel_relaxed(0, USB_OTGSC);
