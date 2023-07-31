@@ -163,6 +163,10 @@ static int tsens_tz_activate_trip_type(struct tsens_sensor *tm_sensor,
 	if (!tmdev)
 		return -EINVAL;
 
+	if (atomic_read(&tmdev->in_suspend) &&
+		(tm_sensor->hw_id != tmdev->ltvr_sensor_id))
+		return 0;
+
 	lo_code = TSENS_THRESHOLD_MIN_CODE;
 	hi_code = TSENS_THRESHOLD_MAX_CODE;
 
@@ -505,11 +509,54 @@ static void dump_tsens_status(struct tsens_device *tm, char *cntxt)
 			(tm->ltvr_sensor_id << TSENS_STATUS_ADDR_OFFSET)));
 }
 
+static int tsens1xxx_pm_activate_all_trip_type(struct tsens_device *tm,
+		enum thermal_device_mode mode)
+{
+	struct tsens_sensor *tm_sensor = NULL;
+	int i, rc = 0;
+
+	for (i = 0; i < TSENS_MAX_SENSORS; i++) {
+		if (IS_ERR(tm->sensor[i].tzd) || (i == tm->ltvr_sensor_id))
+			continue;
+
+		tm_sensor = &tm->sensor[i];
+		rc = tsens_tz_activate_trip_type(tm_sensor,
+				TSENS_TRIP_CONFIGURABLE_HI,
+				mode);
+		if (rc)
+			pr_debug("%s:trip high disable error:%d sensor[%d]\n",
+				__func__, rc, i);
+		rc = tsens_tz_activate_trip_type(tm_sensor,
+				TSENS_TRIP_CONFIGURABLE_LOW,
+				mode);
+		if (rc)
+			pr_debug("%s:trip low disable error:%d sensor[%d]\n",
+				__func__, rc, i);
+	}
+
+	return rc;
+}
+
 static int tsens1xxx_tsens_resume(struct tsens_device *tmdev)
 {
-	int ret;
+	int ret, i;
 	struct tsens_sensor *zeroc_sensor = NULL;
 	unsigned int temp;
+	unsigned long flags;
+
+	if (tmdev->tm_disable_on_suspend) {
+		spin_lock_irqsave(&tmdev->tsens_upp_low_lock, flags);
+		atomic_set(&tmdev->in_suspend, 0);
+		spin_unlock_irqrestore(&tmdev->tsens_upp_low_lock, flags);
+
+		for (i = 0; i < TSENS_MAX_SENSORS; i++) {
+			if (IS_ERR_OR_NULL(tmdev->sensor[i].tzd) ||
+					(i == tmdev->ltvr_sensor_id))
+				continue;
+			of_thermal_handle_trip(tmdev->dev, tmdev->sensor[i].tzd);
+		}
+		dump_tsens_status(tmdev, "resume_tm_disable_exit");
+	}
 
 	if (!tmdev->ltvr_resume_trigger)
 		return 0;
@@ -541,6 +588,18 @@ static int tsens1xxx_tsens_resume(struct tsens_device *tmdev)
 
 static int tsens1xxx_tsens_suspend(struct tsens_device *tmdev)
 {
+	unsigned long flags;
+
+	if (!tmdev->tm_disable_on_suspend)
+		return 0;
+
+	dump_tsens_status(tmdev, "Suspend_Entry");
+	spin_lock_irqsave(&tmdev->tsens_upp_low_lock, flags);
+	tsens1xxx_pm_activate_all_trip_type(tmdev, THERMAL_DEVICE_DISABLED);
+	atomic_set(&tmdev->in_suspend, 1);
+	spin_unlock_irqrestore(&tmdev->tsens_upp_low_lock, flags);
+	dump_tsens_status(tmdev, "Suspend_Exit");
+
 	return 0;
 }
 
