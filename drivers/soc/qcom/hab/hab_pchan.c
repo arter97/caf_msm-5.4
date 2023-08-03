@@ -15,7 +15,7 @@ hab_pchan_alloc(struct hab_device *habdev, int otherend_id)
 	idr_init(&pchan->vchan_idr);
 	spin_lock_init(&pchan->vid_lock);
 	idr_init(&pchan->expid_idr);
-	spin_lock_init(&pchan->expid_lock);
+	rwlock_init(&pchan->expid_lock);
 	kref_init(&pchan->refcount);
 
 	pchan->habdev = habdev;
