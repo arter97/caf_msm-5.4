@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/platform_device.h>
@@ -184,6 +184,10 @@ static void qrtr_mhi_dev_state_cb(struct mhi_dev_client_cb_data *cb_data)
 		}
 		break;
 	case MHI_STATE_DISCONNECTED:
+		mutex_lock(&qep->out_lock);
+		complete_all(&qep->out_tre);
+		mutex_unlock(&qep->out_lock);
+
 		qrtr_endpoint_unregister(&qep->ep);
 		qrtr_mhi_dev_close_channels(qep);
 		break;

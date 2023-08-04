@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2016, Linaro Limited
  * Copyright (c) 2014, 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk-provider.h>
@@ -1087,6 +1087,28 @@ static const struct rpm_smd_clk_desc rpm_clk_bengal = {
 	.num_clks = ARRAY_SIZE(bengal_clks),
 };
 
+static struct clk_hw *mdm9607_clks[] = {
+	[RPM_SMD_XO_CLK_SRC] = &holi_bi_tcxo.hw,
+	[RPM_SMD_XO_A_CLK_SRC] = &holi_bi_tcxo_ao.hw,
+	[RPM_SMD_PCNOC_CLK] = &sdxnightjar_pcnoc_clk.hw,
+	[RPM_SMD_PCNOC_A_CLK] = &sdxnightjar_pcnoc_a_clk.hw,
+	[RPM_SMD_BIMC_CLK] = &holi_bimc_clk.hw,
+	[RPM_SMD_BIMC_A_CLK] = &holi_bimc_a_clk.hw,
+	[RPM_SMD_QPIC_CLK] = &qcs404_qpic_clk.hw,
+	[RPM_SMD_QPIC_A_CLK] = &qcs404_qpic_a_clk.hw,
+	[RPM_SMD_QDSS_CLK] = &msm8916_qdss_clk.hw,
+	[RPM_SMD_QDSS_A_CLK] = &msm8916_qdss_a_clk.hw,
+	[RPM_SMD_BB_CLK1] = &msm8916_bb_clk1.hw,
+	[RPM_SMD_BB_CLK1_A] = &msm8916_bb_clk1_a.hw,
+	[RPM_SMD_BB_CLK1_PIN] = &msm8916_bb_clk1_pin.hw,
+	[RPM_SMD_BB_CLK1_A_PIN] = &msm8916_bb_clk1_a_pin.hw,
+};
+
+static const struct rpm_smd_clk_desc rpm_clk_mdm9607 = {
+	.clks = mdm9607_clks,
+	.num_clks = ARRAY_SIZE(mdm9607_clks),
+};
+
 static const struct of_device_id rpm_smd_clk_match_table[] = {
 	{ .compatible = "qcom,rpmcc-msm8916", .data = &rpm_clk_msm8916 },
 	{ .compatible = "qcom,rpmcc-msm8974", .data = &rpm_clk_msm8974 },
@@ -1098,6 +1120,7 @@ static const struct of_device_id rpm_smd_clk_match_table[] = {
 	{ .compatible = "qcom,rpmcc-monaco", .data = &rpm_clk_monaco },
 	{ .compatible = "qcom,rpmcc-scuba", .data = &rpm_clk_scuba },
 	{ .compatible = "qcom,rpmcc-bengal", .data = &rpm_clk_bengal},
+	{ .compatible = "qcom,rpmcc-mdm9607", .data = &rpm_clk_mdm9607},
 	{ }
 };
 MODULE_DEVICE_TABLE(of, rpm_smd_clk_match_table);
@@ -1251,7 +1274,7 @@ static int rpm_smd_clk_probe(struct platform_device *pdev)
 {
 	struct clk_hw **hw_clks;
 	const struct rpm_smd_clk_desc *desc;
-	int ret, i, is_holi, hw_clk_handoff = false, is_sdxnightjar, is_monaco;
+	int ret, i, is_holi, hw_clk_handoff = false, is_sdxnightjar, is_monaco, is_mdm9607;
 	int is_qcs404;
 	int is_scuba, is_bengal;
 
@@ -1271,9 +1294,11 @@ static int rpm_smd_clk_probe(struct platform_device *pdev)
 						"qcom,rpmcc-scuba");
 	is_bengal = of_device_is_compatible(pdev->dev.of_node,
 						"qcom,rpmcc-bengal");
+	is_mdm9607 = of_device_is_compatible(pdev->dev.of_node,
+						"qcom,rpmcc-mdm9607");
 
 	if (is_holi || is_sdxnightjar || is_monaco || is_qcs404 || is_scuba ||
-	    is_bengal) {
+	    is_bengal || is_mdm9607) {
 		ret = clk_vote_bimc(&holi_bimc_clk.hw, INT_MAX);
 		if (ret < 0)
 			return ret;
@@ -1337,7 +1362,7 @@ static int rpm_smd_clk_probe(struct platform_device *pdev)
 		clk_set_rate(holi_qup_a_clk.hw.clk, 19200000);
 	}
 
-	if (is_sdxnightjar) {
+	if (is_sdxnightjar || is_mdm9607) {
 		/*
 		 * Keep an active vote on CXO in case no other driver
 		 * votes for it.
@@ -1348,9 +1373,11 @@ static int rpm_smd_clk_probe(struct platform_device *pdev)
 		clk_prepare_enable(sdxnightjar_pcnoc_a_clk.hw.clk);
 		clk_set_rate(sdxnightjar_pcnoc_a_clk.hw.clk, 19200000);
 
-		/* Hold an active set vote for the snoc_keepalive_a_clk */
-		clk_prepare_enable(sdxnightjar_snoc_a_clk.hw.clk);
-		clk_set_rate(sdxnightjar_snoc_a_clk.hw.clk, 19200000);
+		if (is_sdxnightjar) {
+			/* Hold an active set vote for the snoc_keepalive_a_clk */
+			clk_prepare_enable(sdxnightjar_snoc_a_clk.hw.clk);
+			clk_set_rate(sdxnightjar_snoc_a_clk.hw.clk, 19200000);
+		}
 	}
 
 	if (is_qcs404) {

@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _DT_BINDINGS_CLK_QCOM_GCC_SM6150_H
@@ -192,5 +193,7 @@
 #define GCC_USB20_SEC_BCR			11
 #define GCC_USB3_PHY_PRIM_SP0_BCR		12
 #define GCC_USB3PHY_PHY_PRIM_SP0_BCR		13
+#define GCC_SDCC1_BCR				14
+#define GCC_SDCC2_BCR				15
 
 #endif
