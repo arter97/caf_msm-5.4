@@ -5547,8 +5547,11 @@ int stmmac_suspend(struct device *dev)
 
 #ifdef CONFIG_DWMAC_QCOM_ETHQOS
 	rtnl_lock();
-	if (!priv->plat->mac2mac_en)
+	if (!priv->plat->mac2mac_en) {
 		phylink_stop(priv->phylink);
+		if (priv->plat->is_phy_off)
+			phylink_disconnect_phy(priv->phylink);
+	}
 	rtnl_unlock();
 #endif
 	mutex_lock(&priv->lock);
@@ -5586,11 +5589,15 @@ int stmmac_suspend(struct device *dev)
 
 		stmmac_mac_set(priv, priv->ioaddr, false);
 		pinctrl_pm_select_sleep_state(priv->device);
-		/* Disable clock in case of PWM is off */
-		if (priv->plat->clk_ptp_ref)
-			clk_disable_unprepare(priv->plat->clk_ptp_ref);
-		clk_disable_unprepare(priv->plat->pclk);
-		clk_disable_unprepare(priv->plat->stmmac_clk);
+
+		if (!priv->plat->clks_suspended) {
+			/* Disable clock in case of PWM is off */
+			if (priv->plat->clk_ptp_ref)
+				clk_disable_unprepare(priv->plat->clk_ptp_ref);
+			clk_disable_unprepare(priv->plat->pclk);
+			clk_disable_unprepare(priv->plat->stmmac_clk);
+			priv->plat->clks_suspended = true;
+		}
 	}
 	mutex_unlock(&priv->lock);
 
@@ -5654,11 +5661,15 @@ int stmmac_resume(struct device *dev)
 		priv->irq_wake = 0;
 	} else {
 		pinctrl_pm_select_default_state(priv->device);
-		/* enable the clk previously disabled */
-		clk_prepare_enable(priv->plat->stmmac_clk);
-		clk_prepare_enable(priv->plat->pclk);
-		if (priv->plat->clk_ptp_ref)
-			clk_prepare_enable(priv->plat->clk_ptp_ref);
+
+		if (priv->plat->clks_suspended) {
+			/* enable the clk previously disabled */
+			clk_prepare_enable(priv->plat->stmmac_clk);
+			clk_prepare_enable(priv->plat->pclk);
+			if (priv->plat->clk_ptp_ref)
+				clk_prepare_enable(priv->plat->clk_ptp_ref);
+			priv->plat->clks_suspended = false;
+		}
 		/* reset the phy so that it's ready */
 		if (priv->mii && !priv->boot_kpi)
 			stmmac_mdio_reset(priv->mii);

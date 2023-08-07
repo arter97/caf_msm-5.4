@@ -1536,7 +1536,7 @@ static void qcom_ethqos_phy_suspend_clks(struct qcom_ethqos *ethqos)
 
 	ethqos_update_rgmii_clk_and_bus_cfg(ethqos, 0);
 
-	if (ethqos->phy_wol_supported) {
+	if (ethqos->phy_wol_supported || !priv->plat->clks_suspended) {
 		if (priv->plat->stmmac_clk)
 			clk_disable_unprepare(priv->plat->stmmac_clk);
 
@@ -1545,6 +1545,7 @@ static void qcom_ethqos_phy_suspend_clks(struct qcom_ethqos *ethqos)
 
 		if (priv->plat->clk_ptp_ref)
 			clk_disable_unprepare(priv->plat->clk_ptp_ref);
+		priv->plat->clks_suspended = true;
 	}
 	if (ethqos->rgmii_clk)
 		clk_disable_unprepare(ethqos->rgmii_clk);
@@ -1580,12 +1581,21 @@ static int ethqos_reset_phy_rec(struct stmmac_priv *priv, int int_en)
 		ethqos->backup_autoneg = AUTONEG_ENABLE;
 	}
 
+	if (int_en) {
+		rtnl_lock();
+		phylink_stop(priv->phylink);
+		phylink_disconnect_phy(priv->phylink);
+		rtnl_unlock();
+	}
 	ethqos_phy_power_off(ethqos);
 
 	ethqos_phy_power_on(ethqos);
 
 	if (int_en) {
 		ethqos_reset_phy_enable_interrupt(ethqos);
+		rtnl_lock();
+		phylink_start(priv->phylink);
+		rtnl_unlock();
 		if (ethqos->backup_autoneg == AUTONEG_DISABLE && priv->phydev) {
 			priv->phydev->autoneg = ethqos->backup_autoneg;
 			phy_write(priv->phydev, MII_BMCR, ethqos->backup_bmcr);
@@ -1798,6 +1808,8 @@ static void qcom_ethqos_phy_resume_clks(struct qcom_ethqos *ethqos)
 
 		if (priv->plat->clk_ptp_ref)
 			clk_prepare_enable(priv->plat->clk_ptp_ref);
+
+		priv->plat->clks_suspended = false;
 	}
 
 	if (ethqos->rgmii_clk)
@@ -2518,6 +2530,7 @@ static ssize_t phy_off_config(struct device *dev, struct device_attribute *attr,
 			}
 		}
 		ethqos_phy_power_off(ethqos);
+		plat->is_phy_off = true;
 	} else if (config == ENABLE_PHY_IMMEDIATELY) {
 		ethqos->current_phy_mode = ENABLE_PHY_IMMEDIATELY;
 		//make phy on
@@ -2534,12 +2547,16 @@ static ssize_t phy_off_config(struct device *dev, struct device_attribute *attr,
 						    ethqos->loopback_speed, 1);
 			ETHQOSDBG("Enabling Phy loopback again");
 		}
+		plat->is_phy_off = false;
 	} else if (config == DISABLE_PHY_AT_SUSPEND_ONLY) {
 		ethqos->current_phy_mode = DISABLE_PHY_AT_SUSPEND_ONLY;
+		plat->is_phy_off = true;
 	} else if (config == DISABLE_PHY_SUSPEND_ENABLE_RESUME) {
 		ethqos->current_phy_mode = DISABLE_PHY_SUSPEND_ENABLE_RESUME;
+		plat->is_phy_off = true;
 	} else if (config == DISABLE_PHY_ON_OFF) {
 		ethqos->current_phy_mode = DISABLE_PHY_ON_OFF;
+		plat->is_phy_off = false;
 	} else {
 		ETHQOSERR("Invalid option\n");
 		return -EINVAL;
@@ -4300,6 +4317,8 @@ static int _qcom_ethqos_probe(void *arg)
 	plat_dat->handletxcompletion = ethwrapper_handletxcompletion;
 	plat_dat->handlericompletion = ethwrapper_handlericompletion;
 #endif
+	plat_dat->clks_suspended = false;
+
 	/* Get rgmii interface speed for mac2c from device tree */
 	if (of_property_read_u32(np, "mac2mac-rgmii-speed",
 				&plat_dat->mac2mac_rgmii_speed))
@@ -4364,6 +4383,13 @@ static int _qcom_ethqos_probe(void *arg)
 	}
 	ETHQOSINFO("emac-phy-off-suspend = %d\n",
 		   ethqos->current_phy_mode);
+
+	if (ethqos->current_phy_mode == DISABLE_PHY_AT_SUSPEND_ONLY ||
+	    ethqos->current_phy_mode == DISABLE_PHY_SUSPEND_ENABLE_RESUME) {
+		plat_dat->is_phy_off = true;
+	} else {
+		plat_dat->is_phy_off = false;
+	}
 
 	plat_dat->mdio_reset = of_property_read_bool(pdev->dev.of_node,
 						     "mdio-reset");
