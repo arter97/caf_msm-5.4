@@ -746,6 +746,12 @@ static int cnss_pci_reg_read(struct cnss_pci_data *pci_priv,
 			return ret;
 	}
 
+	if (offset & 0x03) {
+		*val = 0xdeadbeaf;
+		cnss_pr_err("read offset 0x%x is not dword alignment\n", offset);
+		return -EINVAL;
+	}
+
 	if (pci_priv->pci_dev->device == QCA6174_DEVICE_ID ||
 	    offset < MAX_UNWINDOWED_ADDRESS) {
 		*val = readl_relaxed(pci_priv->bar + offset);
@@ -781,6 +787,11 @@ static int cnss_pci_reg_write(struct cnss_pci_data *pci_priv, u32 offset,
 		ret = cnss_pci_check_link_status(pci_priv);
 		if (ret)
 			return ret;
+	}
+
+	if (offset & 0x03) {
+		cnss_pr_err("write offset 0x%x is not dword alignment\n", offset);
+		return -EINVAL;
 	}
 
 	if (pci_priv->pci_dev->device == QCA6174_DEVICE_ID ||
