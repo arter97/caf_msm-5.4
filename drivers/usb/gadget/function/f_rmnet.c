@@ -1138,6 +1138,11 @@ static int frmnet_bind(struct usb_configuration *c, struct usb_function *f)
 
 	ret = ipa_update_function_bind_params(dev, cdev, &info);
 
+	if (dev->xport_type == BAM_DMUX)
+		ret = gbam_setup(dev->bam_dmux_func_type);
+	else
+		ret = ipa_data_setup(dev->ipa_func_type);
+
 	return ret;
 }
 
@@ -1171,14 +1176,6 @@ static struct usb_function *frmnet_bind_config(struct usb_function_instance *fi)
 	dev->port.send_cpkt_response = frmnet_send_cpkt_response;
 	dev->port.disconnect = frmnet_disconnect;
 	dev->port.connect = frmnet_connect;
-
-	if (dev->xport_type == BAM_DMUX)
-		ret = gbam_setup(dev->bam_dmux_func_type);
-	else
-		ret = ipa_data_setup(dev->ipa_func_type);
-
-	if (ret)
-		pr_err("%s: bam setup failed with %d\n", __func__, ret);
 
 	pr_debug("%s: complete\n", __func__);
 
