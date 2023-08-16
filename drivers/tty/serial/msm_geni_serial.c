@@ -282,6 +282,7 @@ struct msm_geni_serial_port {
 	struct uart_gsi *gsi;
 	struct work_struct tx_xfer_work;
 	struct work_struct rx_cancel_work;
+	struct work_struct tx_cancel_work;
 	struct workqueue_struct *tx_wq;
 	struct workqueue_struct *rx_wq;
 	struct completion xfer;
@@ -1634,6 +1635,18 @@ exit_gsi_tx_xfer:
 	IPC_LOG_MSG(msm_port->ipc_log_misc, "%s: End\n", __func__);
 }
 
+static void msm_geni_uart_gsi_cancel_tx(struct work_struct *work)
+{
+	struct msm_geni_serial_port *msm_port = container_of(work,
+						struct msm_geni_serial_port,
+						tx_cancel_work);
+
+	IPC_LOG_MSG(msm_port->ipc_log_misc, "%s: start", __func__);
+	if (dmaengine_terminate_all(msm_port->gsi->tx_c))
+		IPC_LOG_MSG(msm_port->ipc_log_misc,
+			    "%s: dmaengine_terminate_all failed for Tx ch\n", __func__);
+}
+
 static void msm_geni_uart_gsi_cancel_rx(struct work_struct *work)
 {
 	struct msm_geni_serial_port *msm_port = container_of(work,
@@ -1641,8 +1654,11 @@ static void msm_geni_uart_gsi_cancel_rx(struct work_struct *work)
 						rx_cancel_work);
 
 	IPC_LOG_MSG(msm_port->ipc_log_misc, "%s: start", __func__);
-	if (msm_port->gsi->rx_c)
-		dmaengine_terminate_all(msm_port->gsi->rx_c);
+	if (msm_port->gsi->rx_c) {
+		if (dmaengine_terminate_all(msm_port->gsi->rx_c))
+			IPC_LOG_MSG(msm_port->ipc_log_misc,
+				    "%s: dmaengine_terminate_all failed for Rx ch\n", __func__);
+	}
 	complete(&msm_port->xfer);
 	IPC_LOG_MSG(msm_port->ipc_log_misc, "%s: End", __func__);
 }
@@ -1973,7 +1989,7 @@ static void stop_tx_sequencer(struct uart_port *uport)
 			atomic_set(&port->xfer_inprogress, 0);
 		}
 		if (port->gsi->tx_c)
-			dmaengine_terminate_all(port->gsi->tx_c);
+			queue_work(port->tx_wq, &port->tx_cancel_work);
 		goto out;
 	}
 	geni_status = geni_read_reg_nolog(uport->membase, SE_GENI_STATUS);
@@ -4088,7 +4104,9 @@ static void msm_geni_serial_init_gsi(struct uart_port *uport)
 							dev_name(uport->dev));
 		INIT_WORK(&msm_port->tx_xfer_work, msm_geni_uart_gsi_xfer_tx);
 		INIT_WORK(&msm_port->rx_cancel_work,
-						msm_geni_uart_gsi_cancel_rx);
+			  msm_geni_uart_gsi_cancel_rx);
+		INIT_WORK(&msm_port->tx_cancel_work,
+			  msm_geni_uart_gsi_cancel_tx);
 	}
 }
 
