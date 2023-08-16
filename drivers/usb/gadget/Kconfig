@@ -242,6 +242,9 @@ config USB_F_GSI
 config USB_F_IPC
 	tristate
 
+config USB_F_RMNET_BAM
+	tristate
+
 config USB_F_FS_IPC_LOGGING
 	bool "Enable IPC logging for FunctionFS"
 	depends on QGKI
@@ -630,6 +633,18 @@ config USB_FUNC_WAKEUP_SUPPORTED
 	  support for allowing a function to issue a remote wakeup to the
 	  composite driver, which in turn will issue a device notification
 	  packet request to the device controller driver.
+
+config USB_CONFIGFS_RMNET_BAM
+	bool "RMNET_BAM"
+	depends on USB_CONFIGFS
+	select USB_F_RMNET_BAM
+	help
+	  RmNet interface is a new logical device in QMI framework for data
+	  services. RmNet in accordance with QMI architecture uses Data I/O
+	  channel for IP data transfer and control I/O channel for QMI
+	  messaging (functionality similar to AT commands).
+	  RmNet interface is an alternative to standard CDC-ECM and windows
+	  RNDIS.
 
 source "drivers/usb/gadget/legacy/Kconfig"
 

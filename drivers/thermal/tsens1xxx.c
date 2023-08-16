@@ -490,6 +490,16 @@ static int tsens1xxx_register_interrupts(struct tsens_device *tmdev)
 	return 0;
 }
 
+static int tsens1xxx_tsens_resume(struct tsens_device *tmdev)
+{
+	return 0;
+}
+
+static int tsens1xxx_tsens_suspend(struct tsens_device *tmdev)
+{
+	return 0;
+}
+
 static const struct tsens_ops ops_tsens1xxx = {
 	.hw_init = tsens1xxx_hw_init,
 	.get_temp = tsens1xxx_get_temp,
@@ -498,6 +508,8 @@ static const struct tsens_ops ops_tsens1xxx = {
 	.sensor_en = tsens1xxx_hw_sensor_en,
 	.calibrate = calibrate_8937,
 	.dbg = tsens2xxx_dbg,
+	.suspend = tsens1xxx_tsens_suspend,
+	.resume = tsens1xxx_tsens_resume,
 };
 
 const struct tsens_data data_tsens14xx = {
@@ -520,6 +532,8 @@ static const struct tsens_ops ops_tsens1xxx_405 = {
 	.sensor_en = tsens1xxx_hw_sensor_en,
 	.calibrate = calibrate_405,
 	.dbg = tsens2xxx_dbg,
+	.suspend = tsens1xxx_tsens_suspend,
+	.resume = tsens1xxx_tsens_resume,
 };
 
 const struct tsens_data data_tsens14xx_405 = {
@@ -542,6 +556,8 @@ static const struct tsens_ops ops_tsens1xxx_9607 = {
 	.sensor_en = tsens1xxx_hw_sensor_en,
 	.calibrate = calibrate_9607,
 	.dbg = tsens2xxx_dbg,
+	.suspend = tsens1xxx_tsens_suspend,
+	.resume = tsens1xxx_tsens_resume,
 };
 
 const struct tsens_data data_tsens14xx_9607 = {

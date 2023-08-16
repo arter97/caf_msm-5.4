@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __HDCP_QSEECOM_H
@@ -69,6 +70,7 @@ int hdcp2_open_stream(void *ctx, uint8_t vc_payload_id,
 		uint8_t stream_number, uint32_t *stream_id);
 int hdcp2_close_stream(void *ctx, uint32_t stream_id);
 int hdcp2_force_encryption(void *ctx, uint32_t enable);
+int set_hdcp_key_verify_retries(int value);
 #else
 static inline void *hdcp1_init(void)
 {
@@ -130,6 +132,10 @@ static inline int hdcp2_close_stream(void *ctx, uint32_t stream_id)
 }
 
 static inline int hdcp2_force_encryption(void *ctx, uint32_t enable)
+{
+	return 0;
+}
+static inline int set_hdcp_key_verify_retries(int value)
 {
 	return 0;
 }

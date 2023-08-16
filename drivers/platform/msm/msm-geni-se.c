@@ -116,6 +116,7 @@ struct geni_se_device {
 	struct se_geni_rsc wrapper_rsc;
 	struct ssc_qup_ssr ssr;
 	struct clk_bulk_data *ssc_clks;
+	atomic_t is_ssc_clk_enabled;
 };
 
 #define HW_VER_MAJOR_MASK GENMASK(31, 28)
@@ -372,17 +373,31 @@ void geni_se_ssc_clk_enable(struct se_geni_rsc *rsc, bool enable)
 		return;
 
 	if (enable) {
-		/* Enable core and core2x clock */
-		ret = clk_bulk_prepare_enable(SSC_NUM_CLKS, dev->ssc_clks);
-		if (ret) {
-			GENI_SE_ERR(dev->log_ctx, false, NULL,
-				"%s: corex/2x clk enable failed ret:%d\n",
-						__func__, ret);
-			return;
+		if (!atomic_read(&dev->is_ssc_clk_enabled)) {
+			/* Enable core and core2x clock */
+			ret = clk_bulk_prepare_enable(SSC_NUM_CLKS, dev->ssc_clks);
+			if (ret) {
+				GENI_SE_ERR(dev->log_ctx, false, NULL,
+					    "%s: corex/2x clks enable failed ret:%d\n",
+					    __func__, ret);
+				return;
+			}
+			atomic_set(&dev->is_ssc_clk_enabled, 1);
+		} else {
+			GENI_SE_DBG(dev->log_ctx, false, NULL,
+				    "%s: SSC corex/2x clks already enabled\n",
+				    __func__, ret);
 		}
 	} else {
-		/* Disable core and core2x clk */
-		clk_bulk_disable_unprepare(SSC_NUM_CLKS, dev->ssc_clks);
+		if (atomic_read(&dev->is_ssc_clk_enabled)) {
+			/* Disable core and core2x clk */
+			clk_bulk_disable_unprepare(SSC_NUM_CLKS, dev->ssc_clks);
+			atomic_set(&dev->is_ssc_clk_enabled, 0);
+		} else {
+			GENI_SE_DBG(dev->log_ctx, false, NULL,
+				    "%s: SSC corex/2x clks already disabled\n",
+				    __func__, ret);
+		}
 	}
 }
 EXPORT_SYMBOL(geni_se_ssc_clk_enable);
@@ -2031,6 +2046,7 @@ static int geni_se_probe(struct platform_device *pdev)
 			dev_err(dev, "%s: Err getting core/2x clk:%d\n", ret);
 			return ret;
 		}
+		atomic_set(&geni_se_dev->is_ssc_clk_enabled, 0);
 
 		INIT_LIST_HEAD(&geni_se_dev->ssr.active_list_head);
 		ret = geni_se_ssc_qup_ssr_reg(geni_se_dev);

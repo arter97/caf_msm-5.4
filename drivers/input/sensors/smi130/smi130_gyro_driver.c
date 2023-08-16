@@ -1918,6 +1918,12 @@ static irqreturn_t smi130_gyro_irq_work_func(int irq, void *handle)
 	ts = ns_to_timespec(client_data->timestamp);
 
 	SMI_GYRO_CALL_API(get_dataXYZ)(&gyro_data);
+
+	if (!is_gyro_ready) {
+		PINFO("Sensor gyro not ready, discard data of first 200ms period after active");
+		return 0;
+	}
+
 	/*remapping for SMI130_GYRO sensor*/
 	smi130_gyro_remap_sensor_data(&gyro_data, client_data);
 	input_event(client_data->input, EV_MSC, MSC_TIME,
@@ -1939,10 +1945,6 @@ static irqreturn_t smi130_gyro_irq_work_func(int irq, void *handle)
 static irqreturn_t smi_gyro_irq_handler(int irq, void *handle)
 {
 	struct smi_gyro_client_data *client_data = handle;
-	if (!is_gyro_ready) {
-		PINFO("Senosr gyro not ready, discard data of first 200ms period after active");
-		return 0;
-	}
 	client_data->timestamp= smi130_gyro_get_alarm_timestamp();
 	return IRQ_WAKE_THREAD;
 }

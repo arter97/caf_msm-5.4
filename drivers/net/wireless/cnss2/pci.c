@@ -5902,7 +5902,6 @@ static void cnss_pci_unregister_mhi(struct cnss_pci_data *pci_priv)
 	mhi_ctrl->irq = NULL;
 	mhi_free_controller(mhi_ctrl);
 	pci_priv->mhi_ctrl = NULL;
-	cnss_qmi_deinit(pci_priv->plat_priv);
 }
 
 static void cnss_pci_config_regs(struct cnss_pci_data *pci_priv)

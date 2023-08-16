@@ -2762,6 +2762,8 @@ static void gsi_suspend(struct usb_function *f)
 	bool block_db;
 	struct f_gsi *gsi = func_to_gsi(f);
 
+	gsi->rwake_inprogress = false;
+
 	/* Check if function is already suspended in gsi_func_suspend()
 	 * Or func_suspend would have bailed out earlier if func_remote_wakeup
 	 * wasn't enabled.

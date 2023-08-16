@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __MINIDUMP_H
@@ -34,7 +35,7 @@ struct md_region {
 #if IS_ENABLED(CONFIG_QCOM_MINIDUMP)
 extern struct seq_buf *md_meminfo_seq_buf;
 extern struct seq_buf *md_slabinfo_seq_buf;
-
+extern bool crash_kexec_post_notifiers;
 extern int msm_minidump_add_region(const struct md_region *entry);
 extern int msm_minidump_remove_region(const struct md_region *entry);
 /*
@@ -91,5 +92,35 @@ extern void md_dump_slabowner(void);
 #else
 static inline void md_dump_slabowner(void) {}
 static inline bool is_slub_debug_enabled(void) { return false; }
+#endif
+#define MAX_OWNER_STRING        32
+struct va_md_entry {
+	unsigned long vaddr;
+	unsigned char owner[MAX_OWNER_STRING];
+	unsigned int size;
+	void (*cb)(void *dst, unsigned long size);
+};
+
+#if IS_ENABLED(CONFIG_QCOM_VA_MINIDUMP)
+extern bool qcom_va_md_enabled(void);
+extern int qcom_va_md_register(char *name, struct notifier_block *nb);
+extern int qcom_va_md_unregister(const char *name, struct notifier_block *nb);
+extern int qcom_va_md_add_region(struct va_md_entry *entry);
+#else
+static inline bool qcom_va_md_enabled(void) { return false; }
+static inline int qcom_va_md_register(const char *name, struct notifier_block *nb)
+{
+	return -ENODEV;
+}
+
+static inline int qcom_va_md_unregister(const char *name, struct notifier_block *nb)
+{
+	return -ENODEV;
+}
+
+static inline int qcom_va_md_add_region(struct va_md_entry *entry)
+{
+	return -ENODEV;
+}
 #endif
 #endif

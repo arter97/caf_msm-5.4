@@ -267,7 +267,7 @@ extern int __qcom_scm_paravirt_smmu_attach(struct device *dev, u64 sid,
 				    u64 asid, u64 ste_pa, u64 ste_size,
 				    u64 cd_pa, u64 cd_size);
 
-extern int __qcom_scm_paravirt_tlb_inv(struct device *dev, u64 asid);
+extern int __qcom_scm_paravirt_tlb_inv(struct device *dev, u64 asid, u64 sid);
 
 extern int __qcom_scm_paravirt_smmu_detach(struct device *dev,
 						u64 sid);
