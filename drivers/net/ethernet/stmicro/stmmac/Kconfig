@@ -233,3 +233,8 @@ config STMMAC_PCI
 
 	  If unsure, say N.
 endif
+
+config DWMAC_QCOM_ETH_AUTOSAR
+	tristate "Qualcomm ETHQOS support"
+	default n
+	depends on DWMAC_QCOM_ETHQOS
