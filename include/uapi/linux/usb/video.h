@@ -576,36 +576,17 @@ struct uvc_format_h264 {
 	__u8  bDescriptorSubType;
 	__u8  bFormatIndex;
 	__u8  bNumFrameDescriptors;
+	__u8  guidFormat[16];
+	__u8  bBitsPerPixel;
 	__u8  bDefaultFrameIndex;
-	__u8  bMaxCodecConfigDelay;
-	__u8  bmSupportedSliceModes;
-	__u8  bmSupportedSyncFrameTypes;
-	__u8  bResolutionScaling;
-	__u8  Reserved1;
-	__u8  bmSupportedRateControlModes;
-	__u16 wMaxMBperSecOneResNoScalability;
-	__u16 wMaxMBperSecTwoResNoScalability;
-	__u16 wMaxMBperSecThreeResNoScalability;
-	__u16 wMaxMBperSecFourResNoScalability;
-	__u16 wMaxMBperSecOneResTemporalScalability;
-	__u16 wMaxMBperSecTwoResTemporalScalability;
-	__u16 wMaxMBperSecThreeResTemporalScalability;
-	__u16 wMaxMBperSecFourResTemporalScalability;
-	__u16 wMaxMBperSecOneResTemporalQualityScalability;
-	__u16 wMaxMBperSecTwoResTemporalQualityScalability;
-	__u16 wMaxMBperSecThreeResTemporalQualityScalability;
-	__u16 wMaxMBperSecFourResTemporalQualityScalability;
-	__u16 wMaxMBperSecOneResTemporalSpatialScalability;
-	__u16 wMaxMBperSecTwoResTemporalSpatialScalability;
-	__u16 wMaxMBperSecThreeResTemporalSpatialScalability;
-	__u16 wMaxMBperSecFourResTemporalSpatialScalability;
-	__u16 wMaxMBperSecOneResFullScalability;
-	__u16 wMaxMBperSecTwoResFullScalability;
-	__u16 wMaxMBperSecThreeResFullScalability;
-	__u16 wMaxMBperSecFourResFullScalability;
+	__u8  bAspectRatioX;
+	__u8  bAspectRatioY;
+	__u8  bmInterfaceFlags;
+	__u8  bCopyProtect;
+	__u8  bVariableSize;
 } __attribute__((__packed__));
 
-#define UVC_DT_FORMAT_H264_SIZE		52
+#define UVC_DT_FORMAT_H264_SIZE		28
 
 /* H264 Payload - 3.1.2. H264 Video Frame Descriptor */
 struct uvc_frame_h264 {
@@ -613,25 +594,18 @@ struct uvc_frame_h264 {
 	__u8  bDescriptorType;
 	__u8  bDescriptorSubType;
 	__u8  bFrameIndex;
+	__u8  bmCapabilities;
 	__u16 wWidth;
 	__u16 wHeight;
-	__u16 wSARwidth;
-	__u16 wSARheight;
-	__u16 wProfile;
-	__u8  bLevelIDC;
-	__u16 wConstrainedToolset;
-	__u32 bmSupportedUsages;
-	__u16 bmCapabilities;
-	__u32 bmSVCCapabilities;
-	__u32 bmMVCCapabilities;
 	__u32 dwMinBitRate;
 	__u32 dwMaxBitRate;
 	__u32 dwDefaultFrameInterval;
-	__u8  bNumFrameIntervals;
+	__u8  bFrameIntervalType;
+	__u32 dwBytesPerLine;
 	__u32 dwFrameInterval[];
 } __attribute__((__packed__));
 
-#define UVC_DT_FRAME_H264_SIZE(n)			(44+4*(n))
+#define UVC_DT_FRAME_H264_SIZE(n)			(26+4*(n))
 
 #define UVC_FRAME_H264(n) \
 	uvc_frame_h264_##n
@@ -642,21 +616,14 @@ struct UVC_FRAME_H264(n) {				\
 	__u8  bDescriptorType;				\
 	__u8  bDescriptorSubType;			\
 	__u8  bFrameIndex;				\
+	__u8  bmCapabilities;				\
 	__u16 wWidth;					\
 	__u16 wHeight;					\
-	__u16 wSARwidth;				\
-	__u16 wSARheight;				\
-	__u16 wProfile;					\
-	__u8  bLevelIDC;				\
-	__u16 wConstrainedToolset;			\
-	__u32 bmSupportedUsages;			\
-	__u16 bmCapabilities;				\
-	__u32 bmSVCCapabilities;			\
-	__u32 bmMVCCapabilities;			\
 	__u32 dwMinBitRate;				\
 	__u32 dwMaxBitRate;				\
 	__u32 dwDefaultFrameInterval;			\
-	__u8  bNumFrameIntervals;			\
+	__u8  bFrameIntervalType;			\
+	__u32 dwBytesPerLine;				\
 	__u32 dwFrameInterval[n];			\
 } __attribute__ ((packed))
 
