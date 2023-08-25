@@ -6317,7 +6317,7 @@ static int msm_pcie_probe(struct platform_device *pdev)
 		pcie_dev->pins_sleep = pinctrl_lookup_state(pcie_dev->pinctrl,
 								"sleep");
 		if (IS_ERR(pcie_dev->pins_sleep)) {
-			PCIE_ERR(pcie_dev,
+			PCIE_INFO(pcie_dev,
 				"PCIe: RC%d could not get pinctrl sleep state\n",
 				pcie_dev->rc_idx);
 			pcie_dev->pins_sleep = NULL;
