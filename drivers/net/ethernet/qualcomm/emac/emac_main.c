@@ -230,6 +230,34 @@ int emac_clk_set_rate(struct emac_adapter *adpt, enum emac_clk_id id,
 	return ret;
 }
 
+int emac_reinit_locked_mtu(struct emac_adapter *adpt)
+{
+	struct net_device *netdev = adpt->netdev;
+	int ret = 0;
+	WARN_ON(in_interrupt());
+
+	/* Reset might take few 10s of ms */
+	while (TEST_N_SET_FLAG(adpt, ADPT_STATE_RESETTING))
+		msleep(EMAC_ADPT_RESET_WAIT_TIME);
+
+	if (TEST_FLAG(adpt, ADPT_STATE_DOWN)) {
+		CLR_FLAG(adpt, ADPT_STATE_RESETTING);
+		return -EPERM;
+	}
+
+	pm_runtime_get_sync(netdev->dev.parent);
+
+	emac_mac_down(adpt, EMAC_HW_CTRL_RESET_MAC);
+	//adpt->phy.ops.reset(adpt);
+	ret = emac_mac_up(adpt);
+
+	pm_runtime_mark_last_busy(netdev->dev.parent);
+	pm_runtime_put_autosuspend(netdev->dev.parent);
+
+	CLR_FLAG(adpt, ADPT_STATE_RESETTING);
+	return ret;
+}
+
 /* reinitialize */
 int emac_reinit_locked(struct emac_adapter *adpt)
 {
@@ -1726,7 +1754,7 @@ static int emac_change_mtu(struct net_device *netdev, int new_mtu)
 		adpt->rxbuf_size = new_mtu > EMAC_DEF_RX_BUF_SIZE ?
 			ALIGN(max_frame, 8) : EMAC_DEF_RX_BUF_SIZE;
 		if (netif_running(netdev))
-			return emac_reinit_locked(adpt);
+			return emac_reinit_locked_mtu(adpt);
 	}
 	return 0;
 }
