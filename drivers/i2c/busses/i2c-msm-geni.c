@@ -1417,7 +1417,7 @@ static int geni_i2c_probe(struct platform_device *pdev)
 		ret = geni_se_resources_init(&gi2c->i2c_rsc, I2C_CORE2X_VOTE,
 				     (DEFAULT_SE_CLK * DEFAULT_BUS_WIDTH));
 		if (ret) {
-			dev_err(gi2c->dev, "geni_se_resources_init\n");
+			dev_info(gi2c->dev, "geni_se_resources_init\n");
 			return ret;
 		}
 
