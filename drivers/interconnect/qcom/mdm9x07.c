@@ -32,11 +32,23 @@ static const struct clk_bulk_data bus_clocks[] = {
 	{ .id = "bus_a" },
 };
 
+static struct qcom_icc_qosbox apps_proc_qos = {
+	.regs = icc_bimc_qos_regs[ICC_QNOC_QOSGEN_TYPE_RPMH],
+	.num_ports = 1,
+	.offsets = { 0x7300 },
+	.config = &(struct qos_config) {
+		.prio = 0,
+		.bke_enable = 1,
+	 },
+};
+
 static struct qcom_icc_node apps_proc = {
 	.name = "apps_proc",
 	.id = MASTER_AMPSS_M0,
 	.channels = 1,
 	.buswidth = 8,
+	.noc_ops = &qcom_bimc_ops,
+	.qosbox = &apps_proc_qos,
 	.mas_rpm_id = -1,
 	.slv_rpm_id = -1,
 	.num_links = 2,
@@ -54,11 +66,23 @@ static struct qcom_icc_node mas_pcnoc_bimc_1 = {
 	.links = { SLAVE_EBI_CH0 },
 };
 
+static struct qcom_icc_qosbox tcu_0_qos = {
+	.regs = icc_bimc_qos_regs[ICC_QNOC_QOSGEN_TYPE_RPMH],
+	.num_ports = 1,
+	.offsets = { 0x1B300 },
+	.config = &(struct qos_config) {
+		.prio = 2,
+		.bke_enable = 1,
+	 },
+};
+
 static struct qcom_icc_node tcu_0 = {
 	.name = "tcu_0",
 	.id = MASTER_TCU_0,
 	.channels = 1,
 	.buswidth = 8,
+	.noc_ops = &qcom_bimc_ops,
+	.qosbox = &tcu_0_qos,
 	.mas_rpm_id = -1,
 	.slv_rpm_id = -1,
 	.num_links = 1,
@@ -154,11 +178,24 @@ static struct qcom_icc_node usb_hs1 = {
 	.links = { PNOC_M_1 },
 };
 
+static struct qcom_icc_qosbox crypto_qos = {
+	.regs = icc_qnoc2_qos_regs[ICC_QNOC_QOSGEN_TYPE_RPMH],
+	.num_ports = 1,
+	.offsets = { 0x7000 },
+	.config = &(struct qos_config) {
+		.prio0 = 2,
+		.prio1 = 2,
+		.mode = 0,
+	},
+};
+
 static struct qcom_icc_node crypto = {
 	.name = "crypto",
 	.id = MASTER_CRYPTO_CORE_0,
 	.channels = 1,
 	.buswidth = 8,
+	.noc_ops = &qcom_qnoc2_ops,
+	.qosbox = &crypto_qos,
 	.mas_rpm_id = -1,
 	.slv_rpm_id = -1,
 	.num_links = 1,
@@ -209,11 +246,24 @@ static struct qcom_icc_node xi_hsic = {
 	.links = { SLAVE_PCNOC_BIMC_1, PNOC_INT_2 },
 };
 
+static struct qcom_icc_qosbox mas_sgmii_qos = {
+	.regs = icc_qnoc2_qos_regs[ICC_QNOC_QOSGEN_TYPE_RPMH],
+	.num_ports = 1,
+	.offsets = { 0x11000 },
+	.config = &(struct qos_config) {
+		.prio0 = 1,
+		.prio1 = 1,
+		.mode = 0,
+	},
+};
+
 static struct qcom_icc_node mas_sgmii = {
 	.name = "mas_sgmii",
 	.id = MASTER_SGMII,
 	.channels = 1,
 	.buswidth = 8,
+	.noc_ops = &qcom_qnoc2_ops,
+	.qosbox = &mas_sgmii_qos,
 	.mas_rpm_id = -1,
 	.slv_rpm_id = -1,
 	.num_links = 2,

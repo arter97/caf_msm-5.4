@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  */
 
@@ -25,10 +26,16 @@ enum {
 
 #ifndef CONFIG_INTERCONNECT_QCOM_RPMH
 enum {
+	QOSGEN_OFF_QNOC2_PRIORITY,
+	QOSGEN_OFF_QNOC2_MODE,
+};
+
+enum {
 	QOSGEN_OFF_MPORT_BKE_HEALTH,
 	QOSGEN_OFF_MPORT_BKE_EN,
 };
 
+extern const u8 icc_qnoc2_qos_regs[ICC_QNOC_QOS_MAX_TYPE][QOSGEN_OFF_MAX_REGS];
 extern const u8 icc_bimc_qos_regs[ICC_QNOC_QOS_MAX_TYPE][QOSGEN_OFF_MAX_REGS];
 #endif
 extern const u8 icc_qnoc_qos_regs[ICC_QNOC_QOS_MAX_TYPE][QOSGEN_OFF_MAX_REGS];
@@ -41,6 +48,9 @@ struct qos_config {
 	u32 prio;
 	u32 urg_fwd;
 #ifndef CONFIG_INTERCONNECT_QCOM_RPMH
+	u32 prio0;
+	u32 prio1;
+	u32 mode;
 	u32 bke_enable;
 #endif
 };
@@ -67,6 +77,7 @@ struct qcom_icc_qosbox {
 
 extern const struct qcom_icc_noc_ops qcom_qnoc4_ops;
 #ifndef CONFIG_INTERCONNECT_QCOM_RPMH
+extern const struct qcom_icc_noc_ops qcom_qnoc2_ops;
 extern const struct qcom_icc_noc_ops qcom_bimc_ops;
 #endif
 

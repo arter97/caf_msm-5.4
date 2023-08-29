@@ -968,6 +968,7 @@ config MSM_PM_LEGACY
 	depends on PM
 	select MSM_IDLE_STATS if DEBUG_FS
 	select CPU_IDLE_MULTIPLE_DRIVERS
+	select QTI_SYSTEM_PM_RPM if MSM_RPM_SMD && QCOM_MPM
 	bool "Qualcomm Technologies, Inc. (QTI) platform specific Legacy PM driver"
 	help
 	  Platform specific legacy power driver to manage
