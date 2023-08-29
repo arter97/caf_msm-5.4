@@ -4645,6 +4645,13 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	if (ret)
 		dev_err(&pdev->dev, "Failed to register uart_port: %d\n",
 				ret);
+
+	if (!dev_port->is_console) {
+		se_geni_clks_on(&dev_port->serial_rsc);
+		msm_geni_check_stop_engine(uport);
+		se_geni_clks_off(&dev_port->serial_rsc);
+	}
+
 	/*
 	 * Remove proxy vote from QUP core which was kept from common driver
 	 * probe on behalf of earlycon
