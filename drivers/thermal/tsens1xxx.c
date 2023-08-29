@@ -48,6 +48,8 @@
 #define TSENS_THRESHOLD_MAX_CODE	0x3ff
 #define TSENS_THRESHOLD_MIN_CODE	0x0
 #define TSENS_SCALE_MILLIDEG		1000
+#define TSENS_0c_TRIGGER_THRESHOLD		5000
+#define TSENS_0c_CLEAR_THRESHOLD		10000
 
 static int code_to_degc(u32 adc_code, const struct tsens_sensor *sensor)
 {
@@ -160,6 +162,10 @@ static int tsens_tz_activate_trip_type(struct tsens_sensor *tm_sensor,
 	tmdev = tm_sensor->tmdev;
 	if (!tmdev)
 		return -EINVAL;
+
+	if (atomic_read(&tmdev->in_suspend) &&
+		(tm_sensor->hw_id != tmdev->ltvr_sensor_id))
+		return 0;
 
 	lo_code = TSENS_THRESHOLD_MIN_CODE;
 	hi_code = TSENS_THRESHOLD_MAX_CODE;
@@ -490,13 +496,110 @@ static int tsens1xxx_register_interrupts(struct tsens_device *tmdev)
 	return 0;
 }
 
+static void dump_tsens_status(struct tsens_device *tm, char *cntxt)
+{
+	pr_debug("%s: %s: thresh_mask[%d]:0x%x S%d_STATUS:0x%x\n",
+		cntxt, __func__,
+		readl_relaxed(
+			(TSENS_S0_UPPER_LOWER_STATUS_CTRL_ADDR(tm->tsens_tm_addr)) +
+			tm->ltvr_sensor_id * TSENS_SN_ADDR_OFFSET),
+		tm->ltvr_sensor_id,
+		readl_relaxed(TSENS_SN_STATUS_ADDR(tm->tsens_tm_addr +
+		tm->ctrl_data->tsens_sn_offset) +
+			(tm->ltvr_sensor_id << TSENS_STATUS_ADDR_OFFSET)));
+}
+
+static int tsens1xxx_pm_activate_all_trip_type(struct tsens_device *tm,
+		enum thermal_device_mode mode)
+{
+	struct tsens_sensor *tm_sensor = NULL;
+	int i, rc = 0;
+
+	for (i = 0; i < TSENS_MAX_SENSORS; i++) {
+		if (IS_ERR(tm->sensor[i].tzd) || (i == tm->ltvr_sensor_id))
+			continue;
+
+		tm_sensor = &tm->sensor[i];
+		rc = tsens_tz_activate_trip_type(tm_sensor,
+				TSENS_TRIP_CONFIGURABLE_HI,
+				mode);
+		if (rc)
+			pr_debug("%s:trip high disable error:%d sensor[%d]\n",
+				__func__, rc, i);
+		rc = tsens_tz_activate_trip_type(tm_sensor,
+				TSENS_TRIP_CONFIGURABLE_LOW,
+				mode);
+		if (rc)
+			pr_debug("%s:trip low disable error:%d sensor[%d]\n",
+				__func__, rc, i);
+	}
+
+	return rc;
+}
+
 static int tsens1xxx_tsens_resume(struct tsens_device *tmdev)
 {
+	int ret, i;
+	struct tsens_sensor *zeroc_sensor = NULL;
+	unsigned int temp;
+	unsigned long flags;
+
+	if (tmdev->tm_disable_on_suspend) {
+		spin_lock_irqsave(&tmdev->tsens_upp_low_lock, flags);
+		atomic_set(&tmdev->in_suspend, 0);
+		spin_unlock_irqrestore(&tmdev->tsens_upp_low_lock, flags);
+
+		for (i = 0; i < TSENS_MAX_SENSORS; i++) {
+			if (IS_ERR_OR_NULL(tmdev->sensor[i].tzd) ||
+					(i == tmdev->ltvr_sensor_id))
+				continue;
+			of_thermal_handle_trip(tmdev->dev, tmdev->sensor[i].tzd);
+		}
+		dump_tsens_status(tmdev, "resume_tm_disable_exit");
+	}
+
+	if (!tmdev->ltvr_resume_trigger)
+		return 0;
+
+	dump_tsens_status(tmdev,
+		"ltvr_resume_begin_with_no_status_support");
+	zeroc_sensor = &tmdev->sensor[tmdev->ltvr_sensor_id];
+	ret = tsens1xxx_get_temp(zeroc_sensor, &temp);
+	if (ret) {
+		pr_err("Error:%d reading temp sensor\n", ret);
+		return 0;
+	}
+
+	if (zeroc_sensor->thr_state.low_th_state &&
+		temp <= (TSENS_0c_TRIGGER_THRESHOLD +
+		tmdev->ltvr_trip_temp_delta)) {
+		of_thermal_handle_trip_temp(tmdev->dev, zeroc_sensor->tzd,
+			TSENS_0c_TRIGGER_THRESHOLD);
+		dump_tsens_status(tmdev, "ltvr_resume_end_with_0c_set");
+	} else if (zeroc_sensor->thr_state.high_th_state &&
+			temp >= TSENS_0c_CLEAR_THRESHOLD -
+			tmdev->ltvr_clear_temp_delta) {
+		of_thermal_handle_trip_temp(tmdev->dev, zeroc_sensor->tzd,
+			TSENS_0c_CLEAR_THRESHOLD);
+		dump_tsens_status(tmdev, "ltvr_resume_end_with_0c_reset");
+	}
 	return 0;
 }
 
 static int tsens1xxx_tsens_suspend(struct tsens_device *tmdev)
 {
+	unsigned long flags;
+
+	if (!tmdev->tm_disable_on_suspend)
+		return 0;
+
+	dump_tsens_status(tmdev, "Suspend_Entry");
+	spin_lock_irqsave(&tmdev->tsens_upp_low_lock, flags);
+	tsens1xxx_pm_activate_all_trip_type(tmdev, THERMAL_DEVICE_DISABLED);
+	atomic_set(&tmdev->in_suspend, 1);
+	spin_unlock_irqrestore(&tmdev->tsens_upp_low_lock, flags);
+	dump_tsens_status(tmdev, "Suspend_Exit");
+
 	return 0;
 }
 

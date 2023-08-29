@@ -31,6 +31,7 @@ obj-$(CONFIG_DWMAC_DWC_QOS_ETH)	+= dwmac-dwc-qos-eth.o
 obj-$(CONFIG_DWMAC_GENERIC)	+= dwmac-generic.o
 stmmac-platform-objs:= stmmac_platform.o
 dwmac-altr-socfpga-objs := altr_tse_pcs.o dwmac-socfpga.o
+obj-$(CONFIG_DWMAC_QCOM_ETH_AUTOSAR)	+= dwmac-qcom-eth-autosar.o
 
 ccflags-$(CONFIG_PTP_1588_CLOCK)+=-DCONFIG_PTPSUPPORT_OBJ
 ccflags-$(CONFIG_ETHQOS_IPA_OFFLOAD)+=-DCONFIG_ETH_IPA_OFFLOAD
