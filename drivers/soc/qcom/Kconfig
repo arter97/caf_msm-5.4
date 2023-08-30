@@ -1581,6 +1581,15 @@ config PLATFORM_AUTO
 
 	  If you are unsure about this, Say N here.
 
+config LK_BOOT_TIME_MARKER
+	bool "Add boot marker support for LK bootloader"
+	depends on MSM_BOOT_STATS
+	help
+	  Bootloader KPIs are stored and passed via imem.
+	  Little Kernel Bootloader shares a slightly different data
+	  structure than Android Bootloader.
+	  This config adds support for LK bootloader.
+
 source "drivers/soc/qcom/icnss2/Kconfig"
 
 source "drivers/soc/qcom/gnsssirf/Kconfig"
