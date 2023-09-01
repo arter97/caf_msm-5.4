@@ -605,7 +605,7 @@ static void ufshcd_print_pwr_info(struct ufs_hba *hba)
 		"INVALID MODE",
 	};
 
-	dev_err(hba->dev, "%s:[RX, TX]: gear=[%d, %d], lane[%d, %d], pwr[%s, %s], rate = %d\n",
+	dev_info(hba->dev, "%s:[RX, TX]: gear=[%d, %d], lane[%d, %d], pwr[%s, %s], rate = %d\n",
 		 __func__,
 		 hba->pwr_info.gear_rx, hba->pwr_info.gear_tx,
 		 hba->pwr_info.lane_rx, hba->pwr_info.lane_tx,
@@ -7086,7 +7086,7 @@ static u32 ufshcd_find_max_sup_active_icc_level(struct ufs_hba *hba,
 	if (!hba->vreg_info.vcc ||
 		(!hba->vreg_info.vccq && hba->dev_info.wspecversion >= 0x300) ||
 		(!hba->vreg_info.vccq2 && hba->dev_info.wspecversion < 0x300)) {
-		dev_err(hba->dev,
+		dev_dbg(hba->dev,
 			"%s: Regulator capability was not set, actvIccLevel=%d",
 							__func__, icc_level);
 		goto out;
@@ -7793,7 +7793,6 @@ static int ufshcd_probe_hba(struct ufs_hba *hba, bool async)
 #endif
 	ktime_t start = ktime_get();
 
-	dev_err(hba->dev, "*** This is %s ***\n", __FILE__);
 #if defined(CONFIG_SCSI_UFSHCD_QTI)
 reinit:
 #endif

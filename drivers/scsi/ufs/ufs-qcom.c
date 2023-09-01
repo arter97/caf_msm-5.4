@@ -2622,7 +2622,7 @@ static void ufs_qcom_qos_init(struct ufs_hba *hba)
 	qr->num_groups = of_get_available_child_count(np);
 	dev_dbg(hba->dev, "num-groups: %d\n", qr->num_groups);
 	if (!qr->num_groups) {
-		dev_err(dev, "QoS groups undefined\n");
+		dev_dbg(dev, "QoS groups undefined\n");
 		kfree(qr);
 		host->ufs_qos = NULL;
 		return;
