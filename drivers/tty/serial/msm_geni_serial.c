@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/bitmap.h>
@@ -32,6 +32,7 @@
 #include <uapi/linux/msm_geni_serial.h>
 #include <soc/qcom/boot_stats.h>
 #include <linux/suspend.h>
+#include <linux/syscore_ops.h>
 
 /* UART specific GENI registers */
 #define SE_UART_LOOPBACK_CFG		(0x22C)
@@ -289,6 +290,7 @@ struct msm_geni_serial_port {
 	bool resuming_from_deep_sleep;
 };
 
+static struct uart_port *uart_console_uport;
 static const struct uart_ops msm_geni_serial_pops;
 static struct uart_driver msm_geni_console_driver;
 static struct uart_driver msm_geni_serial_hs_driver;
@@ -4270,6 +4272,20 @@ static int msm_geni_serial_read_dtsi(struct platform_device *pdev,
 	return ret;
 }
 
+static void uart_console_syscore_resume(void)
+{
+	if (!uart_console_uport)
+		return;
+	uart_resume_port((struct uart_driver *)uart_console_uport->private_data,
+						uart_console_uport);
+	msm_geni_serial_port_setup(uart_console_uport);
+	uart_console_uport = NULL;
+}
+
+struct syscore_ops uart_console_syscore_ops = {
+	.resume         = uart_console_syscore_resume,
+};
+
 static int msm_geni_serial_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -4453,6 +4469,9 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 			"M - DRIVER GENI_HS_UART_%d Ready", line);
 	place_marker(boot_marker);
 
+	if (is_console)
+		register_syscore_ops(&uart_console_syscore_ops);
+
 exit_geni_serial_probe:
 	IPC_LOG_MSG(dev_port->ipc_log_misc, "%s: ret:%d\n",
 		    __func__, ret);
@@ -4479,6 +4498,8 @@ static int msm_geni_serial_remove(struct platform_device *pdev)
 					port->rx_buf, DMA_RX_BUF_SIZE);
 		port->rx_dma = (dma_addr_t)NULL;
 	}
+	if (uart_console(&port->uport))
+		unregister_syscore_ops(&uart_console_syscore_ops);
 	return 0;
 }
 
@@ -4637,6 +4658,7 @@ static int msm_geni_serial_sys_suspend(struct device *dev)
 	if (uart_console(uport) || port->pm_auto_suspend_disable) {
 		uart_suspend_port((struct uart_driver *)uport->private_data,
 					uport);
+		uart_console_uport = uport;
 		if (port->console_rx_wakeup && port->wakeup_irq > 0)
 			enable_irq(port->wakeup_irq);
 		IPC_LOG_MSG(port->console_log, "%s\n", __func__);
@@ -4670,6 +4692,7 @@ static int msm_geni_serial_sys_hib_suspend(struct device *dev)
 	if (uart_console(uport) || port->pm_auto_suspend_disable) {
 		uart_suspend_port((struct uart_driver *)uport->private_data,
 					uport);
+		uart_console_uport = uport;
 		IPC_LOG_MSG(port->console_log, "%s\n", __func__);
 	} else {
 		struct uart_state *state = uport->state;
