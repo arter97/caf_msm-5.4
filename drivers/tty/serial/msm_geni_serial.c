@@ -3175,6 +3175,7 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 			if (msm_port->gsi->rx_c) {
 				IPC_LOG_MSG(msm_port->ipc_log_misc,
 					"%s:GSI DMA-Rx ch\n", __func__);
+				dma_release_channel(msm_port->gsi->rx_c);
 				if (msm_port->rx_wq)
 					flush_workqueue(msm_port->rx_wq);
 
@@ -3184,13 +3185,14 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 							msm_port->rx_gsi_buf[i],
 							DMA_RX_BUF_SIZE);
 				}
+				msm_port->gsi->rx_c = NULL;
 				IPC_LOG_MSG(msm_port->ipc_log_misc,
 					"%s:Unmap buf done\n", __func__);
 			}
 			if (msm_port->gsi->tx_c) {
 				IPC_LOG_MSG(msm_port->ipc_log_misc,
 					"%s:GSI DMA-Tx ch\n", __func__);
-				msm_geni_serial_stop_tx(uport);
+				dma_release_channel(msm_port->gsi->tx_c);
 				if (msm_port->tx_wq)
 					flush_workqueue(msm_port->tx_wq);
 
@@ -3203,6 +3205,7 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 					IPC_LOG_MSG(msm_port->ipc_log_misc,
 						    "%s:Unmap buf done\n", __func__);
 				}
+				msm_port->gsi->tx_c = NULL;
 			}
 		} else {
 			msm_geni_serial_stop_tx(uport);
