@@ -3207,6 +3207,7 @@ static bool cnss_pci_is_drv_supported(struct cnss_pci_data *pci_priv)
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	struct device_node *root_of_node;
 	bool drv_supported = false;
+	bool drv_supported_overlay_disable = false;
 
 	if (!root_port) {
 		cnss_pr_err("PCIe DRV is not supported as root port is null\n");
@@ -3219,17 +3220,26 @@ static bool cnss_pci_is_drv_supported(struct cnss_pci_data *pci_priv)
 	if (root_of_node && root_of_node->parent)
 		drv_supported = of_property_read_bool(root_of_node->parent,
 						      "qcom,drv-supported");
-
 	cnss_pr_dbg("PCIe DRV is %s\n",
 		    drv_supported ? "supported" : "not supported");
-	pci_priv->drv_supported = drv_supported;
 
-	if (drv_supported) {
+	if (root_of_node && root_of_node->parent)
+		drv_supported_overlay_disable = of_property_read_bool(root_of_node->parent,
+								      "qcom,overlay-disable-drv-supported");
+
+	cnss_pr_dbg("Using overlay to disable PCIe DRV is %s\n",
+		    drv_supported_overlay_disable ? "true" : "false");
+
+	pci_priv->drv_supported = drv_supported;
+	if (drv_supported_overlay_disable)
+		pci_priv->drv_supported = false;
+
+	if (pci_priv->drv_supported) {
 		plat_priv->cap.cap_flag |= CNSS_HAS_DRV_SUPPORT;
 		cnss_set_feature_list(plat_priv, CNSS_DRV_SUPPORT_V01);
 	}
 
-	return drv_supported;
+	return pci_priv->drv_supported;
 }
 
 static void cnss_pci_event_cb(struct msm_pcie_notify *notify)
