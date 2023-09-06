@@ -459,6 +459,10 @@ void handle_rx_event(struct seb_priv *dev, void *rx_event_buf, int len)
 	struct seb_buf_list *rx_notif = NULL;
 	unsigned long flags;
 
+	if (len < sizeof(struct gmi_header)) {
+		pr_err("Invalid rx_event_buffer length\n");
+		return;
+	}
 	event_header = (struct gmi_header *)rx_event_buf;
 
 	if (event_header->opcode == GMI_SLATE_EVENT_RSB ||
@@ -476,6 +480,7 @@ void handle_rx_event(struct seb_priv *dev, void *rx_event_buf, int len)
 
 		seb_send_input(evnt);
 		kfree(evnt);
+		return;
 	} else if (event_header->opcode == GMI_SLATE_EVENT_TOUCH) {
 		return;
 	}
