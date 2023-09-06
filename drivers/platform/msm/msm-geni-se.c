@@ -356,19 +356,17 @@ static ssize_t ssc_qup_state_show(struct device *dev,
 
 static DEVICE_ATTR_RO(ssc_qup_state);
 
-void geni_se_ssc_clk_enable(struct se_geni_rsc *rsc, bool enable)
+/*
+ * geni_se_ssc_clk_on() - vote/unvote SSC QUP core x/2x clocks
+ * @dev: Pointer to the concerned serial engine structure.
+ *
+ * Return: none
+ */
+static void geni_se_ssc_clk_on(struct geni_se_device *dev, bool enable)
 {
-	struct geni_se_device *dev;
 	int ret = 0;
 
-	if (unlikely(!rsc || !rsc->wrapper_dev))
-		return;
-
-	dev = dev_get_drvdata(rsc->wrapper_dev);
 	if (!dev)
-		return;
-
-	if (!rsc->rsc_ssr.ssr_enable)
 		return;
 
 	if (enable) {
@@ -384,6 +382,29 @@ void geni_se_ssc_clk_enable(struct se_geni_rsc *rsc, bool enable)
 		/* Disable core and core2x clk */
 		clk_bulk_disable_unprepare(SSC_NUM_CLKS, dev->ssc_clks);
 	}
+}
+
+/*
+ * geni_se_ssc_clk_enable() - enable/disable SSC QUP core x/2x clocks
+ * @rsc: Pointer to resource associated with the serial engine.
+ *
+ * Return: none
+ */
+void geni_se_ssc_clk_enable(struct se_geni_rsc *rsc, bool enable)
+{
+	struct geni_se_device *dev;
+
+	if (unlikely(!rsc || !rsc->wrapper_dev))
+		return;
+
+	dev = dev_get_drvdata(rsc->wrapper_dev);
+	if (!dev)
+		return;
+
+	if (!rsc->rsc_ssr.ssr_enable)
+		return;
+
+	geni_se_ssc_clk_on(dev, enable);
 }
 EXPORT_SYMBOL(geni_se_ssc_clk_enable);
 
@@ -402,7 +423,7 @@ static void geni_se_ssc_qup_down(struct geni_se_device *dev)
 					rsc_ssr.active_list) {
 		rsc->rsc_ssr.force_suspend(rsc->ctrl_dev);
 	}
-	geni_se_ssc_clk_enable(rsc, false);
+	geni_se_ssc_clk_on(dev, false);
 }
 
 static void geni_se_ssc_qup_up(struct geni_se_device *dev)
@@ -417,7 +438,19 @@ static void geni_se_ssc_qup_up(struct geni_se_device *dev)
 		return;
 	}
 
-	geni_se_ssc_clk_enable(rsc, true);
+	geni_se_ssc_clk_on(dev, true);
+
+	if (!dev->ssr.is_ssr_down) {
+		/*
+		 * Since bootup of ADSP cause default SSR up,
+		 * we need to ignore this very first time.
+		 * Later ssr up and ssr down can continue as usual.
+		 */
+		GENI_SE_ERR(dev->log_ctx, false, NULL,
+			    "%s: Ignore SSR up notification process\n",
+			    __func__);
+		return;
+	}
 
 	list_for_each_entry(rsc, &dev->ssr.active_list_head,
 					rsc_ssr.active_list) {
