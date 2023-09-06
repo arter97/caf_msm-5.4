@@ -460,6 +460,7 @@ int mhi_arch_pcie_init(struct mhi_controller *mhi_cntrl)
 	char node[32];
 	int ret;
 	u16 linkstat;
+	bool drv_supported_overlay_disable = false;
 
 	if (!arch_info) {
 		struct msm_pcie_register_event *reg_event;
@@ -500,10 +501,16 @@ int mhi_arch_pcie_init(struct mhi_controller *mhi_cntrl)
 		/* check if root-complex support DRV */
 		root_port = pci_find_pcie_root_port(mhi_dev->pci_dev);
 		root_ofnode = root_port->dev.of_node;
-		if (root_ofnode->parent)
+		if (root_ofnode->parent) {
 			mhi_dev->drv_supported =
 				of_property_read_bool(root_ofnode->parent,
 						      "qcom,drv-supported");
+			drv_supported_overlay_disable =
+				of_property_read_bool(root_ofnode->parent,
+						      "qcom,overlay-disable-drv-supported");
+			if (drv_supported_overlay_disable)
+				mhi_dev->drv_supported = false;
+		}
 
 		mhi_port = mhi_dev->pci_dev;
 		mhi_ofnode = mhi_port->dev.of_node;
