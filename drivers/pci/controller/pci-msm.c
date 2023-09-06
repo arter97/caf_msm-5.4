@@ -6183,6 +6183,7 @@ static int msm_pcie_probe(struct platform_device *pdev)
 	int ret = 0;
 	int rc_idx = -1;
 	int size = 0;
+	bool drv_supported_overlay_disable = false;
 	struct msm_pcie_dev_t *pcie_dev;
 	struct device_node *of_node;
 
@@ -6488,6 +6489,12 @@ static int msm_pcie_probe(struct platform_device *pdev)
 
 	pcie_dev->drv_supported = of_property_read_bool(of_node,
 							"qcom,drv-supported");
+	drv_supported_overlay_disable = of_property_read_bool(of_node,
+							"qcom,overlay-disable-drv-supported");
+	if (drv_supported_overlay_disable) {
+		pcie_dev->drv_supported = false;
+	}
+
 	if (pcie_dev->drv_supported) {
 		ret = msm_pcie_setup_drv(pcie_dev, of_node);
 		if (ret)
