@@ -867,8 +867,13 @@ void qcom_wdt_trigger_bite(void)
 	compute_irq_stat(&wdog_data->irq_counts_work);
 	dev_err(wdog_data->dev, "Causing a QCOM Apps Watchdog bite!\n");
 	wdog_data->ops->show_wdt_status(wdog_data);
+	printk("%s log3 \n", __func__);
+	qcom_scm_deassert_ps_hold();
+	printk("%s log31 \n", __func__);
 	wdog_data->ops->set_bite_time(1, wdog_data);
+	printk("%s log32 \n", __func__);
 	wdog_data->ops->reset_wdt(wdog_data);
+	printk("%s log33 \n", __func__);
 	/* Delay to make sure bite occurs */
 	mdelay(10000);
 	/*
