@@ -1951,6 +1951,23 @@ err_scale_timer:
 	return ret;
 }
 
+int qseecom_set_msm_bus_request_from_smcinvoke(uint32_t mode)
+{
+	int ret = 0;
+
+	if (mode > HIGH || mode < INACTIVE) {
+		pr_err("Invalid mode %d for clock requested, setting clock to INACTIVE\n", mode);
+		ret = qseecom_scale_bus_bandwidth_timer(INACTIVE);
+		if (ret)
+			pr_err("Failed to set bw INACTIVE\n");
+		return -EINVAL;
+	}
+	ret = qseecom_scale_bus_bandwidth_timer(mode);
+	if (ret)
+		pr_err("Failed to set bw for request_mode (%d)\n", mode);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(qseecom_set_msm_bus_request_from_smcinvoke);
 
 static int qseecom_unregister_bus_bandwidth_needs(
 					struct qseecom_dev_handle *data)
