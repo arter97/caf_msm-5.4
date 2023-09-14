@@ -4469,6 +4469,7 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	device_create_file(uport->dev, &dev_attr_ver_info);
 	msm_geni_serial_debug_init(uport, is_console);
 	dev_port->port_setup = false;
+	dev_port->serial_rsc.base = uport->membase;
 
 	dev_port->uart_error = UART_ERROR_DEFAULT;
 
