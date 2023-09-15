@@ -4563,6 +4563,10 @@ void icnss_recovery_timeout_hdlr(struct timer_list *t)
 {
 	struct icnss_priv *priv = from_timer(priv, t, recovery_timer);
 
+	/* This is to handle if slate is not up and modem SSR is triggered */
+	if (priv->is_slate_rfa && !test_bit(ICNSS_SLATE_UP, &priv->state))
+		return;
+
 	if (test_bit(ICNSS_LOW_POWER, &priv->state)) {
 		icnss_pr_info("Device is in low power mode");
 		return;
