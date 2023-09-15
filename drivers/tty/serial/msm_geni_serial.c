@@ -4121,7 +4121,7 @@ static int msm_geni_serial_get_ver_info(struct uart_port *uport)
 			msm_port->ver_info.hw_step_ver);
 
 	msm_port->ver_info.hw_ver = geni_se_qupv3_get_hw_version(msm_port->wrapper_dev);
-	dev_err(uport->dev, "%s:HW version %d\n", __func__, msm_port->ver_info.hw_ver);
+	dev_info(uport->dev, "%s:HW version %d\n", __func__, msm_port->ver_info.hw_ver);
 
 exit_ver_info:
 	return ret;

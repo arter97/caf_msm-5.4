@@ -1069,7 +1069,7 @@ int cnss_wlfw_qdss_dnld_send_sync(struct cnss_plat_data *plat_priv)
 	ret = cnss_request_firmware_direct(plat_priv, &fw_entry,
 					   qdss_cfg_filename);
 	if (ret) {
-		cnss_pr_err("Failed to load QDSS: %s\n",
+		cnss_pr_warn("Failed to load QDSS: %s\n",
 			    qdss_cfg_filename);
 		goto err_req_fw;
 	}
