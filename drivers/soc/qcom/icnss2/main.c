@@ -2029,6 +2029,8 @@ static int icnss_wpss_ssr_register_notifier(struct icnss_priv *priv)
 static int icnss_slate_event_notifier_nb(struct notifier_block *nb,
 					 unsigned long event, void *data)
 {
+	icnss_pr_info("Received slate event 0x%x\n", event);
+
 	if (event == SLATE_STATUS) {
 		struct icnss_priv *priv = container_of(nb, struct icnss_priv,
 						       seb_nb);
@@ -2059,6 +2061,17 @@ static int icnss_register_slate_event_notifier(struct icnss_priv *priv)
 		icnss_pr_err("SLATE event register notifier failed: %d\n",
 			     ret);
 	}
+
+	return ret;
+}
+
+static int icnss_unregister_slate_event_notifier(struct icnss_priv *priv)
+{
+	int ret = 0;
+
+	ret = seb_unregister_for_slate_event(priv->seb_handle, &priv->seb_nb);
+	if (ret < 0)
+		icnss_pr_err("Slate event unregister failed: %d\n", ret);
 
 	return ret;
 }
@@ -2133,6 +2146,11 @@ static int icnss_slate_ssr_unregister_notifier(struct icnss_priv *priv)
 }
 #else
 static int icnss_register_slate_event_notifier(struct icnss_priv *priv)
+{
+	return 0;
+}
+
+static int icnss_unregister_slate_event_notifier(struct icnss_priv *priv)
 {
 	return 0;
 }
@@ -4489,8 +4507,10 @@ static int icnss_remove(struct platform_device *pdev)
 
 	complete_all(&priv->unblock_shutdown);
 
-	if (priv->is_slate_rfa)
+	if (priv->is_slate_rfa) {
 		icnss_slate_ssr_unregister_notifier(priv);
+		icnss_unregister_slate_event_notifier(priv);
+	}
 
 	destroy_ramdump_device(priv->msa0_dump_dev);
 

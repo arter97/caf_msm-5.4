@@ -496,8 +496,10 @@ struct icnss_priv {
 	unsigned long device_config;
 	bool is_rf_subtype_valid;
 	u32 rf_subtype;
+#ifdef CONFIG_SLATE_MODULE_ENABLED
 	struct seb_notif_info *seb_handle;
 	struct notifier_block seb_nb;
+#endif
 	struct timer_list recovery_timer;
 };
 
