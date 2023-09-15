@@ -638,7 +638,7 @@ static void icnss_send_wlan_boot_complete(void)
 	icnss_pr_info("sent wlan boot complete command\n");
 }
 
-static void icnss_wait_for_slate_complete(struct icnss_priv *priv)
+static int icnss_wait_for_slate_complete(struct icnss_priv *priv)
 {
 	if (!test_bit(ICNSS_SLATE_UP, &priv->state)) {
 		reinit_completion(&priv->slate_boot_complete);
@@ -647,15 +647,21 @@ static void icnss_wait_for_slate_complete(struct icnss_priv *priv)
 		wait_for_completion(&priv->slate_boot_complete);
 	}
 
+	if (!test_bit(ICNSS_SLATE_UP, &priv->state))
+		return -EINVAL;
+
 	icnss_send_wlan_boot_init();
+
+	return 0;
 }
 #else
 static void icnss_send_wlan_boot_complete(void)
 {
 }
 
-static void icnss_wait_for_slate_complete(struct icnss_priv *priv)
+static int icnss_wait_for_slate_complete(struct icnss_priv *priv)
 {
+	return 0;
 }
 #endif
 
@@ -673,6 +679,14 @@ static int icnss_driver_event_server_arrive(struct icnss_priv *priv,
 	clear_bit(ICNSS_FW_DOWN, &priv->state);
 	clear_bit(ICNSS_FW_READY, &priv->state);
 
+	if (priv->is_slate_rfa) {
+		ret = icnss_wait_for_slate_complete(priv);
+		if (ret == -EINVAL) {
+			icnss_pr_err("Slate complete failed\n");
+			return ret;
+		}
+	}
+
 	icnss_ignore_fw_timeout(false);
 
 	if (test_bit(ICNSS_WLFW_CONNECTED, &priv->state)) {
@@ -685,9 +699,6 @@ static int icnss_driver_event_server_arrive(struct icnss_priv *priv,
 		goto fail;
 
 	set_bit(ICNSS_WLFW_CONNECTED, &priv->state);
-
-	if (priv->is_slate_rfa)
-		icnss_wait_for_slate_complete(priv);
 
 	ret = wlfw_ind_register_send_sync_msg(priv);
 	if (ret < 0) {
@@ -1911,6 +1922,9 @@ static int icnss_modem_notifier_nb(struct notifier_block *nb,
 
 	switch (code) {
 	case SUBSYS_BEFORE_SHUTDOWN:
+		if (priv->is_slate_rfa)
+			complete(&priv->slate_boot_complete);
+
 		if (!notif->crashed &&
 		    priv->low_power_support) { /* Hibernate */
 			if (test_bit(ICNSS_MODE_ON, &priv->state))
@@ -4508,6 +4522,7 @@ static int icnss_remove(struct platform_device *pdev)
 	complete_all(&priv->unblock_shutdown);
 
 	if (priv->is_slate_rfa) {
+		complete(&priv->slate_boot_complete);
 		icnss_slate_ssr_unregister_notifier(priv);
 		icnss_unregister_slate_event_notifier(priv);
 	}
