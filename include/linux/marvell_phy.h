@@ -22,6 +22,7 @@
 #define MARVELL_PHY_ID_88E3016		0x01410e60
 #define MARVELL_PHY_ID_88X3310		0x002b09a0
 #define MARVELL_PHY_ID_88E2110		0x002b09b0
+#define MARVELL_PHY_ID_88Q2220		0x002b0b20
 
 /* These Ethernet switch families contain embedded PHYs, but they do
  * not have a model ID. So the switch driver traps reads to the ID2
@@ -36,5 +37,15 @@
 #define MARVELL_PHY_M1145_FLAGS_RESISTANCE	0x00000001
 #define MARVELL_PHY_M1118_DNS323_LEDS		0x00000002
 #define MARVELL_PHY_LED0_LINK_LED1_ACTIVE	0x00000004
+
+/* device address */
+#define MV88Q2220_PMA_PMD_REG_ADDR       (1)
+#define MV88Q2220_CONTROL_PCS_REG_ADDR   (3)
+#define MV88Q2220_RGMII_REG_ADDR         (4)
+#define MV88Q2220_INIT_SEQ_REG_ADDR      (7)
+
+#define MV88Q2220_PMA_REG_RESET          0x8000
+#define MV88Q2220_FLAG_LINK_CHECK        0x0004
+#define MV88Q2220_PHY_MODEL              0x32
 
 #endif /* _MARVELL_PHY_H */

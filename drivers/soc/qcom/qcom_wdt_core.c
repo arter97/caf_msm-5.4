@@ -2,6 +2,11 @@
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  */
+#include <linux/dma-mapping.h>
+#include <linux/slab.h>
+#include <linux/mutex.h>
+#include <linux/cpu.h>
+#include <soc/qcom/memory_dump.h>
 #include <linux/irqdomain.h>
 #include <linux/delay.h>
 #include <linux/jiffies.h>
@@ -32,8 +37,10 @@
 #include <linux/kallsyms.h>
 #include <linux/kdebug.h>
 
-#define MASK_SIZE        32
-#define COMPARE_RET      -1
+#define MASK_SIZE	32
+#define COMPARE_RET	-1
+#define SCANDUMP_ERR	-1
+#define NUM_CPUS	8
 
 typedef int (*compare_t) (const void *lhs, const void *rhs);
 
@@ -45,6 +52,51 @@ bool copy_early_boot_log = true;
 #endif
 
 static struct msm_watchdog_data *wdog_data;
+static int configure_scandump(struct msm_watchdog_data *wdog_dd)
+{
+	struct msm_dump_entry dump_entry;
+	struct msm_dump_data *cpu_data;
+	int cpu, ret;
+	static dma_addr_t dump_addr;
+	static void *dump_vaddr;
+	unsigned int scandump_size;
+
+	for_each_cpu(cpu, cpu_present_mask) {
+		scandump_size = wdog_dd->cpu_scandump_sizes[cpu];
+		dev_dbg(wdog_dd->dev, "DEBUG: scandump size %x\n", scandump_size);
+		cpu_data = devm_kzalloc(wdog_dd->dev,
+					sizeof(struct msm_dump_data),
+					GFP_KERNEL);
+		if (!cpu_data)
+			continue;
+
+		dump_vaddr = (void *)(size_t) dma_alloc_coherent(wdog_dd->dev,
+					 scandump_size, &dump_addr, GFP_KERNEL);
+		if (!dump_vaddr) {
+			dev_err(wdog_dd->dev, "Couldn't get memory for dump\n");
+			continue;
+		}
+		memset(dump_vaddr, 0x0, scandump_size);
+
+		cpu_data->addr = dump_addr;
+		cpu_data->len = scandump_size;
+		snprintf(cpu_data->name, sizeof(cpu_data->name),
+				"KSCANDUMP%d", cpu);
+		dump_entry.id = MSM_DUMP_DATA_SCANDUMP_PER_CPU + cpu;
+		dump_entry.addr = virt_to_phys(cpu_data);
+		ret = msm_dump_data_register(MSM_DUMP_TABLE_APPS,
+					     &dump_entry);
+		if (ret) {
+			dev_err(wdog_dd->dev, "Dump setup failed, id = %x\n",
+				MSM_DUMP_DATA_SCANDUMP_PER_CPU + cpu);
+			dma_free_coherent(wdog_dd->dev, scandump_size,
+					  dump_vaddr, dump_addr);
+			return SCANDUMP_ERR;
+		}
+	}
+	dev_dbg(wdog_dd->dev, "DEBUG: Scandump configured successfully\n");
+	return 0;
+}
 
 static void qcom_wdt_dump_cpu_alive_mask(struct msm_watchdog_data *wdog_dd)
 {
@@ -887,6 +939,7 @@ static int qcom_wdt_init(struct msm_watchdog_data *wdog_dd,
 	uint32_t val;
 	int ret;
 	void *wdog_cpu_dd_v;
+	bool support_scandump = false;
 
 	if (wdog_dd->irq_ppi) {
 		wdog_dd->wdog_cpu_dd = alloc_percpu(struct msm_watchdog_data *);
@@ -914,6 +967,17 @@ static int qcom_wdt_init(struct msm_watchdog_data *wdog_dd,
 			return -EINVAL;
 		}
 	}
+	support_scandump = of_property_read_bool((&pdev->dev)->of_node,
+							"qcom,support-scandump");
+	if (support_scandump) {
+		dev_dbg(wdog_dd->dev, "DEBUG: Calling configure_scandump\n");
+		ret = configure_scandump(wdog_dd);
+		if (ret == SCANDUMP_ERR) {
+			dev_err(wdog_dd->dev, "DEBUG: config scandump Probe Defer\n");
+			return -EPROBE_DEFER;
+		}
+	}
+
 	INIT_WORK(&wdog_dd->irq_counts_work, compute_irq_stat);
 	atomic_set(&wdog_dd->irq_counts_running, 0);
 	delay_time = msecs_to_jiffies(wdog_dd->pet_time);
@@ -991,6 +1055,20 @@ static void qcom_wdt_dump_pdata(struct msm_watchdog_data *pdata)
 static void qcom_wdt_dt_to_pdata(struct platform_device *pdev,
 				struct msm_watchdog_data *pdata)
 {
+	struct device_node *node = pdev->dev.of_node;
+	int cpu;
+	int num_scandump_sizes = of_property_count_elems_of_size(node,
+				"qcom,scandump-sizes", sizeof(u32));
+
+	if ((num_scandump_sizes < 0) || (num_scandump_sizes != NUM_CPUS)) {
+		dev_info(&pdev->dev, "%s scandump sizes property not correct\n",
+			__func__);
+	} else {
+		for_each_cpu(cpu, cpu_present_mask)
+			of_property_read_u32_index(node, "qcom,scandump-sizes",
+					cpu, &pdata->cpu_scandump_sizes[cpu]);
+	}
+
 	pdata->bark_irq = platform_get_irq(pdev, 0);
 	pdata->irq_ppi = irq_is_percpu(pdata->bark_irq);
 	pdata->bark_time = QCOM_WATCHDOG_BARK_TIME;

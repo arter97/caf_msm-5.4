@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "clk: %s: " fmt, __func__
@@ -106,7 +106,7 @@ static const char *const gcc_debug_mux_parent_names[] = {
 	"gcc_usb3_phy_aux_clk",
 	"gcc_usb3_phy_pipe_clk",
 	"gcc_usb_phy_cfg_ahb2phy_clk",
-	"measure_only_bimc_clk",
+	"mc_cc_debug_mux",
 	"measure_only_ipa_2x_clk",
 	"measure_only_snoc_clk",
 	"measure_only_qpic_clk",
@@ -160,7 +160,7 @@ static int gcc_debug_mux_sels[] = {
 	0x2B,		/* gcc_usb3_phy_aux_clk */
 	0x2D,		/* gcc_usb3_phy_pipe_clk */
 	0x31,		/* gcc_usb_phy_cfg_ahb2phy_clk */
-	0x73,		/* measure_only_bimc_clk */
+	0x73,		/* mc_cc_debug_mux */
 	0xAC,		/* measure_only_ipa_2x_clk */
 	0x109,		/* measure_only_snoc_clk */
 	0xB1,		/* measure_only_qpic_clk */
@@ -187,7 +187,7 @@ static struct clk_debug_mux gcc_debug_mux = {
 };
 
 static const char *const mc_cc_debug_mux_parent_names[] = {
-	"measure_only_mccc_clk",
+	"measure_only_bimc_clk",
 };
 
 static struct clk_debug_mux mc_cc_debug_mux = {

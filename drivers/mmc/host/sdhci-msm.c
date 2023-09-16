@@ -3,7 +3,7 @@
  * drivers/mmc/host/sdhci-msm.c - Qualcomm SDHCI Platform driver
  *
  * Copyright (c) 2013-2014,2020. The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -135,7 +135,6 @@
 #define FINE_TUNE_MODE_EN		BIT(27)
 #define BIAS_OK_SIGNAL			BIT(29)
 #define DLL_CONFIG_3_POR_VAL		0x10
-#define DLL_CONFIG_POR_VAL		0x6007642C
 
 
 #define INVALID_TUNING_PHASE	-1
@@ -956,14 +955,16 @@ static int msm_init_cm_dll(struct sdhci_host *host,
 		udelay(5);
 	}
 
-	/* Step 10 - Config DLL_CONFIG with HSR values */
-	if (msm_host->dll_hsr && msm_host->dll_hsr->dll_config)
-		writel_relaxed(msm_host->dll_hsr->dll_config |
-			CORE_DLL_RST | CORE_DLL_PDN, host->ioaddr +
-			msm_offset->core_dll_config);
-	else
-		writel_relaxed(DLL_CONFIG_POR_VAL, host->ioaddr +
-			msm_offset->core_dll_config);
+	/*
+	 * Step 10 - Update the lower two bytes of DLL_CONFIG only with
+	 * HSR values. Since these are the static settings.
+	 */
+	if (msm_host->dll_hsr) {
+		writel_relaxed((readl_relaxed(host->ioaddr +
+			msm_offset->core_dll_config) |
+			(msm_host->dll_hsr->dll_config & 0xffff)),
+			host->ioaddr + msm_offset->core_dll_config);
+	}
 
 	/* Step 11 - Wait for 52us */
 	spin_unlock_irqrestore(&host->lock, flags);
@@ -1000,22 +1001,27 @@ static int msm_init_cm_dll(struct sdhci_host *host,
 				msm_offset->core_dll_config_2);
 	}
 
+	/* Step 16 - Set DLL_EN bit to 1. */
+	writel_relaxed((readl_relaxed(host->ioaddr +
+			msm_offset->core_dll_config) | CORE_DLL_EN),
+			host->ioaddr + msm_offset->core_dll_config);
+
 	/*
-	 * Step 16 - Wait for 8000 input clock. Here we calculate the
+	 * Step 17 - Wait for 8000 input clock. Here we calculate the
 	 * delay from fixed clock freq 192MHz, which turns out 42us.
 	 */
 	spin_unlock_irqrestore(&host->lock, flags);
 	usleep_range(45, 50);
 	spin_lock_irqsave(&host->lock, flags);
 
-	/* Step 17 - Set CK_OUT_EN bit to 1. */
+	/* Step 18 - Set CK_OUT_EN bit to 1. */
 	writel_relaxed((readl_relaxed(host->ioaddr +
 			msm_offset->core_dll_config)
 			| CORE_CK_OUT_EN), host->ioaddr +
 			msm_offset->core_dll_config);
 
 	/*
-	 * Step 18 - Wait until DLL_LOCK bit of DLL_STATUS register
+	 * Step 19 - Wait until DLL_LOCK bit of DLL_STATUS register
 	 * becomes '1'.
 	 */
 	while (!(readl_relaxed(host->ioaddr + msm_offset->core_dll_status) &
@@ -1033,7 +1039,7 @@ static int msm_init_cm_dll(struct sdhci_host *host,
 
 out:
 	if (core_vendor_spec & CORE_CLK_PWRSAVE) {
-		/* Step 19 - Reenable PWRSAVE as needed */
+		/* Step 20 - Reenable PWRSAVE as needed */
 		writel_relaxed((readl_relaxed(host->ioaddr +
 			msm_offset->core_vendor_spec)
 			| CORE_CLK_PWRSAVE), host->ioaddr +
@@ -3472,6 +3478,7 @@ static const struct sdhci_msm_variant_info sdm845_sdhci_var = {
 static const struct of_device_id sdhci_msm_dt_match[] = {
 	{.compatible = "qcom,sdhci-msm-v4", .data = &sdhci_msm_mci_var},
 	{.compatible = "qcom,sdhci-msm-v5", .data = &sdhci_msm_v5_var},
+	{.compatible = "qcom,sdm670-sdhci", .data = &sdm845_sdhci_var},
 	{.compatible = "qcom,sdm845-sdhci", .data = &sdm845_sdhci_var},
 	{},
 };
@@ -4374,6 +4381,8 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	struct sdhci_msm_host *msm_host;
 	struct resource *core_memres;
 	int ret;
+	struct resource *tlmm_memres = NULL;
+	void __iomem *tlmm_mem;
 	u16 host_version, core_minor;
 	u32 core_version, config;
 	u8 core_major;
@@ -4399,10 +4408,10 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 
 	if (pdev->dev.of_node) {
 		ret = of_alias_get_id(pdev->dev.of_node, "sdhc");
-		if (ret <= 0)
+		if (ret < 0)
 			dev_err(&pdev->dev, "get slot index failed %d\n", ret);
-		else if (ret <= 2)
-			sdhci_slot[ret-1] = msm_host;
+		else if (ret <= 1)
+			sdhci_slot[ret] = msm_host;
 	}
 
 	/*
@@ -4493,6 +4502,20 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 			ret = PTR_ERR(msm_host->core_mem);
 			goto vreg_deinit;
 		}
+	}
+	tlmm_memres = platform_get_resource_byname(pdev,
+			IORESOURCE_MEM, "tlmm_mem");
+	if (tlmm_memres) {
+		tlmm_mem = devm_ioremap(&pdev->dev, tlmm_memres->start,
+				resource_size(tlmm_memres));
+		if (!tlmm_mem) {
+			dev_err(&pdev->dev, "Failed to remap tlmm registers\n");
+			ret = -ENOMEM;
+			goto vreg_deinit;
+		}
+		writel_relaxed(readl_relaxed(tlmm_mem) | 0x2, tlmm_mem);
+		dev_dbg(&pdev->dev, "tlmm reg %pa value 0x%08x\n",
+				&tlmm_memres->start, readl_relaxed(tlmm_mem));
 	}
 
 	/* Toggle wlan_en pin to reset SDIO card to correct state */

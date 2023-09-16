@@ -191,10 +191,12 @@ struct plat_stmmacenet_data {
 	int has_gmac4;
 	bool has_sun8i;
 	bool tso_en;
+	bool c45_marvell_en;
 	bool force_thresh_dma_mode_q0_en;
 	int rss_en;
 	int mac_port_sel_speed;
 	bool en_tx_lpi_clockgating;
+	bool rx_clk_runs_in_lpi;
 	int has_xgmac;
 	bool phyad_change;
 	bool is_gpio_phy_reset;
@@ -223,5 +225,10 @@ struct plat_stmmacenet_data {
 	unsigned int jumbo_mtu;
 	bool crc_strip_en;
 	bool mdio_reset;
+	bool autosar_en;
+	void (*handletxcompletion)(struct sk_buff *skb, u8 result);
+	void (*handlericompletion)(struct sk_buff *skb);
+	bool clks_suspended;
+	bool is_phy_off;
 };
 #endif

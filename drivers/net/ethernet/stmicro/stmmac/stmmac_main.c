@@ -859,8 +859,10 @@ static void stmmac_validate(struct phylink_config *config,
 	int tx_cnt = priv->plat->tx_queues_to_use;
 	int max_speed = priv->plat->max_speed;
 
-	phylink_set(mac_supported, 10baseT_Half);
-	phylink_set(mac_supported, 10baseT_Full);
+	if (!priv->plat->c45_marvell_en) {
+		phylink_set(mac_supported, 10baseT_Half);
+		phylink_set(mac_supported, 10baseT_Full);
+	}
 	phylink_set(mac_supported, 100baseT_Half);
 	phylink_set(mac_supported, 100baseT_Full);
 	phylink_set(mac_supported, 1000baseT_Half);
@@ -900,7 +902,8 @@ static void stmmac_validate(struct phylink_config *config,
 
 	/* Half-Duplex can only work with single queue */
 	if (tx_cnt > 1) {
-		phylink_set(mask, 10baseT_Half);
+		if (!priv->plat->c45_marvell_en)
+			phylink_set(mask, 10baseT_Half);
 		phylink_set(mask, 100baseT_Half);
 		phylink_set(mask, 1000baseT_Half);
 	}
@@ -1040,7 +1043,8 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 
 	stmmac_mac_set(priv, priv->ioaddr, true);
 	if (phy && priv->dma_cap.eee) {
-		priv->eee_active = phy_init_eee(phy, 1) >= 0;
+		priv->eee_active =
+			phy_init_eee(phy, !priv->plat->rx_clk_runs_in_lpi) >= 0;
 		priv->eee_enabled = stmmac_eee_init(priv);
 		stmmac_set_eee_pls(priv, priv->hw, true);
 	}
@@ -1140,13 +1144,18 @@ static int stmmac_init_phy(struct net_device *dev)
 	if (!node || ret) {
 		int addr = priv->plat->phy_addr;
 
+		if (addr < 0) {
+			netdev_err(priv->dev, "no phy found\n");
+			return -ENODEV;
+		}
+
 		priv->phydev = mdiobus_get_phy(priv->mii, addr);
 		if (!priv->phydev) {
 			netdev_err(priv->dev, "no phy at addr %d\n", addr);
 			return -ENODEV;
 		}
 
-		if (!priv->plat->mac2mac_en) {
+		if (!priv->plat->mac2mac_en && !priv->plat->c45_marvell_en) {
 			if (((priv->phydev->phy_id &
 			    priv->phydev->drv->phy_id_mask) == MICREL_PHY_ID) &&
 				!priv->plat->phy_intr_en) {
@@ -1158,7 +1167,8 @@ static int stmmac_init_phy(struct net_device *dev)
 			}
 		}
 
-		if (priv->plat->phy_intr_en_extn_stm && priv->plat->phy_intr_en) {
+		if (priv->plat->phy_intr_en_extn_stm && priv->plat->phy_intr_en &&
+		    !priv->plat->c45_marvell_en) {
 			priv->phydev->irq = PHY_IGNORE_INTERRUPT;
 			priv->phydev->interrupts =  PHY_INTERRUPT_ENABLED;
 		}
@@ -1166,7 +1176,8 @@ static int stmmac_init_phy(struct net_device *dev)
 		ret = phylink_connect_phy(priv->phylink, priv->phydev);
 
 #ifndef DEFER_ENABLE_INTERRUPTS
-		if (priv->plat->phy_intr_en_extn_stm && priv->plat->phy_intr_en) {
+		if (priv->plat->phy_intr_en_extn_stm && priv->plat->phy_intr_en &&
+		    !priv->plat->c45_marvell_en) {
 			if (priv->phydev->drv->ack_interrupt &&
 			    !priv->phydev->drv->ack_interrupt(priv->phydev)) {
 				pr_info(" qcom-ethqos: %s ack_interrupt successful aftre connect\n",
@@ -1188,6 +1199,11 @@ static int stmmac_init_phy(struct net_device *dev)
 			priv->phydev->irq = PHY_POLL;
 		}
 #endif
+	} else if (!ret && node) {
+		if (dev->phydev) {
+			priv->phydev = dev->phydev;
+			priv->plat->phy_addr = priv->phydev->mdio.addr;
+		}
 	}
 
 	return ret;
@@ -2103,7 +2119,10 @@ int stmmac_tx_clean(struct stmmac_priv *priv, int budget, u32 queue)
 	struct stmmac_tx_queue *tx_q = &priv->tx_queue[queue];
 	unsigned int bytes_compl = 0, pkts_compl = 0;
 	unsigned int entry, count = 0;
-
+#ifdef CONFIG_DWMAC_QCOM_ETH_AUTOSAR
+	struct ethhdr *eth_header = NULL;
+	unsigned short eth_type = 0;
+#endif
 	__netif_tx_lock_bh(netdev_get_tx_queue(priv->dev, queue));
 
 	priv->xstats.tx_clean++;
@@ -2148,7 +2167,14 @@ if (priv->dev->stats.tx_packets == 1)
 			}
 			stmmac_get_tx_hwtstamp(priv, p, skb);
 		}
-
+#ifdef CONFIG_DWMAC_QCOM_ETH_AUTOSAR
+		if (skb)
+			eth_header = (struct ethhdr *)skb_mac_header(skb);
+		if (eth_header)
+			eth_type = ntohs(eth_header->h_proto);
+		if (eth_type == ETH_P_1588)
+			priv->plat->handletxcompletion(skb, pkts_compl);
+#endif
 		if (likely(tx_q->tx_skbuff_dma[entry].buf)) {
 			if (tx_q->tx_skbuff_dma[entry].map_as_page)
 				dma_unmap_page(GET_MEM_PDEV_DEV,
@@ -2173,10 +2199,12 @@ if (priv->dev->stats.tx_packets == 1)
 		if (likely(skb != NULL)) {
 			pkts_compl++;
 			bytes_compl += skb->len;
+#ifdef CONFIG_DWMAC_QCOM_ETH_AUTOSAR
+		if (!(eth_type == ETH_P_1588))
+#endif
 			dev_consume_skb_any(skb);
 			tx_q->tx_skbuff[entry] = NULL;
 		}
-
 		stmmac_release_tx_desc(priv, p, priv->mode);
 
 		entry = STMMAC_GET_ENTRY(entry, DMA_TX_SIZE);
@@ -2184,9 +2212,10 @@ if (priv->dev->stats.tx_packets == 1)
 	tx_q->dirty_tx = entry;
 
 	if (!priv->tx_coal_timer_disable)
+#ifndef CONFIG_DWMAC_QCOM_ETH_AUTOSAR
 		netdev_tx_completed_queue(netdev_get_tx_queue(priv->dev, queue),
 					  pkts_compl, bytes_compl);
-
+#endif
 	if (unlikely(netif_tx_queue_stopped(netdev_get_tx_queue(priv->dev,
 								queue))) &&
 	    stmmac_tx_avail(priv, queue) > STMMAC_TX_THRESH) {
@@ -3532,7 +3561,10 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 	bool has_vlan;
 	int entry;
 	unsigned int int_mod;
-
+#ifdef CONFIG_DWMAC_QCOM_ETH_AUTOSAR
+	struct ethhdr *eth_header = NULL;
+	unsigned short eth_type = 0;
+#endif
 	tx_q = &priv->tx_queue[queue];
 
 	if (priv->tx_path_in_lpi_mode)
@@ -3735,10 +3767,16 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 	 * all is coherent before granting the DMA engine.
 	 */
 	wmb();
-
-	if (!priv->tx_coal_timer_disable)
-		netdev_tx_sent_queue(netdev_get_tx_queue(dev, queue), skb->len);
-
+	if (!priv->tx_coal_timer_disable) {
+#ifdef CONFIG_DWMAC_QCOM_ETH_AUTOSAR
+		if (skb)
+			eth_header = (struct ethhdr *)skb_mac_header(skb);
+		if (eth_header)
+			eth_type = ntohs(eth_header->h_proto);
+		if (!(eth_type == ETH_P_1588))
+#endif
+			netdev_tx_sent_queue(netdev_get_tx_queue(dev, queue), skb->len);
+	}
 	stmmac_enable_dma_transmission(priv, priv->ioaddr);
 
 	tx_q->tx_tail_addr = tx_q->dma_tx_phy + (tx_q->cur_tx * sizeof(*desc));
@@ -4356,7 +4394,12 @@ read_again:
 			skb_set_hash(skb, hash, hash_type);
 
 		skb_record_rx_queue(skb, queue);
+#ifdef CONFIG_DWMAC_QCOM_ETH_AUTOSAR
+		if (eth_type == ETH_P_1588)
+			priv->plat->handlericompletion(skb);
+#else
 		napi_gro_receive(&ch->rx_napi, skb);
+#endif
 
 		priv->dev->stats.rx_packets++;
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
@@ -5504,8 +5547,11 @@ int stmmac_suspend(struct device *dev)
 
 #ifdef CONFIG_DWMAC_QCOM_ETHQOS
 	rtnl_lock();
-	if (!priv->plat->mac2mac_en)
+	if (!priv->plat->mac2mac_en) {
 		phylink_stop(priv->phylink);
+		if (priv->plat->is_phy_off)
+			phylink_disconnect_phy(priv->phylink);
+	}
 	rtnl_unlock();
 #endif
 	mutex_lock(&priv->lock);
@@ -5543,11 +5589,15 @@ int stmmac_suspend(struct device *dev)
 
 		stmmac_mac_set(priv, priv->ioaddr, false);
 		pinctrl_pm_select_sleep_state(priv->device);
-		/* Disable clock in case of PWM is off */
-		if (priv->plat->clk_ptp_ref)
-			clk_disable_unprepare(priv->plat->clk_ptp_ref);
-		clk_disable_unprepare(priv->plat->pclk);
-		clk_disable_unprepare(priv->plat->stmmac_clk);
+
+		if (!priv->plat->clks_suspended) {
+			/* Disable clock in case of PWM is off */
+			if (priv->plat->clk_ptp_ref)
+				clk_disable_unprepare(priv->plat->clk_ptp_ref);
+			clk_disable_unprepare(priv->plat->pclk);
+			clk_disable_unprepare(priv->plat->stmmac_clk);
+			priv->plat->clks_suspended = true;
+		}
 	}
 	mutex_unlock(&priv->lock);
 
@@ -5611,11 +5661,15 @@ int stmmac_resume(struct device *dev)
 		priv->irq_wake = 0;
 	} else {
 		pinctrl_pm_select_default_state(priv->device);
-		/* enable the clk previously disabled */
-		clk_prepare_enable(priv->plat->stmmac_clk);
-		clk_prepare_enable(priv->plat->pclk);
-		if (priv->plat->clk_ptp_ref)
-			clk_prepare_enable(priv->plat->clk_ptp_ref);
+
+		if (priv->plat->clks_suspended) {
+			/* enable the clk previously disabled */
+			clk_prepare_enable(priv->plat->stmmac_clk);
+			clk_prepare_enable(priv->plat->pclk);
+			if (priv->plat->clk_ptp_ref)
+				clk_prepare_enable(priv->plat->clk_ptp_ref);
+			priv->plat->clks_suspended = false;
+		}
 		/* reset the phy so that it's ready */
 		if (priv->mii && !priv->boot_kpi)
 			stmmac_mdio_reset(priv->mii);

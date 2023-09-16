@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -14,6 +14,7 @@
 #include <linux/ctype.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/of_gpio.h>
+#include <linux/regulator/consumer.h>
 #include <linux/usb/redriver.h>
 
 /* priority: INT_MAX >= x >= 0 */
@@ -89,6 +90,7 @@ struct nb7vpq904m_redriver {
 	struct device		*dev;
 	struct regmap		*regmap;
 	struct i2c_client	*client;
+	struct regulator	*aux;
 
 	int orientation_gpio;
 	int typec_orientation;
@@ -104,6 +106,7 @@ struct nb7vpq904m_redriver {
 	u8	gen_dev_val;
 	bool	lane_channel_swap;
 	bool	is_set_aux;
+	bool	aux_enable;
 
 	struct workqueue_struct *pullup_wq;
 	struct work_struct	pullup_work;
@@ -143,6 +146,26 @@ static int nb7vpq904m_reg_set(struct nb7vpq904m_redriver *redriver,
 	return 0;
 }
 
+static void nb7vpq904m_aux_ldo_enable(struct nb7vpq904m_redriver *redriver, bool on)
+{
+	int s;
+
+	if (!redriver->aux) {
+		dev_dbg(redriver->dev, "no aux regulator operation\n");
+		return;
+	}
+
+	if (on && !redriver->aux_enable) {
+		redriver->aux_enable = true;
+		s = regulator_enable(redriver->aux);
+		dev_dbg(redriver->dev, "aux regulator enable return %d\n", s);
+	} else if (!on && redriver->aux_enable) {
+		redriver->aux_enable = false;
+		s = regulator_disable(redriver->aux);
+		dev_dbg(redriver->dev, "aux regulator disable return %d\n", s);
+	}
+}
+
 static void nb7vpq904m_dev_aux_set(struct nb7vpq904m_redriver *redriver)
 {
 	u8 aux_val = AUX_DISABLE_VAL;
@@ -153,12 +176,14 @@ static void nb7vpq904m_dev_aux_set(struct nb7vpq904m_redriver *redriver)
 	switch (redriver->op_mode) {
 	case OP_MODE_DP:
 	case OP_MODE_USB_AND_DP:
+		nb7vpq904m_aux_ldo_enable(redriver, true);
 		if (redriver->typec_orientation == ORIENTATION_CC1)
 			aux_val = AUX_NORMAL_VAL;
 		else
 			aux_val = AUX_FLIP_VAL;
 		break;
 	default:
+		nb7vpq904m_aux_ldo_enable(redriver, false);
 		break;
 	}
 
@@ -425,8 +450,6 @@ static int nb7vpq904m_read_configuration(struct nb7vpq904m_redriver *redriver)
 			goto err;
 	}
 
-	redriver->is_set_aux = of_property_read_bool(node, "set-aux");
-
 	return 0;
 
 err:
@@ -634,6 +657,24 @@ static void nb7vpq904m_orientation_gpio_init(
 	redriver->r.has_orientation = true;
 }
 
+static void nb7vpq904m_aux_read_cfg(struct nb7vpq904m_redriver *redriver)
+{
+	struct device_node *node = redriver->dev->of_node;
+	int ret;
+
+	redriver->is_set_aux = of_property_read_bool(node, "set-aux");
+	if (!redriver->is_set_aux)
+		return;
+
+	redriver->aux = devm_regulator_get_optional(redriver->dev, "aux");
+	if (IS_ERR(redriver->aux)) {
+		ret = PTR_ERR(redriver->aux);
+		redriver->aux = NULL;
+		if (ret != -ENODEV)
+			dev_err(redriver->dev, "Failed to get aux regulator %d\n", ret);
+	}
+}
+
 static const struct regmap_config redriver_regmap = {
 	.max_register = REDRIVER_REG_MAX,
 	.reg_bits = 8,
@@ -682,6 +723,9 @@ static int nb7vpq904m_probe(struct i2c_client *client,
 
 	redriver->lane_channel_swap =
 	    of_property_read_bool(redriver->dev->of_node, "lane-channel-swap");
+
+	nb7vpq904m_aux_read_cfg(redriver);
+	nb7vpq904m_aux_ldo_enable(redriver, false);
 
 	/* disable it at start, one i2c register write time is acceptable */
 	redriver->op_mode = OP_MODE_NONE;
