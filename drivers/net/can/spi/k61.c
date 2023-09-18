@@ -808,6 +808,7 @@ static int k61_create_netdev(struct spi_device *spi,
 		return -ENOMEM;
 	}
 
+	netdev->mtu = CANFD_MTU;
 	netdev_priv_data = netdev_priv(netdev);
 	netdev_priv_data->k61_can = priv_data;
 
