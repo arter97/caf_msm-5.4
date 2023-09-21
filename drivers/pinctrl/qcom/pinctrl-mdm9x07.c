@@ -1347,8 +1347,14 @@ static const struct msm_pingroup mdm9x07_groups[] = {
 static struct pinctrl_qup mdm9x07_qup_regs[] = {
 };
 
-static const struct msm_gpio_wakeirq_map mdm9x07_pdc_map[] = {
-
+static const struct msm_gpio_wakeirq_map mdm9x07_mpm_map[] = {
+	{ 1, 11 }, { 3, 7 }, { 5, 4 }, { 8, 30 }, { 9, 9 }, { 11, 5 }, { 12, 6 },
+	{ 13, 10 }, { 16, 3 }, { 17, 8 }, { 20, 12 }, { 21, 13 }, { 22, 14 },
+	{ 25, 26 }, { 26, 19 }, { 28, 17 }, { 29, 22 }, { 30, 24 }, { 34, 28 },
+	{ 37, 25 }, { 38, 39 }, { 40, 31 }, { 42, 21 }, { 43, 20 }, { 44, 18 },
+	{ 48, 32 }, { 52, 33 }, { 55, 29 }, { 57, 34 }, { 59, 37 }, { 62, 35 },
+	{ 63, 40 }, { 66, 36 }, { 69, 23 }, { 71, 27 }, { 74, 16 }, { 75, 15 },
+	{ 76, 41 }, { 79, 38 },
 };
 
 static const struct msm_pinctrl_soc_data mdm9x07_pinctrl = {
@@ -1361,8 +1367,8 @@ static const struct msm_pinctrl_soc_data mdm9x07_pinctrl = {
 	.ngpios = 80,
 	.qup_regs = mdm9x07_qup_regs,
 	.nqup_regs = ARRAY_SIZE(mdm9x07_qup_regs),
-	.wakeirq_map = mdm9x07_pdc_map,
-	.nwakeirq_map = ARRAY_SIZE(mdm9x07_pdc_map),
+	.wakeirq_map = mdm9x07_mpm_map,
+	.nwakeirq_map = ARRAY_SIZE(mdm9x07_mpm_map),
 };
 
 static const struct of_device_id mdm9x07_pinctrl_of_match[] = {
