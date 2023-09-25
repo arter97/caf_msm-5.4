@@ -477,6 +477,13 @@ int stmmac_mdio_register(struct net_device *ndev)
 bus_register_done:
 	priv->mii = new_bus;
 
+	if (priv->plat->interface == PHY_INTERFACE_MODE_RMII) {
+		pr_debug("setting speed & clock for RMII\n");
+		priv->speed = SPEED_100;
+		if (priv->plat->fix_mac_speed)
+			priv->plat->fix_mac_speed(priv->plat->bsp_priv, priv->speed);
+	}
+
 	return 0;
 
 bus_register_fail:
