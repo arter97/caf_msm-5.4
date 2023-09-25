@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "hgsl_memory.h"
@@ -533,12 +534,14 @@ static int hgsl_export_dma_buf_fd(struct hgsl_mem_node *mem_node)
 	}
 	mem_node->dma_buf = dma_buf;
 
+	/* increase reference count before install fd. */
+	get_dma_buf(dma_buf);
 	fd = dma_buf_fd(dma_buf, O_CLOEXEC);
 	if (fd < 0) {
 		LOGE("dma buf to fd failed");
+		dma_buf_put(dma_buf);
 		return -EINVAL;
 	}
-	get_dma_buf(dma_buf);
 	mem_node->fd = fd;
 
 	return 0;
