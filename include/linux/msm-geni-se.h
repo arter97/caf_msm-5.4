@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _LINUX_MSM_GENI_SE
@@ -89,7 +89,8 @@ struct se_rsc_ssr {
  * @clk_perf_tbl:	Table of clock frequency input to Serial Engine clock.
  * @skip_bw_vote:	Used for PMIC over i2c use case to skip the BW vote.
  * @se_rsc_ssr:		Pointer to Geni resource SSR structure.
- * @is_list_add;	To synchronize list add and del.
+ * @is_list_add:	To synchronize list add and del.
+ * @base:		Base address of serial engine.
  */
 struct se_geni_rsc {
 	struct device *ctrl_dev;
@@ -115,6 +116,7 @@ struct se_geni_rsc {
 	bool skip_bw_vote;
 	struct se_rsc_ssr rsc_ssr;
 	bool is_list_add;
+	void __iomem *base;
 };
 
 #define PINCTRL_DEFAULT	"default"
