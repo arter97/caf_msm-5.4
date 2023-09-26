@@ -19,7 +19,7 @@
 		interrupts = <0 166 0>;
 		interrupt-names = "byte-cntr-irq";
 
-		qcom,memory-size = <0x100000>;
+		qcom,memory-size = <0xA00000>;
 		qcom,sg-enable;
 
 		coresight-id = <1>;
