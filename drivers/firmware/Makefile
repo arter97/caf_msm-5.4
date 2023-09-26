@@ -20,6 +20,7 @@ obj-$(CONFIG_FW_CFG_SYSFS)	+= qemu_fw_cfg.o
 obj-$(CONFIG_QCOM_SCM)		+= _qcom_scm.o
 _qcom_scm-y			+= qcom_scm.o qcom_scm-smc.o
 _qcom_scm-$(CONFIG_QTEE_SHM_BRIDGE)	+= qtee_shmbridge.o
+obj-$(CONFIG_QCOM_SCM_QCPE_HOS) += qcom_scm-coqoshv.o
 obj-$(CONFIG_TI_SCI_PROTOCOL)	+= ti_sci.o
 obj-$(CONFIG_TRUSTED_FOUNDATIONS) += trusted_foundations.o
 obj-$(CONFIG_TURRIS_MOX_RWTM)	+= turris-mox-rwtm.o
