@@ -553,6 +553,7 @@ struct fastrpc_apps {
 	struct hlist_head drivers;
 	spinlock_t hlock;
 	struct device *dev;
+	struct device *dev_fastrpc;
 	unsigned int latency;
 	int rpmsg_register;
 	bool legacy_remote_heap;
@@ -571,6 +572,7 @@ struct fastrpc_apps {
 	void *ramdump_handle;
 	bool enable_ramdump;
 	struct mutex mut_uid;
+	int remote_cdsp_status;
 };
 
 struct fastrpc_mmap {
@@ -3097,6 +3099,30 @@ static int fastrpc_invoke_send(struct smq_invoke_ctx *ctx,
 	fastrpc_update_txmsg_buf(channel_ctx, msg, err, ns);
  bail:
 	return err;
+}
+
+static void fastrpc_get_dsp_status(struct fastrpc_apps *me)
+{
+	int ret = -1;
+	struct device_node *node = NULL;
+	const char *name = NULL;
+
+	do {
+		node = of_find_compatible_node(node, NULL, "qcom,pil-tz-generic");
+		if (node) {
+			ret = of_property_read_string(node, "qcom,firmware-name", &name);
+			if (!strcmp(name, "cdsp")) {
+				ret =  of_device_is_available(node);
+				me->remote_cdsp_status = ret;
+				pr_info("adsprpc: %s: cdsp node found with ret:%x\n",
+						__func__, ret);
+				break;
+			}
+		} else {
+			ADSPRPC_ERR("adsprpc: Error: %s: cdsp node not found\n", __func__);
+			break;
+		}
+	} while (1);
 }
 
 static void fastrpc_init(struct fastrpc_apps *me)
@@ -7069,6 +7095,38 @@ bail:
 	return err;
 }
 
+static ssize_t remote_cdsp_status_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct fastrpc_apps *me = &gfa;
+
+	/*
+	 * Default remote DSP status: 0
+	 * driver possibly not probed yet or not the main device.
+	 */
+
+	if (!dev || !dev->driver ||
+		!of_device_is_compatible(dev->of_node, "qcom,msm-fastrpc-compute")) {
+		pr_info("adsprpc: Error: %s: driver possibly not probed yet or not the main device\n"
+				, __func__);
+		return 0;
+	}
+
+	return scnprintf(buf, PAGE_SIZE, "%d",
+			me->remote_cdsp_status);
+}
+
+static DEVICE_ATTR_RO(remote_cdsp_status);
+
+static struct attribute *msm_remote_dsp_attrs[] = {
+	&dev_attr_remote_cdsp_status.attr,
+	NULL
+};
+
+static struct attribute_group msm_remote_dsp_attr_group = {
+	.attrs = msm_remote_dsp_attrs,
+};
+
 static int fastrpc_probe(struct platform_device *pdev)
 {
 	int err = 0;
@@ -7079,6 +7137,13 @@ static int fastrpc_probe(struct platform_device *pdev)
 
 	if (of_device_is_compatible(dev->of_node,
 					"qcom,msm-fastrpc-compute")) {
+		me->dev_fastrpc = dev;
+		err = sysfs_create_group(&pdev->dev.kobj, &msm_remote_dsp_attr_group);
+		if (err) {
+			pr_info("adsprpc: Error: %s: initialization of sysfs create group is failed with %d\n"
+					, __func__, err);
+			goto bail;
+		}
 		init_secure_vmid_list(dev, "qcom,adsp-remoteheap-vmid",
 							&gcinfo[0].rhvm);
 		init_secure_vmid_list(dev, "qcom,mdsp-remoteheap-vmid",
@@ -7203,11 +7268,14 @@ static int fastrpc_restore(struct device *dev)
 	struct fastrpc_apps *me = &gfa;
 	int cid;
 
-	pr_info("adsprpc: restore enter\n");
-	for (cid = 0; cid < NUM_CHANNELS; cid++)
-		me->channel[cid].in_hib = 1;
+	if (of_device_is_compatible(dev->of_node,
+					"qcom,msm-fastrpc-compute")) {
+		pr_info("adsprpc: restore enter\n");
+		for (cid = 0; cid < NUM_CHANNELS; cid++)
+			me->channel[cid].in_hib = 1;
 
-	pr_info("adsprpc: restore exit\n");
+		pr_info("adsprpc: restore exit\n");
+	}
 	return 0;
 }
 
@@ -7268,6 +7336,7 @@ static int __init fastrpc_device_init(void)
 #endif
 	memset(me, 0, sizeof(*me));
 	fastrpc_init(me);
+	fastrpc_get_dsp_status(me);
 	me->dev = NULL;
 	me->legacy_remote_heap = false;
 	VERIFY(err, 0 == platform_driver_register(&fastrpc_driver));

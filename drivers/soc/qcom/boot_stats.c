@@ -41,6 +41,9 @@
 struct boot_stats {
 	uint32_t bootloader_start;
 	uint32_t bootloader_end;
+#ifdef CONFIG_LK_BOOT_TIME_MARKER
+	uint32_t bootloader_display;
+#endif
 	uint32_t bootloader_load_kernel;
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
 	uint32_t bootloader_load_kernel_start;

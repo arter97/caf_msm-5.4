@@ -411,9 +411,13 @@ static void tx_wakeup_worker(struct glink_slatecom *glink)
 
 	rc = slatecom_reg_read(glink->slatecom_handle, SLATECOM_REG_FIFO_FILL, 1,
 		&fifo_fill);
-	if (rc < 0)
-		GLINK_ERR(glink, "%s: Error %d receiving data\n",
+	if (rc < 0) {
+		GLINK_ERR(glink, "%s: Error %d reading fifo state\n",
 					__func__, rc);
+		__pm_relax(glink->ws);
+		mutex_unlock(&glink->tx_avail_lock);
+		return;
+	}
 	__pm_relax(glink->ws);
 
 	glink->fifo_fill.tx_avail = fifo_fill.tx_avail;
@@ -1592,7 +1596,7 @@ static int glink_slatecom_rx_defer(struct glink_slatecom *glink,
 	extra = ALIGN(extra, SLATECOM_ALIGNMENT);
 
 	if (rx_avail < sizeof(struct glink_slatecom_msg) + extra) {
-		dev_dbg(glink->dev, "Insufficient data in rx fifo");
+		dev_err(glink->dev, "Insufficient data in rx fifo\n");
 		return -ENXIO;
 	}
 
@@ -1695,7 +1699,7 @@ static int glink_slatecom_rx_data(struct glink_slatecom *glink,
 	channel = idr_find(&glink->rcids, rcid);
 	mutex_unlock(&glink->idr_lock);
 	if (!channel) {
-		dev_dbg(glink->dev, "Data on non-existing channel\n");
+		dev_err(glink->dev, "Data on non-existing channel\n");
 		return msglen;
 	}
 	CH_INFO(channel, "chunk_size:%d left_size:%d\n", chunk_size, left_size);
@@ -1726,7 +1730,7 @@ static int glink_slatecom_rx_data(struct glink_slatecom *glink,
 					chunk_size);
 		glink_slatecom_free_intent(channel, intent);
 		mutex_unlock(&channel->intent_lock);
-		return -EBADMSG;
+		return msglen;
 	}
 
 	do {
@@ -1742,7 +1746,7 @@ static int glink_slatecom_rx_data(struct glink_slatecom *glink,
 
 	} while (rc == -ECANCELED);
 
-intent->offset += chunk_size;
+	intent->offset += chunk_size;
 
 	/* Handle message when no fragments remain to be received */
 	if (!left_size) {
@@ -1965,7 +1969,7 @@ static int glink_slatecom_process_cmd(struct glink_slatecom *glink, void *rx_dat
 		case SLATECOM_CMD_CLOSE_ACK:
 			glink_slatecom_rx_defer(glink,
 					   rx_data + offset - sizeof(*msg),
-					   rx_size + offset - sizeof(*msg), 0);
+					   rx_size - offset + sizeof(*msg), 0);
 			break;
 		case SLATECOM_CMD_RX_INTENT_REQ:
 			glink_slatecom_handle_intent_req(glink, param1, param2);
@@ -1978,7 +1982,7 @@ static int glink_slatecom_process_cmd(struct glink_slatecom *glink, void *rx_dat
 			name = rx_data + offset;
 			glink_slatecom_rx_defer(glink,
 					   rx_data + offset - sizeof(*msg),
-					   rx_size + offset - sizeof(*msg),
+					   rx_size - offset + sizeof(*msg),
 					   ALIGN(name_len, SLATECOM_ALIGNMENT));
 
 			offset += ALIGN(name_len, SLATECOM_ALIGNMENT);

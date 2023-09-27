@@ -6183,6 +6183,7 @@ static int msm_pcie_probe(struct platform_device *pdev)
 	int ret = 0;
 	int rc_idx = -1;
 	int size = 0;
+	bool drv_supported_overlay_disable = false;
 	struct msm_pcie_dev_t *pcie_dev;
 	struct device_node *of_node;
 
@@ -6488,6 +6489,12 @@ static int msm_pcie_probe(struct platform_device *pdev)
 
 	pcie_dev->drv_supported = of_property_read_bool(of_node,
 							"qcom,drv-supported");
+	drv_supported_overlay_disable = of_property_read_bool(of_node,
+							"qcom,overlay-disable-drv-supported");
+	if (drv_supported_overlay_disable) {
+		pcie_dev->drv_supported = false;
+	}
+
 	if (pcie_dev->drv_supported) {
 		ret = msm_pcie_setup_drv(pcie_dev, of_node);
 		if (ret)
@@ -7494,24 +7501,37 @@ static int msm_pcie_pm_suspend(struct pci_dev *dev,
 
 	if (dev) {
 		if (msm_pcie_confirm_linkup(pcie_dev, true, true, dev)) {
+			PCIE_DBG(pcie_dev, "PCIe: RC%d: save config space\n",
+					 pcie_dev->rc_idx);
 			ret = pci_save_state(dev);
 			if (ret) {
 				PCIE_ERR(pcie_dev,
-					 "PCIe: RC%d: fail to save state of RC%d:%d.\n",
+					 "PCIe: RC%d: fail to save state:%d.\n",
 					 pcie_dev->rc_idx, ret);
 				pcie_dev->suspending = false;
 				return ret;
 			}
 
-			pcie_dev->saved_state = pci_store_saved_state(dev);
 		} else {
-			pci_load_and_free_saved_state(dev,
-						      &pcie_dev->saved_state);
-			pcie_dev->saved_state = pcie_dev->default_state;
+			kfree(pcie_dev->saved_state);
+			pcie_dev->saved_state = NULL;
+
 			PCIE_DBG(pcie_dev,
-				 "PCIe: RC%d: saved default config space\n",
+				 "PCIe: RC%d: load default config space\n",
 				 pcie_dev->rc_idx);
+			ret = pci_load_saved_state(dev, pcie_dev->default_state);
+			if (ret) {
+				PCIE_ERR(pcie_dev,
+					 "PCIe: RC%d: fail to load default state:%d.\n",
+					 pcie_dev->rc_idx, ret);
+				pcie_dev->suspending = false;
+				return ret;
+			}
 		}
+
+		PCIE_DBG(pcie_dev, "PCIe: RC%d: store saved state\n",
+							 pcie_dev->rc_idx);
+		pcie_dev->saved_state = pci_store_saved_state(dev);
 	}
 
 	spin_lock_irqsave(&pcie_dev->cfg_lock,

@@ -96,19 +96,31 @@ static struct serdev_device_ops qrc_serdev_ops = {
 
 static int qrcuart_open(struct qrc_dev *dev)
 {
+	struct qrcuart *qrc = qrc_get_data(dev);
+	struct serdev_device *serdev = qrc->serdev;
+	int ret;
+
+	ret = serdev_device_open(serdev);
+	if (ret) {
+		pr_err("qrcuart :Unable to open device\n");
+		return ret;
+	}
+	serdev_device_set_baudrate(serdev, 115200);
+	serdev_device_set_flow_control(serdev, false);
+
 	return 0;
 }
 
 static int qrcuart_close(struct qrc_dev *dev)
 {
 	struct qrcuart *qrc = qrc_get_data(dev);
+	struct serdev_device *serdev = qrc->serdev;
 
 	flush_work(&qrc->tx_work);
-
 	spin_lock_bh(&qrc->lock);
 	qrc->tx_left = 0;
 	spin_unlock_bh(&qrc->lock);
-
+	serdev_device_close(serdev);
 	return 0;
 }
 
@@ -240,7 +252,6 @@ static int qrc_uart_probe(struct serdev_device *serdev)
 {
 	struct qrc_dev *qdev;
 	struct qrcuart *qrc;
-	u32 speed = 115200;
 	int ret = 0;
 
 	qrc = kmalloc(sizeof(*qrc), GFP_KERNEL);
@@ -273,15 +284,12 @@ static int qrc_uart_probe(struct serdev_device *serdev)
 		pr_err("qrcuart :Unable to open device\n");
 		goto free;
 	}
-
-	speed = serdev_device_set_baudrate(serdev, speed);
-	serdev_device_set_flow_control(serdev, false);
+	serdev_device_close(serdev);
 
 	ret = qrc_register_device(qdev, &serdev->dev);
 
 	if (ret) {
 		pr_err("qrcuart: Unable to register qrc device %s\n");
-		serdev_device_close(serdev);
 		cancel_work_sync(&qrc->tx_work);
 		goto free;
 	}
@@ -314,7 +322,6 @@ static const struct of_device_id qrc_uart_of_match[] = {
 	{}
 };
 MODULE_DEVICE_TABLE(of, qrc_of_match);
-
 
 static struct serdev_device_driver qrc_uart_driver = {
 	.probe = qrc_uart_probe,
