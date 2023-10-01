@@ -492,7 +492,8 @@ int hab_open_listen(struct uhab_context *ctx,
 		struct hab_device *dev,
 		struct hab_open_request *listen,
 		struct hab_open_request **recv_request,
-		int ms_timeout);
+		int ms_timeout,
+		uint32_t flags);
 
 struct virtual_channel *hab_vchan_alloc(struct uhab_context *ctx,
 		struct physical_channel *pchan, int openid);

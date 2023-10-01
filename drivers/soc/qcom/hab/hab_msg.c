@@ -399,7 +399,7 @@ int hab_msg_recv(struct physical_channel *pchan,
 				pchan->name, ret, payload_type, sizebytes);
 			break;
 		}
-		wake_up_interruptible(&dev->openq);
+		wake_up(&dev->openq);
 		break;
 
 	case HAB_PAYLOAD_TYPE_INIT_CANCEL:

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2022, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1212,13 +1213,15 @@ static int hgsl_ioctl_get_shadowts_mem(struct file *filep, unsigned long arg)
 
 	dma_buf = ctxt->shadow_ts_node.dma_buf;
 	if (dma_buf) {
+		/* increase reference count before install fd. */
+		get_dma_buf(dma_buf);
 		params.fd = dma_buf_fd(dma_buf, O_CLOEXEC);
 		if (params.fd < 0) {
 			LOGE("dma buf to fd failed\n");
 			ret = -ENOMEM;
+			dma_buf_put(dma_buf);
 			goto out;
 		}
-		get_dma_buf(dma_buf);
 	}
 
 	if (copy_to_user(USRPTR(arg), &params, sizeof(params))) {
@@ -1401,6 +1404,17 @@ static int hgsl_ioctl_ctxt_create(struct file *filep, unsigned long arg)
 	kref_init(&ctxt->kref);
 	init_waitqueue_head(&ctxt->wait_q);
 
+	if (hgsl_ctxt_use_global_dbq(ctxt)) {
+		ret = hgsl_hsync_timeline_create(ctxt);
+		if (ret < 0)
+			LOGE("hsync timeline failed for context %d", params.ctxthandle);
+	}
+
+	if (ctxt->timeline)
+		params.sync_type = HGSL_SYNC_TYPE_HSYNC;
+	else
+		params.sync_type = HGSL_SYNC_TYPE_ISYNC;
+
 	write_lock(&hgsl->ctxt_lock);
 	if (hgsl->contexts[ctxt->context_id] != NULL) {
 		LOGE("context id %d already created",
@@ -1413,17 +1427,6 @@ static int hgsl_ioctl_ctxt_create(struct file *filep, unsigned long arg)
 	hgsl->contexts[ctxt->context_id] = ctxt;
 	write_unlock(&hgsl->ctxt_lock);
 	ctxt_created = true;
-
-	if (hgsl_ctxt_use_global_dbq(ctxt)) {
-		ret = hgsl_hsync_timeline_create(ctxt);
-		if (ret < 0)
-			LOGE("hsync timeline failed for context %d", params.ctxthandle);
-	}
-
-	if (ctxt->timeline)
-		params.sync_type = HGSL_SYNC_TYPE_HSYNC;
-	else
-		params.sync_type = HGSL_SYNC_TYPE_ISYNC;
 
 	if (copy_to_user(USRPTR(arg), &params, sizeof(params))) {
 		ret = -EFAULT;
