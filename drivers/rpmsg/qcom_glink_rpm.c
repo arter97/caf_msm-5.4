@@ -373,7 +373,7 @@ static int glink_rpm_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#if defined(CONFIG_DEEPSLEEP)
+#if defined(CONFIG_RPMSG_QCOM_GLINK_RPM)
 int glink_rpm_resume_noirq(struct device *dev)
 {
 	struct qcom_glink *glink;
@@ -390,6 +390,8 @@ int glink_rpm_resume_noirq(struct device *dev)
 	return 0;
 }
 EXPORT_SYMBOL(glink_rpm_resume_noirq);
+#else
+int glink_rpm_resume_noirq(struct device *dev) { }
 #endif
 
 static const struct of_device_id glink_rpm_of_match[] = {
