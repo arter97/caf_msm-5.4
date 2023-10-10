@@ -63,6 +63,7 @@ struct k61_can {
 	int bits_per_word;
 	int reset_delay_msec;
 	s64 time_diff;
+	bool wake_irq_en;
 };
 
 struct k61_netdev_privdata {
@@ -177,7 +178,14 @@ static irqreturn_t k61_irq(int irq, void *priv)
 	struct k61_can *priv_data = priv;
 
 	LOGDI("k61 IRQ\n");
-	k61_rx_message(priv_data);
+	if (priv_data) {
+		if (!priv_data->wake_irq_en) {
+			k61_rx_message(priv_data);
+		} else {
+			dev_info(&priv_data->spidev->dev,
+				 "qti_can wake_irq Invoked upon Resume\r\n");
+		}
+	}
 	return IRQ_HANDLED;
 }
 
@@ -808,6 +816,7 @@ static int k61_create_netdev(struct spi_device *spi,
 		return -ENOMEM;
 	}
 
+	netdev->mtu = CANFD_MTU;
 	netdev_priv_data = netdev_priv(netdev);
 	netdev_priv_data->k61_can = priv_data;
 
@@ -953,6 +962,9 @@ static int k61_probe(struct spi_device *spi)
 		err = -ENODEV;
 		goto free_irq;
 	}
+
+	/* Initializing wake_irq_en with false to recive SPI data on IRQ */
+	priv_data->wake_irq_en = false;
 	return 0;
 
 free_irq:
@@ -988,24 +1000,36 @@ static const struct of_device_id k61_match_table[] = {
 #ifdef CONFIG_PM
 static int k61_suspend(struct device *dev)
 {
+	int ret = 0;
 	struct spi_device *spi = to_spi_device(dev);
 	struct k61_can *priv_data = spi_get_drvdata(spi);
 	u8 power_event = CMD_SUSPEND_EVENT;
 
-	k61_notify_power_events(priv_data, power_event);
-	enable_irq_wake(spi->irq);
-	return 0;
+	if (spi && priv_data) {
+		k61_notify_power_events(priv_data, power_event);
+		enable_irq_wake(spi->irq);
+		priv_data->wake_irq_en = true;
+	} else {
+		ret = -1;
+	}
+	return ret;
 }
 
 static int k61_resume(struct device *dev)
 {
+	int ret = 0;
 	struct spi_device *spi = to_spi_device(dev);
 	struct k61_can *priv_data = spi_get_drvdata(spi);
 	u8 power_event = CMD_RESUME_EVENT;
 
-	disable_irq_wake(spi->irq);
-	k61_notify_power_events(priv_data, power_event);
-	return 0;
+	if (spi && priv_data) {
+		disable_irq_wake(spi->irq);
+		k61_notify_power_events(priv_data, power_event);
+		priv_data->wake_irq_en = false;
+	} else {
+		ret = -1;
+	}
+	return ret;
 }
 
 static const struct dev_pm_ops k61_dev_pm_ops = {

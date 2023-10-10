@@ -4396,8 +4396,6 @@ static int _qcom_ethqos_probe(void *arg)
 	ethqos->skip_ipa_autoresume = of_property_read_bool(pdev->dev.of_node,
 							    "skip-ipa-autoresume");
 	ethqos->ioaddr = (&stmmac_res)->addr;
-	if (ethqos->io_macro.rgmii_tx_drv)
-		ethqos_update_rgmii_tx_drv_strength(ethqos);
 	ethqos_update_mdio_drv_strength(ethqos, np);
 	ethqos_mac_rec_init(ethqos);
 	if (of_device_is_compatible(np, "qcom,qcs404-ethqos"))
@@ -4406,6 +4404,9 @@ static int _qcom_ethqos_probe(void *arg)
 	ret = stmmac_dvr_probe(&pdev->dev, plat_dat, &stmmac_res);
 	if (ret)
 		goto err_clk;
+
+	if (ethqos->io_macro.rgmii_tx_drv)
+		ethqos_update_rgmii_tx_drv_strength(ethqos);
 
 ethqos_emac_mem_base(ethqos);
 	pethqos = ethqos;
