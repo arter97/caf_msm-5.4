@@ -718,7 +718,7 @@ static int qcom_va_md_driver_probe(struct platform_device *pdev)
 	int count;
 	struct page **pages, *page;
 	dma_addr_t dma_handle;
-	dev_err(&pdev->dev, "inside of qcom_va_md_driver_probe\n");
+	dev_info(&pdev->dev, "inside of qcom_va_md_driver_probe\n");
 	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
 	if (ret)
 		return ret;
@@ -766,7 +766,7 @@ static int qcom_va_md_driver_probe(struct platform_device *pdev)
 
 	/* All updates above should be visible, before init completes */
 	smp_store_release(&va_md_data.va_md_init, true);
-        dev_err(&pdev->dev, "inside of qcom_va_md_driver_probe done \n");
+        dev_info(&pdev->dev, "inside of qcom_va_md_driver_probe done \n");
 
 out:
 	return ret;

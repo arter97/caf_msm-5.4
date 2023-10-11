@@ -332,7 +332,7 @@ static int __init set_early_ethernet_ipv4(char *ipv4_addr_in)
 	ret = in4_pton(pparams.ipv4_addr_str, -1,
 		       (u8 *)&pparams.ipv4_addr.s_addr, -1, NULL);
 	if (ret != 1 || pparams.ipv4_addr.s_addr == 0) {
-		ETHQOSERR("Invalid ipv4 address programmed: %s\n",
+		ETHQOSDBG("Invalid ipv4 address programmed: %s\n",
 			  ipv4_addr_in);
 		return ret;
 	}
@@ -359,7 +359,7 @@ static int __init set_early_ethernet_ipv6(char *ipv6_addr_in)
 	ret = in6_pton(pparams.ipv6_addr_str, -1,
 		       (u8 *)&pparams.ipv6_addr.ifr6_addr.s6_addr32, -1, NULL);
 	if (ret != 1 || !pparams.ipv6_addr.ifr6_addr.s6_addr32)  {
-		ETHQOSERR("Invalid ipv6 address programmed: %s\n",
+		ETHQOSDBG("Invalid ipv6 address programmed: %s\n",
 			  ipv6_addr_in);
 		return ret;
 	}
@@ -3637,7 +3637,7 @@ static int ethqos_create_emac_rec_device_node(dev_t *emac_dev_t,
 		goto fail_create_device;
 	}
 
-	ETHQOSERR(" mac recovery node opened");
+	ETHQOSINFO(" mac recovery node opened");
 	return 0;
 
 fail_create_device:
