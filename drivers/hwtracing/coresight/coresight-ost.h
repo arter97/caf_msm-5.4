@@ -18,6 +18,8 @@ extern ssize_t stm_ost_packet(struct stm_data *stm_data,
 
 extern int stm_set_ost_params(struct device *dev, struct stm_drvdata *drvdata,
 			      size_t bitmap_size);
+
+extern int stm_clear_ost_params(void);
 #else
 static inline bool stm_ost_configured(void) { return false; }
 
@@ -30,6 +32,11 @@ static inline ssize_t stm_ost_packet(struct stm_data *stm_data,
 
 static inline int stm_set_ost_params(struct stm_drvdata *drvdata,
 				     size_t bitmap_size)
+{
+	return 0;
+}
+
+extern inline int stm_clear_ost_params(void)
 {
 	return 0;
 }

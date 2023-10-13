@@ -235,6 +235,7 @@ static int ipc_write(struct platform_device *pdev, char *buf,
 	unsigned long flags;
 	struct usb_request *req;
 	struct usb_ep *in;
+	struct ipc_context *ctxt = ipc_dev;
 	int ret;
 
 	if (!ipc_dev)
@@ -258,6 +259,7 @@ retry_write:
 	if (!ipc_dev->connected) {
 		pr_err("%s: Interface disconnected, cannot queue req\n",
 		       __func__);
+		flush_work(&ctxt->func_work);
 		ipc_dev->pending_writes--;
 		return -EINVAL;
 	}
@@ -328,6 +330,7 @@ static int ipc_read(struct platform_device *pdev, char *buf, unsigned int count)
 	unsigned long flags;
 	struct usb_request *req;
 	struct usb_ep *out;
+	struct ipc_context *ctxt = ipc_dev;
 
 	if (!ipc_dev)
 		return -ENODEV;
@@ -350,6 +353,7 @@ retry_read:
 	if (!ipc_dev->connected) {
 		pr_err("%s: Interface disconnected, cannot queue req\n",
 		       __func__);
+		flush_work(&ctxt->func_work);
 		ipc_dev->pending_reads--;
 		return -EINVAL;
 	}

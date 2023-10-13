@@ -288,3 +288,11 @@ int stm_set_ost_params(struct device *dev, struct stm_drvdata *drvdata,
 }
 EXPORT_SYMBOL(stm_set_ost_params);
 
+int stm_clear_ost_params(void)
+{
+	stmdrvdata = NULL;
+
+	return 0;
+}
+EXPORT_SYMBOL(stm_clear_ost_params);
+

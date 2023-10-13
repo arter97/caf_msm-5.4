@@ -1969,7 +1969,7 @@ static int glink_slatecom_process_cmd(struct glink_slatecom *glink, void *rx_dat
 		case SLATECOM_CMD_CLOSE_ACK:
 			glink_slatecom_rx_defer(glink,
 					   rx_data + offset - sizeof(*msg),
-					   rx_size + offset - sizeof(*msg), 0);
+					   rx_size - offset + sizeof(*msg), 0);
 			break;
 		case SLATECOM_CMD_RX_INTENT_REQ:
 			glink_slatecom_handle_intent_req(glink, param1, param2);
@@ -1982,7 +1982,7 @@ static int glink_slatecom_process_cmd(struct glink_slatecom *glink, void *rx_dat
 			name = rx_data + offset;
 			glink_slatecom_rx_defer(glink,
 					   rx_data + offset - sizeof(*msg),
-					   rx_size + offset - sizeof(*msg),
+					   rx_size - offset + sizeof(*msg),
 					   ALIGN(name_len, SLATECOM_ALIGNMENT));
 
 			offset += ALIGN(name_len, SLATECOM_ALIGNMENT);
