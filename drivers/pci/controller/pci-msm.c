@@ -407,6 +407,8 @@ enum msm_pcie_irq_event {
 enum msm_pcie_gpio {
 	MSM_PCIE_GPIO_PERST,
 	MSM_PCIE_GPIO_WAKE,
+	MSM_PCIE_GPIO_AQR113_PWR,
+	MSM_PCIE_GPIO_QEP8121_PWR,
 	MSM_PCIE_GPIO_EP,
 	MSM_PCIE_MAX_GPIO
 };
@@ -961,6 +963,8 @@ static struct msm_pcie_vreg_info_t msm_pcie_vreg_info[MSM_PCIE_MAX_VREG] = {
 static struct msm_pcie_gpio_info_t msm_pcie_gpio_info[MSM_PCIE_MAX_GPIO] = {
 	{"perst-gpio", 0, 1, 0, 0, 1},
 	{"wake-gpio", 0, 0, 0, 0, 0},
+	{"pcie-aqr113-pwr-gpio", 0, 1, 0, 0, 0},
+	{"pcie-qep8121-pwr-gpio", 0, 1, 0, 0, 0},
 	{"qcom,ep-gpio", 0, 1, 1, 0, 0}
 };
 
@@ -6559,6 +6563,16 @@ static int msm_pcie_probe(struct platform_device *pdev)
 				pcie_dev->phy_power_down_offset, 0);
 		msm_pcie_clk_deinit(pcie_dev);
 	}
+
+	PCIE_DBG(pcie_dev, "RC%d AQR113 up to PCIE QPS615\n",
+								pcie_dev->rc_idx);
+	gpio_set_value(pcie_dev->gpio[MSM_PCIE_GPIO_AQR113_PWR].num, 1);
+	msleep(50);
+
+	PCIE_DBG(pcie_dev, "RC%d QEP8121 up to PCIE QPS615\n",
+								pcie_dev->rc_idx);
+	gpio_set_value(pcie_dev->gpio[MSM_PCIE_GPIO_QEP8121_PWR].num, 1);
+	msleep(50);
 
 	if (pcie_dev->boot_option & MSM_PCIE_NO_PROBE_ENUMERATION) {
 		PCIE_DBG(pcie_dev,
