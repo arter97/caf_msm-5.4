@@ -130,7 +130,7 @@ static __init int system_trusted_keyring_init(void)
 /*
  * Must be initialised before we try and load the keys into the keyring.
  */
-device_initcall(system_trusted_keyring_init);
+fs_initcall(system_trusted_keyring_init);
 
 /*
  * Load the compiled-in list of X.509 certificates.
@@ -142,7 +142,7 @@ static __init int load_system_certificate_list(void)
 	return load_certificate_list(system_certificate_list, system_certificate_list_size,
 				     builtin_trusted_keys);
 }
-late_initcall(load_system_certificate_list);
+device_initcall(load_system_certificate_list);
 
 #ifdef CONFIG_SYSTEM_DATA_VERIFICATION
 
