@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /* Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -80,21 +81,9 @@ struct smd_pkt_dev {
 
 static void *smd_pkt_ilctxt;
 
-static int smd_pkt_debug_mask;
-
-module_param_named(debug_mask, smd_pkt_debug_mask, int, 0664);
-
-enum {
-	SMD_PKT_INFO = 1U << 0,
-};
-
 #define SMD_PKT_INFO(x, ...)                                          \
-do {                                                                    \
-	if (smd_pkt_debug_mask & SMD_PKT_INFO) {                    \
-		ipc_log_string(smd_pkt_ilctxt,                        \
-			"[%s]: "x, __func__, ##__VA_ARGS__);            \
-	}                                                               \
-} while (0)
+	ipc_log_string(smd_pkt_ilctxt,                        \
+		"[%s]: "x, __func__, ##__VA_ARGS__)
 
 #define SMD_PKT_ERR(x, ...)                                                 \
 do {                                                                          \
@@ -145,7 +134,7 @@ static ssize_t open_timeout_show(struct device *dev,
 	return ret;
 }
 
-static DEVICE_ATTR_RW(open_timeout, 0644, open_timeout_show, open_timeout_store);
+static DEVICE_ATTR_RW(open_timeout);
 
 static int smd_pkt_rpdev_probe(struct rpmsg_device *rpdev)
 {
@@ -189,7 +178,7 @@ static int smd_pkt_rpdev_cb(struct rpmsg_device *rpdev, void *buf, int len,
 	return 0;
 }
 
-static int smd_pkt_rpdev_sigs(struct rpmsg_device *rpdev, u32 old, u32 new)
+static int smd_pkt_rpdev_sigs(struct rpmsg_device *rpdev, void *priv, u32 old, u32 new)
 {
 	struct device_driver *drv = rpdev->dev.driver;
 	struct rpmsg_driver *rpdrv = drv_to_rpdrv(drv);
@@ -217,36 +206,34 @@ static int smd_pkt_rpdev_sigs(struct rpmsg_device *rpdev, u32 old, u32 new)
  * TIOCMBIC and TICOMSET.
  */
 static int smd_pkt_tiocmset(struct smd_pkt_dev *smd_pkt_devp, unsigned int cmd,
-				unsigned long arg)
+				int __user *arg)
 {
-	u32 lsigs, rsigs, val;
+	u32 set, clear, val;
 	int ret;
 
-	ret = get_user(val, (u32 *)arg);
+	ret = get_user(val, arg);
 	if (ret)
 		return ret;
 
-	ret = rpmsg_get_sigs(smd_pkt_devp->rpdev->ept, &lsigs, &rsigs);
-	if (ret < 0) {
-		SMD_PKT_ERR("Get signals failed[%d]\n", ret);
-		return ret;
-	}
-
+	set = clear = 0;
 	switch (cmd) {
 	case TIOCMBIS:
-		lsigs |= val;
+		set = val;
 		break;
 	case TIOCMBIC:
-		lsigs &= ~val;
+		clear = val;
 		break;
 	case TIOCMSET:
-		lsigs = val;
+		set = val;
+		clear = ~val;
 		break;
 	}
 
-	return rpmsg_set_sigs(smd_pkt_devp->rpdev->ept, lsigs);
-	SMD_PKT_INFO("sigs[0x%x] ret[%d]\n", lsigs, ret);
-	return ret;
+	set &= TIOCM_DTR | TIOCM_RTS | TIOCM_CD | TIOCM_RI;
+	clear &= TIOCM_DTR | TIOCM_RTS | TIOCM_CD | TIOCM_RI;
+	SMD_PKT_INFO("set[0x%x] clear[0x%x]\n", set, clear);
+	return rpmsg_set_signals(smd_pkt_devp->rpdev->ept, set, clear);
+
 }
 
 /**
@@ -264,7 +251,6 @@ static long smd_pkt_ioctl(struct file *file, unsigned int cmd,
 {
 	struct smd_pkt_dev *smd_pkt_devp;
 	unsigned long flags;
-	u32 lsigs, rsigs;
 	int ret;
 
 	smd_pkt_devp = file->private_data;
@@ -289,14 +275,14 @@ static long smd_pkt_ioctl(struct file *file, unsigned int cmd,
 		smd_pkt_devp->sig_change = false;
 		spin_unlock_irqrestore(&smd_pkt_devp->queue_lock, flags);
 
-		ret = rpmsg_get_sigs(smd_pkt_devp->rpdev->ept, &lsigs, &rsigs);
-		if (!ret)
-			ret = put_user(rsigs, (uint32_t *)arg);
+		ret = rpmsg_get_signals(smd_pkt_devp->rpdev->ept);
+		if (ret >= 0)
+			ret = put_user(ret, (int __user *)arg);
 		break;
 	case TIOCMSET:
 	case TIOCMBIS:
 	case TIOCMBIC:
-		ret = smd_pkt_tiocmset(smd_pkt_devp, cmd, arg);
+		ret = smd_pkt_tiocmset(smd_pkt_devp, cmd, (int __user *)arg);
 		break;
 	case SMD_PKT_IOCTL_QUEUE_RX_INTENT:
 		/* Return success to not break userspace client logic */

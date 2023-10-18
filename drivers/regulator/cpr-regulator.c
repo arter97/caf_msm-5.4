@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "%s: " fmt, __func__
@@ -435,8 +436,11 @@ static u64 cpr_read_efuse_row(struct cpr_regulator *cpr_vreg, u32 row_num,
 		return cpr_read_remapped_efuse_row(cpr_vreg, row_num);
 
 	if (!use_tz_api) {
-		efuse_bits = readl_relaxed(cpr_vreg->efuse_base
-			+ row_num * BYTES_PER_FUSE_ROW);
+		efuse_bits = readl_relaxed((cpr_vreg->efuse_base + row_num *
+			BYTES_PER_FUSE_ROW) + 4);
+		efuse_bits <<= 32;
+		efuse_bits |=  readl_relaxed((cpr_vreg->efuse_base + row_num *
+			BYTES_PER_FUSE_ROW));
 		return efuse_bits;
 	}
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[hdcp-qseecom] %s: " fmt, __func__
@@ -68,6 +69,12 @@
 
 /* Wait 200ms after authentication */
 #define SLEEP_FORCE_ENCRYPTION_MS 200
+
+/* Error code when Qseecomd is not up at boot time */
+#define QSEECOMD_ERROR -4103
+
+/* Wait for 100ms on every retry to check if Qseecomd is up */
+#define SLEEP_QSEECOMD_WAIT_MS 100
 
 /* hdcp command status */
 #define HDCP_SUCCESS                    0
@@ -550,6 +557,22 @@ static struct qseecom_handle *hdcp1_qseecom_handle_g;
 static int hdcp1_app_started;
 static DEFINE_MUTEX(hdcp1_mutex_g);
 
+/*
+ * Max number of retries by default set to 0 which
+ * is equivalent to 0MS. Actual value will be the one
+ * from the dtsi file.
+ */
+static int max_hdcp_key_verify_retries;
+
+/*
+ * If Qseecomd starts late and hdcp key
+ * verification has already started, QSEECOMD_DOWN
+ * flag will be set to true. It will be set to false
+ * once the Qseecomd is up. Initial assumption is
+ * that the Qseecomd will start in time.
+ */
+static bool QSEECOMD_DOWN;
+
 struct hdcp2_handle {
 	struct hdcp2_app_data app_data;
 	uint32_t tz_ctxhandle;
@@ -892,13 +915,18 @@ static int hdcp2_verify_key(struct hdcp2_handle *handle)
 	rc = hdcp2_app_process_cmd(verify_key);
 	pr_debug("verify_key = %d\n", rc);
 
+	if (rsp_buf->status == QSEECOMD_ERROR)
+		QSEECOMD_DOWN = true;
+	else
+		QSEECOMD_DOWN = false;
+
 error:
 	return rc;
 }
 
 bool hdcp2_feature_supported(void *data)
 {
-	int rc = 0;
+	int rc = 0, retry = 0;
 	bool supported = false;
 	struct hdcp2_handle *handle = data;
 
@@ -916,10 +944,24 @@ bool hdcp2_feature_supported(void *data)
 	mutex_lock(&hdcp2_mutex_g);
 	rc = hdcp2_app_load(handle);
 	if (!rc) {
-		if (!hdcp2_verify_key(handle)) {
-			pr_debug("HDCP 2.2 supported\n");
-			handle->feature_supported = true;
-			supported = true;
+		do {
+			if (!hdcp2_verify_key(handle)) {
+				pr_debug("HDCP 2.2 supported.\n");
+				pr_debug("hdcp2_verify_key succeeded on %d retry.\n", retry);
+				handle->feature_supported = true;
+				supported = true;
+				break;
+			} else if (QSEECOMD_DOWN) {
+				pr_debug("Qseecomd is not up. Going to sleep.\n");
+				msleep(SLEEP_QSEECOMD_WAIT_MS);
+				retry++;
+			} else
+				break;
+		} while (max_hdcp_key_verify_retries >= retry);
+
+		if (QSEECOMD_DOWN) {
+			pr_err("hdcp2_verify_key failed after %d retries as Qseecomd is not up.\n",
+				max_hdcp_key_verify_retries);
 		}
 		hdcp2_app_unload(handle);
 	}
@@ -928,6 +970,14 @@ error:
 	return supported;
 }
 EXPORT_SYMBOL(hdcp2_feature_supported);
+
+int set_hdcp_key_verify_retries(int value)
+{
+	max_hdcp_key_verify_retries = value;
+	pr_debug("max_hdcp_key_verify_retries : %d\n", max_hdcp_key_verify_retries);
+	return 0;
+}
+EXPORT_SYMBOL(set_hdcp_key_verify_retries);
 
 static int hdcp2_app_session_init(struct hdcp2_handle *handle)
 {
@@ -1672,6 +1722,12 @@ static int hdcp1_verify_key(struct hdcp1_handle *hdcp1_handle)
 	}
 
 	rc = key_verify_rsp->ret;
+
+	if (rc == QSEECOMD_ERROR)
+		QSEECOMD_DOWN = true;
+	else
+		QSEECOMD_DOWN = false;
+
 	if (rc) {
 		pr_err("key_verify failed, rsp=%d\n", key_verify_rsp->ret);
 		return -EINVAL;
@@ -1686,7 +1742,7 @@ bool hdcp1_feature_supported(void *data)
 {
 	bool supported = false;
 	struct hdcp1_handle *handle = data;
-	int rc = 0;
+	int rc = 0, retry = 0;
 
 	mutex_lock(&hdcp1_mutex_g);
 	if (!handle) {
@@ -1701,10 +1757,24 @@ bool hdcp1_feature_supported(void *data)
 
 	rc = hdcp1_app_load(handle);
 	if (!rc && (handle->hdcp_state & HDCP_STATE_APP_LOADED)) {
-		if (!hdcp1_verify_key(handle)) {
-			pr_debug("HDCP 1.x supported\n");
-			handle->feature_supported = true;
-			supported = true;
+		do {
+			if (!hdcp1_verify_key(handle)) {
+				pr_debug("HDCP 1.x supported\n");
+				pr_debug("hdcp1_verify_key succeeded on %d retry.\n", retry);
+				handle->feature_supported = true;
+				supported = true;
+				break;
+			} else if (QSEECOMD_DOWN) {
+				pr_debug("Qseecomd is not up. Going to sleep.\n");
+				msleep(SLEEP_QSEECOMD_WAIT_MS);
+				retry++;
+			} else
+				break;
+		} while (max_hdcp_key_verify_retries >= retry);
+
+		if (QSEECOMD_DOWN) {
+			pr_err("hdcp1_verify_key failed after %d retries as Qseecomd is not up.\n",
+				max_hdcp_key_verify_retries);
 		}
 		hdcp1_app_unload(handle);
 	}

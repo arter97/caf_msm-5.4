@@ -518,9 +518,9 @@ int qcom_scm_paravirt_smmu_attach(u64 sid, u64 asid,
 }
 EXPORT_SYMBOL(qcom_scm_paravirt_smmu_attach);
 
-int qcom_scm_paravirt_tlb_inv(u64 asid)
+int qcom_scm_paravirt_tlb_inv(u64 asid, u64 sid)
 {
-	return __qcom_scm_paravirt_tlb_inv(__scm ? __scm->dev : NULL, asid);
+	return __qcom_scm_paravirt_tlb_inv(__scm ? __scm->dev : NULL, asid, sid);
 }
 EXPORT_SYMBOL(qcom_scm_paravirt_tlb_inv);
 

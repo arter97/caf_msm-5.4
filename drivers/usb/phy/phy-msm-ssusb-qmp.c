@@ -717,6 +717,11 @@ static int msm_ssphy_qmp_set_suspend(struct usb_phy *uphy, int suspend)
 	}
 
 	if (suspend) {
+		if (phy->phy.flags & PHY_USB_DP_CONCURRENT_MODE) {
+			dev_info(uphy->dev, "QMP PHY set_suspend exit because DP is enabled.\n");
+			return 0;
+		}
+
 		if (phy->cable_connected) {
 			msm_ssusb_qmp_enable_autonomous(phy, 1);
 		} else {

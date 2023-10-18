@@ -746,6 +746,12 @@ static int cnss_pci_reg_read(struct cnss_pci_data *pci_priv,
 			return ret;
 	}
 
+	if (offset & 0x03) {
+		*val = 0xdeadbeaf;
+		cnss_pr_err("read offset 0x%x is not dword alignment\n", offset);
+		return -EINVAL;
+	}
+
 	if (pci_priv->pci_dev->device == QCA6174_DEVICE_ID ||
 	    offset < MAX_UNWINDOWED_ADDRESS) {
 		*val = readl_relaxed(pci_priv->bar + offset);
@@ -781,6 +787,11 @@ static int cnss_pci_reg_write(struct cnss_pci_data *pci_priv, u32 offset,
 		ret = cnss_pci_check_link_status(pci_priv);
 		if (ret)
 			return ret;
+	}
+
+	if (offset & 0x03) {
+		cnss_pr_err("write offset 0x%x is not dword alignment\n", offset);
+		return -EINVAL;
 	}
 
 	if (pci_priv->pci_dev->device == QCA6174_DEVICE_ID ||
@@ -3196,6 +3207,7 @@ static bool cnss_pci_is_drv_supported(struct cnss_pci_data *pci_priv)
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	struct device_node *root_of_node;
 	bool drv_supported = false;
+	bool drv_supported_overlay_disable = false;
 
 	if (!root_port) {
 		cnss_pr_err("PCIe DRV is not supported as root port is null\n");
@@ -3208,17 +3220,26 @@ static bool cnss_pci_is_drv_supported(struct cnss_pci_data *pci_priv)
 	if (root_of_node && root_of_node->parent)
 		drv_supported = of_property_read_bool(root_of_node->parent,
 						      "qcom,drv-supported");
-
 	cnss_pr_dbg("PCIe DRV is %s\n",
 		    drv_supported ? "supported" : "not supported");
-	pci_priv->drv_supported = drv_supported;
 
-	if (drv_supported) {
+	if (root_of_node && root_of_node->parent)
+		drv_supported_overlay_disable = of_property_read_bool(root_of_node->parent,
+								      "qcom,overlay-disable-drv-supported");
+
+	cnss_pr_dbg("Using overlay to disable PCIe DRV is %s\n",
+		    drv_supported_overlay_disable ? "true" : "false");
+
+	pci_priv->drv_supported = drv_supported;
+	if (drv_supported_overlay_disable)
+		pci_priv->drv_supported = false;
+
+	if (pci_priv->drv_supported) {
 		plat_priv->cap.cap_flag |= CNSS_HAS_DRV_SUPPORT;
 		cnss_set_feature_list(plat_priv, CNSS_DRV_SUPPORT_V01);
 	}
 
-	return drv_supported;
+	return pci_priv->drv_supported;
 }
 
 static void cnss_pci_event_cb(struct msm_pcie_notify *notify)
@@ -5902,7 +5923,6 @@ static void cnss_pci_unregister_mhi(struct cnss_pci_data *pci_priv)
 	mhi_ctrl->irq = NULL;
 	mhi_free_controller(mhi_ctrl);
 	pci_priv->mhi_ctrl = NULL;
-	cnss_qmi_deinit(pci_priv->plat_priv);
 }
 
 static void cnss_pci_config_regs(struct cnss_pci_data *pci_priv)

@@ -927,7 +927,10 @@ static int stm_probe(struct amba_device *adev, const struct amba_id *id)
 		dev_info(dev,
 			 "%s : stm_register_device failed, probing deferred\n",
 			 desc.name);
-		pm_runtime_put(&adev->dev);
+
+#ifdef CONFIG_CORESIGHT_QGKI
+		stm_clear_ost_params();
+#endif
 		return -EPROBE_DEFER;
 	}
 

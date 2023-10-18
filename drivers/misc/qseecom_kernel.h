@@ -49,9 +49,19 @@ int qseecom_create_key_in_slot(uint8_t usage_code, uint8_t key_slot, const uint8
 #if IS_ENABLED(CONFIG_QSEECOM)
 int qseecom_process_listener_from_smcinvoke(uint32_t *result,
 					u64 *response_type, unsigned int *data);
+/*
+ *  If clock-support is enabled for smcinvoke,
+ *  a notification will be sent to qseecom to enable/disable
+ *  clocks when smcinvoke sends an invoke command
+ */
+int qseecom_set_msm_bus_request_from_smcinvoke(uint32_t mode);
 #else
 int qseecom_process_listener_from_smcinvoke(uint32_t *result,
 					u64 *response_type, unsigned int *data)
+{
+	return -EOPNOTSUPP;
+}
+int qseecom_set_msm_bus_request_from_smcinvoke(uint32_t mode)
 {
 	return -EOPNOTSUPP;
 }
