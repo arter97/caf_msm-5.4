@@ -91,6 +91,7 @@ static DEFINE_SPINLOCK(time_sync_lock);
 #define HANG_DATA_LENGTH		384
 #define HST_HANG_DATA_OFFSET		((3 * 1024 * 1024) - HANG_DATA_LENGTH)
 #define HSP_HANG_DATA_OFFSET		((2 * 1024 * 1024) - HANG_DATA_LENGTH)
+#define GNO_HANG_DATA_OFFSET		(0x7d000 - HANG_DATA_LENGTH)
 
 #define MHI_SUSPEND_RETRY_CNT		3
 #define MHI_LOG_NAME_LEN			20
@@ -5187,6 +5188,7 @@ static void cnss_pci_send_hang_event(struct cnss_pci_data *pci_priv)
 	struct cnss_hang_event hang_event;
 	void *hang_data_va = NULL;
 	u64 offset = 0;
+	u16 length = 0;
 	int i = 0;
 
 	if (!fw_mem || !plat_priv->fw_mem_seg_len)
@@ -5196,9 +5198,15 @@ static void cnss_pci_send_hang_event(struct cnss_pci_data *pci_priv)
 	switch (pci_priv->device_id) {
 	case QCA6390_DEVICE_ID:
 		offset = HST_HANG_DATA_OFFSET;
+		length = HANG_DATA_LENGTH;
 		break;
 	case QCA6490_DEVICE_ID:
 		offset = HSP_HANG_DATA_OFFSET;
+		length = HANG_DATA_LENGTH;
+		break;
+	case QCN7605_DEVICE_ID:
+		offset = GNO_HANG_DATA_OFFSET;
+		length = HANG_DATA_LENGTH;
 		break;
 	default:
 		cnss_pr_err("Skip Hang Event Data as unsupported Device ID received: %d\n",
@@ -5209,15 +5217,19 @@ static void cnss_pci_send_hang_event(struct cnss_pci_data *pci_priv)
 	for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
 		if (fw_mem[i].type == QMI_WLFW_MEM_TYPE_DDR_V01 &&
 		    fw_mem[i].va) {
+			/* The offset must be < (fw_mem size- hangdata length) */
+			if (!(offset <= fw_mem[i].size - length))
+				goto exit;
+
 			hang_data_va = fw_mem[i].va + offset;
 			hang_event.hang_event_data = kmemdup(hang_data_va,
-							     HANG_DATA_LENGTH,
+							     length,
 							     GFP_ATOMIC);
 			if (!hang_event.hang_event_data) {
 				cnss_pr_dbg("Hang data memory alloc failed\n");
 				return;
 			}
-			hang_event.hang_event_data_len = HANG_DATA_LENGTH;
+			hang_event.hang_event_data_len = length;
 			break;
 		}
 	}
@@ -5226,6 +5238,10 @@ static void cnss_pci_send_hang_event(struct cnss_pci_data *pci_priv)
 
 	kfree(hang_event.hang_event_data);
 	hang_event.hang_event_data = NULL;
+	return;
+exit:
+	cnss_pr_dbg("Invalid hang event params, offset:0x%x, length:0x%x\n",
+		    offset, length);
 }
 
 void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
