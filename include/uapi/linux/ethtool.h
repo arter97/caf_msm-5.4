@@ -1643,6 +1643,8 @@ static inline int ethtool_validate_duplex(__u8 duplex)
 	return 0;
 }
 
+#define MASTER_SLAVE_STATE_ERR			4
+
 /* Which connector port. */
 #define PORT_TP			0x00
 #define PORT_AUI		0x01

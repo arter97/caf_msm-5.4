@@ -21,6 +21,8 @@
 #include <linux/timer.h>
 #include <linux/workqueue.h>
 #include <linux/mod_devicetable.h>
+#include <linux/irqreturn.h>
+#include <linux/iopoll.h>
 #include <linux/android_kabi.h>
 
 #include <linux/atomic.h>
@@ -74,6 +76,7 @@ extern const int phy_10gbit_features_array[1];
 
 #define PHY_IS_INTERNAL		0x00000001
 #define PHY_RST_AFTER_CLK_EN	0x00000002
+#define PHY_POLL_CABLE_TEST	0x00000004
 #define MDIO_DEVICE_IS_PHY	0x80000000
 
 /* Interface Mode definitions */
@@ -404,6 +407,7 @@ struct phy_device {
 	int duplex;
 	int pause;
 	int asym_pause;
+	u8 master_slave_state;
 
 	/* Union of PHY and Attached devices' supported link modes */
 	/* See ethtool.h for more info */
@@ -545,7 +549,11 @@ struct phy_driver {
 	int (*did_interrupt)(struct phy_device *phydev);
 
 	/* Override default interrupt handling */
+#if IS_ENABLED(CONFIG_QPS615)
+	irqreturn_t (*handle_interrupt)(struct phy_device *phydev);
+#else
 	int (*handle_interrupt)(struct phy_device *phydev);
+#endif
 
 	/* Clears up any memory if needed */
 	void (*remove)(struct phy_device *phydev);
@@ -632,6 +640,16 @@ struct phy_driver {
 	int (*module_eeprom)(struct phy_device *dev,
 			     struct ethtool_eeprom *ee, u8 *data);
 
+	/** @cable_test_start: Start a cable test */
+	int (*cable_test_start)(struct phy_device *dev);
+
+	/**
+	 * @cable_test_get_status: Once per second, or on interrupt,
+	 * request the status of the test.
+	 */
+	int (*cable_test_get_status)(struct phy_device *dev, bool *finished);
+
+
 	/* Get statistics from the phy using ethtool */
 	int (*get_sset_count)(struct phy_device *dev);
 	void (*get_strings)(struct phy_device *dev, u8 *data);
@@ -715,6 +733,19 @@ static inline int phy_read(struct phy_device *phydev, u32 regnum)
 {
 	return mdiobus_read(phydev->mdio.bus, phydev->mdio.addr, regnum);
 }
+
+#define phy_read_poll_timeout(phydev, regnum, val, cond, sleep_us, \
+				timeout_us, sleep_before_read) \
+({ \
+	int __ret = read_poll_timeout(phy_read, val, (cond) || val < 0, \
+		sleep_us, timeout_us, sleep_before_read, phydev, regnum); \
+	if (val <  0) \
+		__ret = val; \
+	if (__ret) \
+		phydev_err(phydev, "%s failed: %d\n", __func__, __ret); \
+	__ret; \
+})
+
 
 /**
  * __phy_read - convenience function for reading a given PHY register
@@ -1127,6 +1158,9 @@ int genphy_read_mmd_unsupported(struct phy_device *phdev, int devad,
 int genphy_write_mmd_unsupported(struct phy_device *phdev, int devnum,
 				 u16 regnum, u16 val);
 
+/* Clause 37 */
+int genphy_c37_config_aneg(struct phy_device *phydev);
+
 /* Clause 45 PHY */
 int genphy_c45_restart_aneg(struct phy_device *phydev);
 int genphy_c45_check_and_restart_aneg(struct phy_device *phydev, bool restart);
@@ -1161,8 +1195,10 @@ void phy_drivers_unregister(struct phy_driver *drv, int n);
 int phy_driver_register(struct phy_driver *new_driver, struct module *owner);
 int phy_drivers_register(struct phy_driver *new_driver, int n,
 			 struct module *owner);
+void phy_error(struct phy_device *phydev);
 void phy_state_machine(struct work_struct *work);
 void phy_queue_state_machine(struct phy_device *phydev, unsigned long jiffies);
+void phy_trigger_machine(struct phy_device *phydev);
 void phy_mac_interrupt(struct phy_device *phydev);
 void phy_start_machine(struct phy_device *phydev);
 void phy_stop_machine(struct phy_device *phydev);
