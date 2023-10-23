@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef SLATECOM_INTERFACE_H
 #define SLATECOM_INTERFACE_H
@@ -127,6 +127,15 @@ enum WMSlateCtrlChnlOpcode {
 
 	GMI_WLAN_5G_DISCONNECT  = 19,
 
+       /*
+	 * Notification to Slate About Entry to Hibernate
+        */
+        GMI_WEAR_MGR_ENTER_HIBERNATE = 25,
+
+       /*
+	 * Notification to Slate About Exit to Hibernate
+	 */
+        GMI_WEAR_MGR_EXIT_HIBERNATE = 26,
 	/*
 	 * DEBUG Opcodes
 	 */
