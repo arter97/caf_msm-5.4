@@ -12,6 +12,7 @@
 #include <linux/of.h>
 #include <linux/of_mdio.h>
 #include <linux/phy.h>
+#include <linux/marvell_phy.h>
 #include <linux/phy_fixed.h>
 #include <linux/phylink.h>
 #include <linux/rtnetlink.h>
@@ -748,7 +749,7 @@ static int phylink_bringup_phy(struct phylink *pl, struct phy_device *phy)
 		phylink_set(config.advertising, Asym_Pause);
 
 	ret = phylink_validate(pl, supported, &config);
-	if (ret)
+	if (ret && phy->phy_id != MARVELL_PHY_ID_88Q2220)
 		return ret;
 
 	phy->phylink = pl;

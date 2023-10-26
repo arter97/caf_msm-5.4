@@ -859,8 +859,10 @@ static void stmmac_validate(struct phylink_config *config,
 	int tx_cnt = priv->plat->tx_queues_to_use;
 	int max_speed = priv->plat->max_speed;
 
-	phylink_set(mac_supported, 10baseT_Half);
-	phylink_set(mac_supported, 10baseT_Full);
+	if (!priv->plat->c45_marvell_en) {
+		phylink_set(mac_supported, 10baseT_Half);
+		phylink_set(mac_supported, 10baseT_Full);
+	}
 	phylink_set(mac_supported, 100baseT_Half);
 	phylink_set(mac_supported, 100baseT_Full);
 	phylink_set(mac_supported, 1000baseT_Half);
@@ -900,7 +902,8 @@ static void stmmac_validate(struct phylink_config *config,
 
 	/* Half-Duplex can only work with single queue */
 	if (tx_cnt > 1) {
-		phylink_set(mask, 10baseT_Half);
+		if (!priv->plat->c45_marvell_en)
+			phylink_set(mask, 10baseT_Half);
 		phylink_set(mask, 100baseT_Half);
 		phylink_set(mask, 1000baseT_Half);
 	}
@@ -1146,7 +1149,7 @@ static int stmmac_init_phy(struct net_device *dev)
 			return -ENODEV;
 		}
 
-		if (!priv->plat->mac2mac_en) {
+		if (!priv->plat->mac2mac_en && !priv->plat->c45_marvell_en) {
 			if (((priv->phydev->phy_id &
 			    priv->phydev->drv->phy_id_mask) == MICREL_PHY_ID) &&
 				!priv->plat->phy_intr_en) {
@@ -1158,7 +1161,8 @@ static int stmmac_init_phy(struct net_device *dev)
 			}
 		}
 
-		if (priv->plat->phy_intr_en_extn_stm && priv->plat->phy_intr_en) {
+		if (priv->plat->phy_intr_en_extn_stm && priv->plat->phy_intr_en &&
+		    !priv->plat->c45_marvell_en) {
 			priv->phydev->irq = PHY_IGNORE_INTERRUPT;
 			priv->phydev->interrupts =  PHY_INTERRUPT_ENABLED;
 		}
@@ -1166,7 +1170,8 @@ static int stmmac_init_phy(struct net_device *dev)
 		ret = phylink_connect_phy(priv->phylink, priv->phydev);
 
 #ifndef DEFER_ENABLE_INTERRUPTS
-		if (priv->plat->phy_intr_en_extn_stm && priv->plat->phy_intr_en) {
+		if (priv->plat->phy_intr_en_extn_stm && priv->plat->phy_intr_en &&
+		    !priv->plat->c45_marvell_en) {
 			if (priv->phydev->drv->ack_interrupt &&
 			    !priv->phydev->drv->ack_interrupt(priv->phydev)) {
 				pr_info(" qcom-ethqos: %s ack_interrupt successful aftre connect\n",
