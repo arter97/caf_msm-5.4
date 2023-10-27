@@ -22,6 +22,7 @@
 #include <linux/qtee_shmbridge.h>
 #include <linux/suspend.h>
 
+#include "slatecom_interface.h"
 #include "peripheral-loader.h"
 #include "../../misc/qseecom_kernel.h"
 #include "pil_slate_intf.h"
@@ -334,6 +335,16 @@ static int slate_powerup(const struct subsys_desc *subsys)
 			"%s: SLATE PIL Boot failed\n", __func__);
 		return ret;
 	}
+	/* Slate is booted from flash */
+	if (get_slate_boot_mode()) {
+		if (gpio_get_value(slate_data->gpios[0])) {
+			pr_info("Slate is booted up!! Mode: FLASH\n");
+			slate_data->is_ready = true;
+			return RESULT_SUCCESS;
+		} else
+			return RESULT_FAILURE;
+	}
+
 	ret = wait_for_err_ready(slate_data);
 	if (ret) {
 		dev_err(slate_data->desc.dev,
@@ -341,6 +352,7 @@ static int slate_powerup(const struct subsys_desc *subsys)
 			current->comm, current->pid, slate_data->desc.name);
 		return ret;
 	}
+	pr_info("Slate is booted up!! Mode: HOST\n");
 	return ret;
 }
 
@@ -384,6 +396,50 @@ static int slate_shutdown_trusted(struct pil_desc *pil)
 	return ret;
 }
 
+int send_reset_cmd(struct pil_slate_data *slate_data)
+{
+	struct tzapp_slate_req slate_tz_req;
+	int ret;
+
+	slate_tz_req.tzapp_slate_cmd = SLATEPIL_RESET;
+	slate_tz_req.address_fw = 0;
+	slate_tz_req.size_fw = 0;
+
+	ret = slatepil_tzapp_comm(slate_data, &slate_tz_req);
+	if (ret || slate_data->cmd_status)
+		dev_err(slate_data->desc.dev,
+			"%s: Failed to send reset signal to tzapp\n",
+			__func__);
+	return ret;
+
+}
+
+int slate_wait_for_flash_boot(struct pil_slate_data *slate_data)
+{
+	int ret;
+	int retry_attempt = 2;
+
+	do {
+		ret = wait_for_err_ready(slate_data);
+		if (!ret)
+			return RESULT_SUCCESS;
+		dev_err(slate_data->desc.dev,
+			"[%s:%d]: Timed out waiting for error ready: %s!\n",
+			current->comm, current->pid, slate_data->desc.name);
+
+		pr_debug("Retry booting slate, Mode: Flash, attempt: %d\n",
+				retry_attempt);
+		ret = send_reset_cmd(slate_data);
+		if (ret) {
+			pr_info("Booting slate from Mode: Flash failed\n");
+			return ret;
+		}
+		retry_attempt -= 1;
+	} while (retry_attempt);
+
+	return ret;
+}
+
 /**
  * slate_auth_metadata() - Called by Peripheral loader framework
  * send command to tz app for authentication of metadata.
@@ -400,6 +456,22 @@ static int slate_auth_metadata(struct pil_desc *pil,
 	struct tzapp_slate_req slate_tz_req;
 	struct qtee_shm shm;
 	int ret;
+
+	/* Enable status and err fetal irqs */
+	enable_irq(slate_data->status_irq);
+
+	/* Check slate boot status and return */
+	if (get_slate_boot_mode()) {
+		if (gpio_get_value(slate_data->gpios[0]))
+			return RESULT_SUCCESS;
+		ret = slate_wait_for_flash_boot(slate_data);
+		if (!ret)
+			return RESULT_SUCCESS;
+		dev_err(slate_data->desc.dev,
+			"%s: Failed to boot slate from flash\n",
+			__func__);
+		return ret;
+	}
 
 	ret = qtee_shmbridge_allocate_shm(size, &shm);
 	if (ret)
@@ -440,6 +512,14 @@ static int slate_get_firmware_addr(struct pil_desc *pil,
 					phys_addr_t addr, size_t size)
 {
 	struct pil_slate_data *slate_data = desc_to_data(pil);
+	/* Check Slate boot status and return */
+	if (get_slate_boot_mode()) {
+		if (gpio_get_value(slate_data->gpios[0])) {
+			slate_data->is_ready = true;
+			return RESULT_SUCCESS;
+		} else
+			return RESULT_FAILURE;
+	}
 
 	slate_data->address_fw = addr;
 	slate_data->size_fw = size;
@@ -454,6 +534,16 @@ static int slate_get_version(const struct subsys_desc *subsys)
 	struct pil_desc desc = slate_data->desc;
 	struct tzapp_slate_req slate_tz_req;
 	int ret;
+
+	/* Slate is booted from flash */
+	if (get_slate_boot_mode()) {
+		if (gpio_get_value(slate_data->gpios[0])) {
+			pr_info("Slate is booted up!! Mode: FLASH\n");
+			slate_data->is_ready = true;
+			return RESULT_SUCCESS;
+		} else
+			return RESULT_FAILURE;
+	}
 
 	desc.attrs = 0;
 	desc.attrs |= DMA_ATTR_SKIP_ZEROING;
@@ -485,6 +575,15 @@ static int slate_auth_and_xfer(struct pil_desc *pil)
 	uint32_t ns_vm_perms[] = {PERM_READ | PERM_WRITE};
 	u64 shm_bridge_handle;
 	int ret;
+
+	/* Check slate boot status and return */
+	if (get_slate_boot_mode()) {
+		if (gpio_get_value(slate_data->gpios[0])) {
+			slate_data->is_ready = true;
+			return RESULT_SUCCESS;
+		} else
+			return RESULT_FAILURE;
+	}
 
 	ret = qtee_shmbridge_register(slate_data->address_fw, slate_data->size_fw,
 		ns_vmids, ns_vm_perms, 1, PERM_READ|PERM_WRITE,
