@@ -20,6 +20,8 @@ enum slate_tz_commands {
 	SLATEPIL_SHUTDOWN,
 	SLATEPIL_DUMPINFO,
 	SLATEPIL_UP_INFO,
+	SLATEPIL_RESET,
+
 };
 
 /* tzapp bg request.*/
