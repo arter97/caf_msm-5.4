@@ -15,6 +15,7 @@ enum event_group_type {
 	GMI_SLATE_EVENT_BUTTON  = 0x03,
 	GMI_SLATE_EVENT_TOUCH   = 0x04,
 	GMI_SLATE_EVENT_SENSOR  = 0x05,
+	SLATE_STATUS            = 0x06,
 
 	GLINK_CHANNEL_STATE_UP   = 0xfd,
 	GLINK_CHANNEL_STATE_DOWN = 0xfe,
@@ -39,6 +40,12 @@ int seb_unregister_for_slate_event(void *seb_handle,
  */
 int seb_send_event_to_slate(void *seb_handle, enum event_group_type event,
 					void *event_buf, uint32_t buf_size);
+/* Use the seb_send_event API to send an event to any client.
+ * API return success/failure for the send event.
+ */
+int seb_send_event(enum event_group_type event,
+					void *event_buf, uint32_t buf_size);
+
 #else
 static void *seb_register_for_slate_event(enum event_group_type event,
 						struct notifier_block *nb)

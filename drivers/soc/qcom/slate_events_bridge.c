@@ -79,6 +79,7 @@ struct seb_priv {
 	uint8_t rx_event_len;
 	struct work_struct slate_up_work;
 	struct work_struct slate_down_work;
+	struct work_struct slate_status_work;
 	struct work_struct glink_up_work;
 	struct work_struct slate_notify_work;
 	void *slate_subsys_handle;
@@ -358,6 +359,47 @@ error_ret:
 }
 EXPORT_SYMBOL(seb_send_event_to_slate);
 
+int seb_send_event(enum event_group_type event,
+						void *event_buf, uint32_t buf_size)
+{
+	int rc = 0;
+	uint32_t txn_len = 0;
+	struct seb_priv *dev =
+		container_of(seb_drv, struct seb_priv, lhndl);
+	struct seb_buf_list *rx_notif = NULL;
+	unsigned long flags;
+
+	mutex_lock(&seb_api_mutex);
+
+	if (event == SLATE_STATUS) {
+		rx_notif = kzalloc(sizeof(struct seb_buf_list), GFP_ATOMIC);
+		if (!rx_notif) {
+			rc = -EINVAL;
+			goto error_ret;
+		}
+		txn_len = sizeof(enum event_group_type) + buf_size;
+		rx_notif->rx_buf = kmalloc(txn_len, GFP_ATOMIC);
+		if (!(rx_notif->rx_buf)) {
+			kfree(rx_notif);
+			pr_err("failed to allocate memory\n");
+			rc = -EINVAL;
+			goto error_ret;
+		}
+		memcpy(rx_notif->rx_buf, &event, sizeof(enum event_group_type));
+		memcpy(rx_notif->rx_buf + sizeof(enum event_group_type), event_buf, buf_size);
+
+		spin_lock_irqsave(&dev->rx_lock, flags);
+		list_add_tail(&rx_notif->rx_queue_head, &dev->rx_list);
+		spin_unlock_irqrestore(&dev->rx_lock, flags);
+		queue_work(dev->seb_wq, &dev->slate_status_work);
+	}
+
+error_ret:
+	mutex_unlock(&seb_api_mutex);
+	return rc;
+}
+EXPORT_SYMBOL(seb_send_event);
+
 void seb_notify_glink_channel_state(bool state)
 {
 	struct seb_priv *dev =
@@ -459,6 +501,10 @@ void handle_rx_event(struct seb_priv *dev, void *rx_event_buf, int len)
 	struct event *evnt = NULL;
 	struct seb_buf_list *rx_notif = NULL;
 	unsigned long flags;
+	if (len < sizeof(struct gmi_header)) {
+		pr_err("Invalid rx_event_buffer length\n");
+		return;
+	}
 
 	event_header = (struct gmi_header *)rx_event_buf;
 
@@ -477,6 +523,8 @@ void handle_rx_event(struct seb_priv *dev, void *rx_event_buf, int len)
 
 		seb_send_input(evnt);
 		kfree(evnt);
+		return;
+
 	} else if (event_header->opcode == GMI_SLATE_EVENT_TOUCH) {
 		return;
 	}
