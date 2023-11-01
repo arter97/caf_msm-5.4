@@ -77,6 +77,7 @@ struct pil_slate_data {
 	int app_status;
 	bool is_ready;
 	struct completion err_ready;
+	struct completion shutdown_done;
 };
 
 static irqreturn_t slate_status_change(int irq, void *dev_id);
@@ -356,6 +357,22 @@ static int slate_powerup(const struct subsys_desc *subsys)
 	return ret;
 }
 
+static int wait_for_shutdown_done(struct pil_slate_data *slate_data)
+{
+	int ret;
+
+	ret = wait_for_completion_timeout(&slate_data->shutdown_done,
+			msecs_to_jiffies(10000));
+
+	if (!ret) {
+		dev_err(slate_data->desc.dev,
+		"[%s:%d]: Timed out waiting for slate shutdown: %s!\n",
+		current->comm, current->pid, slate_data->desc.name);
+		return -ETIMEDOUT;
+	}
+	return 0;
+}
+
 /**
  * slate_shutdown() - Called by SSR framework on userspace invocation.
  * disable status interrupt to avoid spurious signal during PRM exit.
@@ -367,6 +384,9 @@ static int slate_powerup(const struct subsys_desc *subsys)
 static int slate_shutdown(const struct subsys_desc *subsys, bool force_stop)
 {
 	struct pil_slate_data *slate_data = subsys_to_data(subsys);
+
+	if (is_slate_unload_only())
+		pil_shutdown(&slate_data->desc);
 
 	if (slate_data->is_ready) {
 		disable_irq(slate_data->status_irq);
@@ -381,12 +401,30 @@ static int slate_shutdown_trusted(struct pil_desc *pil)
 	struct tzapp_slate_req slate_tz_req;
 	int ret;
 
+	if (!slate_data->qseecom_handle) {
+		ret = pil_load_slate_tzapp(slate_data);
+		if (ret) {
+			dev_err(slate_data->desc.dev,
+			"%s: SLATE TZ app load failure\n",
+			__func__);
+		return ret;
+		}
+	}
+
 	slate_tz_req.tzapp_slate_cmd = SLATEPIL_SHUTDOWN;
 
 	ret = slatepil_tzapp_comm(slate_data, &slate_tz_req);
 	if (ret || slate_data->cmd_status) {
 		pr_err("Slate pil shutdown failed\n");
 		return ret;
+	}
+
+	/* wait for slate shutdown completion for unload request */
+	if (is_slate_unload_only()) {
+		pr_info("Received slate unload request.\n");
+		ret = wait_for_shutdown_done(slate_data);
+		if (ret)
+			return ret;
 	}
 
 	if (slate_data->is_ready) {
@@ -774,6 +812,12 @@ static irqreturn_t slate_status_change(int irq, void *dev_id)
 	} else if (!value && drvdata->is_ready) {
 		dev_err(drvdata->desc.dev,
 			"SLATE got unexpected reset: irq state changed 1->0\n");
+		if (is_slate_unload_only()) {
+			/* skip dump collection with shutdown completion signal */
+			pr_info("Received slate unload request\n");
+			complete(&drvdata->shutdown_done);
+			return IRQ_HANDLED;
+		}
 		queue_work(drvdata->slate_queue, &drvdata->restart_work);
 	} else {
 		dev_err(drvdata->desc.dev,
@@ -970,6 +1014,7 @@ static int pil_slate_driver_probe(struct platform_device *pdev)
 		goto err_subsys;
 	}
 	INIT_WORK(&slate_data->restart_work, slate_restart_work);
+	init_completion(&slate_data->shutdown_done);
 	return 0;
 err_subsys:
 	destroy_ramdump_device(slate_data->minidump_dev);
