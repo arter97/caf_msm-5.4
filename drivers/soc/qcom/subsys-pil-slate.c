@@ -478,6 +478,47 @@ int slate_wait_for_flash_boot(struct pil_slate_data *slate_data)
 	return ret;
 }
 
+static int check_s2a_for_ramdump(struct pil_slate_data *slate_data)
+{
+	int ret;
+
+	/* This check is added here to make slate dump collection
+	* decision in RTOS/TWM mode exit. The way for pil drv to know slate state
+	* info(crashed/running)in RTOS/TWM exit is by reading S2A irq line.
+	* When S2A is pulled LOW, it is interpreted as slate crashed state and
+	* slate dump needs to be collected. Once dumps are collected TZ will
+	* automatically send SLATE_RESET CMD.
+	* When S2A is pulled HIGH, it is interpreted as slate running state and
+	* dump should not be collected. At this point it is necessary
+	* to send SLATE_RESET CMD to bring slate out of RTOS slate.
+	* This check does not disturb SSR/system dump collection.
+	*/
+
+	if (gpio_get_value(slate_data->gpios[0])) {
+		slate_data->is_ready = true;
+		pr_info("%s: TWM Exit: Skip dump collection, slate is RUNNING ..!!\n", __func__);
+		ret = send_reset_cmd(slate_data);
+		if (ret)
+			goto out;
+
+		/* By this time if S2A is not LOW then wait for sometime */
+		if (gpio_get_value(slate_data->gpios[0])) {
+			ret = wait_for_shutdown_done(slate_data);
+			if (ret)
+				goto out;
+		}
+	} else {
+		ret = slate_data->subsys_desc.ramdump(true, &slate_data->subsys_desc);
+		if (ret)
+			pr_info("%s: TWM Exit: Slate ramdump failed in TWM_exit\n", __func__);
+		return ret;
+	}
+out:
+	slate_data->is_ready = false;
+	return ret;
+}
+
+
 /**
  * slate_auth_metadata() - Called by Peripheral loader framework
  * send command to tz app for authentication of metadata.
@@ -495,11 +536,14 @@ static int slate_auth_metadata(struct pil_desc *pil,
 	struct qtee_shm shm;
 	int ret;
 
-	/* Enable status and err fetal irqs */
-	enable_irq(slate_data->status_irq);
-
 	/* Check slate boot status and return */
 	if (get_slate_boot_mode()) {
+		if (is_twm_exit()) {
+			ret = check_s2a_for_ramdump(slate_data);
+			if (ret)
+				return ret;
+		}
+
 		if (gpio_get_value(slate_data->gpios[0]))
 			return RESULT_SUCCESS;
 		ret = slate_wait_for_flash_boot(slate_data);
@@ -691,7 +735,6 @@ static int slate_ramdump(int enable, const struct subsys_desc *subsys)
 
 	desc.attrs = 0;
 	desc.attrs |= DMA_ATTR_SKIP_ZEROING;
-	slate_tz_req.tzapp_slate_cmd = SLATEPIL_DUMPINFO;
 	if (!slate_data->qseecom_handle) {
 		ret = pil_load_slate_tzapp(slate_data);
 		if (ret) {
@@ -702,6 +745,7 @@ static int slate_ramdump(int enable, const struct subsys_desc *subsys)
 		}
 	}
 
+	slate_tz_req.tzapp_slate_cmd = SLATEPIL_DUMPINFO;
 	ret = slatepil_tzapp_comm(slate_data, &slate_tz_req);
 	dump_info = slate_data->cmd_status;
 	if (slate_data->cmd_status == SLATE_RAMDUMP)
@@ -751,16 +795,14 @@ static int slate_ramdump(int enable, const struct subsys_desc *subsys)
 			do_ramdump(slate_data->ramdump_dev, ramdump_segments, 1);
 		else if (dump_info == SLATE_MINIDUMP)
 			do_ramdump(slate_data->minidump_dev, ramdump_segments, 1);
-	} else  if (ret || slate_data->cmd_status) {
+	} else  if (ret || slate_data->cmd_status)
 		dev_dbg(desc.dev, "%s: SLATE PIL ramdump collection failed\n", __func__);
-		return slate_data->cmd_status;
-	}
 
 	kfree(ramdump_segments);
 	qtee_shmbridge_deregister(shm_bridge_handle);
 	dma_free_attrs(desc.dev, size, region,
 		       start_addr, desc.attrs);
-	return 0;
+	return ret;
 }
 
 static struct pil_reset_ops pil_ops_trusted = {
