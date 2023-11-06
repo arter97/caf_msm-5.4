@@ -226,6 +226,47 @@ static void seb_slatedown_work(struct work_struct *work)
 	mutex_unlock(&dev->seb_state_mutex);
 }
 
+static void seb_slatestatus_work(struct work_struct *work)
+{
+	struct seb_notif_info *seb_notify = NULL;
+	enum event_group_type event_header;
+	struct seb_buf_list *rx_notify, *next;
+	unsigned long flags;
+
+	struct seb_priv *dev =
+		container_of(work, struct seb_priv, slate_status_work);
+
+	mutex_lock(&dev->seb_state_mutex);
+	if (!list_empty(&dev->rx_list)) {
+		list_for_each_entry_safe(rx_notify, next, &dev->rx_list, rx_queue_head) {
+			event_header = *(enum event_group_type *)rx_notify->rx_buf;
+			seb_notify = _notif_find_group(event_header);
+			if (!seb_notify) {
+				pr_err("%s: notifier event not found\n", __func__);
+				spin_lock_irqsave(&dev->rx_lock, flags);
+				list_del(&rx_notify->rx_queue_head);
+				spin_unlock_irqrestore(&dev->rx_lock, flags);
+				kfree(rx_notify->rx_buf);
+				kfree(rx_notify);
+				mutex_unlock(&dev->seb_state_mutex);
+				return;
+			}
+			srcu_notifier_call_chain(&seb_notify->seb_notif_rcvr_list,
+						 event_header,
+						 rx_notify->rx_buf + sizeof(enum event_group_type));
+
+			spin_lock_irqsave(&dev->rx_lock, flags);
+			list_del(&rx_notify->rx_queue_head);
+			spin_unlock_irqrestore(&dev->rx_lock, flags);
+			kfree(rx_notify->rx_buf);
+			kfree(rx_notify);
+		}
+	}
+
+	pr_debug("%s: notifier call successful\n", __func__);
+	mutex_unlock(&dev->seb_state_mutex);
+}
+
 static void seb_notify_work(struct work_struct *work)
 {
 	struct seb_notif_info *seb_notify = NULL;
@@ -657,6 +698,7 @@ static int seb_init(struct seb_priv *dev)
 	/* Init all works */
 	INIT_WORK(&dev->slate_up_work, seb_slateup_work);
 	INIT_WORK(&dev->slate_down_work, seb_slatedown_work);
+	INIT_WORK(&dev->slate_status_work, seb_slatestatus_work);
 	INIT_WORK(&dev->slate_notify_work, seb_notify_work);
 	INIT_LIST_HEAD(&dev->rx_list);
 	spin_lock_init(&dev->rx_lock);
