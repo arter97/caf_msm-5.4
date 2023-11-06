@@ -26,7 +26,7 @@ struct slatersb_priv {
 	struct completion slate_lnikup_cmplt;
 	struct completion tx_done;
 	struct device *ldev;
-	struct wakeup_source slatersb_ws;
+	struct wakeup_source *slatersb_ws;
 	wait_queue_head_t link_state_wait;
 	uint32_t calbrtion_intrvl;
 	uint32_t calbrtion_cpi;
@@ -71,7 +71,7 @@ static int slatersb_tx_msg(struct slatersb_priv *dev, void  *msg, size_t len)
 	int rc = 0;
 	uint8_t resp = 0;
 
-	__pm_stay_awake(&dev->slatersb_ws);
+	__pm_stay_awake(dev->slatersb_ws);
 	mutex_lock(&dev->glink_mutex);
 	if (!dev->rsb_rpmsg) {
 		pr_err("slatersb-rpmsg is not probed yet, waiting for it to be probed\n");
@@ -109,7 +109,7 @@ static int slatersb_tx_msg(struct slatersb_priv *dev, void  *msg, size_t len)
 
 err_ret:
 	mutex_unlock(&dev->glink_mutex);
-	__pm_relax(&dev->slatersb_ws);
+	__pm_relax(dev->slatersb_ws);
 	return rc;
 }
 
@@ -171,7 +171,7 @@ static void slatersb_slateup_work(struct work_struct *work)
 			pr_err("slatersb-rpmsg is not probed yet\n");
 
 		ret = wait_event_timeout(dev->link_state_wait,
-			dev->rsb_rpmsg, msecs_to_jiffies(TIMEOUT_MS));
+			dev->rsb_rpmsg, msecs_to_jiffies(TIMEOUT_MS_GLINK_OPEN));
 		if (ret == 0) {
 			pr_err("channel connection time out %d\n",
 						ret);
@@ -553,7 +553,7 @@ static int slate_rsb_probe(struct platform_device *pdev)
 	if (!dev)
 		return -ENOMEM;
 	/* Add wake lock for PM suspend */
-	wakeup_source_add(&dev->slatersb_ws);
+	dev->slatersb_ws = wakeup_source_register(&pdev->dev, "slate_rsb");
 	dev->slatersb_current_state = SLATERSB_STATE_UNKNOWN;
 	rc = slatersb_init(dev);
 	if (rc)
@@ -577,7 +577,7 @@ static int slate_rsb_remove(struct platform_device *pdev)
 	struct slatersb_priv *dev = platform_get_drvdata(pdev);
 
 	destroy_workqueue(dev->slatersb_wq);
-	wakeup_source_trash(&dev->slatersb_ws);
+	wakeup_source_trash(dev->slatersb_ws);
 	return 0;
 }
 
