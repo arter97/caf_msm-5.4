@@ -1140,17 +1140,27 @@ static void msm_otg_bus_clks_disable(struct msm_otg *motg)
 	motg->bus_clks_enabled = false;
 }
 
-static void msm_otg_update_bus_bw(struct msm_otg *motg, enum usb_bus_vote bv_index)
+static void msm_otg_update_bus_bw(struct msm_otg *motg, enum usb_bus_vote vote)
 {
 
 	int ret = 0;
 
-	ret = icc_set_bw(motg->icc_paths[0], bus_vote_values[bv_index][0].avg,
-				bus_vote_values[bv_index][0].peak);
+	if (vote > USB_MIN_PERF_VOTE) {
+		pr_err("bus voting failed with invalid vote\n");
+		return;
+	}
+
+	ret = icc_set_bw(motg->icc_paths[0], bus_vote_values[vote][0].avg,
+				bus_vote_values[vote][0].peak);
 
 	if (ret)
-		pr_err("bus bw voting path:%s bv:%d failed %d\n",
-					icc_path_names[0], bv_index, ret);
+		pr_err("bus bw voting path:%s vote:%d failed %d\n",
+					icc_path_names[0], vote, ret);
+
+	if (vote == USB_MAX_PERF_VOTE)
+		msm_otg_bus_clks_enable(motg);
+	else
+		msm_otg_bus_clks_disable(motg);
 
 }
 
@@ -3893,6 +3903,10 @@ struct msm_otg_platform_data *msm_otg_dt_to_pdata(struct platform_device *pdev)
 static inline void iccs_get(struct msm_otg *motg)
 {
 	motg->icc_paths[0] = of_icc_get(&motg->pdev->dev, icc_path_names[0]);
+	if (IS_ERR(motg->icc_paths[0]))
+		pr_err("%s : failed to get icc votes\n", __func__);
+	else
+		debug_bus_voting_enabled = true;
 }
 
 /*put the interconnect votes  */
