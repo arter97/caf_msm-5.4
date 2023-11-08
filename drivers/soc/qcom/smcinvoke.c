@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "smcinvoke: %s: " fmt, __func__
@@ -154,6 +154,7 @@ static uint16_t g_last_mem_rgn_id, g_last_mem_map_obj_id;
 static size_t g_max_cb_buf_size = SMCINVOKE_TZ_MIN_BUF_SIZE;
 static unsigned int cb_reqs_inflight;
 static bool legacy_smc_call;
+static bool smc_clock_support;
 static int invoke_cmd;
 
 static long smcinvoke_ioctl(struct file *, unsigned int, unsigned long);
@@ -1297,7 +1298,7 @@ static int prepare_send_scm_msg(const uint8_t *in_buf, phys_addr_t in_paddr,
 				bool *tz_acked,
 				struct qtee_shm *in_shm, struct  qtee_shm *out_shm)
 {
-	int ret = 0, cmd, retry_count = 0;
+	int ret = 0, cmd, retry_count = 0, ret_smc_clk = 0;
 	u64 response_type;
 	unsigned int data;
 	struct file *arr_filp[OBJECT_COUNTS_MAX_OO] = {NULL};
@@ -1321,9 +1322,32 @@ static int prepare_send_scm_msg(const uint8_t *in_buf, phys_addr_t in_paddr,
 		mutex_lock(&g_smcinvoke_lock);
 
 		do {
+			/*
+			 * If clock-support is enabled for smcinvoke,
+			 * a notification will be sent to qseecom to enable/disable
+			 * clocks when smcinvoke sends an invoke command
+			 */
+			if (smc_clock_support) {
+				ret_smc_clk = qseecom_set_msm_bus_request_from_smcinvoke(HIGH);
+				if (ret_smc_clk) {
+					pr_err("Clock enablement failed, ret: %d\n",
+							ret_smc_clk);
+					ret = -EPERM;
+					break;
+				}
+			}
 			ret = invoke_cmd_handler(cmd, in_paddr, in_buf_len, out_buf,
 				out_paddr, out_buf_len, &req->result, &response_type,
 				&data, in_shm, out_shm);
+			if (smc_clock_support) {
+				ret_smc_clk = qseecom_set_msm_bus_request_from_smcinvoke(INACTIVE);
+				if (ret_smc_clk) {
+					pr_err("Clock enablement failed, ret: %d\n",
+							ret_smc_clk);
+					ret = -EPERM;
+					break;
+				}
+			}
 
 			if (ret == -EBUSY) {
 				pr_err("Secure side is busy,will retry after 30 ms\n");
@@ -2205,6 +2229,8 @@ static int smcinvoke_probe(struct platform_device *pdev)
 	legacy_smc_call = of_property_read_bool((&pdev->dev)->of_node,
 			"qcom,support-legacy_smc");
 	invoke_cmd = legacy_smc_call ? SMCINVOKE_INVOKE_CMD_LEGACY : SMCINVOKE_INVOKE_CMD;
+	smc_clock_support = of_property_read_bool((&pdev->dev)->of_node,
+			"qcom,clock-support");
 
 	return  0;
 

@@ -282,6 +282,7 @@ struct msm_geni_serial_port {
 	struct uart_gsi *gsi;
 	struct work_struct tx_xfer_work;
 	struct work_struct rx_cancel_work;
+	struct work_struct tx_cancel_work;
 	struct workqueue_struct *tx_wq;
 	struct workqueue_struct *rx_wq;
 	struct completion xfer;
@@ -1634,6 +1635,18 @@ exit_gsi_tx_xfer:
 	IPC_LOG_MSG(msm_port->ipc_log_misc, "%s: End\n", __func__);
 }
 
+static void msm_geni_uart_gsi_cancel_tx(struct work_struct *work)
+{
+	struct msm_geni_serial_port *msm_port = container_of(work,
+						struct msm_geni_serial_port,
+						tx_cancel_work);
+
+	IPC_LOG_MSG(msm_port->ipc_log_misc, "%s: start", __func__);
+	if (dmaengine_terminate_all(msm_port->gsi->tx_c))
+		IPC_LOG_MSG(msm_port->ipc_log_misc,
+			    "%s: dmaengine_terminate_all failed for Tx ch\n", __func__);
+}
+
 static void msm_geni_uart_gsi_cancel_rx(struct work_struct *work)
 {
 	struct msm_geni_serial_port *msm_port = container_of(work,
@@ -1641,8 +1654,11 @@ static void msm_geni_uart_gsi_cancel_rx(struct work_struct *work)
 						rx_cancel_work);
 
 	IPC_LOG_MSG(msm_port->ipc_log_misc, "%s: start", __func__);
-	if (msm_port->gsi->rx_c)
-		dmaengine_terminate_all(msm_port->gsi->rx_c);
+	if (msm_port->gsi->rx_c) {
+		if (dmaengine_terminate_all(msm_port->gsi->rx_c))
+			IPC_LOG_MSG(msm_port->ipc_log_misc,
+				    "%s: dmaengine_terminate_all failed for Rx ch\n", __func__);
+	}
 	complete(&msm_port->xfer);
 	IPC_LOG_MSG(msm_port->ipc_log_misc, "%s: End", __func__);
 }
@@ -1973,7 +1989,7 @@ static void stop_tx_sequencer(struct uart_port *uport)
 			atomic_set(&port->xfer_inprogress, 0);
 		}
 		if (port->gsi->tx_c)
-			dmaengine_terminate_all(port->gsi->tx_c);
+			queue_work(port->tx_wq, &port->tx_cancel_work);
 		goto out;
 	}
 	geni_status = geni_read_reg_nolog(uport->membase, SE_GENI_STATUS);
@@ -3175,6 +3191,7 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 			if (msm_port->gsi->rx_c) {
 				IPC_LOG_MSG(msm_port->ipc_log_misc,
 					"%s:GSI DMA-Rx ch\n", __func__);
+				dma_release_channel(msm_port->gsi->rx_c);
 				if (msm_port->rx_wq)
 					flush_workqueue(msm_port->rx_wq);
 
@@ -3184,13 +3201,14 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 							msm_port->rx_gsi_buf[i],
 							DMA_RX_BUF_SIZE);
 				}
+				msm_port->gsi->rx_c = NULL;
 				IPC_LOG_MSG(msm_port->ipc_log_misc,
 					"%s:Unmap buf done\n", __func__);
 			}
 			if (msm_port->gsi->tx_c) {
 				IPC_LOG_MSG(msm_port->ipc_log_misc,
 					"%s:GSI DMA-Tx ch\n", __func__);
-				msm_geni_serial_stop_tx(uport);
+				dma_release_channel(msm_port->gsi->tx_c);
 				if (msm_port->tx_wq)
 					flush_workqueue(msm_port->tx_wq);
 
@@ -3203,6 +3221,7 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 					IPC_LOG_MSG(msm_port->ipc_log_misc,
 						    "%s:Unmap buf done\n", __func__);
 				}
+				msm_port->gsi->tx_c = NULL;
 			}
 		} else {
 			msm_geni_serial_stop_tx(uport);
@@ -4085,7 +4104,9 @@ static void msm_geni_serial_init_gsi(struct uart_port *uport)
 							dev_name(uport->dev));
 		INIT_WORK(&msm_port->tx_xfer_work, msm_geni_uart_gsi_xfer_tx);
 		INIT_WORK(&msm_port->rx_cancel_work,
-						msm_geni_uart_gsi_cancel_rx);
+			  msm_geni_uart_gsi_cancel_rx);
+		INIT_WORK(&msm_port->tx_cancel_work,
+			  msm_geni_uart_gsi_cancel_tx);
 	}
 }
 
@@ -4591,6 +4612,7 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	device_create_file(uport->dev, &dev_attr_ver_info);
 	msm_geni_serial_debug_init(uport, is_console);
 	dev_port->port_setup = false;
+	dev_port->serial_rsc.base = uport->membase;
 
 	dev_port->uart_error = UART_ERROR_DEFAULT;
 
@@ -4624,7 +4646,11 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Failed to register uart_port: %d\n",
 				ret);
 
-	msm_geni_check_stop_engine(uport);
+	if (!dev_port->is_console) {
+		se_geni_clks_on(&dev_port->serial_rsc);
+		msm_geni_check_stop_engine(uport);
+		se_geni_clks_off(&dev_port->serial_rsc);
+	}
 
 	/*
 	 * Remove proxy vote from QUP core which was kept from common driver
