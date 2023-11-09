@@ -218,13 +218,37 @@ int slatecom_set_spi_state(enum slatecom_spi_state state)
 {
 	struct slate_spi_priv *slate_spi = container_of(slate_com_drv,
 						struct slate_spi_priv, lhandle);
-	const struct device spi_dev = slate_spi->spi->master->dev;
+	//const struct device spi_dev = slate_spi->spi->master->dev;
 	ktime_t time_start, delta;
 	s64 time_elapsed;
 	struct slate_context clnt_handle;
-	int ret = 0;
+	int ret = 0, irq_gpio = 0;
+	struct device spi_dev;
+	struct device_node *node;
+
+	if (!slate_com_drv)
+		return -ENODEV;
+	spi_dev = slate_spi->spi->master->dev;
  
 	if (req_irq_flag && state == SLATECOM_SPI_FREE) {
+		node = slate_spi->spi->dev.of_node;
+		irq_gpio = of_get_named_gpio(node, "qcom,irq-gpio", 0);
+		if (!gpio_is_valid(irq_gpio)) {
+			pr_err("gpio %d found is not valid\n", irq_gpio);
+			goto err_ret;
+		}
+		ret = gpio_request(irq_gpio, "slatecom_gpio");
+		if (ret) {
+			pr_err("gpio %d request failed\n", irq_gpio);
+			goto err_ret;
+		}
+		ret = gpio_direction_input(irq_gpio);
+		if (ret) {
+			pr_err("gpio_direction_input not set: %d\n", ret);
+			goto err_ret;
+		}
+		slate_irq = gpio_to_irq(irq_gpio);
+
 		ret = request_threaded_irq(slate_irq, NULL, slate_irq_tasklet_hndlr,
 		IRQF_TRIGGER_HIGH | IRQF_ONESHOT, "qcom-slate_spi", slate_spi);
 		if (ret) {
@@ -275,6 +299,10 @@ int slatecom_set_spi_state(enum slatecom_spi_state state)
 	}
 
 	return 0;
+err_ret:
+	if (gpio_is_valid(irq_gpio))
+		gpio_free(irq_gpio);
+	return -EINVAL;
 }
 EXPORT_SYMBOL(slatecom_set_spi_state);
 
@@ -302,9 +330,13 @@ static int read_slate_locl(enum slatecom_req_type req_type,
 {
 
 	struct slate_context clnt_handle;
-	struct slate_spi_priv *spi =
-			container_of(slate_com_drv, struct slate_spi_priv, lhandle);
+	struct slate_spi_priv *spi = NULL;
 	int ret = 0;
+	if (!slate_com_drv || !buf) {
+		pr_err("driver not probed yet or buf is empty\n");
+		return -ENODEV;
+	}
+	spi = container_of(slate_com_drv, struct slate_spi_priv, lhandle);
 
 	if (!buf)
 		return -EINVAL;
@@ -613,8 +645,11 @@ static void slate_irq_tasklet_hndlr_l(void)
 	uint32_t irq_buf[5] = {0};
 	uint32_t cmnd_reg = 0;
 	struct slate_context clnt_handle;
-	struct slate_spi_priv *spi =
-			container_of(slate_com_drv, struct slate_spi_priv, lhandle);
+	struct slate_spi_priv *spi = NULL;
+	if (!slate_com_drv)
+		return;
+	spi = container_of(slate_com_drv, struct slate_spi_priv, lhandle);
+
 	clnt_handle.slate_spi = spi;
 
 	ret = slatecom_reg_read_internal(&clnt_handle, SLATE_STATUS_REG, 5, &irq_buf[0]);
@@ -1057,16 +1092,17 @@ int slatecom_fifo_write(void *handle, uint32_t num_words,
 	uint32_t size;
 	int ret = 0;
 	uint8_t cmnd = 0;
-	struct spi_device *spi = get_spi_device();
+	struct spi_device *spi;
+	if (!is_slatecom_ready())
+		return -ENODEV;
+
+	spi = get_spi_device();
 
 	if (!handle || !write_buf || num_words == 0
 		|| num_words > SLATE_SPI_MAX_WORDS) {
 		SLATECOM_ERR("Invalid param\n");
 		return -EINVAL;
 	}
-
-	if (!is_slatecom_ready())
-		return -ENODEV;
 
 	if (spi_state == SLATECOM_SPI_BUSY) {
 		SLATECOM_ERR("Device busy\n");
@@ -1540,8 +1576,6 @@ static struct notifier_block slatecom_pm_nb = {
 static int slate_spi_probe(struct spi_device *spi)
 {
 	struct slate_spi_priv *slate_spi;
-	struct device_node *node;
-	int irq_gpio = 0;
 	int ret = 0;
 
 	slate_spi = devm_kzalloc(&spi->dev, sizeof(*slate_spi),
@@ -1555,9 +1589,9 @@ static int slate_spi_probe(struct spi_device *spi)
 	spi_set_drvdata(spi, slate_spi);
 	slate_spi_init(slate_spi);
 
-	/* SLATECOM Interrupt probe */
+
+	/* SLATECOM Interrupt probe 
 	node = slate_spi->spi->dev.of_node;
-	irq_gpio = of_get_named_gpio(node, "qcom,irq-gpio", 0);
 	if (!gpio_is_valid(irq_gpio)) {
 		pr_err("gpio %d found is not valid\n", irq_gpio);
 		goto err_ret;
@@ -1587,7 +1621,7 @@ static int slate_spi_probe(struct spi_device *spi)
 		pr_err("irq set as wakeup return: %d\n", ret);
 		goto err_ret;
 	}
-
+	*/
 	atomic_set(&slate_is_spi_active, 1);
 	dma_set_coherent_mask(&spi->dev, DMA_BIT_MASK(64));
 
@@ -1610,8 +1644,6 @@ err_ret:
 	slate_com_drv = NULL;
 	mutex_destroy(&slate_spi->xfer_mutex);
 	spi_set_drvdata(spi, NULL);
-	if (gpio_is_valid(irq_gpio))
-		gpio_free(irq_gpio);
 	return -ENODEV;
 }
 
@@ -1661,8 +1693,13 @@ static int slatecom_pm_prepare(struct device *dev)
 	else
 		cmnd_reg |= SLATE_OK_SLP_RBSC;
 
-	(!atomic_read(&slate_is_spi_active)) ? pm_runtime_get_sync(&s_dev->dev)
-			: SLATECOM_INFO("spi is already active, skip get_sync...\n");
+	if (!atomic_read(&slate_is_spi_active)) {
+		SLATECOM_INFO("spi is already inactive, get_sync.\n");
+		pm_runtime_get_sync(&s_dev->dev);
+		usleep_range(5000, 10000);
+	} else {
+		SLATECOM_INFO("spi is already active, skip get_sync.\n");
+	}
 
 	atomic_set(&ok_to_sleep, 1);
 	ret = slatecom_reg_write_cmd(&clnt_handle, SLATE_CMND_REG, 1, &cmnd_reg, true);
@@ -1724,8 +1761,11 @@ static int slatecom_pm_resume(struct device *dev)
 {
 	struct slate_context clnt_handle;
 	int ret = 0;
-	struct slate_spi_priv *spi =
-		container_of(slate_com_drv, struct slate_spi_priv, lhandle);
+	struct slate_spi_priv *spi = NULL;
+
+	if (!slate_com_drv)
+		return -ENODEV;
+	spi = container_of(slate_com_drv, struct slate_spi_priv, lhandle);
 
 	SLATECOM_INFO("entry\n");
 	free_irq(slate_irq, spi);
@@ -1808,8 +1848,11 @@ static int slatecom_pm_runtime_resume(struct device *dev)
 {
 	struct slate_context clnt_handle;
 	int ret = 0;
-	struct slate_spi_priv *spi =
-		container_of(slate_com_drv, struct slate_spi_priv, lhandle);
+	struct slate_spi_priv *spi = NULL;
+	
+	if (!slate_com_drv)
+		return -ENODEV;
+	spi = container_of(slate_com_drv, struct slate_spi_priv, lhandle);
 
 	SLATECOM_INFO("entry\n");
 	clnt_handle.slate_spi = spi;
@@ -1857,8 +1900,11 @@ static int slatecom_pm_restore(struct device *dev)
 {
 	struct slate_context clnt_handle;
 	int ret = 0;
-	struct slate_spi_priv *spi =
-		container_of(slate_com_drv, struct slate_spi_priv, lhandle);
+	struct slate_spi_priv *spi = NULL;
+
+	if (!slate_com_drv)
+		return -ENODEV;
+	spi = container_of(slate_com_drv, struct slate_spi_priv, lhandle);
 
 	if (atomic_read(&slate_is_spi_active)) {
 		SLATECOM_INFO("Slatecom in restore state\n");
