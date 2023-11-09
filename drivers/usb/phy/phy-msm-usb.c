@@ -42,6 +42,10 @@
 #include <linux/sched/clock.h>
 #include <linux/usb_bam.h>
 
+#ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
+#include <soc/qcom/boot_stats.h>
+#endif
+
 /**
  * Requested USB votes for BUS bandwidth
  *
@@ -4791,6 +4795,11 @@ static int msm_otg_pm_resume(struct device *dev)
 	dev_dbg(dev, "OTG PM resume\n");
 	msm_otg_dbg_log_event(&motg->phy, "PM RESUME START",
 			get_pm_runtime_counter(dev), pm_runtime_suspended(dev));
+
+#ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
+	if (atomic_read(&motg->in_lpm))
+		update_marker("M - USB device resume started");
+#endif
 
 	if (motg->resume_pending || motg->phy_irq_pending) {
 		msm_otg_dbg_log_event(&motg->phy, "PM RESUME BY USB",
