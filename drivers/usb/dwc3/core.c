@@ -1692,8 +1692,16 @@ static int dwc3_probe(struct platform_device *pdev)
 
 	irq = platform_get_irq(to_platform_device(dwc->dev), 0);
 
-	ret = devm_request_irq(dev, irq, dwc3_interrupt, IRQF_SHARED, "dwc3",
-			dwc);
+	dwc->use_rt_thread = device_property_read_bool(dev,
+			"qcom,use-rt-thread");
+
+	if (dwc->use_rt_thread)
+		ret = devm_request_threaded_irq(dev, irq, NULL,
+			dwc3_interrupt, IRQF_SHARED | IRQF_ONESHOT,
+			"dwc3", dwc);
+	else
+		ret = devm_request_irq(dev, irq, dwc3_interrupt,
+				IRQF_SHARED, "dwc3", dwc);
 	if (ret) {
 		dev_err(dwc->dev, "failed to request irq #%d --> %d\n",
 				irq, ret);
@@ -1716,14 +1724,16 @@ static int dwc3_probe(struct platform_device *pdev)
 	if (IS_ERR(regs))
 		return PTR_ERR(regs);
 
-	dwc->dwc_wq = alloc_ordered_workqueue("dwc_wq", WQ_HIGHPRI);
-	if (!dwc->dwc_wq) {
-		dev_err(dev,
-			"%s: Unable to create workqueue dwc_wq\n", __func__);
-		goto err0;
-	}
+	if (!dwc->use_rt_thread) {
+		dwc->dwc_wq = alloc_ordered_workqueue("dwc_wq", WQ_HIGHPRI);
+		if (!dwc->dwc_wq) {
+			dev_err(dev, "%s: Unable to create workqueue dwc_wq\n",
+					__func__);
+			goto err0;
+		}
 
-	INIT_WORK(&dwc->bh_work, dwc3_bh_work);
+		INIT_WORK(&dwc->bh_work, dwc3_bh_work);
+	}
 	dwc->regs	= regs;
 	dwc->regs_size	= resource_size(&dwc_res);
 
@@ -1854,7 +1864,8 @@ err1:
 	clk_bulk_disable_unprepare(dwc->num_clks, dwc->clks);
 assert_reset:
 	reset_control_assert(dwc->reset);
-	destroy_workqueue(dwc->dwc_wq);
+	if (!dwc->use_rt_thread)
+		destroy_workqueue(dwc->dwc_wq);
 err0:
 	return ret;
 }
