@@ -197,6 +197,8 @@ int ppsout_config(struct stmmac_priv *priv, struct pps_cfg *eth_pps_cfg)
 		return 0;
 	}
 
+	ppsout_stop(priv, eth_pps_cfg);
+
 	val = readl_relaxed(ioaddr + MAC_PPS_CONTROL);
 
 	sub_second_inc = pps_config_sub_second_increment
