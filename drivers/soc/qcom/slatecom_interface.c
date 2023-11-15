@@ -550,6 +550,26 @@ end:
 	mutex_unlock(&pbd->cmdsync_lock);
 	return rc;
 }
+static int setup_pmic_gpio15(void)
+{
+	int val , val1= 0;
+
+	val = of_get_named_gpio(slate_pdev->dev.of_node, "qcom,platform-reset-gpio", 0);
+	if (val < 0) {
+		pr_err("pmic gpio is not found, error=%d\n", val);
+		return -EINVAL;
+	}
+	pmic_gpio15 = val;
+	val1 = gpio_request(pmic_gpio15, "SLATE_EFLASH_STATUS");
+	if (val1) {
+		pr_err("gpio request API value %d \n",val1);
+		dev_err(&slate_pdev->dev,
+			"%s Failed to configure SLATE_EFLASH_STATUS gpio\n",
+				__func__);
+		return -EINVAL;
+	}
+	return RESULT_SUCCESS;
+}
 
 int slate_soft_reset(void)
 {
@@ -643,6 +663,23 @@ static int rf_clk_enable(struct rf_power_clk_data *clk)
 	return rc;
 }
 
+static int rf_clk_disable(struct rf_power_clk_data *clk)
+{
+	int rc = 0;
+
+	pr_debug("%s: %s\n", __func__, clk->name);
+
+	/* Get the clock handle for vreg */
+	if (!clk->clk || !clk->is_enabled) {
+		pr_err("%s: error - node: %p, clk->is_enabled:%d\n",
+			__func__, clk->clk, clk->is_enabled);
+		return -EINVAL;
+	}
+	clk_disable_unprepare(clk->clk);
+	clk->is_enabled = false;
+	return rc;
+}
+
 /*
 Modified for rproc to PIL porting
 */
@@ -717,25 +754,6 @@ int get_slate_boot_mode(void)
 	return mode;
 }
 EXPORT_SYMBOL(get_slate_boot_mode);
-
-static int setup_pmic_gpio15(void)
-{
-	int val = 0;
-
-	val = of_get_named_gpio(slate_pdev->dev.of_node, "qcom,platform-reset-gpio", 0);
-	if (val < 0) {
-		pr_err("pmic gpio is not found, error=%d\n", val);
-		return -EINVAL;
-	}
-	pmic_gpio15 = val;
-	if (gpio_request(pmic_gpio15, "SLATE_EFLASH_STATUS")) {
-		dev_err(&slate_pdev->dev,
-			"%s Failed to configure SLATE_EFLASH_STATUS gpio\n",
-				__func__);
-		return -EINVAL;
-	}
-	return RESULT_SUCCESS;
-}
 
 static int send_boot_cmd_to_slate(struct slate_ui_data *ui_obj_msg)
 {
@@ -1017,7 +1035,7 @@ static long slate_com_ioctl(struct file *filp,
 		if (ret < 0)
 			pr_err("device_state_transition cmd failed\n");
 		break;
-	case SLATECOM_SEND_TIME_DATA:
+	case SEND_TIME_DATA:
 		if (dev->slatecom_current_state != SLATECOM_STATE_GLINK_OPEN) {
 			pr_err("%s: driver not ready, current state: %d\n",
 			__func__, dev->slatecom_current_state);
@@ -1032,7 +1050,7 @@ static long slate_com_ioctl(struct file *filp,
 		if (ret < 0)
 			pr_err("send_time_data cmd failed\n");
 		break;
-	case SLATECOM_SEND_DEBUG_CONFIG:
+	case SEND_DEBUG_CONFIG:
 		if (dev->slatecom_current_state != SLATECOM_STATE_GLINK_OPEN) {
 			pr_err("%s: driver not ready, current state: %d\n",
 			__func__, dev->slatecom_current_state);
@@ -1264,6 +1282,8 @@ static int ssr_slate_cb(struct notifier_block *this,
 		send_uevent(&slatee);
 		set_slate_bt_state(false);
 		set_slate_dsp_state(false);
+		if (dev->rf_clk_2)
+			rf_clk_enable(dev->rf_clk_2);
 		break;
 	case SUBSYS_BEFORE_POWERUP:
 		pr_debug("Slate before powerup\n");
@@ -1278,6 +1298,8 @@ static int ssr_slate_cb(struct notifier_block *this,
 		if (dev->slatecom_current_state == SLATECOM_STATE_INIT ||
 			dev->slatecom_current_state == SLATECOM_STATE_SLATE_SSR)
 			queue_work(dev->slatecom_wq, &dev->slatecom_up_work);
+		if (dev->rf_clk_2)
+			rf_clk_disable(dev->rf_clk_2);
 		break;
 	}
 	return NOTIFY_DONE;
