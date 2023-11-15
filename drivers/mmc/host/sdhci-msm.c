@@ -1827,7 +1827,7 @@ static int sdhci_msm_parse_reset_data(struct device *dev,
 					"core_reset");
 	if (IS_ERR(msm_host->core_reset)) {
 		ret = PTR_ERR(msm_host->core_reset);
-		dev_err(dev, "core_reset unavailable,err = %d\n",
+		dev_warn(dev, "core_reset unavailable,err = %d\n",
 				ret);
 		msm_host->core_reset = NULL;
 	}
