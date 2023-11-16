@@ -1059,7 +1059,7 @@ l3_pwrlevel_probe(struct kgsl_device *device, struct device_node *node)
 	device->l3_icc = of_icc_get(&device->pdev->dev, "l3_path");
 
 	if (IS_ERR(device->l3_icc))
-		dev_err(&device->pdev->dev,
+		dev_warn(&device->pdev->dev,
 			"Unable to get the l3 icc path\n");
 }
 
