@@ -408,6 +408,7 @@ static void geni_se_ssc_qup_down(struct geni_se_device *dev)
 static void geni_se_ssc_qup_up(struct geni_se_device *dev)
 {
 	int ret = 0;
+	int proto = 0;
 	struct se_geni_rsc *rsc = NULL;
 
 	if (list_empty(&dev->ssr.active_list_head)) {
@@ -421,6 +422,13 @@ static void geni_se_ssc_qup_up(struct geni_se_device *dev)
 	list_for_each_entry(rsc, &dev->ssr.active_list_head,
 					rsc_ssr.active_list) {
 		se_geni_clks_on(rsc);
+		if (rsc->base) {
+			proto = get_se_proto(rsc->base);
+			if (proto == UART) {
+				geni_write_reg(0x21, rsc->base, GENI_SER_M_CLK_CFG);
+				geni_write_reg(0x21, rsc->base, GENI_SER_S_CLK_CFG);
+			}
+		}
 	}
 
 	/* Make SCM call, to load the TZ FW */
@@ -432,6 +440,13 @@ static void geni_se_ssc_qup_up(struct geni_se_device *dev)
 
 	list_for_each_entry(rsc, &dev->ssr.active_list_head,
 					rsc_ssr.active_list) {
+		if (rsc->base) {
+			proto = get_se_proto(rsc->base);
+			if (proto == UART) {
+				geni_write_reg(0x1, rsc->base, GENI_SER_M_CLK_CFG);
+				geni_write_reg(0x1, rsc->base, GENI_SER_S_CLK_CFG);
+			}
+		}
 		se_geni_clks_off(rsc);
 	}
 
