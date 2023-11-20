@@ -461,32 +461,51 @@ static bool geni_i2c_is_bus_recovery_required(struct geni_i2c_dev *gi2c)
 static int geni_i2c_bus_recovery(struct geni_i2c_dev *gi2c)
 {
 	int timeout = 0;
+	u32 geni_m_irq_en = 0;
 
 	/* Must be enabled by client "only" if required */
 	if (gi2c->bus_recovery_enable &&
 	    geni_i2c_is_bus_recovery_required(gi2c)) {
 		GENI_SE_ERR(gi2c->ipcl, false, gi2c->dev,
-			    "SDA Line stuck\n", gi2c->err);
+			    "%s: SDA Line stuck, err:%d\n",
+			    __func__, gi2c->err);
 	} else {
 		GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev,
-			    "Bus Recovery not required/enabled\n");
+			    "%s: Bus Recovery not required/enabled\n",
+			    __func__);
 		return 0;
 	}
 
 	GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev, "%s: start\n", __func__);
 
+	geni_m_irq_en = geni_read_reg_nolog(gi2c->base, SE_GENI_M_IRQ_EN);
+	if (!(geni_m_irq_en & M_CMD_DONE_EN)) {
+		GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev,
+			    "%s: Set M_CMD_DONE_EN bit, geni_m_irq_en:0x%x\n",
+			    __func__, geni_m_irq_en);
+		/*
+		 * Opcodes are needed this(SE_GENI_M_IRQ_EN) bit for IRQ to be fired.
+		 * As part of SE_DMA mode configuration we are not setting
+		 * SE_GENI_M_IRQ_EN bit so setting this bit prior to opcode
+		 * execution
+		 */
+		geni_m_irq_en |= M_CMD_DONE_EN;
+		geni_write_reg(geni_m_irq_en, gi2c->base, SE_GENI_M_IRQ_EN);
+	}
+
 	reinit_completion(&gi2c->xfer);
 	geni_setup_m_cmd(gi2c->base, I2C_BUS_CLEAR, 0);
 	timeout = wait_for_completion_timeout(&gi2c->xfer, HZ);
 	if (!timeout) {
+		GENI_SE_DBG(gi2c->ipcl, true, gi2c->dev,
+			    "%s: Bus clear Failed\n", __func__);
 		geni_i2c_err(gi2c, GENI_TIMEOUT);
 		gi2c->cur = NULL;
 		timeout = geni_i2c_stop_with_cancel(gi2c);
-		if (timeout) {
+		if (timeout)
 			GENI_SE_DBG(gi2c->ipcl, true, gi2c->dev,
-				    "%s: Bus clear Failed\n", __func__);
-			return timeout;
-		}
+				    "%s: Cancel/abort Failed\n", __func__);
+		return -ETIMEDOUT;
 	}
 
 	GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev,
@@ -496,14 +515,15 @@ static int geni_i2c_bus_recovery(struct geni_i2c_dev *gi2c)
 	geni_setup_m_cmd(gi2c->base, I2C_STOP_ON_BUS, 0);
 	timeout = wait_for_completion_timeout(&gi2c->xfer, HZ);
 	if (!timeout) {
+		GENI_SE_DBG(gi2c->ipcl, true, gi2c->dev,
+			    "%s:Bus Stop Failed\n", __func__);
 		geni_i2c_err(gi2c, GENI_TIMEOUT);
 		gi2c->cur = NULL;
 		timeout = geni_i2c_stop_with_cancel(gi2c);
-		if (timeout) {
+		if (timeout)
 			GENI_SE_DBG(gi2c->ipcl, true, gi2c->dev,
-				    "%s:Bus Stop Failed\n", __func__);
-			return timeout;
-		}
+				    "%s: Cancel/abort Failed\n", __func__);
+		return -ETIMEDOUT;
 	}
 
 	GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev,
@@ -1571,11 +1591,27 @@ static int geni_i2c_xfer(struct i2c_adapter *adap,
 	if ((geni_ios & 0x3) != 0x3) { //SCL:b'1, SDA:b'0
 		GENI_SE_ERR(gi2c->ipcl, true, gi2c->dev,
 				"IO lines in bad state, Power the slave\n");
-		pm_runtime_mark_last_busy(gi2c->dev);
-		pm_runtime_put_autosuspend(gi2c->dev);
-		mutex_unlock(&gi2c->i2c_ssr.ssr_lock);
-		atomic_set(&gi2c->is_xfer_in_progress, 0);
-		return -ENXIO;
+		if (gi2c->se_mode == FIFO_SE_DMA) {
+			gi2c->err = -EBUSY;
+			ret = geni_i2c_bus_recovery(gi2c);
+			if (ret)
+				GENI_SE_ERR(gi2c->ipcl, true, gi2c->dev,
+					    "%s:Bus Recovery failed\n", __func__);
+			gi2c->err = 0;
+		} else {
+			GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev,
+				    "%s: Bus Recovery not supported for GSI\n",
+				    __func__);
+		}
+
+		if ((gi2c->se_mode == GSI_ONLY) ||
+		    ((gi2c->se_mode != GSI_ONLY) && ret)) {
+			pm_runtime_mark_last_busy(gi2c->dev);
+			pm_runtime_put_autosuspend(gi2c->dev);
+			mutex_unlock(&gi2c->i2c_ssr.ssr_lock);
+			atomic_set(&gi2c->is_xfer_in_progress, 0);
+			return -ENXIO;
+		}
 	}
 
 	GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev,
