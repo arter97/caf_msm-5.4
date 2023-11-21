@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"%s: " fmt, __func__
@@ -383,11 +384,32 @@ static int qti_pmic_lpm_resume_early(struct device *dev)
 }
 #endif
 
+static int qti_pmic_lpm_restore_early(struct device *dev)
+{
+	int rc = 0;
+	struct qti_pmic_lpm *chip = dev_get_drvdata(dev);
+
+	rc = qti_pmic_handle_lpm(chip, false);
+	if (rc < 0) {
+		dev_err(dev, "Failed to handle restore_early(), rc:%d\n",
+			rc);
+		return rc;
+	}
+
+	rc = pmic_get_wakeup_status(chip);
+	if (rc < 0) {
+		dev_err(dev, "Failed to get Hibernate exit status, rc:%d\n", rc);
+	}
+
+        return rc;
+}
+
 static const struct dev_pm_ops qti_pmic_lpm_pm_ops = {
 #ifdef CONFIG_DEEPSLEEP
 	.suspend_late = qti_pmic_lpm_suspend_late,
 	.resume_early = qti_pmic_lpm_resume_early,
 #endif
+	.restore_early = qti_pmic_lpm_restore_early,
 };
 
 static const struct of_device_id qti_pmic_lpm_match_table[] = {
