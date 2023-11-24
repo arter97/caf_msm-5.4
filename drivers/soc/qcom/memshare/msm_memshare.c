@@ -499,6 +499,11 @@ static void handle_alloc_generic_req(struct qmi_handle *handle,
 		if (alloc_req->num_bytes > memblock[index].init_size)
 			alloc_req->num_bytes = memblock[index].init_size;
 
+	if (!memblock[index].allotted && alloc_req->num_bytes > 0) {
+
+		if (alloc_req->num_bytes > memblock[index].init_size)
+			alloc_req->num_bytes = memblock[index].init_size;
+
 		if (memblock[index].guard_band)
 			size = alloc_req->num_bytes + MEMSHARE_GUARD_BYTES;
 		else

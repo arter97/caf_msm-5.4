@@ -3631,7 +3631,8 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse,
 	/* Disable core irq */
 	disable_irq(dwc->irq);
 
-	dbg_event(0xFF, "pend evt", work_busy(&dwc->bh_work));
+	if (!dwc->use_rt_thread)
+		dbg_event(0xFF, "pend evt", work_busy(&dwc->bh_work));
 
 	/* disable power event irq, hs and ss phy irq is used as wake up src */
 	disable_irq_nosync(mdwc->wakeup_irq[PWR_EVNT_IRQ].irq);
@@ -4086,7 +4087,7 @@ skip_update:
 	 * only in case of power event irq in lpm.
 	 */
 	if (mdwc->resume_pending) {
-		dwc3_msm_resume(mdwc);
+		pm_runtime_resume(mdwc->dev);
 		mdwc->resume_pending = false;
 	}
 

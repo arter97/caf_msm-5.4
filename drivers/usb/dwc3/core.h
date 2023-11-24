@@ -1159,6 +1159,7 @@ struct dwc3_scratchpad_array {
  * @in_lpm: indicates if controller is in low power mode (no clocks)
  * @irq: irq number
  * @irq_cnt: total irq count
+ * @use_rt_thread: if true, use RT thread to process irqs instead of work queue
  * @bh_completion_time: time taken for IRQ bottom-half completion
  * @bh_handled_evt_cnt: no. of events handled per IRQ bottom-half
  * @irq_dbg_index: index for capturing IRQ stats
@@ -1412,6 +1413,7 @@ struct dwc3 {
 	/* IRQ timing statistics */
 	int			irq;
 	atomic_t		irq_cnt;
+	bool			use_rt_thread;
 	ktime_t			bh_start_time[MAX_INTR_STATS];
 	unsigned int		bh_completion_time[MAX_INTR_STATS];
 	unsigned int		bh_handled_evt_cnt[MAX_INTR_STATS];

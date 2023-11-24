@@ -52,7 +52,7 @@ int open_not_called;
 static void ethqos_rgmii_io_macro_loopback(struct qcom_ethqos *ethqos,
 					   int mode);
 static int phy_digital_loopback_config(struct qcom_ethqos *ethqos, int speed, int config);
-static void __iomem *tlmm_central_base_addr;
+static void __iomem *tlmm_mdc_mdio_hdrv_pull_ctl_base;
 static struct emac_emb_smmu_cb_ctx emac_emb_smmu_ctx = {0};
 struct plat_stmmacenet_data *plat_dat;
 static struct qcom_ethqos *pethqos;
@@ -3309,6 +3309,7 @@ static int ethqos_update_mdio_drv_strength(struct qcom_ethqos *ethqos,
 	unsigned long tlmm_central_size = 0;
 	int ret = 0;
 	unsigned long v;
+	size_t size = 4;
 
 	resource = platform_get_resource_byname(ethqos->pdev,
 						IORESOURCE_MEM, "tlmm-central-base");
@@ -3323,10 +3324,10 @@ static int ethqos_update_mdio_drv_strength(struct qcom_ethqos *ethqos,
 	ETHQOSDBG("tlmm_central_base = 0x%x, size = 0x%x\n",
 		  tlmm_central_base, tlmm_central_size);
 
-	tlmm_central_base_addr = ioremap(tlmm_central_base,
-					 tlmm_central_size);
-
-	if (!tlmm_central_base_addr) {
+	tlmm_mdc_mdio_hdrv_pull_ctl_base = ioremap(tlmm_central_base +
+			TLMM_MDC_MDIO_HDRV_PULL_CTL_ADDRESS_OFFSET,
+			size);
+	if (!tlmm_mdc_mdio_hdrv_pull_ctl_base) {
 		ETHQOSERR("cannot map dwc_tlmm_central reg memory, aborting\n");
 		ret = -EIO;
 		goto err_out;
@@ -3409,9 +3410,8 @@ static int ethqos_update_mdio_drv_strength(struct qcom_ethqos *ethqos,
 	}
 
 err_out:
-	if (tlmm_central_base_addr)
-		iounmap(tlmm_central_base_addr);
-
+	if (tlmm_mdc_mdio_hdrv_pull_ctl_base)
+		iounmap(tlmm_mdc_mdio_hdrv_pull_ctl_base);
 	return ret;
 }
 
