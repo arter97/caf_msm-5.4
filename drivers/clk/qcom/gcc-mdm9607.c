@@ -40,9 +40,14 @@ enum {
 	P_SLEEP_CLK,
 };
 
+static unsigned int soft_vote_gpll0;
+
 static struct clk_alpha_pll gpll0_early = {
 	.offset = 0x21000,
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_DEFAULT],
+	.soft_vote = &soft_vote_gpll0,
+	.soft_vote_mask = PLL_SOFT_VOTE_PRIMARY,
+	.flags = SUPPORTS_FSM_MODE,
 	.clkr = {
 		.enable_reg = 0x45000,
 		.enable_mask = BIT(0),
@@ -70,6 +75,26 @@ static struct clk_alpha_pll_postdiv gpll0 = {
 	},
 };
 
+static struct clk_alpha_pll gpll0_ao = {
+	.offset = 0x21000,
+	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_DEFAULT],
+	.soft_vote = &soft_vote_gpll0,
+	.soft_vote_mask = PLL_SOFT_VOTE_CPU,
+	.flags = SUPPORTS_FSM_MODE,
+	.clkr = {
+		.enable_reg = 0x45000,
+		.enable_mask = BIT(0),
+		.hw.init = &(struct clk_init_data)
+		{
+			.name = "gpll0_ao",
+			.parent_data = &(const struct clk_parent_data){
+				.fw_name = "xo_ao",
+			},
+			.num_parents = 1,
+			.ops = &clk_alpha_pll_ops,
+		},
+	},
+};
 static const struct parent_map gcc_xo_gpll0_map[] = {
 	{ P_XO, 0 },
 	{ P_GPLL0, 1 },
@@ -1861,6 +1886,7 @@ static struct clk_branch gcc_qusb2_phy_clk = {
 static struct clk_regmap *gcc_mdm9607_clocks[] = {
 	[GPLL0] = &gpll0.clkr,
 	[GPLL0_EARLY] = &gpll0_early.clkr,
+	[GPLL0_AO] = &gpll0_ao.clkr,
 	[GPLL1] = &gpll1.clkr,
 	[GPLL1_VOTE] = &gpll1_vote,
 	[GPLL2] = &gpll2.clkr,
