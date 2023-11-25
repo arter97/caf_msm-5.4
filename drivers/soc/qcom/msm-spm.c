@@ -143,7 +143,7 @@ static uint32_t num_pmic_data;
 static void msm_spm_drv_flush_shadow(struct msm_spm_driver_data *dev,
 		unsigned int reg_index)
 {
-	if (!dev)
+	if (!dev || reg_index >= MSM_SPM_REG_NR)
 		return;
 
 	__raw_writel(dev->reg_shadow[reg_index],
@@ -153,6 +153,9 @@ static void msm_spm_drv_flush_shadow(struct msm_spm_driver_data *dev,
 static void msm_spm_drv_load_shadow(struct msm_spm_driver_data *dev,
 		unsigned int reg_index)
 {
+	if (!dev || reg_index >= MSM_SPM_REG_NR)
+		return;
+
 	dev->reg_shadow[reg_index] =
 		__raw_readl(dev->reg_base_addr +
 				dev->reg_offsets[reg_index]);
