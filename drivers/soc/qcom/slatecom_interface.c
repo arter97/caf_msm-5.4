@@ -301,10 +301,10 @@ static int send_state_change_cmd(struct slate_ui_data *ui_obj_msg)
 		msg_header.opcode = GMI_MGR_EXIT_TRACKER_DS;
 		break;
 	case STATE_S2D_ENTER:
-		msg_header.opcode = GMI_MGR_ENTER_TRACKER_DS;
+		msg_header.opcode = GMI_WEAR_MGR_ENTER_HIBERNATE;
 		break;
 	case STATE_S2D_EXIT:
-		msg_header.opcode = GMI_MGR_EXIT_TRACKER_DS;
+		msg_header.opcode = GMI_WEAR_MGR_EXIT_HIBERNATE;
 		break;
 	default:
 		pr_err("Invalid MSM State transtion cmd\n");
