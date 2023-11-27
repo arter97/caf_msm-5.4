@@ -57,7 +57,7 @@ do {									     \
 #define RPM_GLINK_CID_MAX	65536
 
 static int should_wake;
-#if defined(CONFIG_DEEPSLEEP) && defined(CONFIG_RPMSG_QCOM_GLINK_RPM)
+#if defined(CONFIG_RPMSG_QCOM_GLINK_RPM)
 static int quickboot;
 atomic_t qb_comp;
 wait_queue_head_t quickboot_complete;
@@ -2332,9 +2332,29 @@ static int qcom_glink_resume_no_irq(struct device *dev)
 	return ret;
 }
 
+static int qcom_glink_restore_no_irq(struct device *dev)
+{
+	should_wake = false;
+#if defined(CONFIG_RPMSG_QCOM_GLINK_RPM)
+	quickboot = 1;
+	glink_rpm_resume_noirq(dev);
+#endif
+	return 0;
+}
+
+static int qcom_glink_thaw_no_irq(struct device *dev)
+{
+	should_wake = false;
+
+	return 0;
+}
 const struct dev_pm_ops glink_native_pm_ops = {
 	.suspend_noirq = qcom_glink_suspend_no_irq,
 	.resume_noirq = qcom_glink_resume_no_irq,
+	.freeze_noirq = qcom_glink_suspend_no_irq,
+	.restore_noirq = qcom_glink_restore_no_irq,
+	.thaw_noirq = qcom_glink_thaw_no_irq,
+
 };
 EXPORT_SYMBOL(glink_native_pm_ops);
 

@@ -30,7 +30,7 @@ struct qcom_glink;
 extern const struct dev_pm_ops glink_native_pm_ops;
 extern int glink_resume_pkt;
 
-#if defined(CONFIG_DEEPSLEEP) && defined(CONFIG_RPMSG_QCOM_GLINK_RPM)
+#if defined(CONFIG_RPMSG_QCOM_GLINK_RPM)
 int glink_rpm_resume_noirq(struct device *dev);
 #endif
 
