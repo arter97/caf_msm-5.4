@@ -55,6 +55,9 @@
 /* Indicate backport support for 6GHz band */
 #define CFG80211_6GHZ_BAND_SUPPORTED 1
 
+/* Indicate support for connect request with more than two AKMs */
+#define CFG80211_MULTI_AKM_CONNECT_SUPPORT 1
+
 /**
  * DOC: Device registration
  *
@@ -936,6 +939,12 @@ struct survey_info {
  * @sae_pwd: password for SAE authentication (for devices supporting SAE
  *	offload)
  * @sae_pwd_len: length of SAE password (for devices supporting SAE offload)
+ * @n_connect_akm_suites: number of AKM suites through NL80211_CMD_CONNECT.
+ *	Applicable only when driver indicates @wiphy.max_num_akms_connect as
+ *	non-zero value.
+ * @connect_akm_suites: AKM suites configured through NL80211_CMD_CONNECT
+ *	Applicable only when driver indicates @wiphy.max_num_akms_connect as
+ *	non-zero value.
  */
 struct cfg80211_crypto_settings {
 	u32 wpa_versions;
@@ -953,6 +962,8 @@ struct cfg80211_crypto_settings {
 	const u8 *psk;
 	const u8 *sae_pwd;
 	u8 sae_pwd_len;
+	int n_connect_akm_suites;
+	u32 *connect_akm_suites;
 };
 
 /**
@@ -4691,6 +4702,9 @@ struct wiphy_iftype_akm_suites {
  *	supported by the driver for each vif
  * @tid_config_support.peer: bitmap of attributes (configurations)
  *	supported by the driver for each peer
+ *
+ * @max_num_akms_connect: maximum supported number of AKM suites for
+ *	configuration through NL80211_CMD_CONNECT
  */
 struct wiphy {
 	/* assign these fields before you register the wiphy */
@@ -4842,6 +4856,7 @@ struct wiphy {
 		u64 peer, vif;
 	} tid_config_support;
 
+	u8 max_num_akms_connect;
 	char priv[0] __aligned(NETDEV_ALIGN);
 };
 
