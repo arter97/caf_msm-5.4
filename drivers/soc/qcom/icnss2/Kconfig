@@ -45,3 +45,10 @@ config CNSS_QCA6750
 	  CNSS QCA6750 chipset.
 	  These changes are needed to support the new hardware architecture
 	  for CNSS QCA6750 chipset.
+
+config SLATE_MODULE_ENABLED
+	bool "Enable slate module"
+	depends on ICNSS2
+	help
+	  Say 'Y' here to enable SLATE_MODULE_ENABLED support.
+	  This enables slate code from ICNSS driver.
