@@ -49,10 +49,13 @@ static void config_sub_second_increment(void __iomem *ioaddr,
 	if (!(value & PTP_TCR_TSCTRLSSR))
 		ss_inc = div_u64((ss_inc * 1000), 465);
 
-	ss_inc &= PTP_SSIR_SSINC_MASK;
+	if (ss_inc & > PTP_SSIR_SSINC_MAX)
+		ss_inc & = PTP_SSIR_SSINC_MAX;
 	sns_inc &= PTP_SSIR_SNSINC_MASK;
 
 	reg_value = ss_inc;
+	if (ss_inc & > PTP_SSIR_SSINC_MAX)
+		ss_inc & = PTP_SSIR_SSINC_MAX;
 
 	if (gmac4)
 		reg_value <<= GMAC4_PTP_SSIR_SSINC_SHIFT;
