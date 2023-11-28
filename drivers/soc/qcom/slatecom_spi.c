@@ -176,6 +176,8 @@ static int slatecom_reg_write_cmd(void *handle, uint8_t reg_start_addr,
 static int slatecom_reg_read_internal(void *handle, uint8_t reg_start_addr,
 	uint32_t num_regs, void *read_buf);
 static int slatecom_force_resume(void *handle);
+static irqreturn_t slate_irq_tasklet_hndlr(int irq, void *device);
+static int req_irq_flag = 1;
 
 static struct spi_device *get_spi_device(void)
 {
@@ -220,6 +222,20 @@ int slatecom_set_spi_state(enum slatecom_spi_state state)
 	ktime_t time_start, delta;
 	s64 time_elapsed;
 	struct slate_context clnt_handle;
+	int ret = 0;
+ 
+	if (req_irq_flag && state == SLATECOM_SPI_FREE) {
+		ret = request_threaded_irq(slate_irq, NULL, slate_irq_tasklet_hndlr,
+		IRQF_TRIGGER_HIGH | IRQF_ONESHOT, "qcom-slate_spi", slate_spi);
+		if (ret) {
+			pr_err("qcom-slate_spi: failed to register IRQ:%d\n", ret);
+		}
+		ret = irq_set_irq_wake(slate_irq, true);
+		if (ret) {
+			pr_err("irq set as wakeup return: %d\n", ret);
+		}
+		req_irq_flag = 0;
+	}
 
 	clnt_handle.slate_spi = slate_spi;
 
@@ -1540,7 +1556,7 @@ static int slate_spi_probe(struct spi_device *spi)
 	slate_spi_init(slate_spi);
 
 	/* SLATECOM Interrupt probe */
-	node = spi->dev.of_node;
+	node = slate_spi->spi->dev.of_node;
 	irq_gpio = of_get_named_gpio(node, "qcom,irq-gpio", 0);
 	if (!gpio_is_valid(irq_gpio)) {
 		pr_err("gpio %d found is not valid\n", irq_gpio);
@@ -1594,6 +1610,8 @@ err_ret:
 	slate_com_drv = NULL;
 	mutex_destroy(&slate_spi->xfer_mutex);
 	spi_set_drvdata(spi, NULL);
+	if (gpio_is_valid(irq_gpio))
+		gpio_free(irq_gpio);
 	return -ENODEV;
 }
 
