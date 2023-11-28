@@ -611,7 +611,6 @@ static void slatecom_fw_unload(struct slatedaemon_priv *priv)
 		priv->slate_unload = false;
 		priv->pil_h = NULL;
 		slate_boot_status = 0;
-		slate_soft_reset();
 	}
 }
 
@@ -865,15 +864,17 @@ static long slate_com_ioctl(struct file *filp,
 
 	if (filp == NULL)
 		return -EINVAL;
-
-	switch (ui_slatecom_cmd) {
-	case REG_READ:
-	case AHB_READ:
+	if (arg != 0) {
 		if (copy_from_user(&ui_obj_msg, (void __user *) arg,
 				sizeof(ui_obj_msg))) {
 			pr_err("The copy from user failed\n");
 			ret = -EFAULT;
-		}
+        }
+    }
+	switch (ui_slatecom_cmd) {
+	case REG_READ:
+	case AHB_READ:
+
 		ret = slatechar_read_cmd(&ui_obj_msg,
 				ui_slatecom_cmd);
 		if (ret < 0)
@@ -881,11 +882,6 @@ static long slate_com_ioctl(struct file *filp,
 		break;
 	case AHB_WRITE:
 	case REG_WRITE:
-		if (copy_from_user(&ui_obj_msg, (void __user *) arg,
-				sizeof(ui_obj_msg))) {
-			pr_err("The copy from user failed\n");
-			ret = -EFAULT;
-		}
 		ret = slatechar_write_cmd(&ui_obj_msg, ui_slatecom_cmd);
 		if (ret < 0)
 			pr_err("slatechar_write_cmd failed\n");
@@ -1494,6 +1490,7 @@ static void __exit exit_slate_com_dev(void)
 	cdev_del(&slate_cdev);
 	unregister_chrdev_region(slate_dev, 1);
 	platform_driver_unregister(&slate_daemon_driver);
+	gpio_free(pmic_gpio15);
 }
 
 module_init(init_slate_com_dev);
