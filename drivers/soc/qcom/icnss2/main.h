@@ -128,6 +128,7 @@ enum icnss_driver_state {
 	ICNSS_QMI_DMS_CONNECTED,
 	ICNSS_SLATE_SSR_REGISTERED,
 	ICNSS_SLATE_UP,
+	ICNSS_SLATE_READY,
 	ICNSS_LOW_POWER,
 };
 
@@ -359,6 +360,11 @@ struct icnss_dms_data {
 	u8 mac[QMI_WLFW_MAC_ADDR_SIZE_V01];
 };
 
+#ifndef CONFIG_SLATE_MODULE_ENABLED
+struct seb_notif_info {
+};
+#endif
+
 struct icnss_priv {
 	uint32_t magic;
 	struct platform_device *pdev;
@@ -490,6 +496,8 @@ struct icnss_priv {
 	unsigned long device_config;
 	bool is_rf_subtype_valid;
 	u32 rf_subtype;
+	struct seb_notif_info *seb_handle;
+	struct notifier_block seb_nb;
 	struct timer_list recovery_timer;
 };
 
@@ -520,4 +528,3 @@ void icnss_add_fw_prefix_name(struct icnss_priv *priv, char *prefix_name,
 			      char *name);
 void icnss_recovery_timeout_hdlr(struct timer_list *t);
 #endif
-

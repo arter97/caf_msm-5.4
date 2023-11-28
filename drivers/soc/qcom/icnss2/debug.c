@@ -422,6 +422,9 @@ static int icnss_stats_show_state(struct seq_file *s, struct icnss_priv *priv)
 		case ICNSS_SLATE_UP:
 			seq_puts(s, "ICNSS SLATE UP");
 			continue;
+		case ICNSS_SLATE_READY:
+			seq_puts(s, "ICNSS SLATE READY");
+			continue;
 		case ICNSS_LOW_POWER:
 			seq_puts(s, "ICNSS LOW POWER");
 		}

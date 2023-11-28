@@ -51,6 +51,8 @@
 #include "genl.h"
 #ifdef CONFIG_SLATE_MODULE_ENABLED
 #include "../slatecom_interface.h"
+#include <linux/soc/qcom/slate_events_bridge_intf.h>
+#include <uapi/linux/slatecom_interface.h>
 #endif
 
 #define MAX_PROP_SIZE			32
@@ -2024,6 +2026,43 @@ static int icnss_wpss_ssr_register_notifier(struct icnss_priv *priv)
 }
 
 #ifdef CONFIG_SLATE_MODULE_ENABLED
+static int icnss_slate_event_notifier_nb(struct notifier_block *nb,
+					 unsigned long event, void *data)
+{
+	if (event == SLATE_STATUS) {
+		struct icnss_priv *priv = container_of(nb, struct icnss_priv,
+						       seb_nb);
+		enum boot_status status = *(enum boot_status *)data;
+
+		if (status == SLATE_READY) {
+			icnss_pr_dbg("Slate ready received, state: 0x%lx\n",
+				     priv->state);
+			set_bit(ICNSS_SLATE_READY, &priv->state);
+			set_bit(ICNSS_SLATE_UP, &priv->state);
+			complete(&priv->slate_boot_complete);
+		}
+	}
+
+	return NOTIFY_OK;
+}
+
+static int icnss_register_slate_event_notifier(struct icnss_priv *priv)
+{
+	int ret = 0;
+
+	priv->seb_nb.notifier_call = icnss_slate_event_notifier_nb;
+
+	priv->seb_handle = seb_register_for_slate_event(SLATE_STATUS,
+							&priv->seb_nb);
+	if (IS_ERR_OR_NULL(priv->seb_handle)) {
+		ret = priv->seb_handle ? PTR_ERR(priv->seb_handle) : -EINVAL;
+		icnss_pr_err("SLATE event register notifier failed: %d\n",
+			     ret);
+	}
+
+	return ret;
+}
+
 static int icnss_slate_notifier_nb(struct notifier_block *nb,
 				   unsigned long code,
 				   void *data)
@@ -2034,7 +2073,8 @@ static int icnss_slate_notifier_nb(struct notifier_block *nb,
 
 	icnss_pr_vdbg("Slate-subsys-notify: event %lu\n", code);
 
-	if (code == SUBSYS_AFTER_POWERUP) {
+	if (code == SUBSYS_AFTER_POWERUP &&
+	    test_bit(ICNSS_SLATE_READY, &priv->state)) {
 		set_bit(ICNSS_SLATE_UP, &priv->state);
 		complete(&priv->slate_boot_complete);
 		icnss_pr_dbg("Slate boot complete, state: 0x%lx\n",
@@ -2092,6 +2132,11 @@ static int icnss_slate_ssr_unregister_notifier(struct icnss_priv *priv)
 	return 0;
 }
 #else
+static int icnss_register_slate_event_notifier(struct icnss_priv *priv)
+{
+	return 0;
+}
+
 static int icnss_slate_ssr_register_notifier(struct icnss_priv *priv)
 {
 	return 0;
@@ -2451,8 +2496,10 @@ static int icnss_enable_recovery(struct icnss_priv *priv)
 
 	icnss_modem_ssr_register_notifier(priv);
 
-	if (priv->is_slate_rfa)
+	if (priv->is_slate_rfa) {
 		icnss_slate_ssr_register_notifier(priv);
+		icnss_register_slate_event_notifier(priv);
+	}
 
 	if (test_bit(SSR_ONLY, &priv->ctrl_params.quirks)) {
 		icnss_pr_dbg("PDR disabled through module parameter\n");
