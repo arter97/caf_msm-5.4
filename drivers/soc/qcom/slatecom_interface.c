@@ -10,6 +10,7 @@
 #include <linux/version.h>
 #include <linux/fs.h>
 #include <linux/cdev.h>
+#include <linux/clk.h>
 #include <linux/device.h>
 #include <linux/errno.h>
 #include <linux/uaccess.h>
@@ -113,6 +114,12 @@ enum slatecom_state {
 	SLATECOM_STATE_SLATE_SSR
 };
 
+struct rf_power_clk_data {
+	struct clk *clk;  /* clock regulator handle */
+	const char *name; /* clock name */
+	bool is_enabled;  /* is this clock enabled? */
+};
+
 struct slatedaemon_priv {
 	void *pil_h;
 	int app_status;
@@ -134,6 +141,7 @@ struct slatedaemon_priv {
 	struct workqueue_struct *slatecom_wq;
 	struct wakeup_source slatecom_ws;
 	struct qseecom_handle *qseecom_handle;
+	struct rf_power_clk_data *rf_clk_2; /* rf clock */
 };
 
 static void *slatecom_intf_drv;
@@ -567,12 +575,83 @@ int slate_soft_reset(void)
 	return ret;
 }
 
+static int dt_parse_clk_info(struct device *dev,
+		struct rf_power_clk_data **clk_data)
+{
+	int ret = -EINVAL;
+	struct rf_power_clk_data *clk = NULL;
+	struct device_node *np = dev->of_node;
+
+	*clk_data = NULL;
+	if (of_parse_phandle(np, "clocks", 0)) {
+		clk = devm_kzalloc(dev, sizeof(*clk), GFP_KERNEL);
+		if (!clk) {
+			ret = -ENOMEM;
+			goto err;
+		}
+
+		/* Allocated 20 bytes size buffer for clock name string */
+		clk->name = devm_kzalloc(dev, 20, GFP_KERNEL);
+
+		/* Parse clock name from node */
+		ret = of_property_read_string_index(np, "clock-names", 0,
+				&(clk->name));
+		if (ret < 0) {
+			pr_err("%s: reading \"clock-names\" failed\n",
+				__func__);
+			return ret;
+		}
+
+		clk->clk = devm_clk_get(dev, clk->name);
+		if (IS_ERR(clk->clk)) {
+			ret = PTR_ERR(clk->clk);
+			pr_err("%s: failed to get %s, ret (%d)\n",
+				__func__, clk->name, ret);
+			clk->clk = NULL;
+			return ret;
+		}
+		*clk_data = clk;
+	} else {
+		pr_err("%s: clocks is not provided in device tree\n", __func__);
+	}
+
+err:
+	return ret;
+}
+
+static int rf_clk_enable(struct rf_power_clk_data *clk)
+{
+	int rc = 0;
+
+	pr_debug("%s: %s\n", __func__, clk->name);
+
+	/* Get the clock handle for vreg */
+	if (!clk->clk || clk->is_enabled) {
+		pr_err("%s: error - node: %p, clk->is_enabled:%d\n",
+			__func__, clk->clk, clk->is_enabled);
+		return -EINVAL;
+	}
+
+	rc = clk_prepare_enable(clk->clk);
+	if (rc) {
+		pr_err("%s: failed to enable %s, rc(%d)\n",
+				__func__, clk->name, rc);
+		return rc;
+	}
+
+	clk->is_enabled = true;
+	return rc;
+}
+
 /*
 Modified for rproc to PIL porting
 */
 static int slatecom_fw_load(struct slatedaemon_priv *priv)
 {
 	int ret = 0;
+
+	if (dev->rf_clk_2)
+		rf_clk_enable(dev->rf_clk_2);
 
 	if (priv->pil_h) {
 			pr_err("slate is already loaded\n");
@@ -583,6 +662,7 @@ static int slatecom_fw_load(struct slatedaemon_priv *priv)
 		if (!priv->pil_h) {
 			pr_err("failed to load slate\n");
 			ret = -EFAULT;
+			priv->pil_h = NULL;
 			goto fail;
 		}
 		slate_boot_status = 1;
@@ -1051,7 +1131,7 @@ static void slatecom_slateup_work(struct work_struct *work)
 	if (!dev->slatecom_rpmsg)
 		pr_err("slatecom-rpmsg is not probed yet\n");
 	ret = wait_event_timeout(dev->link_state_wait,
-				dev->slatecom_rpmsg, msecs_to_jiffies(TIMEOUT_MS));
+				dev->slatecom_rpmsg, msecs_to_jiffies(TIMEOUT_MS_GLINK_OPEN));
 	if (ret == 0) {
 		pr_err("channel connection time out %d\n", ret);
 		goto glink_err;
@@ -1125,8 +1205,9 @@ static int slate_daemon_probe(struct platform_device *pdev)
 	pr_info("%s success\n", __func__);
 	slate_pdev = pdev;
 	setup_pmic_gpio15();
-
 	ssr_register();
+	dt_parse_clk_info(&pdev->dev,
+					&dev->rf_clk_2);
 	return 0;
 }
 
