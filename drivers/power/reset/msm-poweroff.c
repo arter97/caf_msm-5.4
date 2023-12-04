@@ -408,7 +408,7 @@ static size_t store_dload_mode(struct kobject *kobj, struct attribute *attr,
 
 	mutex_lock(&tcsr_lock);
 	/*Overwrite TCSR reg*/
-	set_dload_mode(dload_type);
+	set_dload_mode(download_mode);
 	mutex_unlock(&tcsr_lock);
 	return count;
 }
