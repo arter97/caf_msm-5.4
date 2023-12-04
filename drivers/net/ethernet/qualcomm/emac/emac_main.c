@@ -1808,7 +1808,6 @@ static void emac_adjust_link(struct net_device *netdev)
 
 	if (!TEST_FLAG(adpt, ADPT_TASK_LSC_REQ))
 		return;
-	CLR_FLAG(adpt, ADPT_TASK_LSC_REQ);
 
 	/* ensure that no reset is in progress while link task is running */
 	while (TEST_N_SET_FLAG(adpt, ADPT_STATE_RESETTING))
