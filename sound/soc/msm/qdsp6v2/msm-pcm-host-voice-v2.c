@@ -8,6 +8,8 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
+ *
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/init.h>
@@ -669,6 +671,12 @@ static void hpcm_copy_playback_data_from_queue(struct dai_data *dai_data,
 	if (dai_data->substream == NULL)
 		return;
 
+	if (len >= HPCM_MAX_VOC_PKT_SIZE) {
+		pr_err("%s: Playbcak data len %d is > HPCM_MAX_VOC_PKT_SIZE\n",
+			__func__, len);
+		return;
+	}
+
 	spin_lock_irqsave(&dai_data->dsp_lock, dsp_flags);
 
 	if (!list_empty(&dai_data->filled_queue)) {
@@ -702,6 +710,12 @@ static void hpcm_copy_capture_data_to_queue(struct dai_data *dai_data,
 
 	if (dai_data->substream == NULL)
 		return;
+
+	if (len > HPCM_MAX_VOC_PKT_SIZE) {
+		pr_err("%s: Capture data len %d overflow\n",
+				__func__, len);
+		return;
+	}
 
 	/* Copy out buffer packet into free_queue */
 	spin_lock_irqsave(&dai_data->dsp_lock, dsp_flags);
