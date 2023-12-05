@@ -2778,7 +2778,7 @@ static int bam_dmux_probe(struct platform_device *pdev)
 			create_singlethread_workqueue("bam_dmux_rx");
 	else
 		bam_mux_rx_workqueue = alloc_workqueue("bam_dmux_rx",
-					WQ_MEM_RECLAIM | WQ_CPU_INTENSIVE, 1);
+					WQ_MEM_RECLAIM | WQ_CPU_INTENSIVE | WQ_HIGHPRI, 1);
 	if (!bam_mux_rx_workqueue)
 		return -ENOMEM;
 
