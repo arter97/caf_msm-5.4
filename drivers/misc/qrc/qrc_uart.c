@@ -333,7 +333,7 @@ static const struct of_device_id qrc_uart_of_match[] = {
 	},
 	{}
 };
-MODULE_DEVICE_TABLE(of, qrc_of_match);
+MODULE_DEVICE_TABLE(of, qrc_uart_of_match);
 
 static struct serdev_device_driver qrc_uart_driver = {
 	.probe = qrc_uart_probe,
