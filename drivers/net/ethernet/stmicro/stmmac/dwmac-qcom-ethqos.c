@@ -36,6 +36,7 @@
 #include "dwmac-qcom-ethqos.h"
 #include "stmmac_ptp.h"
 #include "dwmac-qcom-ipa-offload.h"
+#include <linux/dwmac-qcom-eth-autosar.h>
 
 void *ipc_emac_log_ctxt;
 void __iomem *tlmm_rgmii_pull_ctl1_base;
@@ -51,7 +52,7 @@ int open_not_called;
 static void ethqos_rgmii_io_macro_loopback(struct qcom_ethqos *ethqos,
 					   int mode);
 static int phy_digital_loopback_config(struct qcom_ethqos *ethqos, int speed, int config);
-static void __iomem *tlmm_central_base_addr;
+static void __iomem *tlmm_mdc_mdio_hdrv_pull_ctl_base;
 static struct emac_emb_smmu_cb_ctx emac_emb_smmu_ctx = {0};
 struct plat_stmmacenet_data *plat_dat;
 static struct qcom_ethqos *pethqos;
@@ -1535,7 +1536,7 @@ static void qcom_ethqos_phy_suspend_clks(struct qcom_ethqos *ethqos)
 
 	ethqos_update_rgmii_clk_and_bus_cfg(ethqos, 0);
 
-	if (ethqos->phy_wol_supported) {
+	if (ethqos->phy_wol_supported || !priv->plat->clks_suspended) {
 		if (priv->plat->stmmac_clk)
 			clk_disable_unprepare(priv->plat->stmmac_clk);
 
@@ -1544,6 +1545,7 @@ static void qcom_ethqos_phy_suspend_clks(struct qcom_ethqos *ethqos)
 
 		if (priv->plat->clk_ptp_ref)
 			clk_disable_unprepare(priv->plat->clk_ptp_ref);
+		priv->plat->clks_suspended = true;
 	}
 	if (ethqos->rgmii_clk)
 		clk_disable_unprepare(ethqos->rgmii_clk);
@@ -1579,12 +1581,21 @@ static int ethqos_reset_phy_rec(struct stmmac_priv *priv, int int_en)
 		ethqos->backup_autoneg = AUTONEG_ENABLE;
 	}
 
+	if (int_en) {
+		rtnl_lock();
+		phylink_stop(priv->phylink);
+		phylink_disconnect_phy(priv->phylink);
+		rtnl_unlock();
+	}
 	ethqos_phy_power_off(ethqos);
 
 	ethqos_phy_power_on(ethqos);
 
 	if (int_en) {
 		ethqos_reset_phy_enable_interrupt(ethqos);
+		rtnl_lock();
+		phylink_start(priv->phylink);
+		rtnl_unlock();
 		if (ethqos->backup_autoneg == AUTONEG_DISABLE && priv->phydev) {
 			priv->phydev->autoneg = ethqos->backup_autoneg;
 			phy_write(priv->phydev, MII_BMCR, ethqos->backup_bmcr);
@@ -1797,6 +1808,8 @@ static void qcom_ethqos_phy_resume_clks(struct qcom_ethqos *ethqos)
 
 		if (priv->plat->clk_ptp_ref)
 			clk_prepare_enable(priv->plat->clk_ptp_ref);
+
+		priv->plat->clks_suspended = false;
 	}
 
 	if (ethqos->rgmii_clk)
@@ -2517,6 +2530,7 @@ static ssize_t phy_off_config(struct device *dev, struct device_attribute *attr,
 			}
 		}
 		ethqos_phy_power_off(ethqos);
+		plat->is_phy_off = true;
 	} else if (config == ENABLE_PHY_IMMEDIATELY) {
 		ethqos->current_phy_mode = ENABLE_PHY_IMMEDIATELY;
 		//make phy on
@@ -2533,12 +2547,16 @@ static ssize_t phy_off_config(struct device *dev, struct device_attribute *attr,
 						    ethqos->loopback_speed, 1);
 			ETHQOSDBG("Enabling Phy loopback again");
 		}
+		plat->is_phy_off = false;
 	} else if (config == DISABLE_PHY_AT_SUSPEND_ONLY) {
 		ethqos->current_phy_mode = DISABLE_PHY_AT_SUSPEND_ONLY;
+		plat->is_phy_off = true;
 	} else if (config == DISABLE_PHY_SUSPEND_ENABLE_RESUME) {
 		ethqos->current_phy_mode = DISABLE_PHY_SUSPEND_ENABLE_RESUME;
+		plat->is_phy_off = true;
 	} else if (config == DISABLE_PHY_ON_OFF) {
 		ethqos->current_phy_mode = DISABLE_PHY_ON_OFF;
+		plat->is_phy_off = false;
 	} else {
 		ETHQOSERR("Invalid option\n");
 		return -EINVAL;
@@ -3291,6 +3309,7 @@ static int ethqos_update_mdio_drv_strength(struct qcom_ethqos *ethqos,
 	unsigned long tlmm_central_size = 0;
 	int ret = 0;
 	unsigned long v;
+	size_t size = 4;
 
 	resource = platform_get_resource_byname(ethqos->pdev,
 						IORESOURCE_MEM, "tlmm-central-base");
@@ -3305,10 +3324,10 @@ static int ethqos_update_mdio_drv_strength(struct qcom_ethqos *ethqos,
 	ETHQOSDBG("tlmm_central_base = 0x%x, size = 0x%x\n",
 		  tlmm_central_base, tlmm_central_size);
 
-	tlmm_central_base_addr = ioremap(tlmm_central_base,
-					 tlmm_central_size);
-
-	if (!tlmm_central_base_addr) {
+	tlmm_mdc_mdio_hdrv_pull_ctl_base = ioremap(tlmm_central_base +
+			TLMM_MDC_MDIO_HDRV_PULL_CTL_ADDRESS_OFFSET,
+			size);
+	if (!tlmm_mdc_mdio_hdrv_pull_ctl_base) {
 		ETHQOSERR("cannot map dwc_tlmm_central reg memory, aborting\n");
 		ret = -EIO;
 		goto err_out;
@@ -3391,9 +3410,8 @@ static int ethqos_update_mdio_drv_strength(struct qcom_ethqos *ethqos,
 	}
 
 err_out:
-	if (tlmm_central_base_addr)
-		iounmap(tlmm_central_base_addr);
-
+	if (tlmm_mdc_mdio_hdrv_pull_ctl_base)
+		iounmap(tlmm_mdc_mdio_hdrv_pull_ctl_base);
 	return ret;
 }
 
@@ -4280,6 +4298,7 @@ static int _qcom_ethqos_probe(void *arg)
 		plat_dat->get_plat_tx_coal_frames =  dwmac_qcom_get_plat_tx_coal_frames;
 	plat_dat->has_gmac4 = 1;
 	plat_dat->tso_en = of_property_read_bool(np, "snps,tso");
+	plat_dat->autosar_en = of_property_read_bool(np, "qcom,autosar");
 	plat_dat->force_thresh_dma_mode_q0_en =
 		of_property_read_bool(np,
 				      "snps,force_thresh_dma_mode_q0");
@@ -4294,6 +4313,11 @@ static int _qcom_ethqos_probe(void *arg)
 	plat_dat->is_gpio_phy_reset = ethqos->is_gpio_phy_reset;
 	plat_dat->handle_mac_err = dwmac_qcom_handle_mac_err;
 	plat_dat->rgmii_loopback_cfg = rgmii_loopback_config;
+#ifdef CONFIG_DWMAC_QCOM_ETH_AUTOSAR
+	plat_dat->handletxcompletion = ethwrapper_handletxcompletion;
+	plat_dat->handlericompletion = ethwrapper_handlericompletion;
+#endif
+	plat_dat->clks_suspended = false;
 
 	/* Get rgmii interface speed for mac2c from device tree */
 	if (of_property_read_u32(np, "mac2mac-rgmii-speed",
@@ -4360,13 +4384,18 @@ static int _qcom_ethqos_probe(void *arg)
 	ETHQOSINFO("emac-phy-off-suspend = %d\n",
 		   ethqos->current_phy_mode);
 
+	if (ethqos->current_phy_mode == DISABLE_PHY_AT_SUSPEND_ONLY ||
+	    ethqos->current_phy_mode == DISABLE_PHY_SUSPEND_ENABLE_RESUME) {
+		plat_dat->is_phy_off = true;
+	} else {
+		plat_dat->is_phy_off = false;
+	}
+
 	plat_dat->mdio_reset = of_property_read_bool(pdev->dev.of_node,
 						     "mdio-reset");
 	ethqos->skip_ipa_autoresume = of_property_read_bool(pdev->dev.of_node,
 							    "skip-ipa-autoresume");
 	ethqos->ioaddr = (&stmmac_res)->addr;
-	if (ethqos->io_macro.rgmii_tx_drv)
-		ethqos_update_rgmii_tx_drv_strength(ethqos);
 	ethqos_update_mdio_drv_strength(ethqos, np);
 	ethqos_mac_rec_init(ethqos);
 	if (of_device_is_compatible(np, "qcom,qcs404-ethqos"))
@@ -4375,6 +4404,9 @@ static int _qcom_ethqos_probe(void *arg)
 	ret = stmmac_dvr_probe(&pdev->dev, plat_dat, &stmmac_res);
 	if (ret)
 		goto err_clk;
+
+	if (ethqos->io_macro.rgmii_tx_drv)
+		ethqos_update_rgmii_tx_drv_strength(ethqos);
 
 ethqos_emac_mem_base(ethqos);
 	pethqos = ethqos;
@@ -4920,6 +4952,262 @@ static int qcom_ethqos_hib_freeze(struct device *dev)
 	return ret;
 }
 
+void qcom_ethqos_getcursystime(struct timespec64 *ts)
+{
+	struct stmmac_priv *priv = NULL;
+	u64 systime, ns, sec0, sec1;
+	void __iomem *ioaddr;
+
+	priv = qcom_ethqos_get_priv(pethqos);
+	if (!priv) {
+		pr_err("\nInvalid priv\n");
+		return;
+	}
+	ioaddr = priv->ptpaddr;
+
+	if (!ioaddr) {
+		pr_err("\nIncorrect memory address\n");
+		return;
+	}
+
+	/* Get the TSS value */
+	sec1 = readl_relaxed(ioaddr + PTP_STSR);
+	do {
+		sec0 = sec1;
+		/* Get the TSSS value */
+		ns = readl_relaxed(ioaddr + PTP_STNSR);
+		/* Get the TSS value */
+		sec1 = readl_relaxed(ioaddr + PTP_STSR);
+	} while (sec0 != sec1);
+	/* systime in ns */
+	systime = ns + (sec1 * 1000000000ULL);
+
+	*ts = ns_to_timespec64(ns);
+}
+
+int qcom_ethqos_enable_hw_timestamp(struct hwtstamp_config *config)
+{
+	u32 snap_type_sel = 0;
+	u32 ptp_over_ipv4_udp = 0;
+	u32 ptp_over_ipv6_udp = 0;
+	u32 ptp_over_ethernet = 0;
+	u32 ts_master_en = 0;
+	u32 ts_event_en = 0;
+	u32 ptp_v2 = 0;
+	u32 av_8021asm_en = 0;
+	u32 value = 0;
+	u32 tstamp_all = 0;
+	bool xmac;
+	u32 sec_inc = 0;
+	u64 temp = 0;
+	struct timespec64 now;
+	struct stmmac_priv *priv;
+
+	priv = qcom_ethqos_get_priv(pethqos);
+	xmac = priv->plat->has_gmac4 || priv->plat->has_xgmac;
+
+	if (!(priv->dma_cap.time_stamp || priv->adv_ts)) {
+		netdev_alert(priv->dev, "No support for HW time stamping\n");
+		priv->hwts_tx_en = 0;
+		priv->hwts_rx_en = 0;
+
+		return -EOPNOTSUPP;
+	}
+
+	if (qcom_ethqos_ipa_enabled() &&
+	    config->rx_filter == HWTSTAMP_FILTER_ALL) {
+		netdev_alert(priv->dev,
+			     "No hw timestamping since ipa is enabled\n");
+		return -EOPNOTSUPP;
+	}
+
+	/* reserved for future extensions */
+	if (config->flags)
+		return -EINVAL;
+
+	if (config->tx_type != HWTSTAMP_TX_OFF &&
+	    config->tx_type != HWTSTAMP_TX_ON)
+		return -ERANGE;
+
+	if (priv->adv_ts) {
+		switch (config->rx_filter) {
+		case HWTSTAMP_FILTER_NONE:
+			/* time stamp no incoming packet at all */
+			config->rx_filter = HWTSTAMP_FILTER_NONE;
+			break;
+
+		case HWTSTAMP_FILTER_PTP_V1_L4_EVENT:
+			/* PTP v1, UDP, any kind of event packet */
+			config->rx_filter = HWTSTAMP_FILTER_PTP_V1_L4_EVENT;
+			/* 'xmac' hardware can support Sync, Pdelay_Req and
+			 * Pdelay_resp by setting bit14 and bits17/16 to 01
+			 * This leaves Delay_Req timestamps out.
+			 * Enable all events *and* general purpose message
+			 * timestamping
+			 */
+			snap_type_sel = PTP_TCR_SNAPTYPSEL_1;
+			ptp_over_ipv4_udp = PTP_TCR_TSIPV4ENA;
+			ptp_over_ipv6_udp = PTP_TCR_TSIPV6ENA;
+			break;
+
+		case HWTSTAMP_FILTER_PTP_V1_L4_SYNC:
+			/* PTP v1, UDP, Sync packet */
+			config->rx_filter = HWTSTAMP_FILTER_PTP_V1_L4_SYNC;
+			/* take time stamp for SYNC messages only */
+			ts_event_en = PTP_TCR_TSEVNTENA;
+
+			ptp_over_ipv4_udp = PTP_TCR_TSIPV4ENA;
+			ptp_over_ipv6_udp = PTP_TCR_TSIPV6ENA;
+			break;
+
+		case HWTSTAMP_FILTER_PTP_V1_L4_DELAY_REQ:
+			/* PTP v1, UDP, Delay_req packet */
+			config->rx_filter = HWTSTAMP_FILTER_PTP_V1_L4_DELAY_REQ;
+			/* take time stamp for Delay_Req messages only */
+			ts_master_en = PTP_TCR_TSMSTRENA;
+			ts_event_en = PTP_TCR_TSEVNTENA;
+
+			ptp_over_ipv4_udp = PTP_TCR_TSIPV4ENA;
+			ptp_over_ipv6_udp = PTP_TCR_TSIPV6ENA;
+			break;
+
+		case HWTSTAMP_FILTER_PTP_V2_L4_EVENT:
+			/* PTP v2, UDP, any kind of event packet */
+			config->rx_filter = HWTSTAMP_FILTER_PTP_V2_L4_EVENT;
+			ptp_v2 = PTP_TCR_TSVER2ENA;
+			/* take time stamp for all event messages */
+			snap_type_sel = PTP_TCR_SNAPTYPSEL_1;
+
+			ptp_over_ipv4_udp = PTP_TCR_TSIPV4ENA;
+			ptp_over_ipv6_udp = PTP_TCR_TSIPV6ENA;
+			break;
+
+		case HWTSTAMP_FILTER_PTP_V2_L4_SYNC:
+			/* PTP v2, UDP, Sync packet */
+			config->rx_filter = HWTSTAMP_FILTER_PTP_V2_L4_SYNC;
+			ptp_v2 = PTP_TCR_TSVER2ENA;
+			/* take time stamp for SYNC messages only */
+			ts_event_en = PTP_TCR_TSEVNTENA;
+
+			ptp_over_ipv4_udp = PTP_TCR_TSIPV4ENA;
+			ptp_over_ipv6_udp = PTP_TCR_TSIPV6ENA;
+			break;
+
+		case HWTSTAMP_FILTER_PTP_V2_L4_DELAY_REQ:
+			/* PTP v2, UDP, Delay_req packet */
+			config->rx_filter = HWTSTAMP_FILTER_PTP_V2_L4_DELAY_REQ;
+			ptp_v2 = PTP_TCR_TSVER2ENA;
+			/* take time stamp for Delay_Req messages only */
+			ts_master_en = PTP_TCR_TSMSTRENA;
+			ts_event_en = PTP_TCR_TSEVNTENA;
+
+			ptp_over_ipv4_udp = PTP_TCR_TSIPV4ENA;
+			ptp_over_ipv6_udp = PTP_TCR_TSIPV6ENA;
+			break;
+
+		case HWTSTAMP_FILTER_PTP_V2_EVENT:
+			/* PTP v2/802.AS1 any layer, any kind of event packet */
+			config->rx_filter = HWTSTAMP_FILTER_PTP_V2_EVENT;
+			ptp_v2 = PTP_TCR_TSVER2ENA;
+			snap_type_sel = PTP_TCR_SNAPTYPSEL_1;
+			if (priv->synopsys_id < DWMAC_CORE_4_10)
+				ts_event_en = PTP_TCR_TSEVNTENA;
+			ptp_over_ipv4_udp = PTP_TCR_TSIPV4ENA;
+			ptp_over_ipv6_udp = PTP_TCR_TSIPV6ENA;
+			ptp_over_ethernet = PTP_TCR_TSIPENA;
+			av_8021asm_en = PTP_TCR_AV8021ASMEN;
+			break;
+
+		case HWTSTAMP_FILTER_PTP_V2_SYNC:
+			/* PTP v2/802.AS1, any layer, Sync packet */
+			config->rx_filter = HWTSTAMP_FILTER_PTP_V2_SYNC;
+			ptp_v2 = PTP_TCR_TSVER2ENA;
+			/* take time stamp for SYNC messages only */
+			ts_event_en = PTP_TCR_TSEVNTENA;
+
+			ptp_over_ipv4_udp = PTP_TCR_TSIPV4ENA;
+			ptp_over_ipv6_udp = PTP_TCR_TSIPV6ENA;
+			ptp_over_ethernet = PTP_TCR_TSIPENA;
+			av_8021asm_en = PTP_TCR_AV8021ASMEN;
+			break;
+
+		case HWTSTAMP_FILTER_PTP_V2_DELAY_REQ:
+			/* PTP v2/802.AS1, any layer, Delay_req packet */
+			config->rx_filter = HWTSTAMP_FILTER_PTP_V2_DELAY_REQ;
+			ptp_v2 = PTP_TCR_TSVER2ENA;
+			/* take time stamp for Delay_Req messages only */
+			ts_master_en = PTP_TCR_TSMSTRENA;
+			ts_event_en = PTP_TCR_TSEVNTENA;
+
+			ptp_over_ipv4_udp = PTP_TCR_TSIPV4ENA;
+			ptp_over_ipv6_udp = PTP_TCR_TSIPV6ENA;
+			ptp_over_ethernet = PTP_TCR_TSIPENA;
+			av_8021asm_en = PTP_TCR_AV8021ASMEN;
+			break;
+
+		case HWTSTAMP_FILTER_NTP_ALL:
+		case HWTSTAMP_FILTER_ALL:
+			/* time stamp any incoming packet */
+			config->rx_filter = HWTSTAMP_FILTER_ALL;
+			tstamp_all = PTP_TCR_TSENALL;
+			break;
+
+		default:
+			return -ERANGE;
+		}
+	} else {
+		switch (config->rx_filter) {
+		case HWTSTAMP_FILTER_NONE:
+			config->rx_filter = HWTSTAMP_FILTER_NONE;
+			break;
+		default:
+			/* PTP v1, UDP, any kind of event packet */
+			config->rx_filter = HWTSTAMP_FILTER_PTP_V1_L4_EVENT;
+			break;
+		}
+	}
+
+	priv->hwts_rx_en = ((config->rx_filter == HWTSTAMP_FILTER_NONE) ? 0 : 1);
+	priv->hwts_tx_en = config->tx_type == HWTSTAMP_TX_ON;
+
+	if (!priv->hwts_tx_en && !priv->hwts_rx_en) {
+		stmmac_config_hw_tstamping(priv, priv->ptpaddr, 0);
+	} else {
+		value = (PTP_TCR_TSENA | PTP_TCR_TSCFUPDT | PTP_TCR_TSCTRLSSR |
+			 tstamp_all | ptp_v2 | ptp_over_ethernet |
+			 ptp_over_ipv6_udp | ptp_over_ipv4_udp | ts_event_en |
+			 ts_master_en | snap_type_sel | av_8021asm_en);
+		stmmac_config_hw_tstamping(priv, priv->ptpaddr, value);
+
+		/* program Sub Second Increment reg */
+		stmmac_config_sub_second_increment(priv,
+						   priv->ptpaddr, priv->plat->clk_ptp_req_rate,
+						   xmac, &sec_inc);
+
+		/* Store sub second increment and flags for later use */
+		priv->sub_second_inc = sec_inc;
+		priv->systime_flags = value;
+
+		/* calculate default added value:
+		 * formula is :
+		 * addend = (2^32)/freq_div_ratio;
+		 * where, freq_div_ratio = 1e9ns/sec_inc
+		 */
+		temp = (u64)((u64)priv->plat->clk_ptp_req_rate << 32);
+		priv->default_addend = div_u64(temp, priv->plat->clk_ptp_rate);
+		stmmac_config_addend(priv, priv->ptpaddr, priv->default_addend);
+
+		/* initialize system time */
+		ktime_get_real_ts64(&now);
+
+		/* lower 32 bits of tv_sec are safe until y2106 */
+		stmmac_init_systime(priv, priv->ptpaddr,
+				    (u32)now.tv_sec, now.tv_nsec);
+	}
+
+	memcpy(&priv->tstamp_config, &config, sizeof(struct hwtstamp_config));
+	return 0;
+}
 MODULE_DEVICE_TABLE(of, qcom_ethqos_match);
 
 static const struct dev_pm_ops qcom_ethqos_pm_ops = {

@@ -225,5 +225,10 @@ struct plat_stmmacenet_data {
 	unsigned int jumbo_mtu;
 	bool crc_strip_en;
 	bool mdio_reset;
+	bool autosar_en;
+	void (*handletxcompletion)(struct sk_buff *skb, u8 result);
+	void (*handlericompletion)(struct sk_buff *skb);
+	bool clks_suspended;
+	bool is_phy_off;
 };
 #endif

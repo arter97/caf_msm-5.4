@@ -91,6 +91,7 @@ static DEFINE_SPINLOCK(time_sync_lock);
 #define HANG_DATA_LENGTH		384
 #define HST_HANG_DATA_OFFSET		((3 * 1024 * 1024) - HANG_DATA_LENGTH)
 #define HSP_HANG_DATA_OFFSET		((2 * 1024 * 1024) - HANG_DATA_LENGTH)
+#define GNO_HANG_DATA_OFFSET		(0x7d000 - HANG_DATA_LENGTH)
 
 #define MHI_SUSPEND_RETRY_CNT		3
 #define MHI_LOG_NAME_LEN			20
@@ -746,6 +747,12 @@ static int cnss_pci_reg_read(struct cnss_pci_data *pci_priv,
 			return ret;
 	}
 
+	if (offset & 0x03) {
+		*val = 0xdeadbeaf;
+		cnss_pr_err("read offset 0x%x is not dword alignment\n", offset);
+		return -EINVAL;
+	}
+
 	if (pci_priv->pci_dev->device == QCA6174_DEVICE_ID ||
 	    offset < MAX_UNWINDOWED_ADDRESS) {
 		*val = readl_relaxed(pci_priv->bar + offset);
@@ -781,6 +788,11 @@ static int cnss_pci_reg_write(struct cnss_pci_data *pci_priv, u32 offset,
 		ret = cnss_pci_check_link_status(pci_priv);
 		if (ret)
 			return ret;
+	}
+
+	if (offset & 0x03) {
+		cnss_pr_err("write offset 0x%x is not dword alignment\n", offset);
+		return -EINVAL;
 	}
 
 	if (pci_priv->pci_dev->device == QCA6174_DEVICE_ID ||
@@ -3196,6 +3208,7 @@ static bool cnss_pci_is_drv_supported(struct cnss_pci_data *pci_priv)
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	struct device_node *root_of_node;
 	bool drv_supported = false;
+	bool drv_supported_overlay_disable = false;
 
 	if (!root_port) {
 		cnss_pr_err("PCIe DRV is not supported as root port is null\n");
@@ -3208,17 +3221,26 @@ static bool cnss_pci_is_drv_supported(struct cnss_pci_data *pci_priv)
 	if (root_of_node && root_of_node->parent)
 		drv_supported = of_property_read_bool(root_of_node->parent,
 						      "qcom,drv-supported");
-
 	cnss_pr_dbg("PCIe DRV is %s\n",
 		    drv_supported ? "supported" : "not supported");
-	pci_priv->drv_supported = drv_supported;
 
-	if (drv_supported) {
+	if (root_of_node && root_of_node->parent)
+		drv_supported_overlay_disable = of_property_read_bool(root_of_node->parent,
+								      "qcom,overlay-disable-drv-supported");
+
+	cnss_pr_dbg("Using overlay to disable PCIe DRV is %s\n",
+		    drv_supported_overlay_disable ? "true" : "false");
+
+	pci_priv->drv_supported = drv_supported;
+	if (drv_supported_overlay_disable)
+		pci_priv->drv_supported = false;
+
+	if (pci_priv->drv_supported) {
 		plat_priv->cap.cap_flag |= CNSS_HAS_DRV_SUPPORT;
 		cnss_set_feature_list(plat_priv, CNSS_DRV_SUPPORT_V01);
 	}
 
-	return drv_supported;
+	return pci_priv->drv_supported;
 }
 
 static void cnss_pci_event_cb(struct msm_pcie_notify *notify)
@@ -5166,6 +5188,7 @@ static void cnss_pci_send_hang_event(struct cnss_pci_data *pci_priv)
 	struct cnss_hang_event hang_event;
 	void *hang_data_va = NULL;
 	u64 offset = 0;
+	u16 length = 0;
 	int i = 0;
 
 	if (!fw_mem || !plat_priv->fw_mem_seg_len)
@@ -5175,9 +5198,15 @@ static void cnss_pci_send_hang_event(struct cnss_pci_data *pci_priv)
 	switch (pci_priv->device_id) {
 	case QCA6390_DEVICE_ID:
 		offset = HST_HANG_DATA_OFFSET;
+		length = HANG_DATA_LENGTH;
 		break;
 	case QCA6490_DEVICE_ID:
 		offset = HSP_HANG_DATA_OFFSET;
+		length = HANG_DATA_LENGTH;
+		break;
+	case QCN7605_DEVICE_ID:
+		offset = GNO_HANG_DATA_OFFSET;
+		length = HANG_DATA_LENGTH;
 		break;
 	default:
 		cnss_pr_err("Skip Hang Event Data as unsupported Device ID received: %d\n",
@@ -5188,15 +5217,19 @@ static void cnss_pci_send_hang_event(struct cnss_pci_data *pci_priv)
 	for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
 		if (fw_mem[i].type == QMI_WLFW_MEM_TYPE_DDR_V01 &&
 		    fw_mem[i].va) {
+			/* The offset must be < (fw_mem size- hangdata length) */
+			if (!(offset <= fw_mem[i].size - length))
+				goto exit;
+
 			hang_data_va = fw_mem[i].va + offset;
 			hang_event.hang_event_data = kmemdup(hang_data_va,
-							     HANG_DATA_LENGTH,
+							     length,
 							     GFP_ATOMIC);
 			if (!hang_event.hang_event_data) {
 				cnss_pr_dbg("Hang data memory alloc failed\n");
 				return;
 			}
-			hang_event.hang_event_data_len = HANG_DATA_LENGTH;
+			hang_event.hang_event_data_len = length;
 			break;
 		}
 	}
@@ -5205,6 +5238,10 @@ static void cnss_pci_send_hang_event(struct cnss_pci_data *pci_priv)
 
 	kfree(hang_event.hang_event_data);
 	hang_event.hang_event_data = NULL;
+	return;
+exit:
+	cnss_pr_dbg("Invalid hang event params, offset:0x%x, length:0x%x\n",
+		    offset, length);
 }
 
 void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
@@ -5902,7 +5939,6 @@ static void cnss_pci_unregister_mhi(struct cnss_pci_data *pci_priv)
 	mhi_ctrl->irq = NULL;
 	mhi_free_controller(mhi_ctrl);
 	pci_priv->mhi_ctrl = NULL;
-	cnss_qmi_deinit(pci_priv->plat_priv);
 }
 
 static void cnss_pci_config_regs(struct cnss_pci_data *pci_priv)

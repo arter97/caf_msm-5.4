@@ -101,10 +101,14 @@ const struct clk_virtio_desc clk_virtio_sm8150_gcc = {
 EXPORT_SYMBOL(clk_virtio_sm8150_gcc);
 
 static const struct virtio_clk_init_data sm8150_scc_virtio_clocks[] = {
+	[SCC_QUPV3_CORE_CLK] = {.name = "scc_qupv3_core_clk",},
+	[SCC_QUPV3_2XCORE_CLK] = {.name = "scc_qupv3_2xcore_clk",},
 	[SCC_QUPV3_SE0_CLK] = {.name = "scc_qupv3_se0_clk",},
 	[SCC_QUPV3_SE1_CLK] = {.name = "scc_qupv3_se1_clk",},
 	[SCC_QUPV3_SE2_CLK] = {.name = "scc_qupv3_se2_clk",},
 	[SCC_QUPV3_SE3_CLK] = {.name = "scc_qupv3_se3_clk",},
+	[SCC_QUPV3_SE4_CLK] = {.name = "scc_qupv3_se4_clk",},
+	[SCC_QUPV3_SE5_CLK] = {.name = "scc_qupv3_se5_clk",},
 	[SCC_QUPV3_M_HCLK_CLK] = {.name = "scc_qupv3_m_hclk_clk",},
 	[SCC_QUPV3_S_HCLK_CLK] = {.name = "scc_qupv3_s_hclk_clk",},
 };

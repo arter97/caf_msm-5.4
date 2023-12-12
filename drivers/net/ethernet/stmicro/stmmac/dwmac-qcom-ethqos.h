@@ -22,7 +22,8 @@ extern void *ipc_emac_log_ctxt;
 #include <net/inet_common.h>
 
 #include <linux/uaccess.h>
-
+#include <linux/time64.h>
+#include "common.h"
 #define QCOM_ETH_QOS_MAC_ADDR_LEN 6
 #define QCOM_ETH_QOS_MAC_ADDR_STR_LEN 18
 
@@ -229,6 +230,8 @@ do  {\
 #define TLMM_BASE_RGMII_CTRL1 (tlmm_rgmii_pull_ctl1_base)
 #define TLMM_BASE_RX_CTR (tlmm_rgmii_rx_ctr_base)
 
+#define TLMM_MDC_MDIO_HDRV_PULL_CTL (tlmm_mdc_mdio_hdrv_pull_ctl_base)
+
 #define TLMM_RGMII_HDRV_PULL_CTL1_ADDRESS_OFFSET\
 	(((ethqos->emac_ver == EMAC_HW_v2_3_2) ? 0xA7000\
 	 : (ethqos->emac_ver == EMAC_HW_v2_0_0) ? 0xA5000\
@@ -238,9 +241,16 @@ do  {\
 #define TLMM_RGMII_HDRV_PULL_CTL1_ADDRESS\
 	(((unsigned long *)\
 		(TLMM_BASE_RGMII_CTRL1)))
+
+#define TLMM_MDC_MDIO_HDRV_PULL_CTL_ADDRESS_OFFSET\
+	(((ethqos->emac_ver == EMAC_HW_v2_3_2) ? 0xA9000\
+	  : (ethqos->emac_ver == EMAC_HW_v2_0_0) ? 0xA7000\
+	  : (ethqos->emac_ver == EMAC_HW_v2_2_0) ? 0xA7000\
+	  : 0))
+
 #define TLMM_MDC_MDIO_HDRV_PULL_CTL_ADDRESS\
 	(((unsigned long *)\
-		(TLMM_BASE_ADDRESS + 0xA9000)))
+		(TLMM_MDC_MDIO_HDRV_PULL_CTL)))
 #define TLMM_RGMII_HDRV_PULL_CTL1_RGWR(data)\
 	iowrite32(data,	(void __iomem *)TLMM_RGMII_HDRV_PULL_CTL1_ADDRESS)
 
@@ -1128,4 +1138,8 @@ unsigned int dwmac_qcom_get_plat_tx_coal_frames(struct sk_buff *skb);
 int ethqos_init_pps(void *priv);
 struct qcom_ethqos *get_pethqos(void);
 int ethqos_mdio_read(struct stmmac_priv  *priv, int phyaddr, int phyreg);
+#ifdef CONFIG_DWMAC_QCOM_ETH_AUTOSAR
+int qcom_ethqos_enable_hw_timestamp(struct hwtstamp_config *config);
+void qcom_ethqos_getcursystime(struct timespec64 *ts);
+#endif
 #endif

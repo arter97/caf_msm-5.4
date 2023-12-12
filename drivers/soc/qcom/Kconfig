@@ -661,6 +661,15 @@ config QCOM_MINIDUMP
 	  Minidump would dump all registered entries, only when DLOAD mode
 	  is enabled.
 
+config QCOM_VA_MINIDUMP
+        tristate "QCOM VA Minidump Support"
+        depends on QCOM_MINIDUMP
+        help
+          This enables minidump feature for registering dynamic
+          data structures. It supports VA based registration
+          with minidump, which is made into an ELF. The region
+          for ELF is registered with legacy minidump.
+
 config QCOM_MINIDUMP_SMEM
 	tristate "QCOM Minidump SMEM Support"
 	depends on QCOM_MINIDUMP && QCOM_SMEM
@@ -959,6 +968,7 @@ config MSM_PM_LEGACY
 	depends on PM
 	select MSM_IDLE_STATS if DEBUG_FS
 	select CPU_IDLE_MULTIPLE_DRIVERS
+	select QTI_SYSTEM_PM_RPM if MSM_RPM_SMD && QCOM_MPM
 	bool "Qualcomm Technologies, Inc. (QTI) platform specific Legacy PM driver"
 	help
 	  Platform specific legacy power driver to manage
@@ -1570,6 +1580,15 @@ config PLATFORM_AUTO
 	  lock for platform driver probe will be removed.
 
 	  If you are unsure about this, Say N here.
+
+config LK_BOOT_TIME_MARKER
+	bool "Add boot marker support for LK bootloader"
+	depends on MSM_BOOT_STATS
+	help
+	  Bootloader KPIs are stored and passed via imem.
+	  Little Kernel Bootloader shares a slightly different data
+	  structure than Android Bootloader.
+	  This config adds support for LK bootloader.
 
 source "drivers/soc/qcom/icnss2/Kconfig"
 
