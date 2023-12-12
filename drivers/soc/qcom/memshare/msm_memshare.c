@@ -494,6 +494,15 @@ static void handle_alloc_generic_req(struct qmi_handle *handle,
 		}
 	}
 
+	if (!client_node) {
+		dev_err(memsh_drv->dev,
+			"memshare_alloc: No valid client node found\n");
+		kfree(alloc_resp);
+		alloc_resp = NULL;
+		mutex_unlock(&memsh_drv->mem_share);
+		return;
+	}
+
 	if (!memblock[index].allotted && alloc_req->num_bytes > 0) {
 
 		if (alloc_req->num_bytes > memblock[index].init_size)
