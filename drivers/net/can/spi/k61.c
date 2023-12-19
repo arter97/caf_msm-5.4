@@ -328,8 +328,8 @@ static int k61_do_spi_transaction(struct k61_can *priv_data)
 
 	spi = priv_data->spidev;
 
-	msg = devm_kzalloc(&spi->dev, sizeof(*msg), GFP_KERNEL);
-	xfer = devm_kzalloc(&spi->dev, sizeof(*xfer), GFP_KERNEL);
+	msg = kzalloc(sizeof(*msg), GFP_KERNEL);
+	xfer = kzalloc(sizeof(*xfer), GFP_KERNEL);
 	if (!xfer || !msg)
 		return -ENOMEM;
 	LOGDI(">%x %2d [%d]\n", priv_data->tx_buf[0],
@@ -361,6 +361,8 @@ static int k61_do_spi_transaction(struct k61_can *priv_data)
 	if (ret == 0)
 		k61_process_rx(priv_data, priv_data->rx_buf);
 
+	kfree(msg);
+	kfree(xfer);
 	return ret;
 }
 
@@ -548,9 +550,7 @@ static int k61_frame_filter(struct net_device *netdev,
 		return -EINVAL;
 	}
 
-	filter_request =
-		devm_kzalloc(&spi->dev, sizeof(struct can_add_filter_req),
-			     GFP_KERNEL);
+	filter_request = kzalloc(sizeof(*filter_request), GFP_KERNEL);
 	if (!filter_request) {
 		mutex_unlock(&priv_data->spi_lock);
 		return -ENOMEM;
@@ -559,6 +559,7 @@ static int k61_frame_filter(struct net_device *netdev,
 	if (copy_from_user(filter_request, ifr->ifr_data,
 			   sizeof(struct can_add_filter_req))) {
 		mutex_unlock(&priv_data->spi_lock);
+		kfree(filter_request);
 		return -EFAULT;
 	}
 
@@ -577,6 +578,7 @@ static int k61_frame_filter(struct net_device *netdev,
 	add_filter->mask = filter_request->mask;
 
 	ret = k61_do_spi_transaction(priv_data);
+	kfree(filter_request);
 	mutex_unlock(&priv_data->spi_lock);
 	return ret;
 }
@@ -718,8 +720,7 @@ static int k61_data_buffering(struct net_device *netdev,
 		return -EINVAL;
 	}
 
-	add_request = devm_kzalloc(&spi->dev, sizeof(struct k61_add_can_buffer),
-				   GFP_KERNEL);
+	add_request = kzalloc(sizeof(*add_request), GFP_KERNEL);
 	if (!add_request) {
 		mutex_unlock(&priv_data->spi_lock);
 		return -ENOMEM;
@@ -728,6 +729,7 @@ static int k61_data_buffering(struct net_device *netdev,
 	if (copy_from_user(add_request, ifr->ifr_data,
 			   sizeof(struct k61_add_can_buffer))) {
 		mutex_unlock(&priv_data->spi_lock);
+		kfree(add_request);
 		return -EFAULT;
 	}
 
@@ -752,6 +754,7 @@ static int k61_data_buffering(struct net_device *netdev,
 	reinit_completion(&priv_data->response_completion);
 
 	ret = k61_do_spi_transaction(priv_data);
+	kfree(add_request);
 	mutex_unlock(&priv_data->spi_lock);
 
 	if (ret == 0) {
