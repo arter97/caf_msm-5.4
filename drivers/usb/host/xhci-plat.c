@@ -175,7 +175,7 @@ static int xhci_plat_probe(struct platform_device *pdev)
 	int			ret;
 	int			irq;
 	struct xhci_plat_priv	*priv = NULL;
-
+	unsigned long		irqflags;
 
 	if (usb_disabled())
 		return -ENODEV;
@@ -186,6 +186,7 @@ static int xhci_plat_probe(struct platform_device *pdev)
 	if (irq < 0)
 		return irq;
 
+	irqflags = IRQF_SHARED;
 	/*
 	 * sysdev must point to a device that is known to the system firmware
 	 * or PCI hardware. We handle these three cases here:
@@ -313,6 +314,9 @@ static int xhci_plat_probe(struct platform_device *pdev)
 		if (device_property_read_bool(tmpdev, "quirk-broken-port-ped"))
 			xhci->quirks |= XHCI_BROKEN_PORT_PED;
 
+		if (device_property_read_bool(tmpdev, "qcom,use-rt-thread"))
+			irqflags = IRQF_SHARED | IRQF_ONESHOT;
+
 		device_property_read_u32(tmpdev, "imod-interval-ns",
 					 &xhci->imod_interval);
 	}
@@ -341,14 +345,14 @@ static int xhci_plat_probe(struct platform_device *pdev)
 	if ((xhci->quirks & XHCI_SKIP_PHY_INIT) || (priv && (priv->quirks & XHCI_SKIP_PHY_INIT)))
 		hcd->skip_phy_initialization = 1;
 
-	ret = usb_add_hcd(hcd, irq, IRQF_SHARED);
+	ret = usb_add_hcd(hcd, irq, irqflags);
 	if (ret)
 		goto disable_usb_phy;
 
 	if (HCC_MAX_PSA(xhci->hcc_params) >= 4)
 		xhci->shared_hcd->can_do_streams = 1;
 
-	ret = usb_add_hcd(xhci->shared_hcd, irq, IRQF_SHARED);
+	ret = usb_add_hcd(xhci->shared_hcd, irq, irqflags);
 	if (ret)
 		goto dealloc_usb2_hcd;
 
