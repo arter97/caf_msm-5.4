@@ -26,14 +26,15 @@ struct qrc_dev;
 #define QRC_IOC_MAGIC   'q'
 
 /* Clear read fifo */
-#define QRC_FIFO_CLEAR	_IO(QRC_IOC_MAGIC, 1)
+#define QRC_FIFO_CLEAR     _IO(QRC_IOC_MAGIC, 1)
 /* Reboot QRC controller */
-#define QRC_REBOOT	_IO(QRC_IOC_MAGIC, 2)
+#define QRC_REBOOT         _IO(QRC_IOC_MAGIC, 2)
 /* QRC boot from memory */
-#define QRC_BOOT_TO_MEM	_IO(QRC_IOC_MAGIC, 3)
+#define QRC_BOOT_TO_MEM	   _IO(QRC_IOC_MAGIC, 3)
 /* QRC boot from flash */
-#define QRC_BOOT_TO_FLASH	_IO(QRC_IOC_MAGIC, 4)
-
+#define QRC_BOOT_TO_FLASH  _IO(QRC_IOC_MAGIC, 4)
+/* QRC get read buffer size */
+#define QRC_FIONREAD	   _IO(QRC_IOC_MAGIC, 5)
 
 enum qrcdev_state_t {
 	__STATE_IDLE,
@@ -106,6 +107,7 @@ struct qrc_dev {
  * @tx_head: String head in XMIT queue.
  * @tx_left: Bytes left in XMIT queue.
  * @tx_buffer: XMIT buffer.
+ * @is_open: Flag shows if the device is open.
  * This structure is used to define robotic controller uart device.
  */
 struct qrcuart {
@@ -117,6 +119,7 @@ struct qrcuart {
 	unsigned char *tx_head;
 	int tx_left;
 	unsigned char *tx_buffer;
+	bool is_open;
 };
 
 struct qrcspi {

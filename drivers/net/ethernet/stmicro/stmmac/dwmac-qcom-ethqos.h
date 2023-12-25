@@ -230,6 +230,8 @@ do  {\
 #define TLMM_BASE_RGMII_CTRL1 (tlmm_rgmii_pull_ctl1_base)
 #define TLMM_BASE_RX_CTR (tlmm_rgmii_rx_ctr_base)
 
+#define TLMM_MDC_MDIO_HDRV_PULL_CTL (tlmm_mdc_mdio_hdrv_pull_ctl_base)
+
 #define TLMM_RGMII_HDRV_PULL_CTL1_ADDRESS_OFFSET\
 	(((ethqos->emac_ver == EMAC_HW_v2_3_2) ? 0xA7000\
 	 : (ethqos->emac_ver == EMAC_HW_v2_0_0) ? 0xA5000\
@@ -239,9 +241,16 @@ do  {\
 #define TLMM_RGMII_HDRV_PULL_CTL1_ADDRESS\
 	(((unsigned long *)\
 		(TLMM_BASE_RGMII_CTRL1)))
+
+#define TLMM_MDC_MDIO_HDRV_PULL_CTL_ADDRESS_OFFSET\
+	(((ethqos->emac_ver == EMAC_HW_v2_3_2) ? 0xA9000\
+	  : (ethqos->emac_ver == EMAC_HW_v2_0_0) ? 0xA7000\
+	  : (ethqos->emac_ver == EMAC_HW_v2_2_0) ? 0xA7000\
+	  : 0))
+
 #define TLMM_MDC_MDIO_HDRV_PULL_CTL_ADDRESS\
 	(((unsigned long *)\
-		(TLMM_BASE_ADDRESS + 0xA9000)))
+		(TLMM_MDC_MDIO_HDRV_PULL_CTL)))
 #define TLMM_RGMII_HDRV_PULL_CTL1_RGWR(data)\
 	iowrite32(data,	(void __iomem *)TLMM_RGMII_HDRV_PULL_CTL1_ADDRESS)
 
