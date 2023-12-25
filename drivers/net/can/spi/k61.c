@@ -43,6 +43,7 @@
 #define K61_CLOCK			120000000
 #define K61_MAX_CHANNELS		1
 #define K61_FW_QUERY_RETRY_COUNT	3
+#define K61_CAN_MAX_DLC			8
 
 struct k61_can {
 	struct net_device	*netdev;
@@ -182,8 +183,8 @@ static irqreturn_t k61_irq(int irq, void *priv)
 		if (!priv_data->wake_irq_en) {
 			k61_rx_message(priv_data);
 		} else {
-			dev_info(&priv_data->spidev->dev,
-				 "qti_can wake_irq Invoked upon Resume\r\n");
+			dev_dbg(&priv_data->spidev->dev,
+				"qti_can wake_irq Invoked upon Resume\r\n");
 		}
 	}
 	return IRQ_HANDLED;
@@ -443,10 +444,15 @@ static int k61_notify_power_events(struct k61_can *priv_data, u8 event_type)
 static int k61_can_write(struct k61_can *priv_data, struct can_frame *cf)
 {
 	char *tx_buf, *rx_buf;
-	int ret, i;
+	int ret = 0, i;
 	struct spi_mosi *req;
 	struct can_write_req *req_d;
 	struct net_device *netdev;
+
+	if (cf->can_dlc > K61_CAN_MAX_DLC) {
+		dev_info(&priv_data->spidev->dev, "As CAN DLC exceeded 8 bytes, Tx Failed\n");
+		return ret;
+	}
 
 	mutex_lock(&priv_data->spi_lock);
 	tx_buf = priv_data->tx_buf;

@@ -1030,6 +1030,9 @@ out:
 
 void cnss_power_off_device(struct cnss_plat_data *plat_priv)
 {
+	if (!plat_priv)
+		return;
+
 	if (!plat_priv->powered_on) {
 		cnss_pr_dbg("Already powered down");
 		return;
