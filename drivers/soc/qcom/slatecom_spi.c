@@ -22,6 +22,8 @@
 #include <linux/pm_runtime.h>
 #include <linux/suspend.h>
 #include <linux/ipc_logging.h>
+#include <linux/qcom_scm.h>
+#include <linux/reboot.h>
 #include "slatecom.h"
 #include "slatecom_interface.h"
 
@@ -1502,6 +1504,21 @@ static struct notifier_block slatecom_pm_nb = {
 		.notifier_call = slatecom_pm_notifier,
 };
 
+static int slatecom_reboot_notifier(struct notifier_block *nb, unsigned long event, void *unused)
+{
+	if (is_hibernate) {
+		pr_info("%s: slatecom hibernate reboot\n", __func__);
+		qcom_scm_custom_reset_type = QCOM_SCM_RST_SHUTDOWN_TO_TWM_MODE;
+	} else
+		pr_debug("%s: slatecom normal reboot\n", __func__);
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block slatecom_reboot_nb = {
+	.notifier_call = slatecom_reboot_notifier,
+};
+
 static int slate_spi_probe(struct spi_device *spi)
 {
 	struct slate_spi_priv *slate_spi;
@@ -1567,6 +1584,12 @@ static int slate_spi_probe(struct spi_device *spi)
 		goto err_ret;
 	}
 
+	ret = register_reboot_notifier(&slatecom_reboot_nb);
+	if (ret) {
+		pr_err("slatecom reboot notif error %d\n", ret);
+		goto err_ret;
+	}
+
 	pr_info("%s success\n", __func__);
 	pr_info("Slatecom Probed successfully\n");
 	return ret;
@@ -1591,6 +1614,7 @@ static int slate_spi_remove(struct spi_device *spi)
 	mutex_destroy(&cma_buffer_lock);
 	mutex_destroy(&slate_task_mutex);
 	unregister_pm_notifier(&slatecom_pm_nb);
+	unregister_reboot_notifier(&slatecom_reboot_nb);
 	return 0;
 }
 
