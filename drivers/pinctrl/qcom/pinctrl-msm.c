@@ -923,23 +923,29 @@ static void msm_gpio_irq_enable(struct irq_data *d)
 	 * the interrupt from being latched at the GIC. The state at
 	 * GIC needs to be cleared before enabling.
 	 */
-	if (is_gpio_dual_edge(d, &dir_conn_irq)) {
-		dir_conn_data = irq_get_irq_data(dir_conn_irq);
-		if (!dir_conn_data)
-			return;
-
-		irq_set_irqchip_state(dir_conn_irq,
-				IRQCHIP_STATE_PENDING, 0);
-		dir_conn_data->chip->irq_unmask(dir_conn_data);
-	}
-
 	if (d->parent_data) {
+		if (is_gpio_dual_edge(d, &dir_conn_irq)) {
+			dir_conn_data = irq_get_irq_data(dir_conn_irq);
+			if (!dir_conn_data)
+				return;
+
+			irq_set_irqchip_state(dir_conn_irq,
+					IRQCHIP_STATE_PENDING, 0);
+			dir_conn_data->chip->irq_unmask(dir_conn_data);
+		}
 		irq_chip_set_parent_state(d, IRQCHIP_STATE_PENDING, 0);
 		irq_chip_enable_parent(d);
 	}
 
 	if (test_bit(d->hwirq, pctrl->skip_wake_irqs))
 		return;
+
+	if (is_gpio_dual_edge(d, &dir_conn_irq)) {
+		dir_conn_data = irq_get_irq_data(dir_conn_irq);
+		if (!dir_conn_data)
+			return;
+		dir_conn_data->chip->irq_unmask(dir_conn_data);
+	}
 
 	msm_gpio_irq_clear_unmask(d, true);
 }
@@ -951,21 +957,28 @@ static void msm_gpio_irq_disable(struct irq_data *d)
 	struct irq_data *dir_conn_data;
 	irq_hw_number_t dir_conn_irq = 0;
 
-	if (is_gpio_dual_edge(d, &dir_conn_irq)) {
-		dir_conn_data = irq_get_irq_data(dir_conn_irq);
-		if (!dir_conn_data)
-			return;
+	if (d->parent_data) {
+		if (is_gpio_dual_edge(d, &dir_conn_irq)) {
+			dir_conn_data = irq_get_irq_data(dir_conn_irq);
+			if (!dir_conn_data)
+				return;
 
-		dir_conn_data->chip->irq_mask(dir_conn_data);
-	}
-
-	if (d->parent_data)
+			dir_conn_data->chip->irq_mask(dir_conn_data);
+		}
 		irq_chip_disable_parent(d);
+	}
 
 	if (test_bit(d->hwirq, pctrl->skip_wake_irqs)) {
 		if (pctrl->mpm_wake_ctl)
 			msm_gpio_mpm_wake_set(d->hwirq, false);
 		return;
+	}
+
+	if (is_gpio_dual_edge(d, &dir_conn_irq)) {
+		dir_conn_data = irq_get_irq_data(dir_conn_irq);
+		if (!dir_conn_data)
+			return;
+		dir_conn_data->chip->irq_mask(dir_conn_data);
 	}
 
 	msm_gpio_irq_mask(d);
