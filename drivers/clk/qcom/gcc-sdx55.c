@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
  * Copyright (c) 2020, Linaro Ltd.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk-provider.h>
@@ -1779,6 +1779,7 @@ static const struct qcom_reset_map gcc_sdx55_resets[] = {
 	[GCC_PCIE_PHY_BCR] = { 0x39000 },
 	[GCC_PCIE_PHY_COM_BCR] = { 0x78004 },
 	[GCC_QUSB2PHY_BCR] = { 0xd000 },
+	[GCC_SDCC1_BCR] = { 0xf000 },
 	[GCC_USB30_BCR] = { 0xb000 },
 	[GCC_USB3_PHY_BCR] = { 0xc000 },
 	[GCC_USB3PHY_PHY_BCR] = { 0xc004 },
