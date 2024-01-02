@@ -1134,6 +1134,7 @@ static int stmmac_init_phy(struct net_device *dev)
 
 	node = priv->plat->phylink_node;
 
+	/* If phylink node is present phydev is initialized here */
 	if (node)
 		ret = phylink_of_phy_connect(priv->phylink, node, 0);
 
@@ -1193,6 +1194,11 @@ static int stmmac_init_phy(struct net_device *dev)
 			priv->phydev->irq = PHY_POLL;
 		}
 #endif
+	} else if (!ret && node) {
+		if (dev->phydev) {
+			priv->phydev = dev->phydev;
+			priv->plat->phy_addr = priv->phydev->mdio.addr;
+		}
 	}
 
 	return ret;
