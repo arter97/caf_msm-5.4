@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  * Copyright (c) 2016-2017, Linaro Ltd
  *
@@ -166,6 +167,7 @@ struct slatecom_fifo_fill {
  * @ilc:	ipc logging context reference
  * @sent_read_notify:	flag to check cmd sent or not
  * @tx_counter: Tx packet Counter
+ * @rx_counter: Rx packet Counter
  */
 struct glink_slatecom {
 	struct device *dev;
@@ -203,6 +205,7 @@ struct glink_slatecom {
 	void *slatecom_handle;
 	bool water_mark_reached;
 	uint32_t tx_counter;
+	uint32_t rx_counter;
 };
 
 enum {
@@ -1966,6 +1969,10 @@ static void glink_slatecom_process_cmd(struct glink_slatecom *glink, void *rx_da
 		param2 = le32_to_cpu(msg->param2);
 		param3 = le32_to_cpu(msg->param3);
 		param4 = le32_to_cpu(msg->param4);
+		glink->rx_counter = glink->rx_counter + 1;
+
+		GLINK_INFO(glink, "Packet count local %d remote %d\n",
+					glink->rx_counter, param3);
 
 		switch (cmd) {
 		case SLATECOM_CMD_VERSION:
@@ -2333,6 +2340,8 @@ static int glink_slatecom_probe(struct platform_device *pdev)
 	glink->ws = wakeup_source_register(NULL, "glink_slatecom_ws");
 	glink->ilc = ipc_log_context_create(GLINK_LOG_PAGE_CNT, glink->name, 0);
 
+	glink->tx_counter = 0;
+	glink->rx_counter = 0;
 	glink->slatecom_config.priv = (void *)glink;
 	glink->slatecom_config.slatecom_notification_cb = glink_slatecom_event_handler;
 	glink->slatecom_handle = NULL;
