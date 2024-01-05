@@ -2,6 +2,16 @@
 /*
  * Copyright (C) 2007 Google, Inc.
  * Copyright (c) 2012-2020 The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
  */
 
 #ifndef __QPIC_NAND_H
@@ -28,6 +38,7 @@
 #include <linux/msm-sps.h>
 #include <linux/soc/qcom/smem.h>
 #include <linux/interconnect.h>
+#include <linux/irq.h>
 
 #define PAGE_SIZE_2K 2048
 #define PAGE_SIZE_4K 4096
@@ -154,7 +165,10 @@
 #define RESET_ERASED_DET	(1 << AUTO_DETECT_RES)
 #define ACTIVE_ERASED_DET	(0 << AUTO_DETECT_RES)
 #define CLR_ERASED_PAGE_DET	(RESET_ERASED_DET | MASK_ECC)
-#define SET_ERASED_PAGE_DET	(ACTIVE_ERASED_DET | MASK_ECC)
+#define SET_ERASED_PAGE_DET	(ACTIVE_ERASED_DET | MASK_ECC | SET_N_MAX_ZEROS)
+#define N_MAX_ZEROS		2
+#define MAX_ECC_BIT_FLIPS       4
+#define SET_N_MAX_ZEROS		(MAX_ECC_BIT_FLIPS << N_MAX_ZEROS)
 
 #define MSM_NAND_ERASED_CW_DETECT_STATUS(info)  MSM_NAND_REG(info, 0x300EC)
 #define PAGE_ALL_ERASED		7
@@ -163,6 +177,7 @@
 #define CODEWORD_ERASED		4
 #define ERASED_PAGE	((1 << PAGE_ALL_ERASED) | (1 << PAGE_ERASED))
 #define ERASED_CW	((1 << CODEWORD_ALL_ERASED) | (1 << CODEWORD_ERASED))
+#define NUM_ERRORS		0x1f
 
 #define MSM_NAND_CTRL(info)		    MSM_NAND_REG(info, 0x30F00)
 #define BAM_MODE_EN	0
@@ -275,6 +290,7 @@ struct msm_nand_chip {
 	uint32_t caps; /* General host capabilities */
 #define MSM_NAND_CAP_PAGE_SCOPE_READ   BIT(0)
 #define MSM_NAND_CAP_MULTI_PAGE_READ   BIT(1)
+#define MSM_NAND_INTERRUPT_MODE_ENABLE BIT(3) /* To enable nand in Interrupt mode */
 };
 
 /* Structure that defines an SPS end point for a NANDc BAM pipe. */
@@ -366,6 +382,7 @@ struct msm_nand_info {
 	struct flash_identification flash_dev;
 	struct msm_nand_clk_data clk_data;
 	u64 dma_mask;
+	u32 bam_irq_type; /*Edge trigger or Level trigger */
 };
 
 extern struct nand_flash_dev nand_flash_ids[];
