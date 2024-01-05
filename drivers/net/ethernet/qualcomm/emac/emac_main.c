@@ -1809,6 +1809,9 @@ static void emac_adjust_link(struct net_device *netdev)
 	if (!TEST_FLAG(adpt, ADPT_TASK_LSC_REQ))
 		return;
 
+	if(TEST_FLAG(adpt, ADPT_TASK_CLOSE_REQ))
+		return;
+
 	/* ensure that no reset is in progress while link task is running */
 	while (TEST_N_SET_FLAG(adpt, ADPT_STATE_RESETTING))
 		/* Reset might take few 10s of ms */
@@ -2082,6 +2085,8 @@ static int emac_close(struct net_device *netdev)
 	struct emac_hw *hw = &adpt->hw;
 	struct emac_phy *phy = &adpt->phy;
 
+	SET_FLAG(adpt, ADPT_TASK_CLOSE_REQ);
+
 	/* ensure no task is running and no reset is in progress */
 	while (TEST_N_SET_FLAG(adpt, ADPT_STATE_RESETTING))
 		/* Reset might take few 10s of ms */
@@ -2110,6 +2115,7 @@ static int emac_close(struct net_device *netdev)
 
 	emac_free_all_rtx_descriptor(adpt);
 
+	CLR_FLAG(adpt, ADPT_TASK_CLOSE_REQ);
 	CLR_FLAG(adpt, ADPT_STATE_RESETTING);
 	return 0;
 }
