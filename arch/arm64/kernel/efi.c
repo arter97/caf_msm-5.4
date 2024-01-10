@@ -144,7 +144,7 @@ asmlinkage efi_status_t efi_handle_corrupted_x18(efi_status_t s, const char *f)
 	return s;
 }
 
-DEFINE_SPINLOCK(efi_rt_lock);
+DEFINE_RAW_SPINLOCK(efi_rt_lock);
 
 asmlinkage u64 *efi_rt_stack_top __ro_after_init;
 
@@ -158,9 +158,10 @@ static int __init arm64_efi_rt_init(void)
 	if (!efi_enabled(EFI_RUNTIME_SERVICES))
 		return 0;
 
-	p = __vmalloc(THREAD_SIZE, THREAD_ALIGN, PAGE_KERNEL);
-
-	if (!p) {
+	p = __vmalloc_node_range(THREAD_SIZE, THREAD_ALIGN, VMALLOC_START,
+				 VMALLOC_END, GFP_KERNEL, PAGE_KERNEL, 0,
+				 NUMA_NO_NODE, &&l);
+l:	if (!p) {
 		pr_warn("Failed to allocate EFI runtime stack\n");
 		clear_bit(EFI_RUNTIME_SERVICES, &efi.flags);
 		return -ENOMEM;
