@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #define pr_fmt(msg) "slatecom_dev:" msg
 
@@ -44,6 +45,7 @@
 #define MPPS_DOWN_EVENT_TO_SLATE_TIMEOUT 3000
 #define ADSP_DOWN_EVENT_TO_SLATE_TIMEOUT 3000
 #define MAX_APP_NAME_SIZE 100
+#define SCOM_GLINK_INTENT_SIZE 308
 
 /*pil_slate_intf.h*/
 #define RESULT_SUCCESS 0
@@ -96,6 +98,18 @@ struct slatedaemon_priv {
 	unsigned long attrs;
 	u32 cmd_status;
 	struct device *platform_dev;
+	bool slatecom_rpmsg;
+	bool slate_resp_cmplt;
+	void *lhndl;
+	wait_queue_head_t link_state_wait;
+	char rx_buf[SCOM_GLINK_INTENT_SIZE];
+	struct work_struct slatecom_up_work;
+	struct work_struct slatecom_down_work;
+	struct mutex glink_mutex;
+	struct mutex slatecom_state_mutex;
+	enum slatecom_state slatecom_current_state;
+	struct workqueue_struct *slatecom_wq;
+	struct wakeup_source slatecom_ws;
 };
 
 struct slate_event {
@@ -181,6 +195,116 @@ static int send_uevent(struct slate_event *pce)
 	snprintf(event_string, ARRAY_SIZE(event_string),
 			"SLATE_EVENT=%d", pce->e_type);
 	return kobject_uevent_env(&dev_ret->kobj, KOBJ_CHANGE, envp);
+}
+
+void slatecom_intf_notify_glink_channel_state(bool state)
+{
+	struct slatedaemon_priv *dev =
+		container_of(slatecom_intf_drv, struct slatedaemon_priv, lhndl);
+
+	pr_debug("%s: slate_ctrl channel state: %d\n", __func__, state);
+	dev->slatecom_rpmsg = state;
+}
+EXPORT_SYMBOL(slatecom_intf_notify_glink_channel_state);
+
+void slatecom_rx_msg(void *data, int len)
+{
+	struct slatedaemon_priv *dev =
+		container_of(slatecom_intf_drv, struct slatedaemon_priv, lhndl);
+
+	if (len > SCOM_GLINK_INTENT_SIZE) {
+		pr_err("Invalid slatecom_intf glink intent size\n");
+		return;
+	}
+	dev->slate_resp_cmplt = true;
+	wake_up(&dev->link_state_wait);
+	memcpy(dev->rx_buf, data, len);
+}
+EXPORT_SYMBOL(slatecom_rx_msg);
+
+static int slatecom_tx_msg(struct slatedaemon_priv *dev, void  *msg, size_t len)
+{
+	int rc = 0;
+	uint8_t resp = 0;
+
+	mutex_lock(&dev->glink_mutex);
+	__pm_stay_awake(&dev->slatecom_ws);
+	if (!dev->slatecom_rpmsg) {
+		pr_err("slatecom-rpmsg is not probed yet, waiting for it to be probed\n");
+		goto err_ret;
+	}
+	rc = slatecom_rpmsg_tx_msg(msg, len);
+
+	/* wait for sending command to SLATE */
+	rc = wait_event_timeout(dev->link_state_wait,
+			(rc == 0), msecs_to_jiffies(TIMEOUT_MS));
+	if (rc == 0) {
+		pr_err("failed to send command to SLATE %d\n", rc);
+		goto err_ret;
+	}
+
+	/* wait for getting response from SLATE */
+	rc = wait_event_timeout(dev->link_state_wait,
+			dev->slate_resp_cmplt,
+				 msecs_to_jiffies(TIMEOUT_MS));
+	if (rc == 0) {
+		pr_err("failed to get SLATE response %d\n", rc);
+		goto err_ret;
+	}
+	dev->slate_resp_cmplt = false;
+	/* check SLATE response */
+	resp = *(uint8_t *)dev->rx_buf;
+	if (resp == 0x01) {
+		pr_err("Bad SLATE response\n");
+		rc = -EINVAL;
+		goto err_ret;
+	}
+	rc = 0;
+
+err_ret:
+	__pm_relax(&dev->slatecom_ws);
+	mutex_unlock(&dev->glink_mutex);
+	return rc;
+}
+
+/**
+ * send_state_change_cmd send state transition event to Slate
+ * and wait for the response.
+ * The response is returned to the caller.
+ */
+static int send_state_change_cmd(struct slate_ui_data *ui_obj_msg)
+{
+	int ret = 0;
+	struct msg_header_t msg_header = {0, 0};
+	struct slatedaemon_priv *dev = container_of(slatecom_intf_drv,
+					struct slatedaemon_priv,
+					lhndl);
+	uint32_t state = ui_obj_msg->cmd;
+
+	switch (state) {
+	case STATE_TWM_ENTER:
+		msg_header.opcode = GMI_MGR_ENTER_TWM;
+		break;
+	case STATE_DS_ENTER:
+		msg_header.opcode = GMI_MGR_ENTER_TRACKER_DS;
+		break;
+	case STATE_DS_EXIT:
+		msg_header.opcode = GMI_MGR_EXIT_TRACKER_DS;
+		break;
+	case STATE_S2D_ENTER:
+		msg_header.opcode = GMI_MGR_ENTER_TRACKER_DS;
+		break;
+	case STATE_S2D_EXIT:
+		msg_header.opcode = GMI_MGR_EXIT_TRACKER_DS;
+		break;
+	default:
+		pr_err("Invalid MSM State transtion cmd\n");
+		break;
+	}
+	ret = slatecom_tx_msg(dev, &msg_header.opcode, sizeof(msg_header.opcode));
+	if (ret < 0)
+		pr_err("MSM State transtion event cmd failed\n");
+	return ret;
 }
 
 static int slatecom_char_open(struct inode *inode, struct file *file)
