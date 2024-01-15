@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -1300,8 +1301,6 @@ static void lt9611_reset(struct lt9611 *pdata, bool on_off)
 	} else {
 		gpio_set_value(pdata->reset_gpio, 0);
 	}
-	/* Need longer time to wait LT9611UXC reset finished. */
-	msleep(300);
 }
 
 static void lt9611_assert_5v(struct lt9611 *pdata)
