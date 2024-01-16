@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(msg) "slatecom: %s: " msg, __func__
@@ -21,6 +22,8 @@
 #include <linux/pm_runtime.h>
 #include <linux/suspend.h>
 #include <linux/ipc_logging.h>
+#include <linux/qcom_scm.h>
+#include <linux/reboot.h>
 #include "slatecom.h"
 #include "slatecom_interface.h"
 
@@ -457,12 +460,8 @@ EXPORT_SYMBOL(slatecom_slatedown_handler);
 static void parse_fifo(uint8_t *data, uint16_t data_len, union slatecom_event_data_type *event_data)
 {
 	uint16_t p_len;
-	uint8_t sub_id;
-	uint32_t evnt_tm;
 	uint16_t event_id;
 	void *evnt_data;
-	struct event *evnt;
-	struct event_list *data_list;
 
 	while (*data != '\0') {
 		if (data_len < HED_EVENT_ID_LEN)
@@ -476,23 +475,7 @@ static void parse_fifo(uint8_t *data, uint16_t data_len, union slatecom_event_da
 		data = data + HED_EVENT_SIZE_LEN;
 		data_len = data_len - HED_EVENT_SIZE_LEN;
 
-		if (event_id == 0xFFFE) {
-
-			sub_id = *data;
-			evnt_tm = *((uint32_t *)(data+1));
-
-			evnt = kmalloc(sizeof(*evnt), GFP_KERNEL);
-			evnt->sub_id = sub_id;
-			evnt->evnt_tm = evnt_tm;
-			evnt->evnt_data =
-				*(int16_t *)(data + HED_EVENT_DATA_STRT_LEN);
-
-			data_list = kmalloc(sizeof(*data_list), GFP_KERNEL);
-			data_list->evnt = evnt;
-			spin_lock(&lst_setup_lock);
-			list_add_tail(&data_list->list, &pr_lst_hd);
-			spin_unlock(&lst_setup_lock);
-		} else if (event_id == 0x0001) {
+		if (event_id == 0x0001) {
 			evnt_data = kmalloc(p_len, GFP_KERNEL);
 			if (evnt_data != NULL) {
 				memcpy(evnt_data, data, p_len);
@@ -1573,6 +1556,21 @@ static struct notifier_block slatecom_pm_nb = {
 		.notifier_call = slatecom_pm_notifier,
 };
 
+static int slatecom_reboot_notifier(struct notifier_block *nb, unsigned long event, void *unused)
+{
+	if (is_hibernate) {
+		pr_info("%s: slatecom hibernate reboot\n", __func__);
+		qcom_scm_custom_reset_type = QCOM_SCM_RST_SHUTDOWN_TO_TWM_MODE;
+	} else
+		pr_debug("%s: slatecom normal reboot\n", __func__);
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block slatecom_reboot_nb = {
+	.notifier_call = slatecom_reboot_notifier,
+};
+
 static int slate_spi_probe(struct spi_device *spi)
 {
 	struct slate_spi_priv *slate_spi;
@@ -1589,9 +1587,9 @@ static int slate_spi_probe(struct spi_device *spi)
 	spi_set_drvdata(spi, slate_spi);
 	slate_spi_init(slate_spi);
 
-
 	/* SLATECOM Interrupt probe 
 	node = slate_spi->spi->dev.of_node;
+	irq_gpio = of_get_named_gpio(node, "qcom,irq-gpio", 0);
 	if (!gpio_is_valid(irq_gpio)) {
 		pr_err("gpio %d found is not valid\n", irq_gpio);
 		goto err_ret;
@@ -1636,6 +1634,12 @@ static int slate_spi_probe(struct spi_device *spi)
 		goto err_ret;
 	}
 
+	ret = register_reboot_notifier(&slatecom_reboot_nb);
+	if (ret) {
+		pr_err("slatecom reboot notif error %d\n", ret);
+		goto err_ret;
+	}
+
 	pr_info("%s success\n", __func__);
 	pr_info("Slatecom Probed successfully\n");
 	return ret;
@@ -1660,6 +1664,7 @@ static int slate_spi_remove(struct spi_device *spi)
 	mutex_destroy(&cma_buffer_lock);
 	mutex_destroy(&slate_task_mutex);
 	unregister_pm_notifier(&slatecom_pm_nb);
+	unregister_reboot_notifier(&slatecom_reboot_nb);
 	return 0;
 }
 

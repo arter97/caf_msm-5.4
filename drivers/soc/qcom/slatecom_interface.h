@@ -153,21 +153,20 @@ enum WMSlateCtrlChnlOpcode {
 
 	GMI_WLAN_5G_DISCONNECT  = 19,
 
-       /*
-	 * Notification to Slate About Entry to Hibernate
-        */
-        GMI_WEAR_MGR_ENTER_HIBERNATE = 25,
-
-       /*
-	 * Notification to Slate About Exit to Hibernate
-	 */
-        GMI_WEAR_MGR_EXIT_HIBERNATE = 26,
 	/*
-	* Get slate firmware info.
-	* Slate will return wear_firmware_info_t piggy-backing with the response code.
-	*/
+	 * Get slate firmware info.
+	 * Slate will return wear_firmware_info_t piggy-backing with the response code.
+	 */
 	GMI_WEAR_MGR_GET_FIRMWARE_DETAILS = 20,
+	/*
+	 * Notification to slate About Entry to Hibernate
+	 */
+	GMI_WEAR_MGR_ENTER_HIBERNATE = 25,
 
+	/*
+	 * Notification to slate About Exit to Hibernate
+	 */
+	GMI_WEAR_MGR_EXIT_HIBERNATE = 26,
 	/*
 	 * DEBUG Opcodes
 	 */

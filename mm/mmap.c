@@ -3275,7 +3275,6 @@ void exit_mmap(struct mm_struct *mm)
 
 		set_bit(MMF_OOM_SKIP, &mm->flags);
 	}
-
 	down_write(&mm->mmap_sem);
 
 	if (mm->locked_vm) {

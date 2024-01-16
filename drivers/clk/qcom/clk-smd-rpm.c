@@ -951,10 +951,10 @@ DEFINE_CLK_SMD_RPM(monaco, bimc_gpu_clk, bimc_gpu_a_clk,
 
 DEFINE_CLK_SMD_RPM_XO_BUFFER(monaco, ln_bb_clk2, ln_bb_clk2_a,
 				QCOM_SMD_RPM_CLK_BUF_A, 0x2);
-DEFINE_CLK_SMD_RPM_XO_BUFFER(monaco, rf_clk3, rf_clk3_a,
-				QCOM_SMD_RPM_CLK_BUF_A, 6);
 DEFINE_CLK_SMD_RPM_XO_BUFFER(monaco, rf_clk2, rf_clk2_a,
 				QCOM_SMD_RPM_CLK_BUF_A, 5);
+DEFINE_CLK_SMD_RPM_XO_BUFFER(monaco, rf_clk3, rf_clk3_a,
+				QCOM_SMD_RPM_CLK_BUF_A, 6);
 
 static struct clk_hw *monaco_clks[] = {
 	[RPM_SMD_XO_CLK_SRC] = &holi_bi_tcxo.hw,

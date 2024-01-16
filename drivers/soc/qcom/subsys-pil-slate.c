@@ -365,7 +365,9 @@ static int wait_for_shutdown_done(struct pil_slate_data *slate_data)
 			msecs_to_jiffies(10000));
 
 	if (!ret) {
-		pr_err("[%s]: Shutdown ack timed out.\n", slate_data->desc.name);
+		dev_err(slate_data->desc.dev,
+		"[%s:%d]: Timed out waiting for slate shutdown: %s!\n",
+		current->comm, current->pid, slate_data->desc.name);
 		return -ETIMEDOUT;
 	}
 	return 0;
@@ -421,12 +423,8 @@ static int slate_shutdown_trusted(struct pil_desc *pil)
 	if (is_slate_unload_only()) {
 		pr_info("Received slate unload request.\n");
 		ret = wait_for_shutdown_done(slate_data);
-		if (ret) {
-			dev_err(slate_data->desc.dev,
-			"[%s:%d]: Timed out waiting for slate shutdown done: %s!\n",
-			current->comm, current->pid, slate_data->desc.name);
+		if (ret)
 			return ret;
-		}
 	}
 
 	if (slate_data->is_ready) {
@@ -693,6 +691,7 @@ static int slate_ramdump(int enable, const struct subsys_desc *subsys)
 
 	desc.attrs = 0;
 	desc.attrs |= DMA_ATTR_SKIP_ZEROING;
+	slate_tz_req.tzapp_slate_cmd = SLATEPIL_DUMPINFO;
 	if (!slate_data->qseecom_handle) {
 		ret = pil_load_slate_tzapp(slate_data);
 		if (ret) {
@@ -703,56 +702,6 @@ static int slate_ramdump(int enable, const struct subsys_desc *subsys)
 		}
 	}
 
-	pr_info("Setup for coredump,\n");
-
-	/* This check is added here to make slate dump collection
-	* decision in RTOS/TWM mode exit. Only way for kernel to know slate state
-	* info(crashed/running)in RTOS/TWM exit is by reading S2A irq line.
-	* When S2A is pulled LOW, it is interpreted as slate crashed state and
-	* slate dump needs to be collected. Once dumps are collected TZ will
-	* automatically send SLATE_RESET CMD.
-	* When S2A is pulled HIGH, it is interpreted as slate running state and
-	* dump should not be collected. At this point it is necessary
-	* to send SLATE_RESET CMD to bring slate out of RTOS slate.
-	* This check does not disturb SSR/system dump collection.
-	*/
-	if (is_twm_exit()) {
-		/* reset_cmd signals shutdown on slate, lets ack s2a irq for same
-		* otherwise it will haunt after slate boot up and crash system.
-		*/
-		enable_irq(slate_data->status_irq);
-		slate_data->is_ready = true;
-		/* Need to check whether we are enabling subsystem ramdump conditionally */
-		/*
-		if (!gpio_get_value(slate_data->gpios[0])) {
-			pr_info("TWM Exit: Collect Dump, slate is CRASHED..!!\n");
-			msleep(5000);
-		} */
-
-		pr_info("TWM Exit: Skip dump collection, slate is RUNNING ..!!\n");
-		/* Send RESET CMD to bring slate out of RTOS state */
-		slate_data->cmd_status = 0;
-		slate_tz_req.tzapp_slate_cmd = SLATEPIL_RESET;
-		ret = slatepil_tzapp_comm(slate_data, &slate_tz_req);
-		if (ret || slate_data->cmd_status) {
-			dev_dbg(desc.dev,
-				"%s: Failed to send reset signal to tzapp\n",
-				__func__);
-			goto rtos_out;
-		}
-		/* By this time if S2A is not pulled then wait for it to go LOW */
-		if (gpio_get_value(slate_data->gpios[0])) {
-			ret = wait_for_shutdown_done(slate_data);
-			if (ret) {
-				dev_err(desc.dev,
-				"[%s:%d]: Timed out waiting for shutdown done: %s!\n",
-				current->comm, current->pid, slate_data->desc.name);
-			}
-		}
-		goto rtos_out;
-	}
-
-	slate_tz_req.tzapp_slate_cmd = SLATEPIL_DUMPINFO;
 	ret = slatepil_tzapp_comm(slate_data, &slate_tz_req);
 	dump_info = slate_data->cmd_status;
 	if (slate_data->cmd_status == SLATE_RAMDUMP)
@@ -812,11 +761,6 @@ static int slate_ramdump(int enable, const struct subsys_desc *subsys)
 	dma_free_attrs(desc.dev, size, region,
 		       start_addr, desc.attrs);
 	return 0;
-
-rtos_out:
-	disable_irq(slate_data->status_irq);
-	slate_data->is_ready = false;
-	return ret;
 }
 
 static struct pil_reset_ops pil_ops_trusted = {

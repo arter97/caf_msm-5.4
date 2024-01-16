@@ -758,7 +758,6 @@ static int send_boot_cmd_to_slate(struct slate_ui_data *ui_obj_msg)
 {
 	int ret = 0;
 	uint32_t cmd = ui_obj_msg->cmd;
-
 	switch (cmd) {
 	case SOFT_RESET:
 		slate_soft_reset();
@@ -1291,6 +1290,7 @@ static int ssr_slate_cb(struct notifier_block *this,
 		slatee.e_type = SLATE_AFTER_POWER_UP;
 		slatecom_set_spi_state(SLATECOM_SPI_FREE);
 		send_uevent(&slatee);
+		twm_exit = false;
 		if (dev->slatecom_current_state == SLATECOM_STATE_INIT ||
 			dev->slatecom_current_state == SLATECOM_STATE_SLATE_SSR)
 			queue_work(dev->slatecom_wq, &dev->slatecom_up_work);
@@ -1390,7 +1390,6 @@ static int ssr_adsp_cb(struct notifier_block *this,
 bool is_twm_exit(void)
 {
 	if (twm_exit) {
-		twm_exit = false;
 		return true;
 	}
 	return false;

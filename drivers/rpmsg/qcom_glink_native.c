@@ -2,6 +2,7 @@
 /*
  * Copyright (c) 2016-2017, Linaro Ltd
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/idr.h>
@@ -1880,7 +1881,7 @@ static int qcom_glink_rx_open(struct qcom_glink *glink, unsigned int rcid,
 		if (ret)
 			goto rcid_remove;
 
-#if defined(CONFIG_DEEPSLEEP) && defined(CONFIG_RPMSG_QCOM_GLINK_RPM)
+#if defined(CONFIG_RPMSG_QCOM_GLINK_RPM) && defined(CONFIG_MSM_RPM_SMD)
 		ret = !strcmp(glink->name, "rpm-glink") &&
 			!strcmp(channel->name, "rpm_requests");
 		if (quickboot && ret) {
@@ -2260,6 +2261,7 @@ static int qcom_glink_remove_device(struct device *dev, void *data)
 void qcom_glink_native_remove(struct qcom_glink *glink)
 {
 	struct glink_channel *channel;
+	int size;
 	int cid;
 	int ret;
 
@@ -2295,6 +2297,10 @@ void qcom_glink_native_remove(struct qcom_glink *glink)
 	kthread_stop(glink->task);
 	qcom_glink_pipe_reset(glink);
 	mbox_free_channel(glink->mbox_chan);
+	size = of_property_count_u32_elems(glink->dev->of_node, "cpu-affinity");
+	if (size > 0 && irq_set_affinity_hint(glink->irq, NULL))
+		dev_err(glink->dev, "failed to clear irq affinity\n");
+
 }
 EXPORT_SYMBOL_GPL(qcom_glink_native_remove);
 
@@ -2303,6 +2309,25 @@ void qcom_glink_native_unregister(struct qcom_glink *glink)
 	device_unregister(glink->dev);
 }
 EXPORT_SYMBOL_GPL(qcom_glink_native_unregister);
+
+#if defined(CONFIG_RPMSG_QCOM_GLINK_RPM)
+int qcom_glink_rpm_ready(struct device *dev)
+{
+	int ret = 0;
+
+	quickboot = 1;
+	glink_rpm_resume_noirq(dev);
+
+	ret = wait_event_timeout(quickboot_complete,
+				 atomic_read(&qb_comp), 10 * HZ);
+	if (!ret) {
+		pr_err("glink: channel open request from rpm timed out\n");
+		ret = -ETIMEDOUT;
+	}
+
+	return ret;
+}
+#endif
 
 static int qcom_glink_suspend_no_irq(struct device *dev)
 {
@@ -2314,38 +2339,31 @@ static int qcom_glink_suspend_no_irq(struct device *dev)
 static int qcom_glink_resume_no_irq(struct device *dev)
 {
 	int ret = 0;
+
 	should_wake = false;
 #if defined(CONFIG_DEEPSLEEP) && defined(CONFIG_RPMSG_QCOM_GLINK_RPM)
 	if (mem_sleep_current == PM_SUSPEND_MEM) {
-		quickboot = 1;
-		glink_rpm_resume_noirq(dev);
-
-		ret = wait_event_timeout(quickboot_complete,
-					 atomic_read(&qb_comp), 10 * HZ);
-		if (!ret) {
-			pr_err("glink: channel open request from rpm timed out\n");
-			ret = -ETIMEDOUT;
-		}
+		ret = qcom_glink_rpm_ready(dev);
 	}
-
 #endif
+
 	return ret;
 }
 
 static int qcom_glink_restore_no_irq(struct device *dev)
 {
+	int ret = 0;
+
 	should_wake = false;
 #if defined(CONFIG_RPMSG_QCOM_GLINK_RPM)
-	quickboot = 1;
-	glink_rpm_resume_noirq(dev);
+	ret = qcom_glink_rpm_ready(dev);
 #endif
-	return 0;
+
+	return ret;
 }
 
 static int qcom_glink_thaw_no_irq(struct device *dev)
 {
-	should_wake = false;
-
 	return 0;
 }
 const struct dev_pm_ops glink_native_pm_ops = {
