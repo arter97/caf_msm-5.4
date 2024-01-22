@@ -98,9 +98,14 @@
 #define UART_START_TX		(0x1)
 #define UART_START_BREAK	(0x4)
 #define UART_STOP_BREAK		(0x5)
+
 /* UART S_CMD OP codes */
-#define UART_START_READ		(0x1)
-#define UART_PARAM		(0x1)
+#define UART_START_READ			(0x1)
+#define UART_PARAM			(0x1)
+/* When set character with framing error is not written in RX fifo */
+#define UART_PARAM_SKIP_FRAME_ERR_CHAR	(BIT(5))
+/* When set break character is not written in RX fifo */
+#define UART_PARAM_SKIP_BREAK_CHAR	(BIT(6))
 #define UART_PARAM_RFR_OPEN		(BIT(7))
 
 /* UART DMA Rx GP_IRQ_BITS */
@@ -288,6 +293,7 @@ struct msm_geni_serial_port {
 	bool console_rx_wakeup;
 	struct ktermios *current_termios;
 	bool resuming_from_deep_sleep;
+	bool shutdown_in_progress;
 };
 
 static struct uart_port *uart_console_uport;
@@ -2036,7 +2042,8 @@ static void start_rx_sequencer(struct uart_port *uport)
 {
 	unsigned int geni_status, ret = 0;
 	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
-	u32 geni_se_param = UART_PARAM_RFR_OPEN;
+	u32 geni_se_param = (UART_PARAM_SKIP_FRAME_ERR_CHAR |
+			     UART_PARAM_SKIP_BREAK_CHAR | UART_PARAM_RFR_OPEN);
 
 	if (port->startup_in_progress)
 		return;
@@ -2080,7 +2087,10 @@ static void start_rx_sequencer(struct uart_port *uport)
 							&port->rx_dma);
 	}
 
-	/* Start RX with the RFR_OPEN to keep RFR in always ready state */
+	/* Start RX with the RFR_OPEN to keep RFR in always ready state.
+	 * Configure for character with Framing error & Break character
+	 * is not written in RX fifo.
+	 */
 	geni_setup_s_cmd(uport->membase, UART_START_READ, geni_se_param);
 	msm_geni_serial_enable_interrupts(uport);
 
@@ -2768,63 +2778,59 @@ static bool handle_rx_dma_xfer(u32 s_irq_status, struct uart_port *uport)
 	unsigned long lock_flags;
 
 	spin_lock_irqsave(&msm_port->rx_lock, lock_flags);
-	dma_rx_status = geni_read_reg_nolog(uport->membase,
-						SE_DMA_RX_IRQ_STAT);
+	dma_rx_status = geni_read_reg_nolog(uport->membase, SE_DMA_RX_IRQ_STAT);
 
 	if (dma_rx_status) {
 		geni_write_reg_nolog(dma_rx_status, uport->membase,
-					SE_DMA_RX_IRQ_CLR);
+				     SE_DMA_RX_IRQ_CLR);
 
 		if (dma_rx_status & RX_RESET_DONE) {
 			IPC_LOG_MSG(msm_port->ipc_log_misc,
-			"%s.Reset done.  0x%x.\n", __func__, dma_rx_status);
+				     "%s Rx Reset done dma_rx_status=0x%x\n",
+				     __func__, dma_rx_status);
 			ret = true;
 			goto exit;
 		}
 
-		if (dma_rx_status & (UART_DMA_RX_ERRS | UART_DMA_RX_BREAK)) {
-			if (dma_rx_status & UART_DMA_RX_PARITY_ERR) {
-				uport->icount.parity++;
-				IPC_LOG_MSG(msm_port->ipc_log_misc,
-					"%s.Rx Errors.  0x%x parity:%d\n",
-					__func__, dma_rx_status,
+		if (dma_rx_status & UART_DMA_RX_PARITY_ERR) {
+			uport->icount.parity++;
+			IPC_LOG_MSG(msm_port->ipc_log_misc,
+				     "%s dma_rx_status:0x%x Rx Parity error:%d\n",
+				     __func__, dma_rx_status,
 					uport->icount.parity);
-				msm_geni_update_uart_error_code(msm_port,
-					UART_ERROR_RX_PARITY_ERROR);
-				drop_rx = true;
-			}
-
-			if (dma_rx_status & UART_DMA_RX_FRAME_ERR) {
-				uport->icount.frame++;
-				IPC_LOG_MSG(msm_port->ipc_log_misc,
-					"%s.Rx Errors. 0x%x frame:%d\n",
-					__func__, dma_rx_status,
-					uport->icount.frame);
-				msm_geni_update_uart_error_code(msm_port,
-					UART_ERROR_RX_FRAME_ERROR);
-				drop_rx = true;
-			}
-
-			if (dma_rx_status & UART_DMA_RX_BREAK) {
-				uport->icount.brk++;
-				IPC_LOG_MSG(msm_port->ipc_log_misc,
-					"%s.Rx Errors.  0x%x break:%d\n",
-					__func__, dma_rx_status,
-					uport->icount.brk);
-				msm_geni_update_uart_error_code(msm_port,
-					UART_ERROR_RX_BREAK_ERROR);
-			}
+			msm_geni_update_uart_error_code(msm_port,
+				UART_ERROR_RX_PARITY_ERROR);
+			drop_rx = true;
 		}
 
-		if (dma_rx_status & RX_EOT ||
-				dma_rx_status & RX_DMA_DONE) {
-			msm_geni_serial_handle_dma_rx(uport,
-						drop_rx);
+		if (dma_rx_status & UART_DMA_RX_FRAME_ERR) {
+			uport->icount.frame++;
+			IPC_LOG_MSG(msm_port->ipc_log_misc,
+				     "%s dma_rx_status:0x%x Rx Framing error:%d\n",
+				     __func__, dma_rx_status,
+				     uport->icount.frame);
+			msm_geni_update_uart_error_code(msm_port,
+				UART_ERROR_RX_FRAME_ERROR);
+			drop_rx = true;
+		}
+
+		if (dma_rx_status & UART_DMA_RX_BREAK) {
+			uport->icount.brk++;
+			IPC_LOG_MSG(msm_port->ipc_log_misc,
+				     "%s dma_rx_status:0x%x Rx Break error:%d\n",
+				     __func__, dma_rx_status, uport->icount.brk);
+			msm_geni_update_uart_error_code(msm_port,
+				UART_ERROR_RX_BREAK_ERROR);
+		}
+
+		if (dma_rx_status & RX_EOT || dma_rx_status & RX_DMA_DONE) {
+			msm_geni_serial_handle_dma_rx(uport, drop_rx);
 			if (!(dma_rx_status & RX_GENI_CANCEL_IRQ)) {
 				IPC_LOG_MSG(msm_port->ipc_log_misc,
 				"%s. mapping rx dma\n", __func__);
 				geni_se_rx_dma_start(uport->membase,
-				DMA_RX_BUF_SIZE, &msm_port->rx_dma);
+						     DMA_RX_BUF_SIZE,
+						     &msm_port->rx_dma);
 			} else {
 				IPC_LOG_MSG(msm_port->ipc_log_misc,
 				"%s. not mapping rx dma\n",
@@ -3067,18 +3073,17 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 	struct device *tx_dev = msm_port->wrapper_dev;
 	int ret, i, timeout;
 
-
 	IPC_LOG_MSG(msm_port->ipc_log_misc, "%s:\n", __func__);
+	msm_port->shutdown_in_progress = true;
 	if (uart_console(uport))
 		disable_irq(uport->irq);
 	else {
 		msm_geni_serial_power_on(uport);
-		ret = wait_for_transfers_inflight(uport);
-		if (ret)
-			IPC_LOG_MSG(msm_port->ipc_log_misc,
-				"%s: wait_for_transfer_inflight return ret:%d\n",
-				__func__, ret);
-
+		if (msm_port->wakeup_irq > 0) {
+			irq_set_irq_wake(msm_port->wakeup_irq, 0);
+			disable_irq(msm_port->wakeup_irq);
+			free_irq(msm_port->wakeup_irq, uport);
+		}
 		if (msm_port->xfer_mode == GSI_DMA) {
 			/* From the framework every time the stop
 			 * rx sequncer will be called before the closing
@@ -3165,11 +3170,7 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 		msm_port->current_termios = NULL;
 	}
 
-	if (msm_port->wakeup_irq > 0) {
-		irq_set_irq_wake(msm_port->wakeup_irq, 0);
-		disable_irq(msm_port->wakeup_irq);
-		free_irq(msm_port->wakeup_irq, uport);
-	}
+	msm_port->shutdown_in_progress = false;
 	IPC_LOG_MSG(msm_port->ipc_log_misc, "%s: End\n", __func__);
 }
 
@@ -4540,17 +4541,22 @@ static int msm_geni_serial_runtime_suspend(struct device *dev)
 	 */
 	if (port->wakeup_byte && port->wakeup_irq)
 		msm_geni_serial_set_manual_flow(false, port);
-	ret = wait_for_transfers_inflight(&port->uport);
-	if (ret) {
-		IPC_LOG_MSG(port->ipc_log_pwr,
-			     "%s: wait_for_transfer_inflight return ret:%d\n",
-			     __func__, ret);
-		/* Flow on from UART only for In band sleep(IBS)
-		 * Avoid manual RFR FLOW ON for Out of band sleep(OBS)
-		 */
-		if (port->wakeup_byte && port->wakeup_irq)
-			msm_geni_serial_allow_rx(port);
-		return -EBUSY;
+	/* If shutdown is in progress stop rx sequencer and
+	 * disable the clocks, don't don't check for wakeup byte.
+	 */
+	if (!port->shutdown_in_progress) {
+		ret = wait_for_transfers_inflight(&port->uport);
+		if (ret) {
+			IPC_LOG_MSG(port->ipc_log_pwr,
+				     "%s: wait_for_transfer_inflight return ret:%d\n",
+				     __func__, ret);
+			/* Flow on from UART only for In band sleep(IBS)
+			 * Avoid manual RFR FLOW ON for Out of band sleep(OBS)
+			 */
+			if (port->wakeup_byte && port->wakeup_irq)
+				msm_geni_serial_allow_rx(port);
+			return -EBUSY;
+		}
 	}
 	/*
 	 * Stop Rx.
@@ -4581,7 +4587,7 @@ static int msm_geni_serial_runtime_suspend(struct device *dev)
 	 * Above before stop_rx disabled the flow so we need to enable it here
 	 * Make sure wake up interrupt is enabled before RFR is made low
 	 */
-	if (port->wakeup_byte && port->wakeup_irq)
+	if (port->wakeup_byte && port->wakeup_irq && !port->shutdown_in_progress)
 		msm_geni_serial_allow_rx(port);
 
 	ret = se_geni_resources_off(&port->serial_rsc);
@@ -4633,7 +4639,9 @@ static int msm_geni_serial_runtime_resume(struct device *dev)
 	if (port->resuming_from_deep_sleep)
 		msm_geni_serial_port_setup(&port->uport);
 
-	start_rx_sequencer(&port->uport);
+	/* Don't start the RX sequencer during shutdown */
+	if (!port->shutdown_in_progress)
+		start_rx_sequencer(&port->uport);
 	/* Ensure that the Rx is running before enabling interrupts */
 	mb();
 	/* Enable interrupt */
