@@ -454,7 +454,7 @@ int send_reset_cmd(struct pil_slate_data *slate_data)
 
 int slate_wait_for_flash_boot(struct pil_slate_data *slate_data)
 {
-	int ret;
+	int ret, rc;
 	int retry_attempt = 2;
 
 	do {
@@ -467,10 +467,10 @@ int slate_wait_for_flash_boot(struct pil_slate_data *slate_data)
 
 		pr_debug("Retry booting slate, Mode: Flash, attempt: %d\n",
 				retry_attempt);
-		ret = send_reset_cmd(slate_data);
-		if (ret) {
+		rc = send_reset_cmd(slate_data);
+		if (rc) {
 			pr_info("Booting slate from Mode: Flash failed\n");
-			return ret;
+			return rc;
 		}
 		retry_attempt -= 1;
 	} while (retry_attempt);
