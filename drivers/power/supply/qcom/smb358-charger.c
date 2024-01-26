@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #define pr_fmt(fmt) "SMB358 %s: " fmt, __func__
 #include <linux/i2c.h>
@@ -11,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/interrupt.h>
 #include <linux/slab.h>
+#include <linux/pm_wakeup.h>
 #include <linux/power_supply.h>
 #include <linux/regulator/of_regulator.h>
 #include <linux/regulator/machine.h>
@@ -228,6 +230,7 @@ struct smb358_charger {
 	struct mutex		read_write_lock;
 	struct mutex		path_suspend_lock;
 	struct mutex		irq_complete;
+	struct wakeup_source    *ws;
 	u8			irq_cfg_mask[2];
 	int			irq_gpio;
 	int			charging_disabled;
@@ -1384,6 +1387,9 @@ static int chg_uv(struct smb358_charger *chip, u8 status)
 {
 	int rc;
 
+	if (!status)
+		pm_wakeup_ws_event(chip->ws, 300, true);
+
 	/* use this to detect USB insertion only if !apsd */
 	if (chip->disable_apsd && status == 0) {
 		chip->chg_present = true;
@@ -2439,6 +2445,10 @@ static int smb358_charger_probe(struct i2c_client *client,
 	mutex_init(&chip->read_write_lock);
 	mutex_init(&chip->path_suspend_lock);
 
+	chip->ws = wakeup_source_register(chip->dev, "smb358-charger");
+	if (!chip->ws)
+		return -ENOMEM;
+
 	/* probe the device to check if its actually connected */
 	rc = smb358_read_reg(chip, CHG_OTH_CURRENT_CTRL_REG, &reg);
 	if (rc) {
@@ -2570,7 +2580,7 @@ static int smb358_charger_probe(struct i2c_client *client,
 		if (rc) {
 			dev_err(&client->dev,
 				"Failed STAT irq=%d request rc = %d\n",
-				irq, rc);
+				client->irq, rc);
 			goto err_set_vtg_i2c;
 		}
 		enable_irq_wake(client->irq);

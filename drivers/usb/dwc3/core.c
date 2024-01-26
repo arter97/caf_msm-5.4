@@ -271,9 +271,9 @@ static int dwc3_core_soft_reset(struct dwc3 *dwc)
 	/*
 	 * We're resetting only the device side because, if we're in host mode,
 	 * XHCI driver will reset the host block. If dwc3 was configured for
-	 * host-only mode, then we can return early.
+	 * host-only mode or current role is host, then we can return early.
 	 */
-	if (dwc->current_dr_role == DWC3_GCTL_PRTCAP_HOST)
+	if (dwc->dr_mode == USB_DR_MODE_HOST || dwc->current_dr_role == DWC3_GCTL_PRTCAP_HOST)
 		return 0;
 
 	reg = dwc3_readl(dwc->regs, DWC3_DCTL);
@@ -1090,22 +1090,6 @@ int dwc3_core_init(struct dwc3 *dwc)
 		dwc3_writel(dwc->regs, DWC3_GUCTL1, reg);
 	}
 
-	if (dwc->dr_mode == USB_DR_MODE_HOST ||
-	    dwc->dr_mode == USB_DR_MODE_OTG) {
-		reg = dwc3_readl(dwc->regs, DWC3_GUCTL);
-
-		/*
-		 * Enable Auto retry Feature to make the controller operating in
-		 * Host mode on seeing transaction errors(CRC errors or internal
-		 * overrun scenerios) on IN transfers to reply to the device
-		 * with a non-terminating retry ACK (i.e, an ACK transcation
-		 * packet with Retry=1 & Nump != 0)
-		 */
-		reg |= DWC3_GUCTL_HSTINAUTORETRY;
-
-		dwc3_writel(dwc->regs, DWC3_GUCTL, reg);
-	}
-
 	/*
 	 * Must config both number of packets and max burst settings to enable
 	 * RX and/or TX threshold.
@@ -1692,8 +1676,16 @@ static int dwc3_probe(struct platform_device *pdev)
 
 	irq = platform_get_irq(to_platform_device(dwc->dev), 0);
 
-	ret = devm_request_irq(dev, irq, dwc3_interrupt, IRQF_SHARED, "dwc3",
-			dwc);
+	dwc->use_rt_thread = device_property_read_bool(dev,
+			"qcom,use-rt-thread");
+
+	if (dwc->use_rt_thread)
+		ret = devm_request_threaded_irq(dev, irq, NULL,
+			dwc3_interrupt, IRQF_SHARED | IRQF_ONESHOT,
+			"dwc3", dwc);
+	else
+		ret = devm_request_irq(dev, irq, dwc3_interrupt,
+				IRQF_SHARED, "dwc3", dwc);
 	if (ret) {
 		dev_err(dwc->dev, "failed to request irq #%d --> %d\n",
 				irq, ret);
@@ -1716,14 +1708,16 @@ static int dwc3_probe(struct platform_device *pdev)
 	if (IS_ERR(regs))
 		return PTR_ERR(regs);
 
-	dwc->dwc_wq = alloc_ordered_workqueue("dwc_wq", WQ_HIGHPRI);
-	if (!dwc->dwc_wq) {
-		dev_err(dev,
-			"%s: Unable to create workqueue dwc_wq\n", __func__);
-		goto err0;
-	}
+	if (!dwc->use_rt_thread) {
+		dwc->dwc_wq = alloc_ordered_workqueue("dwc_wq", WQ_HIGHPRI);
+		if (!dwc->dwc_wq) {
+			dev_err(dev, "%s: Unable to create workqueue dwc_wq\n",
+					__func__);
+			goto err0;
+		}
 
-	INIT_WORK(&dwc->bh_work, dwc3_bh_work);
+		INIT_WORK(&dwc->bh_work, dwc3_bh_work);
+	}
 	dwc->regs	= regs;
 	dwc->regs_size	= resource_size(&dwc_res);
 
@@ -1848,13 +1842,13 @@ err3:
 err2:
 	dwc3_free_event_buffers(dwc);
 err1:
-	pm_runtime_allow(&pdev->dev);
-	pm_runtime_disable(&pdev->dev);
-
+	pm_runtime_allow(dev);
+	pm_runtime_disable(dev);
 	clk_bulk_disable_unprepare(dwc->num_clks, dwc->clks);
 assert_reset:
 	reset_control_assert(dwc->reset);
-	destroy_workqueue(dwc->dwc_wq);
+	if (!dwc->use_rt_thread)
+		destroy_workqueue(dwc->dwc_wq);
 err0:
 	return ret;
 }

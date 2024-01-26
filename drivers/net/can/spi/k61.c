@@ -43,6 +43,7 @@
 #define K61_CLOCK			120000000
 #define K61_MAX_CHANNELS		1
 #define K61_FW_QUERY_RETRY_COUNT	3
+#define K61_CAN_MAX_DLC			8
 
 struct k61_can {
 	struct net_device	*netdev;
@@ -182,8 +183,8 @@ static irqreturn_t k61_irq(int irq, void *priv)
 		if (!priv_data->wake_irq_en) {
 			k61_rx_message(priv_data);
 		} else {
-			dev_info(&priv_data->spidev->dev,
-				 "qti_can wake_irq Invoked upon Resume\r\n");
+			dev_dbg(&priv_data->spidev->dev,
+				"qti_can wake_irq Invoked upon Resume\r\n");
 		}
 	}
 	return IRQ_HANDLED;
@@ -328,8 +329,8 @@ static int k61_do_spi_transaction(struct k61_can *priv_data)
 
 	spi = priv_data->spidev;
 
-	msg = devm_kzalloc(&spi->dev, sizeof(*msg), GFP_KERNEL);
-	xfer = devm_kzalloc(&spi->dev, sizeof(*xfer), GFP_KERNEL);
+	msg = kzalloc(sizeof(*msg), GFP_KERNEL);
+	xfer = kzalloc(sizeof(*xfer), GFP_KERNEL);
 	if (!xfer || !msg)
 		return -ENOMEM;
 	LOGDI(">%x %2d [%d]\n", priv_data->tx_buf[0],
@@ -361,6 +362,8 @@ static int k61_do_spi_transaction(struct k61_can *priv_data)
 	if (ret == 0)
 		k61_process_rx(priv_data, priv_data->rx_buf);
 
+	kfree(msg);
+	kfree(xfer);
 	return ret;
 }
 
@@ -443,10 +446,15 @@ static int k61_notify_power_events(struct k61_can *priv_data, u8 event_type)
 static int k61_can_write(struct k61_can *priv_data, struct can_frame *cf)
 {
 	char *tx_buf, *rx_buf;
-	int ret, i;
+	int ret = 0, i;
 	struct spi_mosi *req;
 	struct can_write_req *req_d;
 	struct net_device *netdev;
+
+	if (cf->can_dlc > K61_CAN_MAX_DLC) {
+		dev_info(&priv_data->spidev->dev, "As CAN DLC exceeded 8 bytes, Tx Failed\n");
+		return ret;
+	}
 
 	mutex_lock(&priv_data->spi_lock);
 	tx_buf = priv_data->tx_buf;
@@ -548,9 +556,7 @@ static int k61_frame_filter(struct net_device *netdev,
 		return -EINVAL;
 	}
 
-	filter_request =
-		devm_kzalloc(&spi->dev, sizeof(struct can_add_filter_req),
-			     GFP_KERNEL);
+	filter_request = kzalloc(sizeof(*filter_request), GFP_KERNEL);
 	if (!filter_request) {
 		mutex_unlock(&priv_data->spi_lock);
 		return -ENOMEM;
@@ -559,6 +565,7 @@ static int k61_frame_filter(struct net_device *netdev,
 	if (copy_from_user(filter_request, ifr->ifr_data,
 			   sizeof(struct can_add_filter_req))) {
 		mutex_unlock(&priv_data->spi_lock);
+		kfree(filter_request);
 		return -EFAULT;
 	}
 
@@ -577,6 +584,7 @@ static int k61_frame_filter(struct net_device *netdev,
 	add_filter->mask = filter_request->mask;
 
 	ret = k61_do_spi_transaction(priv_data);
+	kfree(filter_request);
 	mutex_unlock(&priv_data->spi_lock);
 	return ret;
 }
@@ -718,8 +726,7 @@ static int k61_data_buffering(struct net_device *netdev,
 		return -EINVAL;
 	}
 
-	add_request = devm_kzalloc(&spi->dev, sizeof(struct k61_add_can_buffer),
-				   GFP_KERNEL);
+	add_request = kzalloc(sizeof(*add_request), GFP_KERNEL);
 	if (!add_request) {
 		mutex_unlock(&priv_data->spi_lock);
 		return -ENOMEM;
@@ -728,6 +735,7 @@ static int k61_data_buffering(struct net_device *netdev,
 	if (copy_from_user(add_request, ifr->ifr_data,
 			   sizeof(struct k61_add_can_buffer))) {
 		mutex_unlock(&priv_data->spi_lock);
+		kfree(add_request);
 		return -EFAULT;
 	}
 
@@ -752,6 +760,7 @@ static int k61_data_buffering(struct net_device *netdev,
 	reinit_completion(&priv_data->response_completion);
 
 	ret = k61_do_spi_transaction(priv_data);
+	kfree(add_request);
 	mutex_unlock(&priv_data->spi_lock);
 
 	if (ret == 0) {

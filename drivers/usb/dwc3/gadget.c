@@ -284,6 +284,7 @@ static void dwc3_gadget_del_and_unmap_request(struct dwc3_ep *dep,
 	list_del(&req->list);
 	req->remaining = 0;
 	req->needs_extra_trb = false;
+	req->num_trbs = 0;
 
 	if (req->request.status == -EINPROGRESS)
 		req->request.status = status;
@@ -2619,7 +2620,8 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 	disable_irq(dwc->irq);
 
 	/* prevent pending bh to run later */
-	flush_work(&dwc->bh_work);
+	if (!dwc->use_rt_thread)
+		flush_work(&dwc->bh_work);
 
 	if (is_on)
 		dwc3_device_core_soft_reset(dwc);
@@ -2754,7 +2756,8 @@ static int dwc3_gadget_vbus_session(struct usb_gadget *_gadget, int is_active)
 
 	disable_irq(dwc->irq);
 
-	flush_work(&dwc->bh_work);
+	if (!dwc->use_rt_thread)
+		flush_work(&dwc->bh_work);
 
 	spin_lock_irqsave(&dwc->lock, flags);
 
@@ -2917,9 +2920,11 @@ static int dwc3_gadget_stop(struct usb_gadget *g)
 	dwc->is_remote_wakeup_enabled = false;
 	spin_unlock_irqrestore(&dwc->lock, flags);
 
-	dbg_event(0xFF, "fwq_started", 0);
-	flush_workqueue(dwc->dwc_wq);
-	dbg_event(0xFF, "fwq_completed", 0);
+	if (!dwc->use_rt_thread) {
+		dbg_event(0xFF, "fwq_started", 0);
+		flush_workqueue(dwc->dwc_wq);
+		dbg_event(0xFF, "fwq_completed", 0);
+	}
 
 	return 0;
 }
@@ -4432,8 +4437,12 @@ irqreturn_t dwc3_interrupt(int irq, void *_dwc)
 	if (status == IRQ_WAKE_THREAD)
 		ret = status;
 
-	if (ret == IRQ_WAKE_THREAD)
-		queue_work(dwc->dwc_wq, &dwc->bh_work);
+	if (ret == IRQ_WAKE_THREAD) {
+		if (dwc->use_rt_thread)
+			dwc3_thread_interrupt(dwc->irq, dwc->ev_buf);
+		else
+			queue_work(dwc->dwc_wq, &dwc->bh_work);
+	}
 
 	return IRQ_HANDLED;
 }

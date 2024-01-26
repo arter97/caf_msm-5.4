@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"QBG_K: %s: " fmt, __func__
@@ -1018,11 +1018,12 @@ static int qbg_handle_fast_char(struct qti_qbg *chip)
 				if (rc < 0) {
 					pr_err("Failed to get out of fast char mode, rc=%d\n",
 						rc);
+					kfree(data);
 					return rc;
 				}
 				chip->in_fast_char = false;
 			}
-
+			kfree(data);
 			return 0;
 		}
 	}

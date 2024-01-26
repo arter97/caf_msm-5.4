@@ -1135,6 +1135,7 @@ static int stmmac_init_phy(struct net_device *dev)
 
 	node = priv->plat->phylink_node;
 
+	/* If phylink node is present phydev is initialized here */
 	if (node)
 		ret = phylink_of_phy_connect(priv->phylink, node, 0);
 
