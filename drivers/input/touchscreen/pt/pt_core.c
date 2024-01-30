@@ -84,7 +84,7 @@ int pt_device_entry(struct device *dev,
 static const char *pt_driver_core_name = PT_CORE_NAME;
 static const char *pt_driver_core_version = PT_DRIVER_VERSION;
 static const char *pt_driver_core_date = PT_DRIVER_DATE;
-
+enum core_states pt_core_state = STATE_NONE;
 
 uint32_t pt_slate_resp_ack;
 
@@ -10804,7 +10804,7 @@ static int pt_core_suspend(struct device *dev)
 	cd->wait_until_wake = 0;
 	mutex_unlock(&cd->system_lock);
 
-	if (mem_sleep_current == PM_SUSPEND_MEM) {
+	if (mem_sleep_current == PM_SUSPEND_MEM || cd->touch_offload) {
 		rc = pt_core_suspend_(cd->dev);
 		cd->quick_boot = true;
 	} else {
@@ -11000,7 +11000,7 @@ static int pt_core_resume(struct device *dev)
 		return 0;
 
 
-	if (mem_sleep_current == PM_SUSPEND_MEM) {
+	if (mem_sleep_current == PM_SUSPEND_MEM || cd->touch_offload) {
 		rc = pt_core_restore(cd->dev);
 	} else {
 		pt_debug(cd->dev, DL_INFO, "%s start\n", __func__);
@@ -14910,7 +14910,7 @@ static int pt_device_exit(struct i2c_client *client)
 		glink_touch_tx_msg(glink_pt_send_msg, TOUCH_MSG_SIZE);
 
 		if (active_panel)
-			panel_event_notifier_unregister(cd->entry);
+			drm_panel_notifier_unregister(active_panel, &cd->fb_notifier);
 		pt_core_state = STATE_SUSPEND;
 
 		pm_runtime_suspend(dev);
@@ -17405,6 +17405,8 @@ static struct device_attribute attributes[] = {
 	__ATTR(panel_id, 0444, pt_panel_id_show, NULL),
 	__ATTR(get_param, 0644,
 		pt_get_param_show, pt_get_param_store),
+	__ATTR(pt_touch_offload, 0644,
+		NULL, pt_touch_offload_store),
 #ifdef EASYWAKE_TSG6
 	__ATTR(easy_wakeup_gesture, 0644, pt_easy_wakeup_gesture_show,
 		pt_easy_wakeup_gesture_store),
@@ -17671,6 +17673,7 @@ int pt_probe(const struct pt_bus_ops *ops, struct device *dev,
 	cd->sleep_state			= SS_SLEEP_NONE;
 	cd->quick_boot			= false;
 	cd->drv_debug_suspend          = false;
+	cd->touch_offload              = false;
 
 	if (cd->cpdata->config_dut_generation == CONFIG_DUT_PIP2_CAPABLE) {
 		cd->set_dut_generation = true;
@@ -18124,7 +18127,7 @@ int pt_device_entry(struct device *dev,
 		/* Set platform easywake value */
 		cd->easy_wakeup_gesture = cd->cpdata->easy_wakeup_gesture;
 
-	   /*
+		/*
 		* When the IRQ GPIO is not direclty accessible and no function is
 		* defined to get the IRQ status, the IRQ passed in must be assigned
 		* directly as the gpio_to_irq will not work. e.g. CHROMEOS

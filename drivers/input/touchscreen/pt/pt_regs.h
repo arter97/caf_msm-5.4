@@ -1587,6 +1587,7 @@ struct pt_core_data {
 #endif
 	bool quick_boot;
 	bool drv_debug_suspend;
+	bool touch_offload;
 };
 
 struct gd_sensor {
