@@ -276,6 +276,17 @@ config TOUCHSCREEN_CYTTSP4_SPI
 	  To compile this driver as a module, choose M here: the
 	  module will be called cyttsp4_spi.
 
+config TOUCHSCREEN_MSM_GLINK
+	tristate "Msm Glink Interface Driver"
+	default y
+	help
+	  Say Y here to use glink interface driver.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called glink_interface_ts.
+
 config TOUCHSCREEN_PARADE
 	tristate "Parade TrueTouch Gen5 Touchscreen Driver"
 	default y
