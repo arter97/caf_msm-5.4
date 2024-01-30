@@ -81,6 +81,7 @@ struct f_uvc_opts {
 	 */
 	struct mutex			lock;
 	int				refcnt;
+	bool				disable_interrupt_ep;
 };
 
 #endif /* U_UVC_H */
