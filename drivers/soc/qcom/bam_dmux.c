@@ -14,6 +14,7 @@
 #include <linux/netdevice.h>
 #include <linux/platform_device.h>
 #include <linux/sched.h>
+#include <linux/kthread.h>
 #include <linux/skbuff.h>
 #include <linux/debugfs.h>
 #include <linux/clk.h>
@@ -29,6 +30,7 @@
 #include <linux/soc/qcom/smem_state.h>
 #include <soc/qcom/subsystem_restart.h>
 #include <soc/qcom/subsystem_notif.h>
+#include <uapi/linux/sched/types.h>
 #include <linux/irq.h>
 #include <linux/of_irq.h>
 
@@ -196,8 +198,11 @@ static LIST_HEAD(bam_tx_pool);
 static DEFINE_SPINLOCK(bam_tx_pool_spinlock);
 static DEFINE_MUTEX(bam_pdev_mutexlock);
 
+static struct kthread_worker tx_worker;
+static struct task_struct *bam_dmux_task;
+
 static void notify_all(int event, unsigned long data);
-static void bam_mux_write_done(struct work_struct *work);
+static void bam_mux_write_done(struct kthread_work *tx_work);
 static void handle_bam_mux_cmd(struct work_struct *work);
 static void rx_timer_work_func(struct work_struct *work);
 static void queue_rx_work_func(struct work_struct *work);
@@ -770,7 +775,7 @@ static int bam_mux_write_cmd(void *data, uint32_t len)
 	pkt->dma_address = dma_address;
 	pkt->is_cmd = 1;
 	set_tx_timestamp(pkt);
-	INIT_WORK(&pkt->work, bam_mux_write_done);
+	kthread_init_work(&pkt->tx_work, bam_mux_write_done);
 	spin_lock_irqsave(&bam_tx_pool_spinlock, flags);
 	list_add_tail(&pkt->list_node, &bam_tx_pool);
 	rc = bam_ops->sps_transfer_one_ptr(bam_tx_pipe, dma_address, len,
@@ -793,7 +798,7 @@ static int bam_mux_write_cmd(void *data, uint32_t len)
 	return rc;
 }
 
-static void bam_mux_write_done(struct work_struct *work)
+static void bam_mux_write_done(struct kthread_work *tx_work)
 {
 	struct sk_buff *skb;
 	struct bam_mux_hdr *hdr;
@@ -805,7 +810,7 @@ static void bam_mux_write_done(struct work_struct *work)
 	if (in_global_reset)
 		return;
 
-	info = container_of(work, struct tx_pkt_info, work);
+	info = container_of(tx_work, struct tx_pkt_info, tx_work);
 
 	spin_lock_irqsave(&bam_tx_pool_spinlock, flags);
 	info_expected = list_first_entry(&bam_tx_pool,
@@ -963,7 +968,7 @@ int msm_bam_dmux_write(uint32_t id, struct sk_buff *skb)
 	pkt->dma_address = dma_address;
 	pkt->is_cmd = 0;
 	set_tx_timestamp(pkt);
-	INIT_WORK(&pkt->work, bam_mux_write_done);
+	kthread_init_work(&pkt->tx_work, bam_mux_write_done);
 	spin_lock_irqsave(&bam_tx_pool_spinlock, flags);
 	list_add_tail(&pkt->list_node, &bam_tx_pool);
 	rc = bam_ops->sps_transfer_one_ptr(bam_tx_pipe, dma_address, skb->len,
@@ -1490,7 +1495,7 @@ static void bam_mux_tx_notify(struct sps_event_notify *notify)
 			dma_unmap_single(dma_dev, pkt->dma_address,
 						pkt->len,
 						bam_ops->dma_to);
-		queue_work(bam_mux_tx_workqueue, &pkt->work);
+		kthread_queue_work(&tx_worker, &pkt->tx_work);
 		break;
 	default:
 		pr_err("%s: received unexpected event id %d\n", __func__,
@@ -2654,6 +2659,7 @@ static int bam_dmux_probe(struct platform_device *pdev)
 	int a2_pwr_ctrl_irq;
 	int a2_pwr_ctrl_ack_irq;
 	u32 bit_pos;
+	struct sched_param param = {.sched_priority = MAX_RT_PRIO};
 
 	DBG("%s probe called\n", __func__);
 	if (bam_mux_initialized)
@@ -2775,18 +2781,27 @@ static int bam_dmux_probe(struct platform_device *pdev)
 	 */
 	if (no_cpu_affinity)
 		bam_mux_rx_workqueue =
-			create_singlethread_workqueue("bam_dmux_rx");
+			create_singlethread_workqueue("bam_rx_wq");
 	else
-		bam_mux_rx_workqueue = alloc_workqueue("bam_dmux_rx",
+		bam_mux_rx_workqueue = alloc_workqueue("bam_rx_wq",
 					WQ_MEM_RECLAIM | WQ_CPU_INTENSIVE | WQ_HIGHPRI, 1);
 	if (!bam_mux_rx_workqueue)
 		return -ENOMEM;
 
-	bam_mux_tx_workqueue = create_singlethread_workqueue("bam_dmux_tx");
+	bam_mux_tx_workqueue = create_singlethread_workqueue("bam_tx_wq");
 	if (!bam_mux_tx_workqueue) {
 		rc = -ENOMEM;
 		goto free_wq_rx;
 	}
+
+	kthread_init_worker(&tx_worker);
+	bam_dmux_task = kthread_run(kthread_worker_fn, &tx_worker, "bam_tx_thread");
+	if (IS_ERR(bam_dmux_task)) {
+		rc = -ENOMEM;
+		goto free_wq_tx;
+	}
+
+	sched_setscheduler(bam_dmux_task, SCHED_FIFO, &param);
 
 	for (i = 0; i < BAM_DMUX_NUM_CHANNELS; i++) {
 		spin_lock_init(&bam_ch[i].lock);
@@ -2876,6 +2891,10 @@ free_platform_dev:
 			bam_ch[i].pdev = NULL;
 		}
 	}
+	destroy_workqueue(bam_mux_tx_workqueue);
+	kthread_flush_worker(&tx_worker);
+	kthread_stop(bam_dmux_task);
+free_wq_tx:
 	destroy_workqueue(bam_mux_tx_workqueue);
 free_wq_rx:
 	destroy_workqueue(bam_mux_rx_workqueue);
