@@ -222,8 +222,6 @@ struct msm_otg_platform_data {
 #define PM_QOS_SAMPLE_SEC	2
 #define PM_QOS_THRESHOLD	400
 
-#define POWER_SUPPLY_PROP_REAL_TYPE 67
-
 enum msm_otg_phy_reg_mode {
 	USB_PHY_REG_OFF,
 	USB_PHY_REG_ON,
@@ -1862,7 +1860,7 @@ static int get_psy_type(struct msm_otg *motg)
 		}
 	}
 
-	power_supply_get_property(psy, POWER_SUPPLY_PROP_REAL_TYPE, &pval);
+	power_supply_get_property(psy, POWER_SUPPLY_PROP_USB_TYPE, &pval);
 
 	return pval.intval;
 }
@@ -1894,8 +1892,8 @@ static int msm_otg_notify_chg_type(struct msm_otg *motg)
 	pr_debug("Trying to set usb power supply type %d\n", charger_type);
 
 	propval.intval = charger_type;
-	ret = power_supply_set_property(psy, POWER_SUPPLY_PROP_REAL_TYPE,
-								&propval);
+	ret = power_supply_set_property(psy, POWER_SUPPLY_PROP_USB_TYPE,
+							&propval);
 	if (ret)
 		dev_dbg(motg->phy.dev, "power supply error when setting property\n");
 
