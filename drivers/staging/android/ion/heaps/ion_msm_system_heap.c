@@ -537,7 +537,7 @@ static int ion_msm_system_heap_shrink(struct ion_heap *heap, gfp_t gfp_mask,
 {
 	struct ion_msm_system_heap *sys_heap;
 	int nr_total = 0;
-	int i, j, nr_freed = 0;
+	int i, nr_freed = 0;
 	int only_scan = 0;
 	struct ion_msm_page_pool *pool;
 
@@ -549,15 +549,6 @@ static int ion_msm_system_heap_shrink(struct ion_heap *heap, gfp_t gfp_mask,
 	/* shrink the pools starting from lower order ones */
 	for (i = NUM_ORDERS - 1; i >= 0; i--) {
 		nr_freed = 0;
-
-		for (j = 0; j < VMID_LAST; j++) {
-			if (is_secure_vmid_valid(j))
-				nr_freed +=
-					ion_secure_page_pool_shrink(sys_heap,
-								    j, i,
-								    nr_to_scan);
-		}
-
 		pool = sys_heap->uncached_pools[i];
 		nr_freed +=
 			ion_msm_page_pool_shrink(pool, gfp_mask, nr_to_scan);
