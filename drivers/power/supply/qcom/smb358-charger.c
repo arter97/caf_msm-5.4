@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #define pr_fmt(fmt) "SMB358 %s: " fmt, __func__
 #include <linux/i2c.h>
@@ -1278,11 +1278,13 @@ static void smb358_set_cable_id(struct smb358_charger *chip,
 	dev_dbg(chip->dev, "extcon notify cable %d state %d\n", id, state);
 
 	extcon_set_state_sync(chip->extcon, chip->cable_id, false);
-	if (chip->cable_id == EXTCON_CHG_USB_SDP)
+	if (chip->cable_id == EXTCON_CHG_USB_SDP ||
+			chip->cable_id == EXTCON_CHG_USB_CDP)
 		extcon_set_state_sync(chip->extcon, EXTCON_USB, false);
 
 	extcon_set_state_sync(chip->extcon, id, state);
-	if (id == EXTCON_CHG_USB_SDP)
+	if (id == EXTCON_CHG_USB_SDP ||
+			id == EXTCON_CHG_USB_CDP)
 		extcon_set_state_sync(chip->extcon, EXTCON_USB, state);
 
 	chip->cable_id = id;
