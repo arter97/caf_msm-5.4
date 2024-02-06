@@ -40,7 +40,7 @@
 #include "rpmsg_internal.h"
 #include "qcom_glink_native.h"
 
-#define GLINK_LOG_PAGE_CNT	2
+#define GLINK_LOG_PAGE_CNT	32
 #define GLINK_INFO(ctxt, x, ...)					       \
 	ipc_log_string(ctxt->ilc, "[%s]: "x, __func__, ##__VA_ARGS__)
 
@@ -61,7 +61,7 @@ do {									       \
 #define SLATECOM_ALIGNMENT	16
 #define TX_BLOCKED_CMD_RESERVE	16
 #define DEFAULT_FIFO_SIZE	1024
-#define SHORT_SIZE		16
+#define SHORT_SIZE		96
 #define XPRT_ALIGNMENT		4
 
 #define ACTIVE_TX		BIT(0)
@@ -1859,9 +1859,14 @@ static int glink_slatecom_rx_short_data(struct glink_slatecom *glink,
 {
 	struct glink_slatecom_rx_intent *intent;
 	struct glink_slatecom_channel *channel;
-	size_t msglen = SHORT_SIZE;
+	size_t msglen = chunk_size;
 	unsigned long flags;
 	static uint32_t rx_short_cnt;
+
+	if (!(glink->features & GLINK_FEATURE_SHORT_CMD)) {
+		dev_err(glink->dev, "Short command feature not supported\n");
+		return msglen;
+	}
 
 	if (avail < msglen) {
 		dev_err(glink->dev, "Not enough data in fifo\n");
@@ -2097,7 +2102,8 @@ static int glink_slatecom_process_cmd(struct glink_slatecom *glink, void *rx_dat
 						      param3, param4,
 						      rx_data + offset,
 						      rx_size - offset);
-			offset += ALIGN(ret, SLATECOM_ALIGNMENT);
+			/* 4 bytes alignment for short command */
+			offset += ALIGN(ret, XPRT_ALIGNMENT);
 			break;
 		case SLATECOM_CMD_READ_NOTIF:
 			break;
@@ -2397,7 +2403,7 @@ static int glink_slatecom_probe(struct platform_device *pdev)
 	if (ret < 0)
 		glink->name = dev->of_node->name;
 
-	glink->features = GLINK_FEATURE_INTENT_REUSE;
+	glink->features = GLINK_FEATURE_INTENT_REUSE | GLINK_FEATURE_SHORT_CMD;
 
 	mutex_init(&glink->tx_lock);
 	mutex_init(&glink->tx_avail_lock);
