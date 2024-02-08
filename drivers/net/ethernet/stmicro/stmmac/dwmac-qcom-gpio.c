@@ -203,6 +203,11 @@ void ethqos_reset_phy_enable_interrupt(struct qcom_ethqos *ethqos)
 		stmmac_mdio_reset(priv->mii);
 	}
 
+	if (!priv->phydev) {
+		ETHQOSERR("phy reset & enable interrupt failed: no phydev\n");
+		return;
+	}
+
 	if (priv->plat->phy_intr_en_extn_stm && priv->plat->phy_intr_en) {
 		priv->phydev->irq = PHY_IGNORE_INTERRUPT;
 		priv->phydev->interrupts = PHY_INTERRUPT_ENABLED;
