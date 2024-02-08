@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2022, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -127,15 +128,15 @@ enum HGSL_DBQ_IBDESC_WAIT_TYPE {
 };
 
 /* DBQ structure
- *   IBs storage | reserved | w.idx/r.idx | ctxt.info | hard reset |
- * 0             1K         1.5K          2K          3.5K         |
- * |             |          |             |           |            |
+ *   IBs storage | reserved | w.idx/r.idx | ctxt.info | hard reset | batch ibs |
+ * 0             1K         1.5K          2K          5.5K         6K          |
+ * |             |          |             |           |            |           |
  */
 
 #define HGSL_DBQ_HFI_Q_INDEX_BASE_OFFSET_IN_DWORD            (1536 >> 2)
 #define HGSL_DBQ_CONTEXT_INFO_BASE_OFFSET_IN_DWORD           (2048 >> 2)
-#define HGSL_DBQ_COOPERATIVE_RESET_INFO_BASE_OFFSET_IN_DWORD (3584 >> 2)
-#define HGSL_DBQ_IBDESC_BASE_OFFSET_IN_DWORD                 (4096 >> 2)
+#define HGSL_DBQ_COOPERATIVE_RESET_INFO_BASE_OFFSET_IN_DWORD (5632 >> 2)
+#define HGSL_DBQ_IBDESC_BASE_OFFSET_IN_DWORD                 (6144 >> 2)
 
 
 static inline bool _timestamp_retired(struct hgsl_context *ctxt,
@@ -1279,13 +1280,15 @@ static int hgsl_ioctl_get_shadowts_mem(struct file *filep, unsigned long arg)
 
 	dma_buf = ctxt->shadow_ts_node.dma_buf;
 	if (dma_buf) {
+		/* increase reference count before install fd. */
+		get_dma_buf(dma_buf);
 		params.fd = dma_buf_fd(dma_buf, O_CLOEXEC);
 		if (params.fd < 0) {
 			LOGE("dma buf to fd failed\n");
 			ret = -ENOMEM;
+			dma_buf_put(dma_buf);
 			goto out;
 		}
-		get_dma_buf(dma_buf);
 	}
 
 	if (copy_to_user(USRPTR(arg), &params, sizeof(params))) {
@@ -1429,16 +1432,6 @@ static int hgsl_ctxt_destroy(struct hgsl_priv *priv,
 	bool put_channel = false;
 	struct doorbell_queue *dbq = NULL;
 
-
-	if (!hab_channel) {
-		ret = hgsl_hyp_channel_pool_get(&priv->hyp_priv, 0, &hab_channel);
-		if (ret) {
-			LOGE("Failed to get hab channel %d", ret);
-			goto out;
-		}
-		put_channel = true;
-	}
-
 	ctxt = hgsl_get_context(priv->dev, context_id);
 	if (!ctxt) {
 		LOGE("Invalid context id %d\n", context_id);
@@ -1478,6 +1471,16 @@ static int hgsl_ctxt_destroy(struct hgsl_priv *priv,
 
 	while (!ctxt->destroyed)
 		cpu_relax();
+
+	if (!hab_channel) {
+		ret = hgsl_hyp_channel_pool_get(&priv->hyp_priv, 0, &hab_channel);
+		if (ret) {
+			LOGE("Failed to get hab channel %d", ret);
+			hgsl_free(ctxt);
+			goto out;
+		}
+		put_channel = true;
+	}
 
 	hgsl_hyp_put_shadowts_mem(hab_channel, &ctxt->shadow_ts_node);
 
@@ -1531,7 +1534,7 @@ static int hgsl_ioctl_ctxt_create(struct file *filep, unsigned long arg)
 	ctxt = hgsl_zalloc(sizeof(*ctxt));
 	if (ctxt == NULL) {
 		ret = -ENOMEM;
-		return ret;
+		goto out;
 	}
 
 	if (params.flags & GSL_CONTEXT_FLAG_CLIENT_GENERATED_TS)
@@ -1564,6 +1567,17 @@ static int hgsl_ioctl_ctxt_create(struct file *filep, unsigned long arg)
 	kref_init(&ctxt->kref);
 	init_waitqueue_head(&ctxt->wait_q);
 
+	if (hgsl_ctxt_use_global_dbq(ctxt)) {
+		ret = hgsl_hsync_timeline_create(ctxt);
+		if (ret < 0)
+			LOGE("hsync timeline failed for context %d", params.ctxthandle);
+	}
+
+	if (ctxt->timeline)
+		params.sync_type = HGSL_SYNC_TYPE_HSYNC;
+	else
+		params.sync_type = HGSL_SYNC_TYPE_ISYNC;
+
 	write_lock(&hgsl->ctxt_lock);
 	if (hgsl->contexts[ctxt->context_id] != NULL) {
 		LOGE("context id %d already created",
@@ -1576,17 +1590,6 @@ static int hgsl_ioctl_ctxt_create(struct file *filep, unsigned long arg)
 	hgsl->contexts[ctxt->context_id] = ctxt;
 	write_unlock(&hgsl->ctxt_lock);
 	ctxt_created = true;
-
-	if (hgsl_ctxt_use_global_dbq(ctxt)) {
-		ret = hgsl_hsync_timeline_create(ctxt);
-		if (ret < 0)
-			LOGE("hsync timeline failed for context %d", params.ctxthandle);
-	}
-
-	if (ctxt->timeline)
-		params.sync_type = HGSL_SYNC_TYPE_HSYNC;
-	else
-		params.sync_type = HGSL_SYNC_TYPE_ISYNC;
 
 	if (copy_to_user(USRPTR(arg), &params, sizeof(params))) {
 		ret = -EFAULT;
@@ -2877,7 +2880,7 @@ static int hgsl_cleanup(struct hgsl_priv *priv)
 
 	mutex_lock(&priv->lock);
 	if ((hab_channel == NULL) &&
-	(!list_empty(&priv->mem_mapped) || !list_empty(&priv->mem_allocated))) {
+			(!list_empty(&priv->mem_mapped) || !list_empty(&priv->mem_allocated))) {
 		ret = hgsl_hyp_channel_pool_get(&priv->hyp_priv, 0, &hab_channel);
 		if (ret)
 			LOGE("Failed to get channel %d", ret);
@@ -2888,11 +2891,9 @@ static int hgsl_cleanup(struct hgsl_priv *priv)
 		ret = hgsl_hyp_mem_unmap_smmu(hab_channel, node_found);
 		if (ret)
 			LOGE("Failed to clean mapped buffer %u, 0x%llx, ret %d",
-				node_found->export_id,
-				node_found->memdesc.gpuaddr, ret);
+					node_found->export_id, node_found->memdesc.gpuaddr, ret);
 		else
-			hgsl_trace_gpu_mem_total(priv,
-				-(node_found->memdesc.size64));
+			hgsl_trace_gpu_mem_total(priv, -(node_found->memdesc.size64));
 		list_del(&node_found->node);
 		hgsl_free(node_found);
 	}
@@ -2900,7 +2901,7 @@ static int hgsl_cleanup(struct hgsl_priv *priv)
 		ret = hgsl_hyp_mem_unmap_smmu(hab_channel, node_found);
 		if (ret)
 			LOGE("Failed to clean mapped buffer %u, 0x%llx, ret %d",
-			node_found->export_id, node_found->memdesc.gpuaddr, ret);
+					node_found->export_id, node_found->memdesc.gpuaddr, ret);
 		list_del(&node_found->node);
 		hgsl_trace_gpu_mem_total(priv, -(node_found->memdesc.size64));
 		hgsl_sharedmem_free(node_found);

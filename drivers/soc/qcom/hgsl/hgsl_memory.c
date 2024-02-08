@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "hgsl_memory.h"
@@ -170,6 +171,10 @@ static void hgsl_free_pages(struct hgsl_mem_node *mem_node)
 		struct page *p = mem_node->pages[i];
 
 		page_order = compound_order(p);
+
+		mod_node_page_state(page_pgdat(p), NR_KERNEL_MISC_RECLAIMABLE,
+                                                               -(1 << page_order));
+
 		__free_pages(p, page_order);
 		i += 1 << page_order;
 	}
@@ -512,6 +517,10 @@ static int hgsl_alloc_pages(struct device *dev, uint32_t requested_pcount,
 		_dma_cache_op(dev, page, pcount, GSL_CACHEFLAGS_FLUSH);
 	}
 
+	mod_node_page_state(page_pgdat(page), NR_KERNEL_MISC_RECLAIMABLE,
+                                                       (1 << order));
+
+
 	return pcount;
 }
 
@@ -533,12 +542,14 @@ static int hgsl_export_dma_buf_fd(struct hgsl_mem_node *mem_node)
 	}
 	mem_node->dma_buf = dma_buf;
 
+	/* increase reference count before install fd. */
+	get_dma_buf(dma_buf);
 	fd = dma_buf_fd(dma_buf, O_CLOEXEC);
 	if (fd < 0) {
 		LOGE("dma buf to fd failed");
+		dma_buf_put(dma_buf);
 		return -EINVAL;
 	}
-	get_dma_buf(dma_buf);
 	mem_node->fd = fd;
 
 	return 0;
