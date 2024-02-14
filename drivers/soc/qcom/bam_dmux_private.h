@@ -176,6 +176,7 @@ struct tx_pkt_info {
 	struct list_head list_node;
 	unsigned int ts_sec;
 	unsigned long ts_nsec;
+	struct kthread_work tx_work;
 };
 
 void msm_bam_dmux_set_bam_ops(struct bam_ops_if *ops);
