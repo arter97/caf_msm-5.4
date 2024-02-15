@@ -1038,23 +1038,6 @@ static struct clk_branch gcc_blsp1_ahb_clk = {
 	},
 };
 
-static struct clk_branch gcc_blsp1_sleep_clk = {
-	.halt_reg = 0x1004,
-	.clkr = {
-		.enable_reg = 0x1004,
-		.enable_mask = BIT(0),
-		.hw.init = &(struct clk_init_data){
-			.name = "gcc_blsp1_sleep_clk",
-			.parent_data = &(const struct clk_parent_data){
-				.fw_name = "sleep_clk",
-			},
-			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
 static struct clk_branch gcc_blsp1_qup1_i2c_apps_clk = {
 	.halt_reg = 0x2008,
 	.clkr = {
@@ -1920,7 +1903,6 @@ static struct clk_regmap *gcc_mdm9607_clocks[] = {
 	[APSS_TCU_CLK_SRC] = &apss_tcu_clk_src.clkr,
 	[USB_HS_SYSTEM_CLK_SRC] = &usb_hs_system_clk_src.clkr,
 	[GCC_BLSP1_AHB_CLK] = &gcc_blsp1_ahb_clk.clkr,
-	[GCC_BLSP1_SLEEP_CLK] = &gcc_blsp1_sleep_clk.clkr,
 	[GCC_BLSP1_QUP1_I2C_APPS_CLK] = &gcc_blsp1_qup1_i2c_apps_clk.clkr,
 	[GCC_BLSP1_QUP1_SPI_APPS_CLK] = &gcc_blsp1_qup1_spi_apps_clk.clkr,
 	[GCC_BLSP1_QUP2_I2C_APPS_CLK] = &gcc_blsp1_qup2_i2c_apps_clk.clkr,

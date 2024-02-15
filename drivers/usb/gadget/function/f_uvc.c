@@ -80,14 +80,14 @@ static struct usb_interface_descriptor uvc_control_intf = {
 	.bDescriptorType	= USB_DT_INTERFACE,
 	.bInterfaceNumber	= UVC_INTF_VIDEO_CONTROL,
 	.bAlternateSetting	= 0,
-	.bNumEndpoints		= 1,
+	.bNumEndpoints		= 0,
 	.bInterfaceClass	= USB_CLASS_VIDEO,
 	.bInterfaceSubClass	= UVC_SC_VIDEOCONTROL,
 	.bInterfaceProtocol	= 0x01,
 	.iInterface		= 0,
 };
 
-static struct usb_endpoint_descriptor uvc_control_ep = {
+static struct usb_endpoint_descriptor uvc_interrupt_ep = {
 	.bLength		= USB_DT_ENDPOINT_SIZE,
 	.bDescriptorType	= USB_DT_ENDPOINT,
 	.bEndpointAddress	= USB_DIR_IN,
@@ -287,14 +287,16 @@ uvc_function_set_alt(struct usb_function *f, unsigned interface, unsigned alt)
 		if (alt)
 			return -EINVAL;
 
-		uvcg_info(f, "reset UVC Control\n");
-		usb_ep_disable(uvc->control_ep);
+		if (uvc->interrupt_ep) {
+			uvcg_info(f, "reset UVC Control\n");
+			usb_ep_disable(uvc->interrupt_ep);
 
-		if (!uvc->control_ep->desc)
-			if (config_ep_by_speed(cdev->gadget, f, uvc->control_ep))
-				return -EINVAL;
+			if (!uvc->interrupt_ep->desc)
+				if (config_ep_by_speed(cdev->gadget, f, uvc->interrupt_ep))
+					return -EINVAL;
 
-		usb_ep_enable(uvc->control_ep);
+			usb_ep_enable(uvc->interrupt_ep);
+		}
 
 		if (uvc->state == UVC_STATE_DISCONNECTED) {
 			memset(&v4l2_event, 0, sizeof(v4l2_event));
@@ -372,7 +374,8 @@ uvc_function_disable(struct usb_function *f)
 	uvc->state = UVC_STATE_DISCONNECTED;
 
 	usb_ep_disable(uvc->video.ep);
-	usb_ep_disable(uvc->control_ep);
+	if (uvc->interrupt_ep)
+		usb_ep_disable(uvc->interrupt_ep);
 }
 
 /* --------------------------------------------------------------------------
@@ -513,7 +516,7 @@ uvc_copy_descriptors(struct uvc_device *uvc, enum usb_device_speed speed)
 	 * uvc_iad
 	 * uvc_control_intf
 	 * Class-specific UVC control descriptors
-	 * uvc_control_ep
+	 * uvc_interrupt_ep
 	 * uvc_control_cs_ep
 	 * uvc_ss_control_comp (for SS only)
 	 * uvc_streaming_intf_alt0
@@ -525,10 +528,12 @@ uvc_copy_descriptors(struct uvc_device *uvc, enum usb_device_speed speed)
 	control_size = 0;
 	streaming_size = 0;
 	bytes = uvc_iad.bLength + uvc_control_intf.bLength
-	      + uvc_control_ep.bLength + uvc_control_cs_ep.bLength
-	      + uvc_streaming_intf_alt0.bLength;
+	      + uvc_control_cs_ep.bLength + uvc_streaming_intf_alt0.bLength;
 
-	if (speed == USB_SPEED_SUPER) {
+	if (uvc->interrupt_ep)
+		bytes += uvc_interrupt_ep.bLength;
+
+	if (speed == USB_SPEED_SUPER && uvc->interrupt_ep) {
 		bytes += uvc_ss_control_comp.bLength;
 		n_desc = 6;
 	} else {
@@ -571,8 +576,9 @@ uvc_copy_descriptors(struct uvc_device *uvc, enum usb_device_speed speed)
 	uvc_control_header->bInCollection = 1;
 	uvc_control_header->baInterfaceNr[0] = uvc->streaming_intf;
 
-	UVC_COPY_DESCRIPTOR(mem, dst, &uvc_control_ep);
-	if (speed == USB_SPEED_SUPER)
+	if (uvc->interrupt_ep)
+		UVC_COPY_DESCRIPTOR(mem, dst, &uvc_interrupt_ep);
+	if (speed == USB_SPEED_SUPER && uvc->interrupt_ep)
 		UVC_COPY_DESCRIPTOR(mem, dst, &uvc_ss_control_comp);
 
 	UVC_COPY_DESCRIPTOR(mem, dst, &uvc_control_cs_ep);
@@ -657,13 +663,23 @@ uvc_function_bind(struct usb_configuration *c, struct usb_function *f)
 		cpu_to_le16(max_packet_size * max_packet_mult *
 			    (opts->streaming_maxburst + 1));
 
-	/* Allocate endpoints. */
-	ep = usb_ep_autoconfig(cdev->gadget, &uvc_control_ep);
-	if (!ep) {
-		uvcg_info(f, "Unable to allocate control EP\n");
-		goto error;
+	/* Allocate endpoints. UVC spec section 2.4.2.2 Status Interrupt
+	 * Endpoint says interrupt endpoint is optional and useful in
+	 * status returns and auto and async controls which can be
+	 * limited to enable more endpoints.
+	 */
+	if (!opts->disable_interrupt_ep) {
+		ep = usb_ep_autoconfig(cdev->gadget, &uvc_interrupt_ep);
+		if (!ep) {
+			uvcg_info(f, "Unable to allocate control EP\n");
+			goto error;
+		}
+		uvc->interrupt_ep = ep;
+		uvc_control_intf.bNumEndpoints = 1;
+	} else {
+		uvc->interrupt_ep = NULL;
+		uvc_control_intf.bNumEndpoints = 0;
 	}
-	uvc->control_ep = ep;
 
 	if (gadget_is_superspeed(c->cdev->gadget))
 		ep = usb_ep_autoconfig_ss(cdev->gadget, &uvc_ss_streaming_ep,
