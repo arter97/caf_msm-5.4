@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #define pr_fmt(msg) "power_state:" msg
 
@@ -319,7 +319,7 @@ static long ps_ioctl(struct file *filp, unsigned int ui_power_state_cmd, unsigne
 		}
 #endif
 		current_state = ACTIVE;
-		pr_debug("State Changed to ACTIVE %s\n");
+		pr_info("State Changed to ACTIVE\n");
 		break;
 
 	case ENTER_DEEPSLEEP:
@@ -336,7 +336,15 @@ static long ps_ioctl(struct file *filp, unsigned int ui_power_state_cmd, unsigne
 		break;
 
 	case ENTER_HIBERNATE:
-		pr_debug("Enter Hibernate %s\n", __func__);
+		pr_info("Enter Hibernate %s\n", __func__);
+		mem_sleep_current = PM_SUSPEND_MEM;
+
+		ret = start_timer();
+		if (ret < 0) {
+			/* Take Wakeup Source */
+			pr_debug("Start Timer completed\n");
+		}
+		pr_info("Configure Hibernate Complete\n");
 		break;
 
 	case MODEM_SUSPEND:
