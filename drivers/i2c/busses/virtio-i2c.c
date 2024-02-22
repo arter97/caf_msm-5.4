@@ -21,7 +21,7 @@
 #include <linux/i2c.h>
 
 /* Virtio ID of I2C */
-#define VIRTIO_ID_I2C	32
+#define VIRTIO_ID_I2C		49154
 
 #define I2C_ADAPTER_NR	0x00
 

@@ -21,7 +21,7 @@
 #include <linux/virtio_spmi.h>
 #include <linux/scatterlist.h>
 
-#define VIRTIO_ID_SPMI			33
+#define VIRTIO_ID_SPMI			49155
 
 /* Mapping Table */
 #define PMIC_ARB_MAX_PPID		BIT(12) /* PPID is 12bit */

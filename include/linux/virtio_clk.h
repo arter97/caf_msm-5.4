@@ -10,7 +10,7 @@
 #include <linux/virtio_types.h>
 
 /* Virtio ID of clock */
-#define VIRTIO_ID_CLOCK		30	/* virtio clock */
+#define VIRTIO_ID_CLOCK		49152
 
 /* Feature bits */
 #define VIRTIO_CLK_F_RESET	1	/* Support reset */

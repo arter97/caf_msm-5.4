@@ -22,7 +22,7 @@
 
 #include "vio_eavb.h"
 
-#define VIRTIO_ID_EAVB         36 /* virtio eavb */
+#define VIRTIO_ID_EAVB		49158
 
 /* support feature */
 #define VIRTIO_EAVB_F_SHMEM	1

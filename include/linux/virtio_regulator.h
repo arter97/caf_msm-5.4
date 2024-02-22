@@ -18,7 +18,7 @@ struct virtio_regulator_msg {
 };
 
 /* Virtio ID of regulator */
-#define VIRTIO_ID_REGULATOR    31
+#define VIRTIO_ID_REGULATOR	49153
 
 /* Request type */
 #define VIRTIO_REGULATOR_T_ENABLE	0

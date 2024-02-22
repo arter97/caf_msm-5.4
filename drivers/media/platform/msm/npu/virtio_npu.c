@@ -39,7 +39,7 @@
 /* indicates multi-buffer per command is supported */
 #define VIRTIO_NPU_F_MULTI_BUF	1
 
-#define VIRTIO_ID_NPU           35
+#define VIRTIO_ID_NPU           49157
 
 #define NPU_MAX_STATS_BUF_SIZE	16384
 #define NPU_MAX_PATCH_NUM       160
