@@ -696,7 +696,7 @@ static int slatecom_fw_load(struct slatedaemon_priv *priv)
 			goto fail;
 		}
 		priv->pil_h = subsystem_get_with_fwname("slatefw", "slatefw");
-		if (!priv->pil_h) {
+		if (IS_ERR(priv->pil_h)) {
 			pr_err("failed to load slate\n");
 			ret = -EFAULT;
 			priv->pil_h = NULL;
