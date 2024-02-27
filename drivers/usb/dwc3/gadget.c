@@ -237,7 +237,7 @@ int dwc3_gadget_resize_tx_fifos(struct dwc3 *dwc, struct dwc3_ep *dep)
 
 	if ((dep->endpoint.maxburst > 6) &&
 			usb_endpoint_xfer_isoc(dep->endpoint.desc))
-		mult = 6;
+		mult = 10;
 
 	/* WA to handle tx fifo size limitation , allocating
 	 * 2k and 1k per uvc instance based on available tx fifo
