@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include<linux/init.h>
 #include<linux/kernel.h>
@@ -22,7 +23,8 @@
 
 #include "vio_eavb.h"
 
-#define VIRTIO_ID_EAVB         36 /* virtio eavb */
+/* Virtio ID of eavb : 0xC006 */
+#define VIRTIO_ID_EAVB		49158
 
 /* support feature */
 #define VIRTIO_EAVB_F_SHMEM	1

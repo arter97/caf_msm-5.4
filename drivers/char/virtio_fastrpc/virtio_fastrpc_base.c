@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/debugfs.h>
@@ -19,7 +19,8 @@
 #include "virtio_fastrpc_mem.h"
 #include "virtio_fastrpc_queue.h"
 
-#define VIRTIO_ID_FASTRPC				34
+/* Virtio ID of FASTRPC : 0xC004 */
+#define VIRTIO_ID_FASTRPC				49156
 /* indicates remote invoke with buffer attributes is supported */
 #define VIRTIO_FASTRPC_F_INVOKE_ATTR			1
 /* indicates remote invoke with CRC is supported */
