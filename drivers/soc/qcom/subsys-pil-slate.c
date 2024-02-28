@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
+
+#define pr_fmt(msg) "subsys-pil-slate:" msg
 
 #include <linux/kernel.h>
 #include <linux/err.h>
@@ -64,6 +67,7 @@ struct pil_slate_data {
 	struct workqueue_struct *slate_queue;
 	struct work_struct restart_work;
 	struct notifier_block reboot_blk;
+	struct notifier_block hibernate_blk;
 	struct subsys_desc subsys_desc;
 	struct subsys_device *subsys;
 	unsigned int gpios[NUM_GPIOS];
@@ -454,7 +458,7 @@ int send_reset_cmd(struct pil_slate_data *slate_data)
 
 int slate_wait_for_flash_boot(struct pil_slate_data *slate_data)
 {
-	int ret;
+	int ret, rc;
 	int retry_attempt = 2;
 
 	do {
@@ -467,10 +471,10 @@ int slate_wait_for_flash_boot(struct pil_slate_data *slate_data)
 
 		pr_debug("Retry booting slate, Mode: Flash, attempt: %d\n",
 				retry_attempt);
-		ret = send_reset_cmd(slate_data);
-		if (ret) {
+		rc = send_reset_cmd(slate_data);
+		if (rc) {
 			pr_info("Booting slate from Mode: Flash failed\n");
-			return ret;
+			return rc;
 		}
 		retry_attempt -= 1;
 	} while (retry_attempt);
@@ -538,8 +542,11 @@ static int slate_auth_metadata(struct pil_desc *pil,
 
 	/* Check slate boot status and return */
 	if (get_slate_boot_mode()) {
-		if (is_twm_exit())
+		if (is_twm_exit()) {
 			ret = check_s2a_for_ramdump(slate_data);
+			if (ret)
+				return ret;
+		}
 
 		if (gpio_get_value(slate_data->gpios[0]))
 			return RESULT_SUCCESS;
@@ -988,6 +995,43 @@ static int pil_slate_driver_resume(struct device *dev)
 }
 #endif
 
+
+#ifdef CONFIG_HIBERNATION
+static int pil_slate_driver_freeze(struct device *dev)
+{
+	struct pil_slate_data *slate_data = dev_get_drvdata(dev);
+
+	qseecom_shutdown_app(&slate_data->qseecom_handle);
+	slate_data->qseecom_handle = NULL;
+	return 0;
+}
+#endif
+
+static int pil_slate_pm_notifier(struct notifier_block *nb, unsigned long event, void *unused)
+{
+
+	struct pil_slate_data *slate_data = container_of(nb,
+					struct pil_slate_data, hibernate_blk);
+	switch (event) {
+#ifdef CONFIG_HIBERNATION
+	case PM_HIBERNATION_PREPARE:
+		pr_info("Hibernate entry\n");
+		break;
+
+	case PM_POST_HIBERNATION:
+		pr_info("Hibernate exit\n");
+		if(!gpio_get_value(slate_data->gpios[0]))
+			subsystem_restart_dev(slate_data->subsys);
+		break;
+#endif
+
+	default:
+		pr_info("Default case: PM Notifier: Event-ID: %lu\n");
+		break;
+	}
+	return NOTIFY_DONE;
+}
+
 static int pil_slate_driver_probe(struct platform_device *pdev)
 {
 	struct pil_slate_data *slate_data;
@@ -1054,6 +1098,12 @@ static int pil_slate_driver_probe(struct platform_device *pdev)
 	}
 	INIT_WORK(&slate_data->restart_work, slate_restart_work);
 	init_completion(&slate_data->shutdown_done);
+
+	slate_data->hibernate_blk.notifier_call = pil_slate_pm_notifier;
+	rc = register_pm_notifier(&slate_data->hibernate_blk);
+	if (rc)
+		pr_err("pil slate pm_notif error %d\n", rc);
+
 	return 0;
 err_subsys:
 	destroy_ramdump_device(slate_data->minidump_dev);
@@ -1073,6 +1123,7 @@ static int pil_slate_driver_exit(struct platform_device *pdev)
 	destroy_ramdump_device(slate_data->minidump_dev);
 	destroy_ramdump_device(slate_data->ramdump_dev);
 	pil_desc_release(&slate_data->desc);
+	unregister_pm_notifier(&slate_data->hibernate_blk);
 
 	return 0;
 }
@@ -1081,6 +1132,9 @@ static const struct dev_pm_ops pil_slate_pm_ops = {
 #ifdef CONFIG_DEEPSLEEP
 	.suspend = pil_slate_driver_suspend,
 	.resume = pil_slate_driver_resume,
+#endif
+#ifdef CONFIG_HIBERNATION
+	.freeze = pil_slate_driver_freeze,
 #endif
 };
 
