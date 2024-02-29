@@ -1658,6 +1658,9 @@ static int tz_log_freeze(struct device *dev)
 	dma_free_coherent(dev, QSEE_LOG_BUF_SIZE, (void *)g_qsee_log,
 				coh_pmem);
 
+	if (!tzdbg.is_encrypted_log_enabled)
+		qtee_shmbridge_deregister(qseelog_shmbridge_handle);
+
 	return 0;
 }
 
