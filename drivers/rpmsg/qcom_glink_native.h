@@ -9,7 +9,6 @@
 #define GLINK_FEATURE_INTENT_REUSE	BIT(0)
 #define GLINK_FEATURE_MIGRATION		BIT(1)
 #define GLINK_FEATURE_TRACER_PKT	BIT(2)
-#define GLINK_FEATURE_SHORT_CMD		BIT(8)
 
 struct qcom_glink_pipe {
 	size_t length;
