@@ -36,6 +36,16 @@
 static int sleep_cpu = -EINVAL;
 
 /*
+ * Hibernate core relies on this value being 0 on resume, and marks it
+ * __nosavedata assuming it will keep the resume kernel's '0' value. This
+ * doesn't happen with either KASLR.
+ *
+ * defined as "__visible int in_suspend __nosavedata" in
+ * kernel/power/hibernate.c
+ */
+extern int in_suspend;
+
+/*
  * Values that may not change over hibernate/resume. We put the build number
  * and date in here so that we guarantee not to resume with a different
  * kernel.
@@ -155,10 +165,6 @@ void notrace restore_processor_state(void)
  * required by the resume kernel image to restart execution from
  * swsusp_arch_suspend().
  *
- * soft_restart is not technically needed, but is used to get success
- * returned from cpu_suspend.
- *
- * When soft reboot completes, the hibernation snapshot is written out.
  */
 static int notrace arch_save_image(unsigned long unused)
 {
@@ -168,8 +174,6 @@ static int notrace arch_save_image(unsigned long unused)
 	sleep_cpu = smp_processor_id();
 #endif
 	ret = swsusp_save();
-	if (ret == 0)
-		_soft_restart(virt_to_idmap(cpu_resume), false);
 	return ret;
 }
 
@@ -178,7 +182,12 @@ static int notrace arch_save_image(unsigned long unused)
  */
 int notrace swsusp_arch_suspend(void)
 {
-	return cpu_suspend(0, arch_save_image);
+	int ret;
+
+	ret = cpu_suspend(0, arch_save_image);
+	if (!ret)
+		in_suspend = 0;
+	return ret;
 }
 
 /*
