@@ -971,7 +971,7 @@ static void kgsl_free_secure_system_pages(struct kgsl_memdesc *memdesc)
 	if (memdesc->priv & KGSL_MEMDESC_MAPPED)
 		return;
 
-	ret = unlock_sgt(memdesc->sgt);
+	ret = kgsl_unlock_sgt(memdesc->sgt);
 
 	if (ret) {
 		/*
@@ -1010,7 +1010,7 @@ static void kgsl_free_secure_pool_pages(struct kgsl_memdesc *memdesc)
 	if (memdesc->priv & KGSL_MEMDESC_MAPPED)
 		return;
 
-	ret = unlock_sgt(memdesc->sgt);
+	ret = kgsl_unlock_sgt(memdesc->sgt);
 
 	if (ret) {
 		/*
