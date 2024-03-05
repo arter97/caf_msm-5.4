@@ -25,6 +25,8 @@
 static struct device *qcom_secure_buffer_dev;
 static bool vmid_cp_camera_preview_ro;
 
+bool cma_enable_supported;
+
 static struct qcom_scm_current_perm_info *
 populate_dest_info(int *dest_vmids, int nelements, int *dest_perms,
 		   size_t *size_in_bytes)

@@ -8,6 +8,8 @@
 
 #include <linux/scatterlist.h>
 
+extern bool cma_enable_supported;
+
 /*
  * if you add a secure VMID here make sure you update
  * msm_secure_vmid_to_string.
