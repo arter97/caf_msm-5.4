@@ -113,6 +113,7 @@
 #define GCC_USB_HSIC_SYSTEM_CLK			104
 #define GCC_USB2_HS_PHY_ONLY_CLK		105
 #define GCC_QUSB2_PHY_CLK			106
+#define GPLL0_AO				107
 
 /* Resets */
 #define USB2_HS_PHY_ONLY_BCR			0

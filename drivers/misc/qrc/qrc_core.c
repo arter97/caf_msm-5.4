@@ -20,8 +20,6 @@
 
 #include "qrc_core.h"
 
-#define FIFO_CLEAR 0x1
-
 #define QRC_DEVICE_NAME "qrc"
 
 static dev_t qrc_devt;
@@ -83,6 +81,19 @@ qrc_control_gpio_init(struct qrc_dev *qdev, struct device_node *node)
 					qdev->qrc_boot0_gpio);
 			return ret;
 		}
+
+		ret = gpio_direction_output(qdev->qrc_boot0_gpio, 1);
+		ret += gpio_export(qdev->qrc_boot0_gpio, 0);
+		if (ret) {
+			pr_err("Unable to configure GPIO%d (BOOT0)\n",
+				qdev->qrc_boot0_gpio);
+			ret = -EBUSY;
+			gpio_free(qdev->qrc_boot0_gpio);
+			return ret;
+		}
+
+		/* default config gpio status.boot=1 */
+		gpio_set_value(qdev->qrc_boot0_gpio, 1);
 	}
 
 	if (gpio_is_valid(qdev->qrc_reset_gpio)) {
@@ -92,31 +103,21 @@ qrc_control_gpio_init(struct qrc_dev *qdev, struct device_node *node)
 			qdev->qrc_reset_gpio);
 			return ret;
 		}
-	}
 
-	ret = gpio_direction_output(qdev->qrc_reset_gpio, 0);
-	ret += gpio_export(qdev->qrc_reset_gpio, 0);
+		ret = gpio_direction_output(qdev->qrc_reset_gpio, 0);
+		ret += gpio_export(qdev->qrc_reset_gpio, 0);
 
-	if (ret) {
-		pr_err("Unable to configure GPIO%d (RESET)\n",
-			qdev->qrc_reset_gpio);
-		ret = -EBUSY;
-		gpio_free(qdev->qrc_reset_gpio);
-		return ret;
-	}
+		if (ret) {
+			pr_err("Unable to configure GPIO%d (RESET)\n",
+				qdev->qrc_reset_gpio);
+			ret = -EBUSY;
+			gpio_free(qdev->qrc_reset_gpio);
+			return ret;
+		}
 
-	ret = gpio_direction_output(qdev->qrc_boot0_gpio, 1);
-	ret += gpio_export(qdev->qrc_boot0_gpio, 0);
-	if (ret) {
-		pr_err("Unable to configure GPIO%d (BOOT0)\n",
-			qdev->qrc_boot0_gpio);
-		ret = -EBUSY;
-		gpio_free(qdev->qrc_boot0_gpio);
-		return ret;
+		/* default config gpio status.reset=0 */
+		gpio_set_value(qdev->qrc_reset_gpio, 0);
 	}
-	/* default config gpio status.boot=1,reset=0 */
-	gpio_set_value(qdev->qrc_boot0_gpio, 1);
-	gpio_set_value(qdev->qrc_reset_gpio, 0);
 
 	return 0;
 }
@@ -124,8 +125,11 @@ qrc_control_gpio_init(struct qrc_dev *qdev, struct device_node *node)
 static void
 qrc_control_gpio_uninit(struct qrc_dev *qdev)
 {
-	gpio_free(qdev->qrc_boot0_gpio);
-	gpio_free(qdev->qrc_reset_gpio);
+	if (gpio_is_valid(qdev->qrc_boot0_gpio))
+		gpio_free(qdev->qrc_boot0_gpio);
+
+	if (gpio_is_valid(qdev->qrc_reset_gpio))
+		gpio_free(qdev->qrc_reset_gpio);
 }
 
 static void qrc_gpio_reboot(struct qrc_dev *qdev)
@@ -138,6 +142,8 @@ static long qrc_cdev_ioctl(struct file *filp, unsigned int cmd,
 			     unsigned long arg)
 {
 	struct qrc_dev *qdev;
+	void __user *argp = (void __user *)arg;
+	unsigned int readable_size;
 
 	qdev = filp->private_data;
 	switch (cmd) {
@@ -166,6 +172,13 @@ static long qrc_cdev_ioctl(struct file *filp, unsigned int cmd,
 			return 0;
 		} else
 			return -EFAULT;
+	case QRC_FIONREAD:
+		readable_size = qdev->qrc_ops->qrcops_data_status(qdev);
+		if (copy_to_user(argp, &readable_size, sizeof(unsigned int))) {
+			pr_err("copy_to_user failed\n");
+			return -EFAULT;
+		}
+		return 0;
 	default:
 		return -EINVAL;
 	}
@@ -303,10 +316,12 @@ del_cdev:
 	cdev_del(&qdev->cdev);
 	return ret;
 }
+EXPORT_SYMBOL_GPL(qrc_register_device);
 
 void qrc_unregister(struct qrc_dev *qdev)
 {
 	device_destroy(qrc_class, qdev->dev->devt);
 	qrc_control_gpio_uninit(qdev);
-	dev_info(qdev->dev, "qrc drv unregistered\n");
+	pr_err("qrc drv unregistered\n");
 }
+EXPORT_SYMBOL_GPL(qrc_unregister);

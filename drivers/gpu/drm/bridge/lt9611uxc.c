@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -1728,6 +1728,7 @@ static void lt9611_set_preferred_mode(struct drm_connector *connector)
 
 	if (pdata->fix_mode) {
 		list_for_each_entry(mode, &connector->probed_modes, head) {
+			mode->type &= ~DRM_MODE_TYPE_PREFERRED;
 			if (pdata->debug_mode.vdisplay == mode->vdisplay &&
 				pdata->debug_mode.hdisplay == mode->hdisplay &&
 				pdata->debug_mode.vrefresh == mode->vrefresh) {

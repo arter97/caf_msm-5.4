@@ -108,5 +108,6 @@
 #define GCC_USB3_PHY_BCR					12
 #define GCC_USB3PHY_PHY_BCR					13
 #define GCC_USB_PHY_CFG_AHB2PHY_BCR				14
+#define GCC_SDCC1_BCR						15
 
 #endif

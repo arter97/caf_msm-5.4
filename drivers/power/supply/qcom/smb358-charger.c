@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #define pr_fmt(fmt) "SMB358 %s: " fmt, __func__
 #include <linux/i2c.h>
@@ -11,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/interrupt.h>
 #include <linux/slab.h>
+#include <linux/pm_wakeup.h>
 #include <linux/power_supply.h>
 #include <linux/regulator/of_regulator.h>
 #include <linux/regulator/machine.h>
@@ -228,6 +230,7 @@ struct smb358_charger {
 	struct mutex		read_write_lock;
 	struct mutex		path_suspend_lock;
 	struct mutex		irq_complete;
+	struct wakeup_source    *ws;
 	u8			irq_cfg_mask[2];
 	int			irq_gpio;
 	int			charging_disabled;
@@ -1275,11 +1278,13 @@ static void smb358_set_cable_id(struct smb358_charger *chip,
 	dev_dbg(chip->dev, "extcon notify cable %d state %d\n", id, state);
 
 	extcon_set_state_sync(chip->extcon, chip->cable_id, false);
-	if (chip->cable_id == EXTCON_CHG_USB_SDP)
+	if (chip->cable_id == EXTCON_CHG_USB_SDP ||
+			chip->cable_id == EXTCON_CHG_USB_CDP)
 		extcon_set_state_sync(chip->extcon, EXTCON_USB, false);
 
 	extcon_set_state_sync(chip->extcon, id, state);
-	if (id == EXTCON_CHG_USB_SDP)
+	if (id == EXTCON_CHG_USB_SDP ||
+			id == EXTCON_CHG_USB_CDP)
 		extcon_set_state_sync(chip->extcon, EXTCON_USB, state);
 
 	chip->cable_id = id;
@@ -1383,6 +1388,9 @@ static int apsd_complete(struct smb358_charger *chip, u8 status)
 static int chg_uv(struct smb358_charger *chip, u8 status)
 {
 	int rc;
+
+	if (!status)
+		pm_wakeup_ws_event(chip->ws, 300, true);
 
 	/* use this to detect USB insertion only if !apsd */
 	if (chip->disable_apsd && status == 0) {
@@ -2438,6 +2446,10 @@ static int smb358_charger_probe(struct i2c_client *client,
 
 	mutex_init(&chip->read_write_lock);
 	mutex_init(&chip->path_suspend_lock);
+
+	chip->ws = wakeup_source_register(chip->dev, "smb358-charger");
+	if (!chip->ws)
+		return -ENOMEM;
 
 	/* probe the device to check if its actually connected */
 	rc = smb358_read_reg(chip, CHG_OTH_CURRENT_CTRL_REG, &reg);

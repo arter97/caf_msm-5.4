@@ -82,17 +82,17 @@ struct export_desc_super *habmem_add_export(
 
 	if (!vchan || !sizebytes)
 		return NULL;
-
+	/* the exp_super->exp_state is HAB_EXP_EXPORTING since we call vzalloc here */
 	exp_super = vzalloc(sizebytes);
 	if (!exp_super)
 		return NULL;
 
 	exp = &exp_super->exp;
 	idr_preload(GFP_KERNEL);
-	spin_lock(&vchan->pchan->expid_lock);
+	write_lock(&vchan->pchan->expid_lock);
 	exp->export_id =
 		idr_alloc(&vchan->pchan->expid_idr, exp, 1, 0, GFP_NOWAIT);
-	spin_unlock(&vchan->pchan->expid_lock);
+	write_unlock(&vchan->pchan->expid_lock);
 	idr_preload_end();
 
 	exp->readonly = flags;
@@ -132,34 +132,16 @@ void habmem_remove_export(struct export_desc *exp)
 
 static void habmem_export_destroy(struct kref *refcount)
 {
-	struct physical_channel *pchan = NULL;
 	struct export_desc_super *exp_super =
 			container_of(
 				refcount,
 				struct export_desc_super,
 				refcount);
-	struct export_desc *exp = NULL;
 
 	if (!exp_super) {
 		pr_err("invalid exp_super\n");
 		return;
 	}
-
-	exp = &exp_super->exp;
-	if (!exp || !exp->pchan) {
-		if (exp)
-			pr_err("invalid info in exp %pK pchan %pK\n",
-			   exp, exp->pchan);
-		else
-			pr_err("invalid exp\n");
-		return;
-	}
-
-	pchan = exp->pchan;
-
-	spin_lock(&pchan->expid_lock);
-	idr_remove(&pchan->expid_idr, exp->export_id);
-	spin_unlock(&pchan->expid_lock);
 
 	habmem_exp_release(exp_super);
 	vfree(exp_super);
@@ -181,6 +163,7 @@ static int habmem_export_vchan(struct uhab_context *ctx,
 	uint32_t sizebytes = sizeof(*exp) + payload_size;
 	struct hab_export_ack expected_ack = {0};
 	struct hab_header header = HAB_HEADER_INITIALIZER;
+	struct export_desc_super *exp_super = NULL;
 
 	if (sizebytes > (uint32_t)HAB_HEADER_SIZE_MAX) {
 		pr_err("exp message too large, %u bytes, max is %d\n",
@@ -188,7 +171,9 @@ static int habmem_export_vchan(struct uhab_context *ctx,
 		return -EINVAL;
 	}
 
+	read_lock(&vchan->pchan->expid_lock);
 	exp = idr_find(&vchan->pchan->expid_idr, export_id);
+	read_unlock(&vchan->pchan->expid_lock);
 	if (!exp) {
 		pr_err("export vchan failed: exp_id %d, pchan %s\n",
 				export_id, vchan->pchan->name);
@@ -226,8 +211,51 @@ static int habmem_export_vchan(struct uhab_context *ctx,
 	ctx->export_total++;
 	list_add_tail(&exp->node, &ctx->exp_whse);
 	write_unlock(&ctx->exp_lock);
+	exp_super = container_of(exp, struct export_desc_super, exp);
+	WRITE_ONCE(exp_super->exp_state, HAB_EXP_SUCCESS);
 
 	return ret;
+}
+
+/*
+ * This function is a revoke function for habmm_hyp_grant_*(),
+ * only call this function when habmm_hyp_grant_*() returns
+ * success but exp hasn't been added to exp_whse.
+ * hab_hyp_grant_*() do 4 things:
+ * 1) add 1 to refcount of dma_buf.
+ * 2) alloc memory for struct export_desc_super.
+ * 3) alloc memory for struct exp_platform_data.
+ * 4) alloc idr.
+ * we revoke these 4 things in this function. we choose to call
+ * idr_remove before habmem_export_put() to unpublish this
+ * export desc as early as possible, however the racing between
+ * habmem_export_put() and other concurrent user is handled by
+ * state machine mechanism.
+ */
+static int habmem_hyp_grant_undo(struct uhab_context *ctx,
+		struct virtual_channel *vchan,
+		uint32_t export_id)
+{
+	struct export_desc *exp = NULL;
+	struct export_desc_super *exp_super = NULL;
+
+	exp = idr_find(&vchan->pchan->expid_idr, export_id);
+	if (!exp) {
+		pr_err("export vchan failed: exp_id %d, pchan %s\n",
+				export_id, vchan->pchan->name);
+		return -EINVAL;
+	}
+
+	exp_super = container_of(exp,
+				struct export_desc_super,
+				exp);
+
+	write_lock(&vchan->pchan->expid_lock);
+	idr_remove(&vchan->pchan->expid_idr, exp->export_id);
+	write_unlock(&vchan->pchan->expid_lock);
+
+	exp->ctx = NULL;
+	return habmem_export_put(exp_super);
 }
 
 void habmem_export_get(struct export_desc_super *exp_super)
@@ -289,13 +317,11 @@ int hab_mem_export(struct uhab_context *ctx,
 		goto err;
 	}
 
-	ret = habmem_export_vchan(ctx,
-		vchan,
-		payload_size,
-		param->flags,
-		export_id);
-
-	param->exportid = export_id;
+	ret = habmem_export_vchan(ctx, vchan, payload_size, param->flags, export_id);
+	if (!ret)
+		param->exportid = export_id;
+	else
+		habmem_hyp_grant_undo(ctx, vchan, export_id);
 err:
 	if (vchan)
 		hab_vchan_put(vchan);
@@ -306,9 +332,10 @@ int hab_mem_unexport(struct uhab_context *ctx,
 		struct hab_unexport *param,
 		int kernel)
 {
-	int ret = 0, found = 0;
-	struct export_desc *exp = NULL, *tmp = NULL;
+	int ret = 0;
+	struct export_desc *exp = NULL;
 	struct virtual_channel *vchan;
+	struct export_desc_super *exp_super = NULL;
 
 	if (!ctx || !param)
 		return -EINVAL;
@@ -320,21 +347,39 @@ int hab_mem_unexport(struct uhab_context *ctx,
 		goto err_novchan;
 	}
 
-	write_lock(&ctx->exp_lock);
-	list_for_each_entry_safe(exp, tmp, &ctx->exp_whse, node) {
-		if (param->exportid == exp->export_id &&
-			vchan->pchan == exp->pchan) {
-			list_del(&exp->node);
-			found = 1;
-			break;
-		}
-	}
-	write_unlock(&ctx->exp_lock);
-
-	if (!found) {
+	/* we need to avoid "find and remove" happens concurrently. */
+	write_lock(&vchan->pchan->expid_lock);
+	exp = idr_find(&vchan->pchan->expid_idr, param->exportid);
+	if (!exp) {
+		write_unlock(&vchan->pchan->expid_lock);
+		pr_err("memory unexport failed: exp_id %u not found, pchan %s\n",
+				param->exportid, vchan->pchan->name);
 		ret = -EINVAL;
 		goto err_novchan;
 	}
+	exp_super = container_of(exp, struct export_desc_super, exp);
+	/*
+	 * Before idr_remove(), such below necessary checks must pass:
+	 * 1) We can find exp_desc after idr_alloc. But we need to wait until the
+	 *    export is successful before unexporting.
+	 * 2) And we can only unexport the buffer relevant w/ the exp_desc
+	 *    belonging to the current ctx.
+	 */
+	if (exp_super->exp_state == HAB_EXP_SUCCESS &&
+		exp->ctx == ctx)
+		idr_remove(&vchan->pchan->expid_idr, param->exportid);
+	else {
+		write_unlock(&vchan->pchan->expid_lock);
+		pr_err("memory unexport failed: exp_id %u, pchan %s, exp_state %d\n",
+				param->exportid, vchan->pchan->name, exp_super->exp_state);
+		ret = -EINVAL;
+		goto err_novchan;
+	}
+	write_unlock(&vchan->pchan->expid_lock);
+
+	write_lock(&ctx->exp_lock);
+	list_del(&exp->node);
+	write_unlock(&ctx->exp_lock);
 
 	ret = habmem_hyp_revoke(exp->payload, exp->payload_count);
 	if (ret) {

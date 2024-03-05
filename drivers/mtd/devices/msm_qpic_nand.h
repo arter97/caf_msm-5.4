@@ -38,6 +38,7 @@
 #include <linux/msm-sps.h>
 #include <linux/soc/qcom/smem.h>
 #include <linux/interconnect.h>
+#include <linux/irq.h>
 
 #define PAGE_SIZE_2K 2048
 #define PAGE_SIZE_4K 4096
@@ -289,6 +290,7 @@ struct msm_nand_chip {
 	uint32_t caps; /* General host capabilities */
 #define MSM_NAND_CAP_PAGE_SCOPE_READ   BIT(0)
 #define MSM_NAND_CAP_MULTI_PAGE_READ   BIT(1)
+#define MSM_NAND_INTERRUPT_MODE_ENABLE BIT(3) /* To enable nand in Interrupt mode */
 };
 
 /* Structure that defines an SPS end point for a NANDc BAM pipe. */
@@ -380,6 +382,7 @@ struct msm_nand_info {
 	struct flash_identification flash_dev;
 	struct msm_nand_clk_data clk_data;
 	u64 dma_mask;
+	u32 bam_irq_type; /*Edge trigger or Level trigger */
 };
 
 extern struct nand_flash_dev nand_flash_ids[];
