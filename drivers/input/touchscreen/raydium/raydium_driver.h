@@ -271,6 +271,7 @@
 #include <drm/drm_panel.h>
 #endif
 
+extern uint32_t slate_ack_resp;
 
 enum raydium_fb_state {
 	FB_ON,
