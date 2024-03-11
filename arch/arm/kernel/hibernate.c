@@ -187,6 +187,8 @@ int notrace swsusp_arch_suspend(void)
 	ret = cpu_suspend(0, arch_save_image);
 	if (!ret)
 		in_suspend = 0;
+	else if (ret == 1)
+		ret = 0;
 	return ret;
 }
 
