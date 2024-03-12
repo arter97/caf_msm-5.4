@@ -201,6 +201,7 @@ enum emac_adapter_flags {
 	EMAC_FLAG_ADPT_TASK_REINIT_REQ,
 	EMAC_FLAG_ADPT_TASK_LSC_REQ,
 	EMAC_FLAG_ADPT_TASK_CHK_SGMII_REQ,
+	EMAC_FLAG_ADPT_TASK_CLOSE_REQ,
 };
 
 /* emac shorthand bitops macros */
