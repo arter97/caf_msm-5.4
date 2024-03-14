@@ -9,6 +9,7 @@
 #define GLINK_FEATURE_INTENT_REUSE	BIT(0)
 #define GLINK_FEATURE_MIGRATION		BIT(1)
 #define GLINK_FEATURE_TRACER_PKT	BIT(2)
+#define GLINK_FEATURE_SHORT_CMD		BIT(8)
 
 struct qcom_glink_pipe {
 	size_t length;
@@ -30,9 +31,7 @@ struct qcom_glink;
 extern const struct dev_pm_ops glink_native_pm_ops;
 extern int glink_resume_pkt;
 
-#if defined(CONFIG_DEEPSLEEP) && defined(CONFIG_RPMSG_QCOM_GLINK_RPM)
 int glink_rpm_resume_noirq(struct device *dev);
-#endif
 
 struct qcom_glink *qcom_glink_native_probe(struct device *dev,
 					   unsigned long features,

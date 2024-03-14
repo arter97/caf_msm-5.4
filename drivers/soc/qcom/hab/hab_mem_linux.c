@@ -476,9 +476,9 @@ static int habmem_add_export_compress(struct virtual_channel *vchan,
 err_compress_pfns:
 	kfree(platform_data);
 err_alloc:
-	spin_lock(&vchan->pchan->expid_lock);
+	write_lock(&vchan->pchan->expid_lock);
 	idr_remove(&vchan->pchan->expid_idr, exp->export_id);
-	spin_unlock(&vchan->pchan->expid_lock);
+	write_unlock(&vchan->pchan->expid_lock);
 	vfree(exp_super);
 err_add_exp:
 	dma_buf_put((struct dma_buf *)buf);

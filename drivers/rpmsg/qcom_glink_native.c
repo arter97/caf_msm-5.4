@@ -58,7 +58,7 @@ do {									     \
 #define RPM_GLINK_CID_MAX	65536
 
 static int should_wake;
-#if defined(CONFIG_DEEPSLEEP) && defined(CONFIG_RPMSG_QCOM_GLINK_RPM)
+#if defined(CONFIG_RPMSG_QCOM_GLINK_RPM)
 static int quickboot;
 atomic_t qb_comp;
 wait_queue_head_t quickboot_complete;
@@ -296,6 +296,10 @@ static struct glink_channel *qcom_glink_alloc_channel(struct qcom_glink *glink,
 
 	channel->glink = glink;
 	channel->name = kstrdup(name, GFP_KERNEL);
+	if (!channel->name) {
+		kfree(channel);
+		return ERR_PTR(-ENOMEM);
+	}
 
 	init_completion(&channel->open_req);
 	init_completion(&channel->open_ack);
@@ -1882,7 +1886,7 @@ static int qcom_glink_rx_open(struct qcom_glink *glink, unsigned int rcid,
 		if (ret)
 			goto rcid_remove;
 
-#if defined(CONFIG_DEEPSLEEP) && defined(CONFIG_RPMSG_QCOM_GLINK_RPM)
+#if defined(CONFIG_RPMSG_QCOM_GLINK_RPM) && defined(CONFIG_MSM_RPM_SMD)
 		ret = !strcmp(glink->name, "rpm-glink") &&
 			!strcmp(channel->name, "rpm_requests");
 		if (quickboot && ret) {
@@ -2311,6 +2315,25 @@ void qcom_glink_native_unregister(struct qcom_glink *glink)
 }
 EXPORT_SYMBOL_GPL(qcom_glink_native_unregister);
 
+#if defined(CONFIG_RPMSG_QCOM_GLINK_RPM)
+int qcom_glink_rpm_ready(struct device *dev)
+{
+	int ret = 0;
+
+	quickboot = 1;
+	glink_rpm_resume_noirq(dev);
+
+	ret = wait_event_timeout(quickboot_complete,
+				 atomic_read(&qb_comp), 10 * HZ);
+	if (!ret) {
+		pr_err("glink: channel open request from rpm timed out\n");
+		ret = -ETIMEDOUT;
+	}
+
+	return ret;
+}
+#endif
+
 static int qcom_glink_suspend_no_irq(struct device *dev)
 {
 	should_wake = true;
@@ -2321,27 +2344,40 @@ static int qcom_glink_suspend_no_irq(struct device *dev)
 static int qcom_glink_resume_no_irq(struct device *dev)
 {
 	int ret = 0;
+
 	should_wake = false;
 #if defined(CONFIG_DEEPSLEEP) && defined(CONFIG_RPMSG_QCOM_GLINK_RPM)
 	if (mem_sleep_current == PM_SUSPEND_MEM) {
-		quickboot = 1;
-		glink_rpm_resume_noirq(dev);
-
-		ret = wait_event_timeout(quickboot_complete,
-					 atomic_read(&qb_comp), 10 * HZ);
-		if (!ret) {
-			pr_err("glink: channel open request from rpm timed out\n");
-			ret = -ETIMEDOUT;
-		}
+		ret = qcom_glink_rpm_ready(dev);
 	}
-
 #endif
+
 	return ret;
 }
 
+static int qcom_glink_restore_no_irq(struct device *dev)
+{
+	int ret = 0;
+
+	should_wake = false;
+#if defined(CONFIG_RPMSG_QCOM_GLINK_RPM)
+	ret = qcom_glink_rpm_ready(dev);
+#endif
+
+	return ret;
+}
+
+static int qcom_glink_thaw_no_irq(struct device *dev)
+{
+	return 0;
+}
 const struct dev_pm_ops glink_native_pm_ops = {
 	.suspend_noirq = qcom_glink_suspend_no_irq,
 	.resume_noirq = qcom_glink_resume_no_irq,
+	.freeze_noirq = qcom_glink_suspend_no_irq,
+	.restore_noirq = qcom_glink_restore_no_irq,
+	.thaw_noirq = qcom_glink_thaw_no_irq,
+
 };
 EXPORT_SYMBOL(glink_native_pm_ops);
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include "hab.h"
 
@@ -108,11 +108,14 @@ struct uhab_context *hab_ctx_alloc(int kernel)
 	return ctx;
 }
 
-/* ctx can only be freed when all the vchan releases the refcnt */
-void hab_ctx_free(struct kref *ref)
+/*
+ * This function might sleep. One scenario (only applicable for Linux)
+ * is as below, hab_ctx_free_fn->habmem_remove_export->habmem_export_put
+ * ->habmem_export_destroy->habmem_exp_release,
+ * where dma_buf_unmap_attachment() & dma_buf_detach() might sleep.
+ */
+void hab_ctx_free_fn(struct uhab_context *ctx)
 {
-	struct uhab_context *ctx =
-		container_of(ref, struct uhab_context, refcount);
 	struct hab_export_ack_recvd *ack_recvd, *tmp;
 	struct virtual_channel *vchan;
 	struct physical_channel *pchan;
@@ -214,6 +217,11 @@ void hab_ctx_free(struct kref *ref)
 		read_unlock_bh(&habdev->pchan_lock);
 	}
 	kfree(ctx);
+}
+
+void hab_ctx_free(struct kref *ref)
+{
+	hab_ctx_free_os(ref);
 }
 
 /*
@@ -750,9 +758,8 @@ int hab_vchan_open(struct uhab_context *ctx,
 	hab_write_lock(&ctx->ctx_lock, !ctx->kernel);
 	list_add_tail(&vchan->node, &ctx->vchannels);
 	ctx->vcnt++;
-	hab_write_unlock(&ctx->ctx_lock, !ctx->kernel);
-
 	*vcid = vchan->id;
+	hab_write_unlock(&ctx->ctx_lock, !ctx->kernel);
 
 	return 0;
 }
