@@ -81,6 +81,19 @@ qrc_control_gpio_init(struct qrc_dev *qdev, struct device_node *node)
 					qdev->qrc_boot0_gpio);
 			return ret;
 		}
+
+		ret = gpio_direction_output(qdev->qrc_boot0_gpio, 1);
+		ret += gpio_export(qdev->qrc_boot0_gpio, 0);
+		if (ret) {
+			pr_err("Unable to configure GPIO%d (BOOT0)\n",
+				qdev->qrc_boot0_gpio);
+			ret = -EBUSY;
+			gpio_free(qdev->qrc_boot0_gpio);
+			return ret;
+		}
+
+		/* default config gpio status.boot=1 */
+		gpio_set_value(qdev->qrc_boot0_gpio, 1);
 	}
 
 	if (gpio_is_valid(qdev->qrc_reset_gpio)) {
@@ -90,31 +103,21 @@ qrc_control_gpio_init(struct qrc_dev *qdev, struct device_node *node)
 			qdev->qrc_reset_gpio);
 			return ret;
 		}
-	}
 
-	ret = gpio_direction_output(qdev->qrc_reset_gpio, 0);
-	ret += gpio_export(qdev->qrc_reset_gpio, 0);
+		ret = gpio_direction_output(qdev->qrc_reset_gpio, 0);
+		ret += gpio_export(qdev->qrc_reset_gpio, 0);
 
-	if (ret) {
-		pr_err("Unable to configure GPIO%d (RESET)\n",
-			qdev->qrc_reset_gpio);
-		ret = -EBUSY;
-		gpio_free(qdev->qrc_reset_gpio);
-		return ret;
-	}
+		if (ret) {
+			pr_err("Unable to configure GPIO%d (RESET)\n",
+				qdev->qrc_reset_gpio);
+			ret = -EBUSY;
+			gpio_free(qdev->qrc_reset_gpio);
+			return ret;
+		}
 
-	ret = gpio_direction_output(qdev->qrc_boot0_gpio, 1);
-	ret += gpio_export(qdev->qrc_boot0_gpio, 0);
-	if (ret) {
-		pr_err("Unable to configure GPIO%d (BOOT0)\n",
-			qdev->qrc_boot0_gpio);
-		ret = -EBUSY;
-		gpio_free(qdev->qrc_boot0_gpio);
-		return ret;
+		/* default config gpio status.reset=0 */
+		gpio_set_value(qdev->qrc_reset_gpio, 0);
 	}
-	/* default config gpio status.boot=1,reset=0 */
-	gpio_set_value(qdev->qrc_boot0_gpio, 1);
-	gpio_set_value(qdev->qrc_reset_gpio, 0);
 
 	return 0;
 }
@@ -122,8 +125,11 @@ qrc_control_gpio_init(struct qrc_dev *qdev, struct device_node *node)
 static void
 qrc_control_gpio_uninit(struct qrc_dev *qdev)
 {
-	gpio_free(qdev->qrc_boot0_gpio);
-	gpio_free(qdev->qrc_reset_gpio);
+	if (gpio_is_valid(qdev->qrc_boot0_gpio))
+		gpio_free(qdev->qrc_boot0_gpio);
+
+	if (gpio_is_valid(qdev->qrc_reset_gpio))
+		gpio_free(qdev->qrc_reset_gpio);
 }
 
 static void qrc_gpio_reboot(struct qrc_dev *qdev)

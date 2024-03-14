@@ -52,10 +52,10 @@
 #define USB_GADGET_DELAYED_STATUS       0x7fff	/* Impossibly large value */
 
 /* big enough to hold our biggest descriptor */
-#define USB_COMP_EP0_BUFSIZ	4096
+#define USB_COMP_EP0_BUFSIZ	8092
 
-/* OS feature descriptor length <= 4kB */
-#define USB_COMP_EP0_OS_DESC_BUFSIZ	4096
+/* OS feature descriptor length <= 8kB */
+#define USB_COMP_EP0_OS_DESC_BUFSIZ	8092
 
 #define USB_MS_TO_HS_INTERVAL(x)	(ilog2((x * 1000 / 125)) + 1)
 struct usb_configuration;
@@ -264,7 +264,7 @@ int config_ep_by_speed_and_alt(struct usb_gadget *g, struct usb_function *f,
 int config_ep_by_speed(struct usb_gadget *g, struct usb_function *f,
 			struct usb_ep *_ep);
 
-#define	MAX_CONFIG_INTERFACES		16	/* arbitrary; max 255 */
+#define	MAX_CONFIG_INTERFACES		32	/* arbitrary; max 255 */
 
 /**
  * struct usb_configuration - represents one gadget configuration

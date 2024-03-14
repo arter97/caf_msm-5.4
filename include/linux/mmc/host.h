@@ -590,6 +590,7 @@ struct mmc_host {
 	int			cqe_qdepth;
 	bool			cqe_enabled;
 	bool			cqe_on;
+	bool                    partial_init_broken;
 #ifdef CONFIG_MMC_CRYPTO
 	struct keyslot_manager	*ksm;
 	void *crypto_DO_NOT_USE[7];

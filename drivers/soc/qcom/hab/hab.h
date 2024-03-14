@@ -185,7 +185,7 @@ struct physical_channel {
 	spinlock_t vid_lock;
 
 	struct idr expid_idr;
-	spinlock_t expid_lock;
+	rwlock_t expid_lock;
 
 	void *hyp_data;
 	int dom_id; /* BE role: remote vmid; FE role: don't care */
@@ -266,6 +266,7 @@ struct hab_device {
 struct uhab_context {
 	struct list_head node; /* managed by the driver */
 	struct kref refcount;
+	struct work_struct destroy_work;
 
 	struct list_head vchannels;
 	int vcnt;
@@ -437,6 +438,11 @@ enum exp_desc_state {
 	EXP_DESC_IMPORTING,	/* hab_mem_import is in progress */
 	EXP_DESC_IMPORTED,	/* hab_mem_import is called and returns success */
 };
+enum export_state {
+	HAB_EXP_EXPORTING,		/* memory export is in progress */
+	HAB_EXP_SUCCESS,		/* memory export is successful */
+};
+
 struct export_desc_super {
 	struct kref refcount;
 	void *platform_data;
@@ -448,6 +454,7 @@ struct export_desc_super {
 	 * exp must be the last member
 	 * because it is a variable length struct with pfns as payload
 	 */
+	enum export_state exp_state;
 	struct export_desc  exp;
 };
 
@@ -570,6 +577,9 @@ void hab_pchan_put(struct physical_channel *pchan);
 struct uhab_context *hab_ctx_alloc(int kernel);
 
 void hab_ctx_free(struct kref *ref);
+
+void hab_ctx_free_fn(struct uhab_context *ctx);
+void hab_ctx_free_os(struct kref *ref);
 
 static inline void hab_ctx_get(struct uhab_context *ctx)
 {

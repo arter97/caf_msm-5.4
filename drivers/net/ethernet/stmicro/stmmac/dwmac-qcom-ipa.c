@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -101,6 +101,7 @@ static void eth_ipa_ctx_init(void)
 
 	eth_ipa_ctx.ipa_offload_susp[IPA_QUEUE_BE] = false;
 	eth_ipa_ctx.ipa_offload_susp[IPA_QUEUE_CV2X] = false;
+	eth_ipa_ctx.ipa_offload_link_down = true;
 
 	/* set desc count for BE queues */
 	if (eth_ipa_ctx.queue_enabled[IPA_QUEUE_BE]) {
@@ -1784,7 +1785,7 @@ static ssize_t suspend_resume_ipa_offload(struct device *dev,
 	if (kstrtos8(user_buf, 0, &input))
 		return -EFAULT;
 
-	if (!eth_ipa_ctx.ipa_offload_link_down) {
+	if (qcom_ethqos_is_phy_link_up(ethqos)) {
 		if (input == 0) {
 			ethqos_ipa_offload_event_handler(&qtype1,
 							 EV_USR_RESUME);
