@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1970,11 +1971,13 @@ static int fastrpc_internal_munmap(struct fastrpc_file *fl,
 	}
 	if (!fastrpc_mmap_remove(fl, ud->vaddrout, ud->size,
 				 &map)) {
-		VERIFY(err, !fastrpc_munmap_on_dsp(fl, map->raddr,
-				map->phys, map->size, map->flags));
-		if (err)
-			goto bail;
-		fastrpc_mmap_free(map);
+		if (map) {
+			VERIFY(err, !fastrpc_munmap_on_dsp(fl, map->raddr,
+					map->phys, map->size, map->flags));
+			if (err)
+				goto bail;
+			fastrpc_mmap_free(map);
+		}
 	}
 bail:
 	if (err && map)
