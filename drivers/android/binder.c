@@ -1820,6 +1820,7 @@ static size_t binder_get_object(struct binder_proc *proc,
 
 	read_size = min_t(size_t, sizeof(*object), buffer->data_size - offset);
 	if (offset > buffer->data_size || read_size < sizeof(*hdr) ||
+	    !IS_ALIGNED(offset, sizeof(u32)) ||
 	    binder_alloc_copy_from_buffer(&proc->alloc, object, buffer,
 					  offset, read_size))
 		return 0;
