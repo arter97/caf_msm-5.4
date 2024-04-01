@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "adreno.h"
@@ -1346,6 +1346,18 @@ static void adreno_hwsched_recovery(struct adreno_device *adreno_dev)
 	adreno_hwsched_complete_replay(adreno_dev);
 
 	mutex_unlock(&device->mutex);
+}
+
+void adreno_hwsched_clear_fault(struct adreno_device *adreno_dev)
+{
+	struct a6xx_device *a6xx_dev = container_of(adreno_dev, struct a6xx_device, adreno_dev);
+	struct a6xx_hwsched_device *a6xx_hwsched_dev = container_of(a6xx_dev,
+							struct a6xx_hwsched_device, a6xx_dev);
+
+	atomic_set(&a6xx_hwsched_dev->hwsched.fault, 0);
+
+	/* make sure other CPUs see the update */
+	smp_wmb();
 }
 
 static void adreno_hwsched_work(struct kthread_work *work)
