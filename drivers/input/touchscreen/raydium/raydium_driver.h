@@ -245,7 +245,7 @@
 #define PARA_FW_VERSION_OFFSET	4
 
 #define ENABLE_FW_LOADER	1
-#define FW_NAME      "RM6D030.bin"
+#define FW_NAME      "RM6D030_v0.1.bin"
 
 #define PINCTRL_STATE_ACTIVE     "pmx_ts_active"
 #define PINCTRL_STATE_SUSPEND    "pmx_ts_suspend"
@@ -271,6 +271,7 @@
 #include <drm/drm_panel.h>
 #endif
 
+extern uint32_t slate_ack_resp;
 
 enum raydium_fb_state {
 	FB_ON,

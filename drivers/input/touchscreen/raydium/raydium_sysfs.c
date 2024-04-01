@@ -25,8 +25,18 @@
 #include <linux/device.h>
 #include <linux/delay.h>
 #include <linux/i2c.h>
+#include <linux/input.h>
+#include <linux/input/mt.h>
 #include <linux/gpio.h>
 #include "raydium_driver.h"
+#include <linux/glink_interface.h>
+
+
+static void raydium_ts_touch_entry(void);
+static void raydium_ts_touch_exit(void);
+static int raydium_ts_gpio_config(bool on);
+
+uint32_t slate_ack_resp;
 
 static ssize_t raydium_touch_calibration_show(struct device *dev,
 		struct device_attribute *attr,
@@ -221,6 +231,196 @@ static ssize_t raydium_palm_status_show(struct device *dev,
 	u16_len = strlen(p_i8_buf);
 	return u16_len + 1;
 }
+
+static int raydium_ts_gpio_config(bool on)
+{
+	int i32_err = 0;
+
+	if (on) {
+		if (gpio_is_valid(g_raydium_ts->irq_gpio)) {
+			i32_err = gpio_request(g_raydium_ts->irq_gpio,
+					       "raydium_irq_gpio");
+			if (i32_err) {
+				LOGD(LOG_ERR, "[touch]irq gpio request failed");
+				goto err_irq_gpio_req;
+			}
+
+			i32_err = gpio_direction_input(g_raydium_ts->irq_gpio);
+			if (i32_err) {
+				LOGD(LOG_ERR, "[touch]set_direction for irq gpio failed\n");
+				goto err_irq_gpio_dir;
+			}
+		}
+		if (gpio_is_valid(g_raydium_ts->rst_gpio)) {
+			i32_err = gpio_request(g_raydium_ts->rst_gpio,
+					       "raydium_rst_gpio");
+			if (i32_err) {
+				LOGD(LOG_ERR,  "[touch]rst gpio request failed");
+				goto err_irq_gpio_req;
+			}
+
+			i32_err = gpio_direction_output(g_raydium_ts->rst_gpio, 0);
+			msleep(RAYDIUM_RESET_INTERVAL_10MSEC);
+			if (i32_err) {
+				LOGD(LOG_ERR,
+				     "[touch]set_direction for rst gpio failed\n");
+				goto err_rst_gpio_dir;
+			}
+
+			i32_err = gpio_direction_output(g_raydium_ts->rst_gpio, 1);
+			if (i32_err) {
+				LOGD(LOG_ERR,
+				     "[touch]set_direction for irq gpio failed\n");
+				goto err_rst_gpio_dir;
+			}
+		}
+	} else {
+		if (gpio_is_valid(g_raydium_ts->irq_gpio))
+			gpio_free(g_raydium_ts->irq_gpio);
+	}
+	return 0;
+err_rst_gpio_dir:
+	if (gpio_is_valid(g_raydium_ts->rst_gpio))
+		gpio_free(g_raydium_ts->rst_gpio);
+	return i32_err;
+err_irq_gpio_dir:
+	if (gpio_is_valid(g_raydium_ts->irq_gpio))
+		gpio_free(g_raydium_ts->irq_gpio);
+err_irq_gpio_req:
+	return i32_err;
+}
+
+static void raydium_ts_touch_entry(void)
+{
+	void *glink_send_msg;
+	unsigned char u8_i = 0;
+
+	int glink_touch_enter_prep = TOUCH_ENTER_PREPARE;
+	int glink_touch_enter = TOUCH_ENTER;
+
+	int rc = 0;
+
+	LOGD(LOG_INFO, "%s[touch] raydium_ts_touch_entry Start\n", __func__);
+
+	/*glink touch enter prepare cmd */
+	glink_send_msg = &glink_touch_enter_prep;
+	LOGD(LOG_INFO, "[touch] glink_send_msg = %0x\n", glink_send_msg);
+	glink_touch_tx_msg(glink_send_msg, TOUCH_MSG_SIZE);
+
+	if (slate_ack_resp != 0) {
+		rc = -EINVAL;
+		goto err_ret;
+	}
+	/*glink touch enter cmd */
+	glink_send_msg = &glink_touch_enter;
+	LOGD(LOG_INFO, "[touch]glink_send_msg = %0x\n", glink_send_msg);
+	glink_touch_tx_msg(glink_send_msg, TOUCH_MSG_SIZE);
+
+	if(slate_ack_resp == 0) {
+		//Release the gpio's
+		if (gpio_is_valid(g_raydium_ts->rst_gpio))
+			gpio_free(g_raydium_ts->rst_gpio);
+
+		if (gpio_is_valid(g_raydium_ts->irq_gpio))
+			gpio_free(g_raydium_ts->irq_gpio);
+
+		raydium_irq_control(DISABLE);
+
+		if (!cancel_work_sync(&g_raydium_ts->work))
+			LOGD(LOG_DEBUG, "[touch]workqueue is empty!\n");
+
+		/* release all touches */
+		for (u8_i = 0; u8_i < g_raydium_ts->u8_max_touchs; u8_i++) {
+			pr_err("[touch]%s 1111\n", __func__);
+			input_mt_slot(g_raydium_ts->input_dev, u8_i);
+			input_mt_report_slot_state(g_raydium_ts->input_dev,
+					   MT_TOOL_FINGER,
+					   false);
+		}
+
+		input_mt_report_pointer_emulation(g_raydium_ts->input_dev, false);
+		input_sync(g_raydium_ts->input_dev);
+	}
+
+	LOGD(LOG_INFO, "%s[touch] raydium_ts_touch_entry Start End\n", __func__);
+err_ret:
+	return;
+}
+
+
+static void raydium_ts_touch_exit(void)
+{
+
+	int ret = 0, rc = 0;
+	void *glink_send_msg;
+	int glink_touch_exit_prep = TOUCH_EXIT_PREPARE;
+	int glink_touch_exit = TOUCH_EXIT;
+
+
+	LOGD(LOG_INFO, "%s[touch]raydium_ts_touch_exit Start\n", __func__);
+
+	/*glink touch exit prepare cmd */
+	glink_send_msg = &glink_touch_exit_prep;
+	LOGD(LOG_INFO, "[touch]glink_send_msg = %0x\n", glink_send_msg);
+	glink_touch_tx_msg(glink_send_msg, TOUCH_MSG_SIZE);
+
+	if (slate_ack_resp != 0) {
+		rc = -EINVAL;
+		goto err_ret;
+	}
+
+	else if(slate_ack_resp == 0) {
+		//Configure the gpio's
+		ret = raydium_ts_gpio_config(true);
+		if (ret < 0) {
+			LOGD(LOG_ERR, "[touch]failed to configure the gpios\n");
+			goto err_ret;
+		}
+	}
+
+	/*glink touch exit cmd */
+	glink_send_msg = &glink_touch_exit;
+	LOGD(LOG_INFO, "[touch]glink_send_msg = %d\n", glink_send_msg);
+	glink_touch_tx_msg(glink_send_msg, TOUCH_MSG_SIZE);
+
+	LOGD(LOG_INFO, "%s[touch] raydium_ts_touch_exit End\n", __func__);
+err_ret:
+	return;
+
+}
+
+static ssize_t raydium_touch_offload_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *p_i8_buf, size_t count)
+{
+	int i32_ret = 0;
+	unsigned char u8_mode;
+
+	/* receive command line arguments string */
+	if (count > 2)
+		return -EINVAL;
+
+	i32_ret = kstrtou8(p_i8_buf, 16, &u8_mode);
+	if (i32_ret < 0)
+		return i32_ret;
+
+	switch (u8_mode) {
+	case 0: /* Disable Touch offload */
+
+		LOGD(LOG_INFO, "[touch]RAD %s disable touch offload!!\n", __func__);
+		raydium_ts_touch_entry();
+		break;
+
+	case 1: /* Enable Touch offload */
+
+		LOGD(LOG_INFO, "[touch]RAD %s enable touch offload!!\n", __func__);
+		raydium_ts_touch_exit();
+		break;
+	}
+
+	return count;
+}
+
 static ssize_t raydium_touch_lock_store(struct device *dev,
 					struct device_attribute *attr,
 					const char *p_i8_buf, size_t count)
@@ -1363,6 +1563,14 @@ static DEVICE_ATTR(raydium_i2c_touch_lock, 0644,
 		   NULL,
 		   raydium_touch_lock_store);
 
+/* Touch Offload (W)
+ *  example:    echo 1 > raydium_touch_offload ==> enable touch offload
+ *            echo 0 > raydium_touch_offload ==> disable touch offload
+ */
+static DEVICE_ATTR(raydium_touch_offload, 0644,
+		   NULL,
+		   raydium_touch_offload_store);
+
 /* Log level (W)
  *  example:    echo 1 > raydium_log_level ==> modify log level
  */
@@ -1436,6 +1644,7 @@ struct attribute *raydium_attributes[] = {
 	&dev_attr_raydium_i2c_pda2_page.attr,
 	&dev_attr_raydium_i2c_raw_data.attr,
 	&dev_attr_raydium_i2c_touch_lock.attr,
+	&dev_attr_raydium_touch_offload.attr,
 	&dev_attr_raydium_fw_upgrade.attr,
 	&dev_attr_raydium_check_fw_version.attr,
 	&dev_attr_raydium_check_panel_version.attr,

@@ -31,6 +31,8 @@
 #include <linux/gpio.h>
 #include <linux/kthread.h>
 #include <linux/suspend.h>
+#include <linux/glink_interface.h>
+#include <linux/remoteproc/qcom_rproc.h>
 #include "pt_regs.h"
 
 #define PINCTRL_STATE_ACTIVE    "pmx_ts_active"
@@ -51,6 +53,8 @@
 
 #define PT_STATUS_STR_LEN (50)
 
+#define PT_DATA_SIZE  (2 * 256)
+
 #if defined(CONFIG_DRM)
 static struct drm_panel *active_panel;
 #endif
@@ -59,12 +63,30 @@ MODULE_FIRMWARE(PT_FW_FILE_NAME);
 
 #define ENABLE_I2C_REG_ONLY
 
+enum core_states {
+		STATE_NONE,
+		STATE_RESUME,
+		STATE_SUSPEND
+};
+
 #ifdef ENABLE_I2C_REG_ONLY
 static int pt_enable_i2c_regulator(struct pt_core_data *cd, bool en);
 #endif
+
+#define PT_AMBIENT_MODE
+
+#ifdef PT_AMBIENT_MODE
+static int pt_device_exit(struct i2c_client *client);
+int pt_device_entry(struct device *dev,
+		u16 irq, size_t xfer_buf_size);
+#endif
+
 static const char *pt_driver_core_name = PT_CORE_NAME;
 static const char *pt_driver_core_version = PT_DRIVER_VERSION;
 static const char *pt_driver_core_date = PT_DRIVER_DATE;
+enum core_states pt_core_state = STATE_NONE;
+
+uint32_t pt_slate_resp_ack;
 
 struct pt_hid_field {
 	int report_count;
@@ -10782,7 +10804,7 @@ static int pt_core_suspend(struct device *dev)
 	cd->wait_until_wake = 0;
 	mutex_unlock(&cd->system_lock);
 
-	if (mem_sleep_current == PM_SUSPEND_MEM) {
+	if (mem_sleep_current == PM_SUSPEND_MEM || cd->touch_offload) {
 		rc = pt_core_suspend_(cd->dev);
 		cd->quick_boot = true;
 	} else {
@@ -10978,7 +11000,7 @@ static int pt_core_resume(struct device *dev)
 		return 0;
 
 
-	if (mem_sleep_current == PM_SUSPEND_MEM) {
+	if (mem_sleep_current == PM_SUSPEND_MEM || cd->touch_offload) {
 		rc = pt_core_restore(cd->dev);
 	} else {
 		pt_debug(cd->dev, DL_INFO, "%s start\n", __func__);
@@ -14864,6 +14886,134 @@ static ssize_t pt_pip2_gpio_read_show(struct device *dev,
 }
 
 /*******************************************************************************
+ * FUNCTION: pt_device_exit
+ *
+ * SUMMARY: Remove functon for the I2C module
+ *
+ * PARAMETERS:
+ *      *client - pointer to i2c client structure
+ ******************************************************************************/
+#ifdef PT_AMBIENT_MODE
+static int pt_device_exit(struct i2c_client *client)
+{
+
+		struct pt_core_data *cd = i2c_get_clientdata(client);
+		struct device *dev = cd->dev;
+
+		void *glink_pt_send_msg;
+		int glink_touch_enter = TOUCH_ENTER;
+
+		pt_debug(dev, DL_INFO,"%s: Start pt_device_exit\n", __func__);
+
+		glink_pt_send_msg = &glink_touch_enter;
+		pt_debug(dev, DL_INFO, "[touch]glink_pt_send_msg = %0x\n", glink_pt_send_msg);
+		glink_touch_tx_msg(glink_pt_send_msg, TOUCH_MSG_SIZE);
+
+		if (active_panel)
+			drm_panel_notifier_unregister(active_panel, &cd->fb_notifier);
+		pt_core_state = STATE_SUSPEND;
+
+		pm_runtime_suspend(dev);
+		pm_runtime_disable(dev);
+
+		pt_stop_wd_timer(cd);
+		call_atten_cb(cd, PT_ATTEN_CANCEL_LOADER, 0);
+		cancel_work_sync(&cd->ttdl_restart_work);
+		cancel_work_sync(&cd->enum_work);
+		cancel_work_sync(&cd->resume_offload_work);
+		cancel_work_sync(&cd->suspend_offload_work);
+		cancel_work_sync(&cd->resume_work);
+		cancel_work_sync(&cd->suspend_work);
+
+		pt_stop_wd_timer(cd);
+		device_init_wakeup(dev, 0);
+		disable_irq_nosync(cd->irq);
+
+		if (cd->cpdata->setup_irq)
+			cd->cpdata->setup_irq(cd->cpdata, PT_MT_IRQ_FREE, dev);
+
+		if (cd->cpdata->init)
+			cd->cpdata->init(cd->cpdata, PT_MT_POWER_OFF, dev);
+
+		if (cd->cpdata->setup_power)
+			cd->cpdata->setup_power(cd->cpdata, PT_MT_POWER_OFF, dev);
+
+		pt_debug(dev, DL_INFO,"%s: End pt_device_exit \n", __func__);
+		return 0;
+}
+#endif
+
+/*******************************************************************************
+ * FUNCTION: pt_touch_offload_store
+ *
+ * SUMMARY: The store method for the touch_offload sysfs node that allows the TTDL
+ * 			 to be enabled/disabled.
+ *
+ * RETURN: Size of passed in buffer
+ *
+ * PARAMETERS:
+ * 			*dev  - pointer to device structure
+ *			*attr - pointer to device attributes
+ *			*buf  - pointer to buffer that hold the command parameters
+ *			size - size of buf
+ ******************************************************************************/
+static ssize_t pt_touch_offload_store(struct device *dev,
+			struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct pt_core_data *cd = dev_get_drvdata(dev);
+	struct i2c_client *client = to_i2c_client(dev);
+	u32 input_data[2];
+	int length;
+	int rc = 0;
+
+	/* Maximum input of one value */
+	length = _pt_ic_parse_input(dev, buf, size, input_data, ARRAY_SIZE(input_data));
+	if (length != 1) {
+			pt_debug(dev, DL_ERROR, "%s: Invalid number of arguments\n", __func__);
+			rc = -EINVAL;
+			goto exit;
+	}
+
+	switch (input_data[0]) {
+	case 0:
+		pt_debug(dev, DL_ERROR, "%s: TTDL: Core Touch Offload OFF\n", __func__);
+		cd->touch_offload = true;
+		rc = pt_device_exit(client);
+		if (rc)
+			pt_debug(dev, DL_ERROR, "%s: Power off error detected rc=%d\n",
+					__func__, rc);
+		else {
+			cd->touch_offload = true;
+			pt_debug(dev, DL_ERROR, "%s: Debugfs PT DEVICE EXIT flag set:\n",
+				__func__);
+		}
+	break;
+
+	case 1:
+		pt_debug(dev, DL_ERROR, "%s: TTDL: Core Touch Offload ON\n", __func__);
+		rc = pt_device_entry(&client->dev, client->irq, PT_DATA_SIZE);
+		if (rc)
+			pt_debug(dev, DL_ERROR, "%s: Power on error detected rc=%d\n",
+				__func__, rc);
+		else {
+			cd->touch_offload = false;
+			pt_debug(dev, DL_ERROR, "%s: Debugfs PT DEVICE ENTRY flag set:\n",
+				__func__);
+		}
+	break;
+
+	default:
+		rc = -EINVAL;
+		pt_debug(dev, DL_ERROR, "%s: Invalid value\n", __func__);
+	}
+
+exit:
+	if (rc)
+		return rc;
+	return size;
+}
+
+/*******************************************************************************
  * FUNCTION: pt_pip2_version_show
  *
  * SUMMARY: Sends a PIP2 VERSION command to the DUT and prints the
@@ -17255,6 +17405,8 @@ static struct device_attribute attributes[] = {
 	__ATTR(panel_id, 0444, pt_panel_id_show, NULL),
 	__ATTR(get_param, 0644,
 		pt_get_param_show, pt_get_param_store),
+	__ATTR(pt_touch_offload, 0644,
+		NULL, pt_touch_offload_store),
 #ifdef EASYWAKE_TSG6
 	__ATTR(easy_wakeup_gesture, 0644, pt_easy_wakeup_gesture_show,
 		pt_easy_wakeup_gesture_store),
@@ -17409,6 +17561,32 @@ err_pinctrl_get:
 	return retval;
 }
 
+void touch_notify_glink_pt_channel_state(bool state)
+{
+	pr_info("%s:[touch] touch_notify_glink\n", __func__);
+}
+
+void glink_touch_pt_rx_msg(void *data, int len)
+{
+	int rc = 0;
+	pr_info("%s: TOUCH_RX_MSG Start:\n", __func__);
+
+	if (len > TOUCH_GLINK_INTENT_SIZE) {
+		pr_err("Invalid TOUCH glink intent size\n");
+		return;
+	}
+	/* check SLATE response */
+	pt_slate_resp_ack = *(uint32_t *)&data[8];
+	if (pt_slate_resp_ack == 0x01) {
+			pr_err("Bad SLATE response\n");
+			rc = -EINVAL;
+			goto err_ret;
+	}
+	pr_info("%s: TOUCH_RX_MSG End:\n", __func__);
+err_ret:
+return;
+}
+
 /*******************************************************************************
  *******************************************************************************
  * FUNCTION: pt_probe
@@ -17495,6 +17673,7 @@ int pt_probe(const struct pt_bus_ops *ops, struct device *dev,
 	cd->sleep_state			= SS_SLEEP_NONE;
 	cd->quick_boot			= false;
 	cd->drv_debug_suspend          = false;
+	cd->touch_offload              = false;
 
 	if (cd->cpdata->config_dut_generation == CONFIG_DUT_PIP2_CAPABLE) {
 		cd->set_dut_generation = true;
@@ -17631,6 +17810,8 @@ int pt_probe(const struct pt_bus_ops *ops, struct device *dev,
 	 * in ttdl_restart function
 	 */
 	cd->bus_ops = ops;
+
+	glink_touch_channel_init(&touch_notify_glink_pt_channel_state, &glink_touch_pt_rx_msg);
 
 	/*
 	 * When the IRQ GPIO is not direclty accessible and no function is
@@ -17908,6 +18089,160 @@ error_no_pdata:
 	pr_err("%s failed.\n", __func__);
 	return rc;
 }
+
+#ifdef PT_AMBIENT_MODE
+int pt_device_entry(struct device *dev,
+				u16 irq, size_t xfer_buf_size)
+{
+		struct pt_core_data *cd = dev_get_drvdata(dev);
+		struct pt_platform_data *pdata = dev_get_platdata(dev);
+		struct i2c_client *client = to_i2c_client(dev);
+		int rc = 0;
+		void *glink_pt_send_msg;
+		int glink_touch_exit = TOUCH_EXIT;
+
+		pt_debug(dev, DL_INFO, "%s: Start pt_device_entry\n", __func__);
+
+		cd->dev  	= dev;
+		cd->pdata   = pdata;
+		cd->cpdata  = pdata->core_pdata;
+
+		glink_pt_send_msg = &glink_touch_exit;
+		pt_debug(dev, DL_INFO, "[touch]glink_pt_send_msg = %d\n", glink_pt_send_msg);
+		glink_touch_tx_msg(glink_pt_send_msg, TOUCH_MSG_SIZE);
+
+		msleep(150);
+
+		if (!rc && cd->ts_pinctrl) {
+				/*
+				 * Pinctrl handle is optional. If pinctrl handle is found
+				 * let pins to be configured in active state. If not
+				 * found continue further without error.
+				 */
+			rc = pinctrl_select_state(cd->ts_pinctrl, cd->pinctrl_state_active);
+			if (rc < 0)
+				dev_err(&client->dev, "failed to select pin to active state\n");
+		}
+
+		/* Set platform easywake value */
+		cd->easy_wakeup_gesture = cd->cpdata->easy_wakeup_gesture;
+
+		/*
+		* When the IRQ GPIO is not direclty accessible and no function is
+		* defined to get the IRQ status, the IRQ passed in must be assigned
+		* directly as the gpio_to_irq will not work. e.g. CHROMEOS
+		*/
+
+		if (!cd->cpdata->irq_stat) {
+			cd->irq = irq;
+			pt_debug(cd->dev, DL_ERROR, "%s:No irq_stat, Set cd->irq = %d\n", __func__, cd->irq);
+		}
+
+		/* Call platform init function before setting up the GPIO's */
+		if (cd->cpdata->init) {
+			pt_debug(cd->dev, DL_INFO, "%s: Init HW\n", __func__);
+			rc = cd->cpdata->init(cd->cpdata, PT_MT_POWER_ON, cd->dev);
+		} else {
+			pt_debug(cd->dev, DL_ERROR, "%s: No HW INIT function\n", __func__);
+			rc = 0;
+		}
+		if (rc < 0) {
+			pt_debug(cd->dev, DL_ERROR, "%s: HW Init fail r=%d\n", __func__, rc);
+		}
+
+		/* Power on any needed regulator(s) */
+		if (cd->cpdata->setup_power) {
+				pt_debug(cd->dev, DL_INFO, "%s: Device power on!\n", __func__);
+				rc = cd->cpdata->setup_power(cd->cpdata, PT_MT_POWER_ON, cd->dev);
+		} else {
+				pt_debug(cd->dev, DL_ERROR, "%s: No setup power function\n", __func__);
+				rc = 0;
+		}
+		if (rc < 0)
+			pt_debug(cd->dev, DL_ERROR, "%s: Setup power on fail r=%d\n", __func__, rc);
+
+		if (cd->cpdata->detect) {
+			pt_debug(cd->dev, DL_INFO, "%s: Detect HW\n", __func__);
+			rc = cd->cpdata->detect(cd->cpdata, cd->dev, pt_platform_detect_read);
+			if (!rc) {
+					cd->hw_detected = true;
+					pt_debug(cd->dev, DL_INFO, "%s: HW detected\n", __func__);
+			} else {
+					cd->hw_detected = false;
+					pt_debug(cd->dev, DL_INFO, "%s: No HW detected\n", __func__);
+					rc = -ENODEV;
+					goto pt_error_detect;
+			}
+		} else {
+				pt_debug(dev, DL_ERROR,	"%s: PARADE No HW detect function pointer\n", __func__);
+				/*
+				 * "hw_reset" is not needed in the "if" statement,
+				 * because "hw_reset" is already included in "hw_detect"
+				 * function.
+				 */
+				rc = pt_hw_hard_reset(cd);
+				if (rc)
+					pt_debug(cd->dev, DL_ERROR,	"%s: FAILED to execute HARD reset\n", __func__);
+		}
+
+			if (cd->cpdata->setup_irq) {
+				pt_debug(cd->dev, DL_INFO, "%s: setup IRQ\n", __func__);
+				rc = cd->cpdata->setup_irq(cd->cpdata, PT_MT_IRQ_REG, cd->dev);
+				if (rc) {
+					pt_debug(dev, DL_ERROR,	"%s: Error, couldn't setup IRQ\n", __func__);
+					goto pt_error_setup_irq;
+				}
+			} else {
+				pt_debug(dev, DL_ERROR,	"%s: IRQ function pointer not setup\n", __func__);
+				goto pt_error_setup_irq;
+			}
+
+			rc = device_init_wakeup(dev, 1);
+			if (rc < 0)
+				pt_debug(dev, DL_ERROR, "%s: Error, device_init_wakeup rc:%d\n", __func__, rc);
+
+			if (!enable_irq_wake(cd->irq)) {
+				cd->irq_wake = 1;
+				pt_debug(cd->dev, DL_WARN, "%s Device MAY wakeup\n", __func__);
+			}
+
+			pm_runtime_get_noresume(dev);
+			pm_runtime_set_active(dev);
+			pm_runtime_enable(dev);
+
+			/* Without sleep DUT is not ready and will NAK the first write */
+			msleep(150);
+
+			pm_runtime_put_sync(dev);
+
+#if defined(CONFIG_PANEL_NOTIFIER)
+		/* Setup active dsi panel */
+		active_panel = cd->cpdata->active_panel;
+
+
+		pt_debug(dev, DL_ERROR, "%s: Probe: Setup Panel Event notifier\n", __func__);
+		pt_setup_panel_event_notifier(cd);
+#endif
+
+		mutex_lock(&cd->system_lock);
+		cd->core_probe_complete = 1;
+		mutex_unlock(&cd->system_lock);
+
+		pt_debug(dev, DL_INFO, "%s: ####TTDL Core Device Probe Completed Successfully\n", __func__);
+		pt_core_state = STATE_RESUME;
+		return 0;
+
+pt_error_setup_irq:
+		device_init_wakeup(dev, 0);
+pt_error_detect:
+		if (cd->cpdata->init)
+			cd->cpdata->init(cd->cpdata, PT_MT_POWER_OFF, dev);
+		if (cd->cpdata->setup_power)
+			cd->cpdata->setup_power(cd->cpdata, PT_MT_POWER_OFF, dev);
+		return rc;
+}
+#endif
+
 EXPORT_SYMBOL_GPL(pt_probe);
 
 /*******************************************************************************
