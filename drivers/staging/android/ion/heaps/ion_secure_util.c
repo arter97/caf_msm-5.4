@@ -187,6 +187,9 @@ int ion_hyp_assign_sg(struct sg_table *sgt, int *dest_vm_list,
 	int *dest_perms;
 	int i;
 	int ret = 0;
+	int j = -1;
+	int k = -1;
+	int l = -1;
 
 	if (dest_nelems <= 0) {
 		pr_err("%s: dest_nelems invalid\n",
@@ -201,8 +204,19 @@ int ion_hyp_assign_sg(struct sg_table *sgt, int *dest_vm_list,
 		goto out;
 	}
 
-	for (i = 0; i < dest_nelems; i++)
+	for (i = 0; i < dest_nelems; i++) {
 		dest_perms[i] = msm_secure_get_vmid_perms(dest_vm_list[i]);
+		if (dest_vm_list[i] == VMID_CP_CAMERA_ENCODE)
+			j = i;
+		else if (dest_vm_list[i] == VMID_CP_CAMERA)
+			k = i;
+		else if (dest_vm_list[i] == VMID_CP_CDSP)
+			l = i;
+	}
+	if ((j != -1) && (k != -1) && (l != -1)) {
+		dest_perms[j] = PERM_READ;
+		dest_perms[l] = PERM_READ;
+	}
 
 	ret = hyp_assign_table(sgt, &source_vmid, 1,
 			       dest_vm_list, dest_perms, dest_nelems);
