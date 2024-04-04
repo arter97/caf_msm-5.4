@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include "hab.h"
 #include "hab_grantable.h"
@@ -89,10 +89,10 @@ struct export_desc_super *habmem_add_export(
 
 	exp = &exp_super->exp;
 	idr_preload(GFP_KERNEL);
-	spin_lock(&vchan->pchan->expid_lock);
+	write_lock(&vchan->pchan->expid_lock);
 	exp->export_id =
 		idr_alloc(&vchan->pchan->expid_idr, exp, 1, 0, GFP_NOWAIT);
-	spin_unlock(&vchan->pchan->expid_lock);
+	write_unlock(&vchan->pchan->expid_lock);
 	idr_preload_end();
 
 	exp->readonly = flags;
@@ -157,10 +157,6 @@ static void habmem_export_destroy(struct kref *refcount)
 
 	pchan = exp->pchan;
 
-	spin_lock(&pchan->expid_lock);
-	idr_remove(&pchan->expid_idr, exp->export_id);
-	spin_unlock(&pchan->expid_lock);
-
 	habmem_exp_release(exp_super);
 	vfree(exp_super);
 }
@@ -181,14 +177,16 @@ static int habmem_export_vchan(struct uhab_context *ctx,
 	uint32_t sizebytes = sizeof(*exp) + payload_size;
 	struct hab_export_ack expected_ack = {0};
 	struct hab_header header = HAB_HEADER_INITIALIZER;
+	struct export_desc_super *exp_super = NULL;
 
 	if (sizebytes > (uint32_t)HAB_HEADER_SIZE_MAX) {
 		pr_err("exp message too large, %u bytes, max is %d\n",
 			sizebytes, HAB_HEADER_SIZE_MAX);
 		return -EINVAL;
 	}
-
+	read_lock(&vchan->pchan->expid_lock);
 	exp = idr_find(&vchan->pchan->expid_idr, export_id);
+	read_unlock(&vchan->pchan->expid_lock);
 	if (!exp) {
 		pr_err("export vchan failed: exp_id %d, pchan %s\n",
 				export_id, vchan->pchan->name);
@@ -226,6 +224,8 @@ static int habmem_export_vchan(struct uhab_context *ctx,
 	ctx->export_total++;
 	list_add_tail(&exp->node, &ctx->exp_whse);
 	write_unlock(&ctx->exp_lock);
+	exp_super = container_of(exp, struct export_desc_super, exp);
+	WRITE_ONCE(exp_super->exp_state, HAB_EXP_SUCCESS);
 
 	return ret;
 }
@@ -304,9 +304,10 @@ int hab_mem_unexport(struct uhab_context *ctx,
 		struct hab_unexport *param,
 		int kernel)
 {
-	int ret = 0, found = 0;
-	struct export_desc *exp = NULL, *tmp = NULL;
+	int ret = 0;
+	struct export_desc *exp = NULL;
 	struct virtual_channel *vchan;
+	struct export_desc_super *exp_super = NULL;
 
 	if (!ctx || !param)
 		return -EINVAL;
@@ -317,22 +318,38 @@ int hab_mem_unexport(struct uhab_context *ctx,
 		ret = -ENODEV;
 		goto err_novchan;
 	}
-
-	write_lock(&ctx->exp_lock);
-	list_for_each_entry_safe(exp, tmp, &ctx->exp_whse, node) {
-		if (param->exportid == exp->export_id &&
-			vchan->pchan == exp->pchan) {
-			list_del(&exp->node);
-			found = 1;
-			break;
-		}
-	}
-	write_unlock(&ctx->exp_lock);
-
-	if (!found) {
+	/* we need to avoid "find and remove" happens concurrently. */
+	write_lock(&vchan->pchan->expid_lock);
+		exp = idr_find(&vchan->pchan->expid_idr, param->exportid);
+		if (!exp) {
+			write_unlock(&vchan->pchan->expid_lock);
+			pr_err("memory unexport failed: exp_id %u not found, pchan %s\n",
+					param->exportid, vchan->pchan->name);
 		ret = -EINVAL;
 		goto err_novchan;
 	}
+	exp_super = container_of(exp, struct export_desc_super, exp);
+	/*
+	 * Before idr_remove(), such below necessary checks must pass:
+	 * 1) We can find exp_desc after idr_alloc. But we need to wait until the
+	 *    export is successful before unexporting.
+	 * 2) And we can only unexport the buffer relevant w/ the exp_desc
+	 *    belonging to the current ctx.
+	 */
+	if (exp_super->exp_state == HAB_EXP_SUCCESS &&
+		exp->ctx == ctx)
+		idr_remove(&vchan->pchan->expid_idr, param->exportid);
+	else {
+		write_unlock(&vchan->pchan->expid_lock);
+		pr_err("memory unexport failed: exp_id %u, pchan %s, exp_state %d\n",
+			param->exportid, vchan->pchan->name, exp_super->exp_state);
+		ret = -EINVAL;
+		goto err_novchan;
+	}
+	write_unlock(&vchan->pchan->expid_lock);
+	write_lock(&ctx->exp_lock);
+	list_del(&exp->node);
+	write_unlock(&ctx->exp_lock);
 
 	ret = habmem_hyp_revoke(exp->payload, exp->payload_count);
 	if (ret) {
