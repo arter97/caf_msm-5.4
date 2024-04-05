@@ -171,6 +171,10 @@ static void hgsl_free_pages(struct hgsl_mem_node *mem_node)
 		struct page *p = mem_node->pages[i];
 
 		page_order = compound_order(p);
+
+		mod_node_page_state(page_pgdat(p), NR_KERNEL_MISC_RECLAIMABLE,
+                                                               -(1 << page_order));
+
 		__free_pages(p, page_order);
 		i += 1 << page_order;
 	}
@@ -512,6 +516,10 @@ static int hgsl_alloc_pages(struct device *dev, uint32_t requested_pcount,
 			pages[i] = nth_page(page, i);
 		_dma_cache_op(dev, page, pcount, GSL_CACHEFLAGS_FLUSH);
 	}
+
+	mod_node_page_state(page_pgdat(page), NR_KERNEL_MISC_RECLAIMABLE,
+                                                       (1 << order));
+
 
 	return pcount;
 }
