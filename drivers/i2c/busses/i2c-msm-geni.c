@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -1592,21 +1592,30 @@ static int geni_i2c_xfer(struct i2c_adapter *adap,
 				"IO lines in bad state, Power the slave\n");
 		if (gi2c->se_mode == FIFO_SE_DMA) {
 			gi2c->err = -EBUSY;
-			ret = geni_i2c_bus_recovery(gi2c);
-			if (ret)
-				GENI_SE_ERR(gi2c->ipcl, true, gi2c->dev,
-					    "%s:Bus Recovery failed\n", __func__);
-			gi2c->err = 0;
+			if (gi2c->bus_recovery_enable) {
+				ret = geni_i2c_bus_recovery(gi2c);
+				if (ret)
+					GENI_SE_ERR(gi2c->ipcl, true, gi2c->dev,
+						    "%s:Bus Recovery failed\n", __func__);
+				gi2c->err = 0;
+			} else {
+				GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev,
+					    "%s: Bus Recovery not enabled\n",
+					    __func__);
+				ret = -ENXIO;
+			}
 		} else {
 			GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev,
 				    "%s: Bus Recovery not supported for GSI\n",
 				    __func__);
+				ret = -ENXIO;
 		}
 
-		if ((gi2c->se_mode == GSI_ONLY) ||
-		    ((gi2c->se_mode != GSI_ONLY) && ret)) {
-			pm_runtime_mark_last_busy(gi2c->dev);
-			pm_runtime_put_autosuspend(gi2c->dev);
+		if (gi2c->se_mode == GSI_ONLY || ret) {
+			if (!gi2c->is_le_vm) {
+				pm_runtime_mark_last_busy(gi2c->dev);
+				pm_runtime_put_autosuspend(gi2c->dev);
+			}
 			mutex_unlock(&gi2c->i2c_ssr.ssr_lock);
 			atomic_set(&gi2c->is_xfer_in_progress, 0);
 			return -ENXIO;
