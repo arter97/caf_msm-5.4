@@ -5,6 +5,8 @@
  * Copyright (C) 2013 ARM Limited
  *
  * Author: Will Deacon <will.deacon@arm.com>
+ *
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _ARM_SMMU_H
@@ -245,7 +247,11 @@ enum arm_smmu_cbar_type {
 
 /* Implementation Defined Register Space 5 registers */
 /* Relative to IMPL_DEF5 page */
+#ifdef CONFIG_ARM_SMMU_TESTBUS_DUMP_GEN3AUTO
+#define ARM_SMMU_STATS_SYNC_INV_TBU_ACK 0x51c
+#else
 #define ARM_SMMU_STATS_SYNC_INV_TBU_ACK 0x5dc
+#endif
 #define TBU_SYNC_ACK			GENMASK(25, 17)
 #define TBU_SYNC_REQ			BIT(16)
 #define TBU_INV_ACK			GENMASK(9, 1)
