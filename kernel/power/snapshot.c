@@ -1263,6 +1263,7 @@ static inline void *saveable_highmem_page(struct zone *z, unsigned long p)
 }
 #endif /* CONFIG_HIGHMEM */
 
+#ifdef CONFIG_ARM64
 static bool kernel_pte_present(struct page *page)
 {
 	pgd_t *pgdp;
@@ -1292,6 +1293,7 @@ static bool kernel_pte_present(struct page *page)
 	ptep = pte_offset_kernel(pmdp, addr);
 	return pte_valid(READ_ONCE(*ptep));
 }
+#endif /* CONFIG_ARM64 */
 
 /**
  * saveable_page - Check if the given page is saveable.
@@ -1331,8 +1333,10 @@ static struct page *saveable_page(struct zone *zone, unsigned long pfn)
 	 * don't snapshot it ! This happens to the pages allocated using
 	 * __dma_alloc_coherent with DMA_ATTR_NO_KERNEL_MAPPING flag set.
 	 */
+#ifdef CONFIG_ARM64
 	if (!kernel_pte_present(page))
 		return NULL;
+#endif
 
 	if (page_is_guard(page))
 		return NULL;
