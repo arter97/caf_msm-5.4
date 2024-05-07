@@ -2,6 +2,7 @@
 /*
  * Copyright (C) 2011 Google, Inc.
  * Copyright (c) 2011-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _MSM_ION_PRIV_H
@@ -37,6 +38,8 @@
 #define ION_QSECOM_TA_HEAP_NAME	"qsecom_ta"
 #define ION_SECURE_HEAP_NAME	"secure_heap"
 #define ION_SECURE_DISPLAY_HEAP_NAME "secure_display"
+#define ION_VIDEO_HEAP_NAME "video"
+#define ION_NON_PIXEL_HEAP_NAME    "non_pixel"
 #define ION_AUDIO_HEAP_NAME    "audio"
 #define ION_TUI_CARVEOUT_HEAP_NAME "tui_carveout"
 #define ION_DISPLAY_HEAP_NAME "display"

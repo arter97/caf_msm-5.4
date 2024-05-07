@@ -2,6 +2,7 @@
 /*
  * Copyright (C) 2011 Google, Inc
  * Copyright (c) 2011-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/highmem.h>
@@ -315,6 +316,8 @@ const char *msm_secure_vmid_to_string(int secure_vmid)
 		return "VMID_CP_SPSS_HLOS_SHARED";
 	case VMID_ADSP_HEAP:
 		return "VMID_ADSP_HEAP";
+	case VMID_CP_CAMERA_ENCODE:
+		return "VMID_CP_CAMERA_ENCODE";
 	case VMID_INVAL:
 		return "VMID_INVAL";
 	case VMID_NAV:

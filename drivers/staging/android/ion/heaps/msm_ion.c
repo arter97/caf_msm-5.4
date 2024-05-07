@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/err.h>
@@ -76,6 +77,14 @@ static struct ion_heap_desc ion_heap_meta[] = {
 	{
 		.id	= ION_SECURE_DISPLAY_HEAP_ID,
 		.name	= ION_SECURE_DISPLAY_HEAP_NAME,
+	},
+	{
+		.id	= ION_VIDEO_HEAP_ID,
+		.name	= ION_VIDEO_HEAP_NAME,
+	},
+	{
+		.id	= ION_NON_PIXEL_HEAP_ID,
+		.name	= ION_NON_PIXEL_HEAP_NAME,
 	},
 	{
 		.id     = ION_AUDIO_HEAP_ID,
