@@ -3,7 +3,7 @@
  * Copyright (c) 2009-2021, The Linux Foundation. All rights reserved.
  * Copyright (c) 2017-2019, Linaro Ltd.
  */
-
+#include <linux/debugfs.h>
 #include <linux/err.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
@@ -13,8 +13,9 @@
 #include <linux/string.h>
 #include <linux/sys_soc.h>
 #include <linux/types.h>
+#include <linux/stat.h>
 #include <soc/qcom/socinfo.h>
-
+#include <asm/unaligned.h>
 /*
  * SoC version type with major number in the upper 16 bits and minor
  * number in the lower 16 bits.
@@ -32,9 +33,32 @@
  */
 #define SMEM_HW_SW_BUILD_ID            137
 #define SMEM_IMAGE_VERSION_TABLE	469
+#define BUILD_ID_LENGTH 32
+#define CHIP_ID_LENGTH 32
+#define SMEM_IMAGE_VERSION_BLOCKS_COUNT 32
+#define SMEM_IMAGE_VERSION_SINGLE_BLOCK_SIZE 128
+#define SMEM_IMAGE_VERSION_SIZE 4096
+#define SMEM_IMAGE_VERSION_NAME_SIZE 75
+#define SMEM_IMAGE_VERSION_VARIANT_SIZE 20
+#define SMEM_IMAGE_VERSION_VARIANT_OFFSET 75
+#define SMEM_IMAGE_VERSION_OEM_SIZE 33
+#define SMEM_IMAGE_VERSION_OEM_OFFSET 95
+#define SMEM_IMAGE_VERSION_PARTITION_APPS 10
+#ifdef CONFIG_DEBUG_FS
+/*
+ * SMEM Image table indices
+ */
+#define SMEM_IMAGE_TABLE_BOOT_INDEX     0
+#define SMEM_IMAGE_TABLE_TZ_INDEX       1
+#define SMEM_IMAGE_TABLE_RPM_INDEX      3
+#define SMEM_IMAGE_TABLE_APPS_INDEX     10
+#define SMEM_IMAGE_TABLE_MPSS_INDEX     11
+#define SMEM_IMAGE_TABLE_ADSP_INDEX     12
+#define SMEM_IMAGE_TABLE_CNSS_INDEX     13
+#define SMEM_IMAGE_TABLE_VIDEO_INDEX    14
 
+#endif /* CONFIG_DEBUG_FS */
 static uint32_t socinfo_format;
-
 enum {
 	HW_PLATFORM_UNKNOWN = 0,
 	HW_PLATFORM_SURF    = 1,
@@ -169,33 +193,43 @@ static struct socinfo {
 	/* Version 14 */
 	__le32 num_clusters;
 	__le32 ncluster_array_offset;
-	__le32 num_defective_parts;
-	__le32 ndefective_parts_array_offset;
+	__le32 num_subset_parts;
+	__le32 nsubset_parts_array_offset;
 	/* Version 15 */
 	__le32  nmodem_supported;
 } *socinfo;
 
+#define MAX_SOCINFO_ATTRS 50
 /* sysfs attributes */
 #define ATTR_DEFINE(param)	\
-	static DEVICE_ATTR(param, 0644,	\
+	static DEVICE_ATTR(param, 0644, \
 		   msm_get_##param,	\
 		   NULL)
-
-#define BUILD_ID_LENGTH 32
-#define CHIP_ID_LENGTH 32
-#define SMEM_IMAGE_VERSION_BLOCKS_COUNT 32
-#define SMEM_IMAGE_VERSION_SINGLE_BLOCK_SIZE 128
-#define SMEM_IMAGE_VERSION_SIZE 4096
-#define SMEM_IMAGE_VERSION_NAME_SIZE 75
-#define SMEM_IMAGE_VERSION_VARIANT_SIZE 20
-#define SMEM_IMAGE_VERSION_VARIANT_OFFSET 75
-#define SMEM_IMAGE_VERSION_OEM_SIZE 33
-#define SMEM_IMAGE_VERSION_OEM_OFFSET 95
-#define SMEM_IMAGE_VERSION_PARTITION_APPS 10
-
-int softsku_idx;
-module_param_named(softsku_idx, softsku_idx, int, 0644);
-
+#define CREATE_PART_FUNCTION(part, part_enum)  \
+	static ssize_t \
+	msm_get_##part(struct device *dev, \
+			struct device_attribute *attr, \
+			char *buf) \
+	{ \
+		u32 *part_info; \
+		int num_parts = 0; \
+		int str_pos = 0, i = 0, ret = 0; \
+		num_parts = socinfo_get_part_count(part_enum); \
+		part_info = kmalloc_array(num_parts, sizeof(*part_info), GFP_KERNEL); \
+		ret = socinfo_get_subpart_info(part_enum, part_info, num_parts); \
+		if (ret < 0) \
+			return -EINVAL;  \
+		for (i = 0; i < num_parts; i++) { \
+			str_pos += scnprintf(buf+str_pos, PAGE_SIZE-str_pos, "0x%x", \
+					part_info[i]); \
+			if (i != num_parts-1) \
+				str_pos += scnprintf(buf+str_pos, PAGE_SIZE-str_pos, ","); \
+		} \
+		str_pos += scnprintf(buf+str_pos, PAGE_SIZE-str_pos, "\n"); \
+		kfree(part_info); \
+		return str_pos; \
+	} \
+	ATTR_DEFINE(part) \
 /* Version 2 */
 static uint32_t socinfo_get_raw_id(void)
 {
@@ -343,19 +377,19 @@ static uint32_t socinfo_get_ncluster_array_offset(void)
 		: 0;
 }
 
-static uint32_t socinfo_get_num_defective_parts(void)
+static uint32_t socinfo_get_num_subset_parts(void)
 {
 	return socinfo ?
 		(socinfo_format >= SOCINFO_VERSION(0, 14) ?
-			le32_to_cpu(socinfo->num_defective_parts) : 0)
+		 le32_to_cpu(socinfo->num_subset_parts) : 0)
 		: 0;
 }
 
-static uint32_t socinfo_get_ndefective_parts_array_offset(void)
+static uint32_t socinfo_get_nsubset_parts_array_offset(void)
 {
 	return socinfo ?
 		(socinfo_format >= SOCINFO_VERSION(0, 14) ?
-			le32_to_cpu(socinfo->ndefective_parts_array_offset) : 0)
+		 le32_to_cpu(socinfo->nsubset_parts_array_offset) : 0)
 		: 0;
 }
 
@@ -374,7 +408,7 @@ msm_get_raw_id(struct device *dev,
 		struct device_attribute *attr,
 		char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "%u\n",
+	return scnprintf(buf, PAGE_SIZE, "%u\n",
 		socinfo_get_raw_id());
 }
 ATTR_DEFINE(raw_id);
@@ -384,7 +418,7 @@ msm_get_raw_version(struct device *dev,
 		     struct device_attribute *attr,
 		     char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "%u\n",
+	return scnprintf(buf, PAGE_SIZE, "%u\n",
 		socinfo_get_raw_version());
 }
 ATTR_DEFINE(raw_version);
@@ -399,7 +433,7 @@ msm_get_hw_platform(struct device *dev,
 
 	hw_type = socinfo_get_platform_type();
 
-	return snprintf(buf, PAGE_SIZE, "%-.32s\n",
+	return scnprintf(buf, PAGE_SIZE, "%-.32s\n",
 			hw_platform[hw_type]);
 }
 ATTR_DEFINE(hw_platform);
@@ -410,7 +444,7 @@ msm_get_platform_version(struct device *dev,
 				struct device_attribute *attr,
 				char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "%u\n",
+	return scnprintf(buf, PAGE_SIZE, "%u\n",
 		socinfo_get_platform_version());
 }
 ATTR_DEFINE(platform_version);
@@ -421,7 +455,7 @@ msm_get_accessory_chip(struct device *dev,
 				struct device_attribute *attr,
 				char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "%u\n",
+	return scnprintf(buf, PAGE_SIZE, "%u\n",
 		socinfo_get_accessory_chip());
 }
 ATTR_DEFINE(accessory_chip);
@@ -435,7 +469,7 @@ msm_get_platform_subtype_id(struct device *dev,
 	uint32_t hw_subtype;
 
 	hw_subtype = socinfo_get_platform_subtype();
-	return snprintf(buf, PAGE_SIZE, "%u\n",
+	return scnprintf(buf, PAGE_SIZE, "%u\n",
 		hw_subtype);
 }
 ATTR_DEFINE(platform_subtype_id);
@@ -453,7 +487,7 @@ msm_get_platform_subtype(struct device *dev,
 			pr_err("Invalid hardware platform sub type for qrd found\n");
 			hw_subtype = PLATFORM_SUBTYPE_QRD_INVALID;
 		}
-		return snprintf(buf, PAGE_SIZE, "%-.32s\n",
+		return scnprintf(buf, PAGE_SIZE, "%-.32s\n",
 					qrd_hw_platform_subtype[hw_subtype]);
 	} else if (socinfo_get_platform_type() == HW_PLATFORM_ADP) {
 		return scnprintf(buf, PAGE_SIZE, "%-.32s\n",
@@ -463,7 +497,7 @@ msm_get_platform_subtype(struct device *dev,
 			pr_err("Invalid hardware platform subtype\n");
 			hw_subtype = PLATFORM_SUBTYPE_INVALID;
 		}
-		return snprintf(buf, PAGE_SIZE, "%-.32s\n",
+		return scnprintf(buf, PAGE_SIZE, "%-.32s\n",
 			hw_platform_subtype[hw_subtype]);
 	}
 }
@@ -475,7 +509,7 @@ msm_get_pmic_model(struct device *dev,
 			struct device_attribute *attr,
 			char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "%u\n",
+	return scnprintf(buf, PAGE_SIZE, "%u\n",
 		socinfo_get_pmic_model());
 }
 ATTR_DEFINE(pmic_model);
@@ -485,7 +519,7 @@ msm_get_pmic_die_revision(struct device *dev,
 			       struct device_attribute *attr,
 			       char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "%u\n",
+	return scnprintf(buf, PAGE_SIZE, "%u\n",
 			 socinfo_get_pmic_die_revision());
 }
 ATTR_DEFINE(pmic_die_revision);
@@ -497,7 +531,7 @@ msm_get_foundry_id(struct device *dev,
 			struct device_attribute *attr,
 			char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "%u\n",
+	return scnprintf(buf, PAGE_SIZE, "%u\n",
 		socinfo_get_foundry_id());
 }
 ATTR_DEFINE(foundry_id);
@@ -520,7 +554,7 @@ msm_get_chip_family(struct device *dev,
 			struct device_attribute *attr,
 			char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "0x%x\n",
+	return scnprintf(buf, PAGE_SIZE, "0x%x\n",
 		socinfo_get_chip_family());
 }
 ATTR_DEFINE(chip_family);
@@ -530,7 +564,7 @@ msm_get_raw_device_family(struct device *dev,
 			struct device_attribute *attr,
 			char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "0x%x\n",
+	return scnprintf(buf, PAGE_SIZE, "0x%x\n",
 		socinfo_get_raw_device_family());
 }
 ATTR_DEFINE(raw_device_family);
@@ -540,7 +574,7 @@ msm_get_raw_device_number(struct device *dev,
 			struct device_attribute *attr,
 			char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "0x%x\n",
+	return scnprintf(buf, PAGE_SIZE, "0x%x\n",
 		socinfo_get_raw_device_number());
 }
 ATTR_DEFINE(raw_device_number);
@@ -551,7 +585,7 @@ msm_get_nproduct_id(struct device *dev,
 			struct device_attribute *attr,
 			char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "0x%x\n",
+	return scnprintf(buf, PAGE_SIZE, "0x%x\n",
 		socinfo_get_nproduct_id());
 }
 ATTR_DEFINE(nproduct_id);
@@ -572,7 +606,7 @@ msm_get_num_clusters(struct device *dev,
 			struct device_attribute *attr,
 			char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "0x%x\n",
+	return scnprintf(buf, PAGE_SIZE, "0x%x\n",
 		socinfo_get_num_clusters());
 }
 ATTR_DEFINE(num_clusters);
@@ -588,33 +622,131 @@ msm_get_ncluster_array_offset(struct device *dev,
 ATTR_DEFINE(ncluster_array_offset);
 
 static ssize_t
-msm_get_num_defective_parts(struct device *dev,
+msm_get_num_subset_parts(struct device *dev,
 			struct device_attribute *attr,
 			char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "0x%x\n",
-		socinfo_get_num_defective_parts());
+	return scnprintf(buf, PAGE_SIZE, "0x%x\n",
+			socinfo_get_num_subset_parts());
 }
-ATTR_DEFINE(num_defective_parts);
+ATTR_DEFINE(num_subset_parts);
 
 static ssize_t
-msm_get_ndefective_parts_array_offset(struct device *dev,
+msm_get_nsubset_parts_array_offset(struct device *dev,
 			struct device_attribute *attr,
 			char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "0x%x\n",
-		socinfo_get_ndefective_parts_array_offset());
+	return scnprintf(buf, PAGE_SIZE, "0x%x\n",
+			socinfo_get_nsubset_parts_array_offset());
 }
-ATTR_DEFINE(ndefective_parts_array_offset);
-
+ATTR_DEFINE(nsubset_parts_array_offset);
+static uint32_t
+socinfo_get_subset_parts(void)
+{
+	uint32_t num_parts = socinfo_get_num_subset_parts();
+	uint32_t offset = socinfo_get_nsubset_parts_array_offset();
+	uint32_t sub_parts = 0;
+	void *info = socinfo;
+	uint32_t part_entry;
+	int i;
+	if (!num_parts || !offset)
+		return -EINVAL;
+	info += offset;
+	for (i = 0; i < num_parts; i++) {
+		part_entry = get_unaligned_le32(info);
+		if (part_entry & 1)
+			sub_parts |= BIT(i);
+		info += sizeof(uint32_t);
+	}
+	return sub_parts;
+}
+bool
+socinfo_get_part_info(enum subset_part_type part)
+{
+	uint32_t partinfo;
+	if (part >= NUM_PARTS_MAX) {
+		pr_err("Bad part number\n");
+		return false;
+	}
+	partinfo = socinfo_get_subset_parts();
+	if (partinfo < 0) {
+		pr_err("Failed to get part information\n");
+		return false;
+	}
+	return (partinfo & BIT(part));
+}
+EXPORT_SYMBOL(socinfo_get_part_info);
+static ssize_t
+msm_get_subset_parts(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	uint32_t sub_parts = socinfo_get_subset_parts();
+	return scnprintf(buf, PAGE_SIZE, "%x\n", sub_parts);
+}
+ATTR_DEFINE(subset_parts);
+int
+socinfo_get_part_count(enum subset_part_type part)
+{
+	int part_count = 1;
+	if ((part <= PART_UNKNOWN) || (part >= NUM_PARTS_MAX)) {
+		pr_err("Bad part number\n");
+		return -EINVAL;
+	}
+	return part_count;
+}
+EXPORT_SYMBOL(socinfo_get_part_count);
+int
+socinfo_get_subpart_info(enum subset_part_type part,
+		u32 *part_info,
+		u32 num_parts)
+{
+	uint32_t num_subset_parts = 0, offset = 0;
+	void *info = socinfo;
+	u32 i = 0, count = 0;
+	int part_count = 0;
+	if (!part_info)
+		return -EINVAL;
+	part_count = socinfo_get_part_count(part);
+	if (part_count <= 0)
+		return -EINVAL;
+	num_subset_parts = socinfo_get_num_subset_parts();
+	offset = socinfo_get_nsubset_parts_array_offset();
+	if (!num_subset_parts || !offset)
+		return -EINVAL;
+	info += (offset + (part * sizeof(u32)));
+	count = min_t(u32, num_parts, part_count);
+	for (i = 0; i < count; i++) {
+		part_info[i] = get_unaligned_le32(info);
+		info += sizeof(u32);
+	}
+	return 0;
+}
+EXPORT_SYMBOL(socinfo_get_subpart_info);
+CREATE_PART_FUNCTION(gpu, PART_GPU);
+CREATE_PART_FUNCTION(video, PART_VIDEO);
+CREATE_PART_FUNCTION(camera, PART_CAMERA);
+CREATE_PART_FUNCTION(display, PART_DISPLAY);
+CREATE_PART_FUNCTION(audio, PART_AUDIO);
+CREATE_PART_FUNCTION(modem, PART_MODEM);
+CREATE_PART_FUNCTION(wlan, PART_WLAN);
+CREATE_PART_FUNCTION(comp, PART_COMP);
+CREATE_PART_FUNCTION(sensors, PART_SENSORS);
+CREATE_PART_FUNCTION(npu, PART_NPU);
+CREATE_PART_FUNCTION(spss, PART_SPSS);
+CREATE_PART_FUNCTION(nav, PART_NAV);
+CREATE_PART_FUNCTION(comp1, PART_COMP1);
+CREATE_PART_FUNCTION(display1, PART_DISPLAY1);
+CREATE_PART_FUNCTION(nsp, PART_NSP);
+CREATE_PART_FUNCTION(eva, PART_EVA);
 /* Version 15 */
 static ssize_t
 msm_get_nmodem_supported(struct device *dev,
-			struct device_attribute *attr,
-			char *buf)
+		struct device_attribute *attr,
+		char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "0x%x\n",
-		socinfo_get_nmodem_supported());
+	return scnprintf(buf, PAGE_SIZE, "0x%x\n",
+			socinfo_get_nmodem_supported());
 }
 ATTR_DEFINE(nmodem_supported);
 
@@ -730,7 +862,7 @@ static const struct soc_id soc_id[] = {
 };
 
 static struct qcom_socinfo *qsocinfo;
-static struct attribute *msm_custom_socinfo_attrs[35];
+static struct attribute *msm_custom_socinfo_attrs[MAX_SOCINFO_ATTRS];
 
 static char *socinfo_get_image_version_base_address(void)
 {
@@ -750,14 +882,14 @@ msm_get_image_version(struct device *dev,
 	string_address = socinfo_get_image_version_base_address();
 	if (IS_ERR_OR_NULL(string_address)) {
 		pr_err("Failed to get image version base address\n");
-		return snprintf(buf, SMEM_IMAGE_VERSION_NAME_SIZE, "Unknown");
+		return scnprintf(buf, SMEM_IMAGE_VERSION_NAME_SIZE, "Unknown");
 	}
 
 	down_read(&qsocinfo->current_image_rwsem);
 	string_address +=
 		qsocinfo->current_image * SMEM_IMAGE_VERSION_SINGLE_BLOCK_SIZE;
 	up_read(&qsocinfo->current_image_rwsem);
-	return snprintf(buf, SMEM_IMAGE_VERSION_NAME_SIZE, "%-.75s\n",
+	return scnprintf(buf, SMEM_IMAGE_VERSION_NAME_SIZE, "%-.75s\n",
 			string_address);
 }
 
@@ -783,7 +915,7 @@ msm_set_image_version(struct device *dev,
 	store_address +=
 		qsocinfo->current_image * SMEM_IMAGE_VERSION_SINGLE_BLOCK_SIZE;
 	up_read(&qsocinfo->current_image_rwsem);
-	snprintf(store_address, SMEM_IMAGE_VERSION_NAME_SIZE, "%-.75s", buf);
+	scnprintf(store_address, SMEM_IMAGE_VERSION_NAME_SIZE, "%-.75s", buf);
 	return count;
 }
 
@@ -797,7 +929,7 @@ msm_get_image_variant(struct device *dev,
 	string_address = socinfo_get_image_version_base_address();
 	if (IS_ERR_OR_NULL(string_address)) {
 		pr_err("Failed to get image version base address\n");
-		return snprintf(buf, SMEM_IMAGE_VERSION_VARIANT_SIZE,
+		return scnprintf(buf, SMEM_IMAGE_VERSION_VARIANT_SIZE,
 		"Unknown");
 	}
 
@@ -806,7 +938,7 @@ msm_get_image_variant(struct device *dev,
 		qsocinfo->current_image * SMEM_IMAGE_VERSION_SINGLE_BLOCK_SIZE;
 	up_read(&qsocinfo->current_image_rwsem);
 	string_address += SMEM_IMAGE_VERSION_VARIANT_OFFSET;
-	return snprintf(buf, SMEM_IMAGE_VERSION_VARIANT_SIZE, "%-.20s\n",
+	return scnprintf(buf, SMEM_IMAGE_VERSION_VARIANT_SIZE, "%-.20s\n",
 			string_address);
 }
 
@@ -833,7 +965,7 @@ msm_set_image_variant(struct device *dev,
 		qsocinfo->current_image * SMEM_IMAGE_VERSION_SINGLE_BLOCK_SIZE;
 	up_read(&qsocinfo->current_image_rwsem);
 	store_address += SMEM_IMAGE_VERSION_VARIANT_OFFSET;
-	snprintf(store_address, SMEM_IMAGE_VERSION_VARIANT_SIZE, "%-.20s", buf);
+	scnprintf(store_address, SMEM_IMAGE_VERSION_VARIANT_SIZE, "%-.20s", buf);
 	return count;
 }
 
@@ -847,14 +979,14 @@ msm_get_image_crm_version(struct device *dev,
 	string_address = socinfo_get_image_version_base_address();
 	if (IS_ERR_OR_NULL(string_address)) {
 		pr_err("Failed to get image version base address\n");
-		return snprintf(buf, SMEM_IMAGE_VERSION_OEM_SIZE, "Unknown");
+		return scnprintf(buf, SMEM_IMAGE_VERSION_OEM_SIZE, "Unknown");
 	}
 	down_read(&qsocinfo->current_image_rwsem);
 	string_address +=
 		qsocinfo->current_image * SMEM_IMAGE_VERSION_SINGLE_BLOCK_SIZE;
 	up_read(&qsocinfo->current_image_rwsem);
 	string_address += SMEM_IMAGE_VERSION_OEM_OFFSET;
-	return snprintf(buf, SMEM_IMAGE_VERSION_OEM_SIZE, "%-.33s\n",
+	return scnprintf(buf, SMEM_IMAGE_VERSION_OEM_SIZE, "%-.33s\n",
 			string_address);
 }
 
@@ -881,7 +1013,7 @@ msm_set_image_crm_version(struct device *dev,
 		qsocinfo->current_image * SMEM_IMAGE_VERSION_SINGLE_BLOCK_SIZE;
 	up_read(&qsocinfo->current_image_rwsem);
 	store_address += SMEM_IMAGE_VERSION_OEM_OFFSET;
-	snprintf(store_address, SMEM_IMAGE_VERSION_OEM_SIZE, "%-.33s", buf);
+	scnprintf(store_address, SMEM_IMAGE_VERSION_OEM_SIZE, "%-.33s", buf);
 	return count;
 }
 
@@ -893,7 +1025,7 @@ msm_get_image_number(struct device *dev,
 	int ret;
 
 	down_read(&qsocinfo->current_image_rwsem);
-	ret = snprintf(buf, PAGE_SIZE, "%d\n",
+	ret = scnprintf(buf, PAGE_SIZE, "%d\n",
 			qsocinfo->current_image);
 	up_read(&qsocinfo->current_image_rwsem);
 	return ret;
@@ -928,7 +1060,7 @@ msm_get_images(struct device *dev,
 
 	image_address = socinfo_get_image_version_base_address();
 	if (IS_ERR_OR_NULL(image_address))
-		return snprintf(buf, PAGE_SIZE, "Unavailable\n");
+		return scnprintf(buf, PAGE_SIZE, "Unavailable\n");
 
 	*buf = '\0';
 	for (image = 0; image < SMEM_IMAGE_VERSION_BLOCKS_COUNT; image++) {
@@ -937,14 +1069,14 @@ msm_get_images(struct device *dev,
 			continue;
 		}
 
-		pos += snprintf(buf + pos, PAGE_SIZE - pos, "%d:\n",
+		pos += scnprintf(buf + pos, PAGE_SIZE - pos, "%d:\n",
 			image);
-		pos += snprintf(buf + pos, PAGE_SIZE - pos,
+		pos += scnprintf(buf + pos, PAGE_SIZE - pos,
 			"\tCRM:\t\t%-.75s\n", image_address);
-		pos += snprintf(buf + pos, PAGE_SIZE - pos,
+		pos += scnprintf(buf + pos, PAGE_SIZE - pos,
 			"\tVariant:\t%-.20s\n",
 			image_address + SMEM_IMAGE_VERSION_VARIANT_OFFSET);
-		pos += snprintf(buf + pos, PAGE_SIZE - pos,
+		pos += scnprintf(buf + pos, PAGE_SIZE - pos,
 			"\tVersion:\t%-.33s\n",
 			image_address + SMEM_IMAGE_VERSION_OEM_OFFSET);
 
@@ -1000,9 +1132,26 @@ static void socinfo_populate_sysfs(struct qcom_socinfo *qcom_socinfo)
 		msm_custom_socinfo_attrs[i++] =
 		&dev_attr_ncluster_array_offset.attr;
 		msm_custom_socinfo_attrs[i++] =
-		&dev_attr_num_defective_parts.attr;
+			&dev_attr_num_subset_parts.attr;
 		msm_custom_socinfo_attrs[i++] =
-		&dev_attr_ndefective_parts_array_offset.attr;
+			&dev_attr_nsubset_parts_array_offset.attr;
+		msm_custom_socinfo_attrs[i++] = &dev_attr_subset_parts.attr;
+		msm_custom_socinfo_attrs[i++] = &dev_attr_gpu.attr;
+		msm_custom_socinfo_attrs[i++] = &dev_attr_video.attr;
+		msm_custom_socinfo_attrs[i++] = &dev_attr_camera.attr;
+		msm_custom_socinfo_attrs[i++] = &dev_attr_display.attr;
+		msm_custom_socinfo_attrs[i++] = &dev_attr_audio.attr;
+		msm_custom_socinfo_attrs[i++] = &dev_attr_modem.attr;
+		msm_custom_socinfo_attrs[i++] = &dev_attr_wlan.attr;
+		msm_custom_socinfo_attrs[i++] = &dev_attr_comp.attr;
+		msm_custom_socinfo_attrs[i++] = &dev_attr_sensors.attr;
+		msm_custom_socinfo_attrs[i++] = &dev_attr_npu.attr;
+		msm_custom_socinfo_attrs[i++] = &dev_attr_spss.attr;
+		msm_custom_socinfo_attrs[i++] = &dev_attr_nav.attr;
+		msm_custom_socinfo_attrs[i++] = &dev_attr_comp1.attr;
+		msm_custom_socinfo_attrs[i++] = &dev_attr_display1.attr;
+		msm_custom_socinfo_attrs[i++] = &dev_attr_nsp.attr;
+		msm_custom_socinfo_attrs[i++] = &dev_attr_eva.attr;
 	case SOCINFO_VERSION(0, 13):
 		msm_custom_socinfo_attrs[i++] = &dev_attr_nproduct_id.attr;
 		msm_custom_socinfo_attrs[i++] = &dev_attr_chip_name.attr;
@@ -1103,7 +1252,9 @@ static void socinfo_print(void)
 		break;
 	case SOCINFO_VERSION(0, 7):
 	case SOCINFO_VERSION(0, 8):
-		pr_info("v%u.%u, id=%u, ver=%u.%u, raw_id=%u, raw_ver=%u, hw_plat=%u, hw_plat_ver=%u\n accessory_chip=%u, hw_plat_subtype=%u, pmic_model=%u, pmic_die_revision=%u\n",
+		pr_info("v%u.%u, id=%u, ver=%u.%u, raw_id=%u, raw_ver=%u, " \
+				"hw_plat=%u, hw_plat_ver=%u\n accessory_chip=%u, " \
+				"hw_plat_subtype=%u, pmic_model=%u, pmic_die_revision=%u\n",
 			f_maj, f_min, socinfo->id, v_maj, v_min,
 			socinfo->raw_id, socinfo->raw_ver,
 			socinfo->hw_plat,
@@ -1114,7 +1265,10 @@ static void socinfo_print(void)
 			socinfo->pmic_die_rev);
 		break;
 	case SOCINFO_VERSION(0, 9):
-		pr_info("v%u.%u, id=%u, ver=%u.%u, raw_id=%u, raw_ver=%u, hw_plat=%u, hw_plat_ver=%u\n accessory_chip=%u, hw_plat_subtype=%u, pmic_model=%u, pmic_die_revision=%u foundry_id=%u\n",
+		pr_info("v%u.%u, id=%u, ver=%u.%u, raw_id=%u, raw_ver=%u, " \
+				"hw_plat=%u, hw_plat_ver=%u\n accessory_chip=%u, " \
+				"hw_plat_subtype=%u, pmic_model=%u, " \
+				"pmic_die_revision=%u foundry_id=%u\n",
 			f_maj, f_min, socinfo->id, v_maj, v_min,
 			socinfo->raw_id, socinfo->raw_ver,
 			socinfo->hw_plat,
@@ -1126,7 +1280,10 @@ static void socinfo_print(void)
 			socinfo->foundry_id);
 		break;
 	case SOCINFO_VERSION(0, 10):
-		pr_info("v%u.%u, id=%u, ver=%u.%u, raw_id=%u, raw_ver=%u, hw_plat=%u, hw_plat_ver=%u\n accessory_chip=%u, hw_plat_subtype=%u, pmic_model=%u, pmic_die_revision=%u foundry_id=%u serial_number=%u\n",
+		pr_info("v%u.%u, id=%u, ver=%u.%u, raw_id=%u, raw_ver=%u," \
+				"hw_plat=%u, hw_plat_ver=%u\n accessory_chip=%u, " \
+				"hw_plat_subtype=%u, pmic_model=%u, pmic_die_revision=%u " \
+				"foundry_id=%u > serial_number=%u\n",
 			f_maj, f_min, socinfo->id, v_maj, v_min,
 			socinfo->raw_id, socinfo->raw_ver,
 			socinfo->hw_plat,
@@ -1139,7 +1296,10 @@ static void socinfo_print(void)
 			socinfo->serial_num);
 		break;
 	case SOCINFO_VERSION(0, 11):
-		pr_info("v%u.%u, id=%u, ver=%u.%u, raw_id=%u, raw_ver=%u, hw_plat=%u, hw_plat_ver=%u\n accessory_chip=%u, hw_plat_subtype=%u, pmic_model=%u, pmic_die_revision=%u foundry_id=%u serial_number=%u num_pmics=%u\n",
+		pr_info("v%u.%u, id=%u, ver=%u.%u, raw_id=%u, raw_ver=%u," \
+				"hw_plat=%u, hw_plat_ver=%u\n accessory_chip=%u, " \
+				"hw_plat_subtype=%u, pmic_model=%u, pmic_die_revision=%u " \
+				"foundry_id=%u serial_number=%u > num_pmics=%u\n",
 			f_maj, f_min, socinfo->id, v_maj, v_min,
 			socinfo->raw_id, socinfo->raw_ver,
 			socinfo->hw_plat,
@@ -1153,7 +1313,11 @@ static void socinfo_print(void)
 			socinfo->num_pmics);
 		break;
 	case SOCINFO_VERSION(0, 12):
-		pr_info("v%u.%u, id=%u, ver=%u.%u, raw_id=%u, raw_ver=%u, hw_plat=%u, hw_plat_ver=%u\n accessory_chip=%u, hw_plat_subtype=%u, pmic_model=%u, pmic_die_revision=%u foundry_id=%u serial_number=%u num_pmics=%u chip_family=0x%x raw_device_family=0x%x raw_device_number=0x%x\n",
+		pr_info("v%u.%u, id=%u, ver=%u.%u, raw_id=%u, raw_ver=%u, " \
+				"hw_plat=%u, hw_plat_ver=%u\n accessory_chip=%u, " \
+				"hw_plat_subtype=%u, pmic_model=%u, pmic_die_revision=%u " \
+				"foundry_id=%u serial_number=%u > num_pmics=%u " \
+				"chip_family=0x%x raw_device_family=0x%x raw_device_number=0x%x\n",
 			f_maj, f_min, socinfo->id, v_maj, v_min,
 			socinfo->raw_id, socinfo->raw_ver,
 			socinfo->hw_plat,
@@ -1170,7 +1334,11 @@ static void socinfo_print(void)
 			socinfo->raw_device_num);
 		break;
 	case SOCINFO_VERSION(0, 13):
-		pr_info("v%u.%u, id=%u, ver=%u.%u, raw_id=%u, raw_ver=%u, hw_plat=%u, hw_plat_ver=%u\n accessory_chip=%u, hw_plat_subtype=%u, pmic_model=%u, pmic_die_revision=%u foundry_id=%u serial_number=%u num_pmics=%u chip_family=0x%x raw_device_family=0x%x raw_device_number=0x%x nproduct_id=0x%x\n",
+		pr_info("v%u.%u, id=%u, ver=%u.%u, raw_id=%u, raw_ver=%u," \
+				"hw_plat=%u, hw_plat_ver=%u\n accessory_chip=%u, " \
+				"hw_plat_subtype=%u, pmic_model=%u, pmic_die_revision=%u " \
+				"foundry_id=%u serial_number=%u > num_pmics=%u chip_family=0x%x " \
+				"raw_device_family=0x%x raw_device_number=0x%x nproduct_id=0x%x\n",
 			f_maj, f_min, socinfo->id, v_maj, v_min,
 			socinfo->raw_id, socinfo->raw_ver,
 			socinfo->hw_plat,
@@ -1189,7 +1357,13 @@ static void socinfo_print(void)
 		break;
 
 	case SOCINFO_VERSION(0, 14):
-		pr_info("v%u.%u, id=%u, ver=%u.%u, raw_id=%u, raw_ver=%u, hw_plat=%u, hw_plat_ver=%u\n accessory_chip=%u, hw_plat_subtype=%u, pmic_model=%u, pmic_die_revision=%u foundry_id=%u serial_number=%u num_pmics=%u chip_family=0x%x raw_device_family=0x%x raw_device_number=0x%x nproduct_id=0x%x num_clusters=0x%x ncluster_array_offset=0x%x num_defective_parts=0x%x ndefective_parts_array_offset=0x%x\n",
+		pr_info("v%u.%u, id=%u, ver=%u.%u, raw_id=%u, raw_ver=%u," \
+				"hw_plat=%u, hw_plat_ver=%u\n accessory_chip=%u, " \
+				"hw_plat_subtype=%u, pmic_model=%u, pmic_die_revision=%u " \
+				"foundry_id=%u serial_number=%u > num_pmics=%u chip_family=0x%x " \
+				"raw_device_family=0x%x raw_device_number=0x%x nproduct_id=0x%x " \
+				"num_clusters=0x%x ncluster_array_offset=0x%x " \
+				"num_subset_parts=0x%x nsubset_parts_array_offset=0x%x\n",
 			f_maj, f_min, socinfo->id, v_maj, v_min,
 			socinfo->raw_id, socinfo->raw_ver,
 			socinfo->hw_plat,
@@ -1207,12 +1381,19 @@ static void socinfo_print(void)
 			socinfo->nproduct_id,
 			socinfo->num_clusters,
 			socinfo->ncluster_array_offset,
-			socinfo->num_defective_parts,
-			socinfo->ndefective_parts_array_offset);
+				socinfo->num_subset_parts,
+				socinfo->nsubset_parts_array_offset);
 		break;
 
 	case SOCINFO_VERSION(0, 15):
-		pr_info("v%u.%u, id=%u, ver=%u.%u, raw_id=%u, raw_ver=%u, hw_plat=%u, hw_plat_ver=%u\n accessory_chip=%u, hw_plat_subtype=%u, pmic_model=%u, pmic_die_revision=%u foundry_id=%u serial_number=%u num_pmics=%u chip_family=0x%x raw_device_family=0x%x raw_device_number=0x%x nproduct_id=0x%x num_clusters=0x%x ncluster_array_offset=0x%x num_defective_parts=0x%x ndefective_parts_array_offset=0x%x nmodem_supported=0x%x\n",
+		pr_info("v%u.%u, id=%u, ver=%u.%u, raw_id=%u, raw_ver=%u," \
+				"hw_plat=%u, hw_plat_ver=%u\n accessory_chip=%u, " \
+				"hw_plat_subtype=%u, pmic_model=%u, pmic_die_revision=%u " \
+				"foundry_id=%u serial_number=%u > num_pmics=%u chip_family=0x%x " \
+				"raw_device_family=0x%x raw_device_number=0x%x nproduct_id=0x%x " \
+				"num_clusters=0x%x ncluster_array_offset=0x%x " \
+				"num_subset_parts=0x%x nsubset_parts_array_offset=0x%x " \
+				"> \nmodem_supported=0x%x\n",
 			f_maj, f_min, socinfo->id, v_maj, v_min,
 			socinfo->raw_id, socinfo->raw_ver,
 			socinfo->hw_plat,
@@ -1230,8 +1411,8 @@ static void socinfo_print(void)
 			socinfo->nproduct_id,
 			socinfo->num_clusters,
 			socinfo->ncluster_array_offset,
-			socinfo->num_defective_parts,
-			socinfo->ndefective_parts_array_offset,
+				socinfo->num_subset_parts,
+				socinfo->nsubset_parts_array_offset,
 			socinfo->nmodem_supported);
 		break;
 
@@ -1241,7 +1422,7 @@ static void socinfo_print(void)
 	}
 }
 
-static const char *socinfo_machine(unsigned int id)
+static const char *socinfo_machine(struct device *dev, unsigned int id)
 {
 	int idx;
 
@@ -1263,7 +1444,7 @@ const char *socinfo_get_id_string(void)
 {
 	uint32_t id = socinfo_get_id();
 
-	return socinfo_machine(id);
+	return socinfo_machine(NULL, id);
 }
 EXPORT_SYMBOL(socinfo_get_id_string);
 
@@ -1287,7 +1468,6 @@ static int qcom_socinfo_probe(struct platform_device *pdev)
 	if (!qs)
 		return -ENOMEM;
 
-	qs->attr.machine = socinfo_machine(le32_to_cpu(info->id));
 	qs->attr.family = "Snapdragon";
 	qs->attr.soc_id = devm_kasprintf(&pdev->dev, GFP_KERNEL, "%u",
 					 le32_to_cpu(info->id));
