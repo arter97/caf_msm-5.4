@@ -2,6 +2,7 @@
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -4653,6 +4654,17 @@ static struct usb_role_switch_desc role_desc = {
 	.allow_userspace_control = true,
 };
 
+static void typec_orientation_set(struct dwc3_msm *mdwc)
+{
+	struct device *dev = mdwc->dev;
+	int ret;
+
+	ret = of_property_read_u32(dev->of_node, "qcom,typec_cc_orientation",
+			&mdwc->orientation_override);
+	if (ret)
+		mdwc->orientation_override = 0;
+}
+
 static inline int role_switch_init(struct dwc3_msm *mdwc)
 {
 	struct device *dev = mdwc->dev;
@@ -5707,6 +5719,8 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 
 	if (dwc3_msm_ocp_init(pdev))
 		goto put_dwc3;
+
+	typec_orientation_set(mdwc);
 
 	if (role_switch_init(mdwc))
 		goto put_dwc3;
