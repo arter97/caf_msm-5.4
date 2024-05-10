@@ -1668,6 +1668,10 @@ static int hgsl_ioctl_mem_alloc(struct file *filep, unsigned long arg)
 		goto out;
 	}
 
+	/* let the back end aware that this is HGSL allocation */
+	params.flags &= ~GSL_MEMFLAGS_USERMEM_MASK;
+	params.flags |= GSL_MEMFLAGS_USERMEM_HGSL_ALLOC;
+
 	mem_node->fd = -1;
 	mem_node->flags = params.flags;
 
@@ -1856,6 +1860,7 @@ static int hgsl_ioctl_mem_map_smmu(struct file *filep, unsigned long arg)
 	}
 
 	params.size = PAGE_ALIGN(params.size);
+	params.flags &= ~GSL_MEMFLAGS_USERMEM_MASK;
 	mem_node->flags = params.flags;
 	ret = hgsl_hyp_mem_map_smmu(hab_channel, &params, mem_node);
 

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __HAB_H
 #define __HAB_H
@@ -181,7 +181,7 @@ struct physical_channel {
 	spinlock_t vid_lock;
 
 	struct idr expid_idr;
-	spinlock_t expid_lock;
+	rwlock_t expid_lock;
 
 	void *hyp_data;
 	int dom_id; /* BE role: remote vmid; FE role: don't care */
@@ -391,10 +391,16 @@ struct export_desc {
 	unsigned char       payload[1];
 } __packed;
 
+enum export_state {
+	HAB_EXP_EXPORTING,		/* memory export is in progress */
+	HAB_EXP_SUCCESS,		/* memory export is successful */
+};
+
 struct export_desc_super {
 	struct kref refcount;
 	void *platform_data;
 	unsigned long offset;
+	enum export_state exp_state;
 	struct export_desc  exp;
 };
 
