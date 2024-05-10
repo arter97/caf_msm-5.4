@@ -22,6 +22,7 @@
 
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
+#include <linux/moduleparam.h>
 
 #include "debug.h"
 #include "core.h"
@@ -36,6 +37,9 @@
 static int __dwc3_gadget_start(struct dwc3 *dwc);
 static void dwc3_gadget_disconnect_interrupt(struct dwc3 *dwc);
 static void dwc3_gadget_wakeup_interrupt(struct dwc3 *dwc, bool remote_wakeup);
+
+static unsigned int multi_uvc_support;
+module_param(multi_uvc_support, uint, 0644);
 
 /**
  * dwc3_gadget_set_test_mode - enables usb2 test modes
@@ -233,8 +237,28 @@ int dwc3_gadget_resize_tx_fifos(struct dwc3 *dwc, struct dwc3_ep *dep)
 
 	if ((dep->endpoint.maxburst > 6) &&
 			usb_endpoint_xfer_isoc(dep->endpoint.desc))
-		mult = 6;
+		mult = 10;
 
+	/* WA to handle tx fifo size limitation , allocating
+	 * 2k and 1k per uvc instance based on available tx fifo
+	 * and 1k fifo to non isoc and uac eps.
+	 */
+	if (multi_uvc_support) {
+		if ((dep->endpoint.maxburst > 6) &&
+				usb_endpoint_xfer_isoc(dep->endpoint.desc))
+			mult = 6;
+		else if ((dep->endpoint.maxpacket < 1024) &&
+				usb_endpoint_xfer_isoc(dep->endpoint.desc))
+			mult = 1;
+		else if ((dep->endpoint.maxburst < 6) &&
+				usb_endpoint_xfer_isoc(dep->endpoint.desc))
+			mult = 2;
+		else
+			mult = 1;
+
+		if (((dwc->last_fifo_depth * mdwidth) + 4184) >= dwc->tx_fifo_size)
+			mult = 1;
+	}
 
 	tmp = ((max_packet + mdwidth) * mult) + mdwidth;
 	fifo_size = DIV_ROUND_UP(tmp, mdwidth);

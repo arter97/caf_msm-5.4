@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (c) 2018-19 Linaro Limited
 /* Copyright (c) 2021, The Linux Foundation. All rights reserved. */
-/*Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.*/
+/*Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.*/
 
 #include <linux/delay.h>
 #include <linux/module.h>
@@ -4292,7 +4292,8 @@ static int _qcom_ethqos_probe(void *arg)
 	plat_dat->c45_marvell_en = of_property_read_bool(np, "qcom,c45_marvell");
 	plat_dat->tx_select_queue = dwmac_qcom_select_queue;
 	if (of_property_read_bool(pdev->dev.of_node,
-				  "disable-intr-mod"))
+				  "disable-intr-mod") &&
+	    !plat_dat->autosar_en)
 		ETHQOSINFO("disabling Interrupt moderation\n");
 	else
 		plat_dat->get_plat_tx_coal_frames =  dwmac_qcom_get_plat_tx_coal_frames;
@@ -4627,16 +4628,19 @@ static int qcom_ethqos_suspend(struct device *dev)
 		return -EINVAL;
 	priv = netdev_priv(ndev);
 	plat = priv->plat;
-	if (ethqos->current_phy_mode == DISABLE_PHY_AT_SUSPEND_ONLY ||
-	    ethqos->current_phy_mode == DISABLE_PHY_SUSPEND_ENABLE_RESUME) {
-		/*Backup phy related data*/
-		if (priv->phydev->autoneg == AUTONEG_DISABLE) {
-			ethqos->backup_autoneg = priv->phydev->autoneg;
-			ethqos->backup_bmcr = ethqos_mdio_read(priv,
-							       plat->phy_addr,
-							       MII_BMCR);
-		} else {
-			ethqos->backup_autoneg = AUTONEG_ENABLE;
+	if (priv->phydev)  {
+		if (ethqos->current_phy_mode == DISABLE_PHY_AT_SUSPEND_ONLY ||
+		    ethqos->current_phy_mode ==
+		    DISABLE_PHY_SUSPEND_ENABLE_RESUME) {
+			/*Backup phy related data*/
+			if (priv->phydev->autoneg == AUTONEG_DISABLE) {
+				ethqos->backup_autoneg = priv->phydev->autoneg;
+				ethqos->backup_bmcr = ethqos_mdio_read
+						      (priv, plat->phy_addr,
+						       MII_BMCR);
+			} else {
+				ethqos->backup_autoneg = AUTONEG_ENABLE;
+			}
 		}
 	}
 	ret = stmmac_suspend(dev);

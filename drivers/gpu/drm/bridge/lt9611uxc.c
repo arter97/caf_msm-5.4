@@ -1726,6 +1726,7 @@ static void lt9611_set_preferred_mode(struct drm_connector *connector)
 
 	if (pdata->fix_mode) {
 		list_for_each_entry(mode, &connector->probed_modes, head) {
+			mode->type &= ~DRM_MODE_TYPE_PREFERRED;
 			if (pdata->debug_mode.vdisplay == mode->vdisplay &&
 				pdata->debug_mode.hdisplay == mode->hdisplay &&
 				pdata->debug_mode.vrefresh == mode->vrefresh) {
