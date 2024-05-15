@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2012-2016 Qualcomm Atheros, Inc.
+ * Copyright (c) 2012-2017 Qualcomm Atheros, Inc.
+ * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -211,6 +212,8 @@ __acquires(&sta->tid_rx_lock) __releases(&sta->tid_rx_lock)
 	}
 	/* statistics */
 	memset(&sta->stats, 0, sizeof(sta->stats));
+	sta->stats.tx_latency_min_us = U32_MAX;
+	wil_sta_info_amsdu_init(sta);
 }
 
 static bool wil_ap_is_connected(struct wil6210_priv *wil)
@@ -478,6 +481,13 @@ void wil_bcast_fini(struct wil6210_priv *wil)
 
 	wil->bcast_vring = -1;
 	wil_vring_fini_tx(wil, ri);
+}
+
+void wil_sta_info_amsdu_init(struct wil_sta_info *sta)
+{
+	sta->amsdu_drop_sn = -1;
+	sta->amsdu_drop_tid = -1;
+	sta->amsdu_drop = 0;
 }
 
 int wil_priv_init(struct wil6210_priv *wil)

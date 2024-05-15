@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2012-2016 Qualcomm Atheros, Inc.
+ * Copyright (c) 2012-2017 Qualcomm Atheros, Inc.
+ * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -509,6 +510,13 @@ struct wil_sta_info {
 	unsigned long tid_rx_stop_requested[BITS_TO_LONGS(WIL_STA_TID_NUM)];
 	struct wil_tid_crypto_rx tid_crypto_rx[WIL_STA_TID_NUM];
 	struct wil_tid_crypto_rx group_crypto_rx;
+	u8 aid; /* 1-254; 0 if unknown/not reported */
+	bool fst_link_loss;
+
+	/* amsdu frame related info to check if the frame is valid */
+	int amsdu_drop_sn;
+	int amsdu_drop_tid;
+	u8 amsdu_drop;
 };
 
 enum {
@@ -927,5 +935,5 @@ void wil_ftm_evt_per_dest_res(struct wil6210_priv *wil,
 void wil_aoa_evt_meas(struct wil6210_priv *wil,
 		      struct wmi_aoa_meas_event *evt,
 		      int len);
-
+void wil_sta_info_amsdu_init(struct wil_sta_info *sta);
 #endif /* __WIL6210_H__ */

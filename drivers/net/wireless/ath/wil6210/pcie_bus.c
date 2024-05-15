@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2012-2016 Qualcomm Atheros, Inc.
+ * Copyright (c) 2012-2017 Qualcomm Atheros, Inc.
+ * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -40,11 +41,71 @@ void wil_set_capabilities(struct wil6210_priv *wil)
 
 	bitmap_zero(wil->hw_capabilities, hw_capability_last);
 	bitmap_zero(wil->fw_capabilities, WMI_FW_CAPABILITY_MAX);
+	bitmap_zero(wil->platform_capa, WIL_PLATFORM_CAPA_MAX);
+	wil->wil_fw_name = ftm_mode ? WIL_FW_NAME_FTM_DEFAULT :
+			   WIL_FW_NAME_DEFAULT;
+	wil->chip_revision = chip_revision;
 
-	switch (rev_id) {
-	case JTAG_DEV_ID_SPARROW_B0:
-		wil->hw_name = "Sparrow B0";
-		wil->hw_version = HW_VER_SPARROW_B0;
+	switch (jtag_id) {
+	case JTAG_DEV_ID_SPARROW:
+		memcpy(fw_mapping, sparrow_fw_mapping,
+		       sizeof(sparrow_fw_mapping));
+		switch (chip_revision) {
+		case REVISION_ID_SPARROW_D0:
+			wil->hw_name = "Sparrow D0";
+			wil->hw_version = HW_VER_SPARROW_D0;
+			wil_fw_name = ftm_mode ? WIL_FW_NAME_FTM_SPARROW_PLUS :
+				      WIL_FW_NAME_SPARROW_PLUS;
+
+			if (wil_fw_verify_file_exists(wil, wil_fw_name))
+				wil->wil_fw_name = wil_fw_name;
+			sct = wil_find_fw_mapping("mac_rgf_ext");
+			if (!sct) {
+				wil_err(wil, "mac_rgf_ext section not found in fw_mapping\n");
+				return -EINVAL;
+			}
+			memcpy(sct, &sparrow_d0_mac_rgf_ext, sizeof(*sct));
+			break;
+		case REVISION_ID_SPARROW_B0:
+			wil->hw_name = "Sparrow B0";
+			wil->hw_version = HW_VER_SPARROW_B0;
+			break;
+		default:
+			wil->hw_name = "Unknown";
+			wil->hw_version = HW_VER_UNKNOWN;
+			break;
+		}
+		wil->rgf_fw_assert_code_addr = SPARROW_RGF_FW_ASSERT_CODE;
+		wil->rgf_ucode_assert_code_addr = SPARROW_RGF_UCODE_ASSERT_CODE;
+		break;
+	case JTAG_DEV_ID_TALYN:
+		wil->hw_name = "Talyn-MA";
+		wil->hw_version = HW_VER_TALYN;
+		memcpy(fw_mapping, talyn_fw_mapping, sizeof(talyn_fw_mapping));
+		wil->rgf_fw_assert_code_addr = TALYN_RGF_FW_ASSERT_CODE;
+		wil->rgf_ucode_assert_code_addr = TALYN_RGF_UCODE_ASSERT_CODE;
+		if (wil_r(wil, RGF_USER_OTP_HW_RD_MACHINE_1) &
+		    BIT_NO_FLASH_INDICATION)
+			set_bit(hw_capa_no_flash, wil->hw_capa);
+		wil_fw_name = ftm_mode ? WIL_FW_NAME_FTM_TALYN :
+			      WIL_FW_NAME_TALYN;
+		if (wil_fw_verify_file_exists(wil, wil_fw_name))
+			wil->wil_fw_name = wil_fw_name;
+		break;
+	case JTAG_DEV_ID_TALYN_MB:
+		wil->hw_name = "Talyn-MB";
+		wil->hw_version = HW_VER_TALYN_MB;
+		memcpy(fw_mapping, talyn_mb_fw_mapping,
+		       sizeof(talyn_mb_fw_mapping));
+		wil->rgf_fw_assert_code_addr = TALYN_RGF_FW_ASSERT_CODE;
+		wil->rgf_ucode_assert_code_addr = TALYN_RGF_UCODE_ASSERT_CODE;
+		set_bit(hw_capa_no_flash, wil->hw_capa);
+		wil->use_enhanced_dma_hw = true;
+		wil->use_rx_hw_reordering = true;
+		wil_fw_name = ftm_mode ? WIL_FW_NAME_FTM_TALYN :
+			      WIL_FW_NAME_TALYN;
+		if (wil_fw_verify_file_exists(wil, wil_fw_name))
+			wil->wil_fw_name = wil_fw_name;
 		break;
 	default:
 		wil_err(wil, "Unknown board hardware 0x%08x\n", rev_id);
