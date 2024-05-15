@@ -87,7 +87,6 @@ static const char *pt_driver_core_date = PT_DRIVER_DATE;
 enum core_states pt_core_state = STATE_NONE;
 
 uint32_t pt_slate_resp_ack;
-
 struct pt_hid_field {
 	int report_count;
 	int report_size;
@@ -10796,6 +10795,12 @@ static int pt_core_suspend(struct device *dev)
 	if (cd->drv_debug_suspend || (cd->cpdata->flags & PT_CORE_FLAG_SKIP_SYS_SLEEP))
 		return 0;
 
+	if (pt_core_state == STATE_SUSPEND)
+	{
+		pt_debug(cd->dev, DL_INFO, "%s Already in Suspend state\n", __func__);
+		return 0;
+	}
+
 	pt_debug(cd->dev, DL_INFO, "%s Suspend start\n", __func__);
 	cancel_work_sync(&cd->resume_work);
 	cancel_work_sync(&cd->suspend_work);
@@ -10870,7 +10875,6 @@ exit:
 	if (rc) {
 		dev_err(dev, "%s: Failed to wake up: rc=%d\n",
 			__func__, rc);
-		pt_enable_regulator(cd, false);
 		return -EAGAIN;
 	}
 
@@ -10948,7 +10952,7 @@ static void pt_resume_offload_work(struct work_struct *work)
 
 {
 	int rc = 0;
-	int retry_count = 10;
+	int retry_count = 1000;
 	struct pt_core_data *pt_data = container_of(work, struct pt_core_data,
 					resume_offload_work);
 
@@ -10960,6 +10964,11 @@ static void pt_resume_offload_work(struct work_struct *work)
 		pt_debug(pt_data->dev, DL_ERROR,
 			"%s: Error on wake\n", __func__);
 	} while (retry_count && rc < 0);
+
+	if (rc < 0){
+		pt_debug(pt_data->dev, DL_ERROR, "%s: Error on wake\n", __func__);
+		return;
+	}
 
 #ifdef TOUCH_TO_WAKE_POWER_FEATURE_WORK_AROUND
 	rc = pt_core_easywake_on(pt_data);
@@ -18045,6 +18054,7 @@ skip_enum:
 	cd->core_probe_complete = 1;
 	mutex_unlock(&cd->system_lock);
 
+	pt_core_state = STATE_RESUME;
 	pt_debug(dev, DL_ERROR, "%s: TTDL Core Probe Completed Successfully\n",
 		__func__);
 	return 0;
@@ -18090,6 +18100,20 @@ error_no_pdata:
 	return rc;
 }
 
+/*******************************************************************************
+ * FUNCTION: pt_device_entry
+ *
+ * SUMMARY: Wrapper function of pt_core_suspend_() to help avoid TP from being
+ *  woke up or put to sleep based on Kernel power state even when the display
+ *  is off based on the check of TTDL core platform flag.
+ *
+ * RETURN:
+ *        0 = success
+ *       !0 = failure
+ *
+ * PARAMETERS:
+ *      *dev  - pointer to core device
+ ******************************************************************************/
 #ifdef PT_AMBIENT_MODE
 int pt_device_entry(struct device *dev,
 				u16 irq, size_t xfer_buf_size)
