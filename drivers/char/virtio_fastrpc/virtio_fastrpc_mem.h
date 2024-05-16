@@ -24,6 +24,11 @@ struct fastrpc_mmap {
 	size_t len;
 	uintptr_t raddr;
 	int refs;
+	/*
+	 * Used to store attributes of the fastrpc_mmap when it's created,
+	 * such as FASTRPC_ATTR_KEEP_MAP.
+	 */
+	unsigned int attr;
 };
 
 struct fastrpc_buf {
@@ -35,6 +40,11 @@ struct fastrpc_buf {
 	struct page **pages;
 	void *va;
 	unsigned long dma_attr;
+	/*
+	 * Indicate cacheability of the map, set to 0 for uncached buf,
+	 * set to FASTRPC_MAP_ATTR_CACHED for cached buf.
+	 */
+	u32 map_attr;
 	uintptr_t raddr;
 	uint32_t flags;
 	int remote;
@@ -51,7 +61,8 @@ struct fastrpc_buf_desc {
 	struct fastrpc_buf *buf;
 };
 
-int fastrpc_mmap_create(struct fastrpc_file *fl, int fd,
+/* fastrpc_mmap_* APIs are not thread-safe, caller needs to take fl->map_mutex */
+int fastrpc_mmap_create(struct fastrpc_file *fl, int fd, unsigned int attr,
 	uintptr_t va, size_t len, int mflags, struct fastrpc_mmap **ppmap);
 
 int fastrpc_mmap_find(struct fastrpc_file *fl, int fd,
@@ -59,7 +70,9 @@ int fastrpc_mmap_find(struct fastrpc_file *fl, int fd,
 		struct fastrpc_mmap **ppmap);
 
 void fastrpc_mmap_free(struct fastrpc_file *fl,
-		struct fastrpc_mmap *map, uint32_t flags);
+		struct fastrpc_mmap *map, uint32_t force_free);
+
+int fastrpc_mmap_remove_fd(struct fastrpc_file *fl, int fd, u32 *entries);
 
 int fastrpc_mmap_remove(struct fastrpc_file *fl, uintptr_t va,
 		size_t len, struct fastrpc_mmap **ppmap);

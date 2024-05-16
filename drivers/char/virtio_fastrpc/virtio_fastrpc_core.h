@@ -80,7 +80,14 @@ struct fastrpc_file {
 	spinlock_t hlock;
 	struct hlist_head maps;
 	struct hlist_head cached_bufs;
+	/* Number of cached internal buffer, upper limit is MAX_CACHED_BUFS. */
+	u32 num_cached_buf;
 	struct hlist_head remote_bufs;
+	/*
+	 * List to store virtio fastrpc cmds interrupted by signal while waiting
+	 * for completion.
+	 */
+	struct hlist_head interrupted_cmds;
 	struct fastrpc_ctx_lst clst;
 	uint32_t mode;
 	int tgid;
