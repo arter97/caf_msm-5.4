@@ -2841,7 +2841,7 @@ static int hgsl_open(struct inode *inodep, struct file *filep)
 	struct qcom_hgsl  *hgsl = container_of(inodep->i_cdev,
 					       struct qcom_hgsl, cdev);
 	struct pid *pid = task_tgid(current);
-	struct task_struct *task = pid_task(pid, PIDTYPE_PID);
+	struct task_struct *task = get_pid_task(pid, PIDTYPE_PID);
 	int ret = 0;
 
 	if (!priv)

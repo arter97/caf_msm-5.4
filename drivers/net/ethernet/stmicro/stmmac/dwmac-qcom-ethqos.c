@@ -4292,7 +4292,8 @@ static int _qcom_ethqos_probe(void *arg)
 	plat_dat->c45_marvell_en = of_property_read_bool(np, "qcom,c45_marvell");
 	plat_dat->tx_select_queue = dwmac_qcom_select_queue;
 	if (of_property_read_bool(pdev->dev.of_node,
-				  "disable-intr-mod"))
+				  "disable-intr-mod") &&
+	    !plat_dat->autosar_en)
 		ETHQOSINFO("disabling Interrupt moderation\n");
 	else
 		plat_dat->get_plat_tx_coal_frames =  dwmac_qcom_get_plat_tx_coal_frames;
