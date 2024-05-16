@@ -9,6 +9,7 @@
 #include <linux/slab.h>
 #include <linux/scatterlist.h>
 #include <linux/completion.h>
+#include <linux/wait.h>
 #include "../adsprpc_compat.h"
 #include "../adsprpc_shared.h"
 #include "virtio_fastrpc_base.h"
@@ -63,10 +64,13 @@ struct fastrpc_perf {
 struct fastrpc_ctx_lst {
 	struct hlist_head pending;
 	struct hlist_head interrupted;
+	/* Queue which holds all async job contexts of process */
+	struct list_head async_queue;
 };
 
 struct virt_fastrpc_msg {
 	struct completion work;
+	struct fastrpc_invoke_ctx *ctx;
 	u16 msgid;
 	void *txbuf;
 	void *rxbuf;
@@ -97,6 +101,12 @@ struct fastrpc_file {
 	uint32_t profile;
 	/* Flag to indicate attempt has been made to allocate memory for debug_buf*/
 	int debug_buf_alloced_attempted;
+	/* Number of jobs pending in Async Queue */
+	atomic_t async_queue_job_count;
+	/* Async wait queue to synchronize BE response and async thread */
+	wait_queue_head_t async_wait_queue;
+	/* IRQ safe spin lock for protecting async queue */
+	spinlock_t aqlock;
 };
 
 struct fastrpc_invoke_ctx {
@@ -104,6 +114,7 @@ struct fastrpc_invoke_ctx {
 	size_t size;
 	struct fastrpc_buf_desc *desc;
 	struct hlist_node hn;
+	struct list_head asyncn;
 	struct fastrpc_mmap **maps;
 	remote_arg_t *lpra;
 	int *fds;
@@ -118,6 +129,7 @@ struct fastrpc_invoke_ctx {
 	struct fastrpc_perf *perf;
 	uint64_t *perf_kernel;
 	uint64_t *perf_dsp;
+	struct fastrpc_async_job asyncjob;
 };
 
 struct virt_msg_hdr {
@@ -145,9 +157,13 @@ int fastrpc_internal_munmap(struct fastrpc_file *fl,
 int fastrpc_internal_munmap_fd(struct fastrpc_file *fl,
 				struct fastrpc_ioctl_munmap_fd *ud);
 int fastrpc_internal_invoke(struct fastrpc_file *fl,
-		uint32_t mode, struct fastrpc_ioctl_invoke_perf *inv);
+		uint32_t mode, struct fastrpc_ioctl_invoke_async *inv);
 
 int fastrpc_ioctl_get_dsp_info(struct fastrpc_ioctl_capability *cap,
 		void *param, struct fastrpc_file *fl);
 
+int fastrpc_internal_invoke2(struct fastrpc_file *fl,
+				struct fastrpc_ioctl_invoke2 *inv2);
+
+void fastrpc_queue_completed_async_job(struct fastrpc_invoke_ctx *ctx);
 #endif /*__VIRTIO_FASTRPC_CORE_H__*/
