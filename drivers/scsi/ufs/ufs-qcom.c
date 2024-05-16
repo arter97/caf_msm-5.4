@@ -2691,7 +2691,7 @@ static void ufs_qcom_parse_pm_level(struct ufs_hba *hba)
 void ufs_qcom_read_nvmem_cell(struct ufs_qcom_host *host)
 {
 	size_t len;
-	int *data = NULL;
+	u8 *data = NULL;
 
 	host->nvmem_cell = nvmem_cell_get(host->hba->dev, "ufs_dev");
 	if (IS_ERR(host->nvmem_cell)) {
@@ -2699,7 +2699,7 @@ void ufs_qcom_read_nvmem_cell(struct ufs_qcom_host *host)
 		return;
 	}
 
-	data = (int *) nvmem_cell_read(host->nvmem_cell, &len);
+	data = (u8 *) nvmem_cell_read(host->nvmem_cell, &len);
 	if (IS_ERR(data)) {
 		dev_info(host->hba->dev, "(%s) Failed to read from nvmem\n", __func__);
 		goto cell_put;
