@@ -68,7 +68,7 @@ void fastrpc_mmap_add(struct fastrpc_file *fl, struct fastrpc_mmap *map);
 
 int fastrpc_buf_alloc(struct fastrpc_file *fl, size_t size,
 				unsigned long dma_attr, uint32_t rflags,
-				int remote, struct fastrpc_buf **obuf);
+				int remote, pgprot_t prot, struct fastrpc_buf **obuf);
 
 void fastrpc_buf_free(struct fastrpc_buf *buf, int cache);
 #endif /*__VIRTIO_FASTRPC_MEM_H__*/

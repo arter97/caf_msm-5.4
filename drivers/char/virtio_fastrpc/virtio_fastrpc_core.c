@@ -730,7 +730,7 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 				ctx->desc[i].type = FASTRPC_BUF_TYPE_INTERNAL;
 				len = PAGE_ALIGN(len);
 				err = fastrpc_buf_alloc(fl, len, 0,
-						0, 0, &ctx->desc[i].buf);
+						0, 0, PAGE_KERNEL, &ctx->desc[i].buf);
 				if (err)
 					goto bail;
 				len = ctx->desc[i].buf->sgt.nents *
@@ -824,6 +824,7 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 			   ctx->desc[i].type == FASTRPC_BUF_TYPE_INTERNAL) {
 			table = &ctx->desc[i].buf->sgt;
 			rpra[i].attrs |= FASTRPC_BUF_ATTR_INTERNAL;
+			rpra[i].attrs |= FASTRPC_BUF_ATTR_CACHED;
 			rpra[i].crc = 0;
 			rpra[i].pv = buf;
 			rpra[i].buf_len = len;
@@ -1504,7 +1505,8 @@ int fastrpc_internal_mmap(struct fastrpc_file *fl,
 		}
 		dma_attr = DMA_ATTR_NO_KERNEL_MAPPING;
 		err = fastrpc_buf_alloc(fl, ud->size, dma_attr, ud->flags,
-								1, &rbuf);
+								1, pgprot_noncached(PAGE_KERNEL),
+								&rbuf);
 		if (err)
 			goto bail;
 		err = virt_fastrpc_mmap(fl, ud->flags, 0, rbuf->sgt.sgl,
