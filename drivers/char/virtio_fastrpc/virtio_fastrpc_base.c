@@ -28,8 +28,10 @@
 #define VIRTIO_FASTRPC_F_MMAP				3
 /* indicates QOS setting is supported */
 #define VIRTIO_FASTRPC_F_CONTROL			4
-/* indicates version check is supported */
+/* indicates version is available in config space */
 #define VIRTIO_FASTRPC_F_VERSION			5
+/* indicates domain num is available in config space */
+#define VIRTIO_FASTRPC_F_DOMAIN_NUM			6
 
 #define NUM_CHANNELS			4 /* adsp, mdsp, slpi, cdsp0*/
 #define NUM_DEVICES			2 /* adsprpc-smd, adsprpc-smd-secure */
@@ -51,12 +53,13 @@
  * need to be matched with BE_MINOR_VER. And it will return to 0 when
  * FE_MAJOR_VER is increased.
  */
-#define FE_MINOR_VER 0x0
+#define FE_MINOR_VER 0x1
 #define FE_VERSION (FE_MAJOR_VER << 16 | FE_MINOR_VER)
 #define BE_MAJOR_VER(ver) (((ver) >> 16) & 0xffff)
 
 struct virtio_fastrpc_config {
 	u32 version;
+	u32 domain_num;
 } __packed;
 
 
@@ -724,7 +727,13 @@ static int virt_fastrpc_probe(struct virtio_device *vdev)
 		return err;
 	}
 
-	if (of_get_property(me->dev->of_node, "qcom,domain_num", NULL) != NULL) {
+	if (virtio_has_feature(vdev, VIRTIO_FASTRPC_F_DOMAIN_NUM)) {
+		virtio_cread(vdev, struct virtio_fastrpc_config, domain_num,
+				&config.domain_num);
+		dev_info(&vdev->dev, "get domain_num %d from config space\n",
+				config.domain_num);
+		me->num_channels = config.domain_num;
+	} else if (of_get_property(me->dev->of_node, "qcom,domain_num", NULL) != NULL) {
 		err = of_property_read_u32(me->dev->of_node, "qcom,domain_num",
 					&me->num_channels);
 		if (err) {
@@ -851,6 +860,7 @@ static unsigned int features[] = {
 	VIRTIO_FASTRPC_F_MMAP,
 	VIRTIO_FASTRPC_F_CONTROL,
 	VIRTIO_FASTRPC_F_VERSION,
+	VIRTIO_FASTRPC_F_DOMAIN_NUM,
 };
 
 static struct virtio_driver virtio_fastrpc_driver = {
