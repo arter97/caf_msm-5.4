@@ -1831,6 +1831,10 @@ static int hgsl_ioctl_mem_alloc(struct file *filep, unsigned long arg)
 		goto out;
 	}
 
+	/* let the back end aware that this is HGSL allocation */
+	params.flags &= ~GSL_MEMFLAGS_USERMEM_MASK;
+	params.flags |= GSL_MEMFLAGS_USERMEM_HGSL_ALLOC;
+
 	mem_node->flags = params.flags;
 
 	ret = hgsl_sharedmem_alloc(hgsl->dev, params.sizebytes, params.flags, mem_node);
@@ -2019,6 +2023,7 @@ static int hgsl_ioctl_mem_map_smmu(struct file *filep, unsigned long arg)
 	}
 
 	params.size = PAGE_ALIGN(params.size);
+	params.flags &= ~GSL_MEMFLAGS_USERMEM_MASK;
 	mem_node->flags = params.flags;
 	mem_node->fd = params.fd;
 	mem_node->memtype = params.memtype;
@@ -2841,7 +2846,7 @@ static int hgsl_open(struct inode *inodep, struct file *filep)
 	struct qcom_hgsl  *hgsl = container_of(inodep->i_cdev,
 					       struct qcom_hgsl, cdev);
 	struct pid *pid = task_tgid(current);
-	struct task_struct *task = pid_task(pid, PIDTYPE_PID);
+	struct task_struct *task = get_pid_task(pid, PIDTYPE_PID);
 	int ret = 0;
 
 	if (!priv)
