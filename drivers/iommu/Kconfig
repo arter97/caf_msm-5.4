@@ -621,7 +621,7 @@ config ARM_SMMU_TESTBUS_DUMP
 
 config ARM_SMMU_TESTBUS_DUMP_GEN3AUTO
         bool "ARM SMMU testbus dump for gen3auto"
-        depends on ARM_SMMU && ARM_SMMU_TESTBUS && ARM_SMMU_TESTBUS_DUMP
+        depends on ARM_SMMU && ARM_SMMU_TESTBUS_DUMP
         help
           Enables testbus dump collection on arm smmu right after TLB
           sync timeout failure on gen3auto.
