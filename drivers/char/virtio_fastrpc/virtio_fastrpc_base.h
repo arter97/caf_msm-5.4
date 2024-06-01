@@ -18,6 +18,9 @@
 #define PID_SIZE		10
 #define FASTRPC_MSG_MAX	256
 
+#define CDSP_DOMAIN_ID	3
+#define CDSP1_DOMAIN_ID	4
+
 struct fastrpc_dsp_capabilities {
 	uint32_t is_cached;	/* ! Flag if dsp attributes are cached */
 	uint32_t dsp_attributes[FASTRPC_MAX_DSP_ATTRIBUTES];
@@ -41,10 +44,10 @@ struct fastrpc_apps {
 	struct virtio_device *vdev;
 	struct virt_fastrpc_vq rvq;
 	struct virt_fastrpc_vq svq;
-	void *rbufs;
-	void *sbufs;
-	unsigned int order;
+	void **rbufs;
+	void **sbufs;
 	unsigned int num_bufs;
+	unsigned int order;
 	unsigned int buf_size;
 	unsigned int num_channels;
 	int last_sbuf;
@@ -53,6 +56,7 @@ struct fastrpc_apps {
 	bool has_invoke_crc;
 	bool has_mmap;
 	bool has_control;
+	bool has_mem_map;
 
 	struct device *dev;
 	struct cdev cdev;

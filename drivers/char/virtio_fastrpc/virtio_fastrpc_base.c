@@ -28,8 +28,13 @@
 #define VIRTIO_FASTRPC_F_MMAP				3
 /* indicates QOS setting is supported */
 #define VIRTIO_FASTRPC_F_CONTROL			4
-/* indicates version check is supported */
+/* indicates version is available in config space */
 #define VIRTIO_FASTRPC_F_VERSION			5
+/* indicates domain num is available in config space */
+#define VIRTIO_FASTRPC_F_DOMAIN_NUM			6
+#define VIRTIO_FASTRPC_F_VQUEUE_SETTING			7
+/* indicates fastrpc_mmap/fastrpc_munmap is supported */
+#define VIRTIO_FASTRPC_F_MEM_MAP			8
 
 #define NUM_CHANNELS			4 /* adsp, mdsp, slpi, cdsp0*/
 #define NUM_DEVICES			2 /* adsprpc-smd, adsprpc-smd-secure */
@@ -37,24 +42,29 @@
 #define INIT_FILELEN_MAX		(2*1024*1024)
 #define INIT_MEMLEN_MAX			(8*1024*1024)
 
-#define MAX_FASTRPC_BUF_SIZE		(128*1024)
+#define MAX_FASTRPC_BUF_SIZE		(1024*1024*4)
+#define DEF_FASTRPC_BUF_SIZE		(128*1024)
 #define DEBUGFS_SIZE			3072
-#define UL_SIZE				25
 
-#define CDSP_DOMAIN_ID	3
-#define CDSP1_DOMAIN_ID	4
 /*
- * Increase only for critical patches which must be consistent with BE,
- * if not, the basic function is broken.
+ * FE_MAJOR_VER is used for the FE and BE's version match check,
+ * and it MUST be equal to BE_MAJOR_VER, otherwise virtual fastrpc
+ * cannot work properly. It increases when fundamental protocol is
+ * changed between FE and BE.
  */
-#define FE_MAJOR_VER 0x4
-/* Increase for new features. */
-#define FE_MINOR_VER 0x1
+#define FE_MAJOR_VER 0x5
+/* FE_MINOR_VER is used to track patches in this driver. It does not
+ * need to be matched with BE_MINOR_VER. And it will return to 0 when
+ * FE_MAJOR_VER is increased.
+ */
+#define FE_MINOR_VER 0x4
 #define FE_VERSION (FE_MAJOR_VER << 16 | FE_MINOR_VER)
 #define BE_MAJOR_VER(ver) (((ver) >> 16) & 0xffff)
 
 struct virtio_fastrpc_config {
 	u32 version;
+	u32 domain_num;
+	u32 max_buf_size;
 } __packed;
 
 
@@ -71,25 +81,29 @@ static ssize_t fastrpc_debugfs_read(struct file *filp, char __user *buffer,
 	char *fileinfo = NULL;
 	unsigned int len = 0;
 	int err = 0;
-	char single_line[UL_SIZE] = "----------------";
-	char title[UL_SIZE] = "=========================";
+	char title[] = "=========================";
+
+	/* Only allow read once */
+	if (*position != 0)
+		goto bail;
 
 	fileinfo = kzalloc(DEBUGFS_SIZE, GFP_KERNEL);
-	if (!fileinfo)
+	if (!fileinfo) {
+		err = -ENOMEM;
 		goto bail;
+	}
 	if (fl) {
 		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
-				"\n%s %d\n", "CHANNEL =", fl->domain);
+				"\n%s %d %s %d\n", "channel =", fl->domain,
+				"proc_attr =", fl->procattrs);
+
 		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
-			"\n======%s %s %s======\n", title,
+			"\n========%s %s %s========\n", title,
 			" LIST OF BUFS ", title);
 		spin_lock(&fl->hlock);
 		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
-			"%-19s|%-19s|%-19s\n",
+			"%-19s|%-19s|%-19s\n\n",
 			"virt", "phys", "size");
-		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
-			"%s%s%s%s%s\n", single_line, single_line,
-			single_line, single_line, single_line);
 		hlist_for_each_entry_safe(buf, n, &fl->cached_bufs, hn) {
 			len += scnprintf(fileinfo + len,
 				DEBUGFS_SIZE - len,
@@ -100,14 +114,11 @@ static ssize_t fastrpc_debugfs_read(struct file *filp, char __user *buffer,
 		}
 
 		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
-			"\n%s %s %s\n", title,
+			"\n==%s %s %s==\n", title,
 			" LIST OF PENDING CONTEXTS ", title);
 		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
-			"%-20s|%-10s|%-10s|%-10s|%-20s\n",
+			"%-20s|%-10s|%-10s|%-10s|%-20s\n\n",
 			"sc", "pid", "tgid", "size", "handle");
-		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
-			"%s%s%s%s%s\n", single_line, single_line,
-			single_line, single_line, single_line);
 		hlist_for_each_entry_safe(ictx, n, &fl->clst.pending, hn) {
 			len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
 				"0x%-18X|%-10d|%-10d|%-10zu|0x%-20X\n\n",
@@ -119,11 +130,8 @@ static ssize_t fastrpc_debugfs_read(struct file *filp, char __user *buffer,
 			"\n%s %s %s\n", title,
 			" LIST OF INTERRUPTED CONTEXTS ", title);
 		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
-			"%-20s|%-10s|%-10s|%-10s|%-20s\n",
+			"%-20s|%-10s|%-10s|%-10s|%-20s\n\n",
 			"sc", "pid", "tgid", "size", "handle");
-		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
-			"%s%s%s%s%s\n", single_line, single_line,
-			single_line, single_line, single_line);
 		hlist_for_each_entry_safe(ictx, n, &fl->clst.interrupted, hn) {
 			len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
 				"0x%-18X|%-10d|%-10d|%-10zu|0x%-20X\n\n",
@@ -131,28 +139,26 @@ static ssize_t fastrpc_debugfs_read(struct file *filp, char __user *buffer,
 				ictx->size, ictx->handle);
 		}
 		spin_unlock(&fl->hlock);
+
 		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
-			"\n=======%s %s %s======\n", title,
+			"\n========%s %s %s========\n", title,
 			" LIST OF MAPS ", title);
 		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
-			"%-20s|%-20s|%-20s\n", "va", "phys", "size");
-		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
-			"%s%s%s%s%s\n",
-			single_line, single_line, single_line,
-			single_line, single_line);
+			"%-20s|%-20s|%-10s|%-10s|%-10s|%-10s\n\n",
+			"va", "phys", "size", "dma_flags", "attr", "refs");
 		mutex_lock(&fl->map_mutex);
 		hlist_for_each_entry_safe(map, n, &fl->maps, hn) {
 			len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
-				"0x%-20lX|0x%-20llX|0x%-20zu\n\n",
-				map->va, map->phys,
-				map->size);
+				"0x%-18lX|0x%-18llX|%-10zu|0x%-10lx|0x%-10x|%-10d\n\n",
+				map->va, map->phys, map->size, map->dma_flags,
+				map->attr, map->refs);
 		}
 		mutex_unlock(&fl->map_mutex);
-
 	}
 
 	if (len > DEBUGFS_SIZE)
 		len = DEBUGFS_SIZE;
+
 	err = simple_read_from_buffer(buffer, count, position, fileinfo, len);
 	kfree(fileinfo);
 bail:
@@ -190,7 +196,9 @@ static inline void get_fastrpc_ioctl_munmap_64(
 }
 
 union fastrpc_ioctl_param {
-	struct fastrpc_ioctl_invoke_perf inv;
+	struct fastrpc_ioctl_invoke_async inv;
+	struct fastrpc_ioctl_mem_map mem_map;
+	struct fastrpc_ioctl_mem_unmap mem_unmap;
 	struct fastrpc_ioctl_mmap mmap;
 	struct fastrpc_ioctl_mmap_64 mmap64;
 	struct fastrpc_ioctl_munmap munmap;
@@ -199,6 +207,7 @@ union fastrpc_ioctl_param {
 	struct fastrpc_ioctl_init_attrs init;
 	struct fastrpc_ioctl_control cp;
 	struct fastrpc_ioctl_capability cap;
+	struct fastrpc_ioctl_invoke2 inv2;
 };
 
 static int fastrpc_mmap_ioctl(struct fastrpc_file *fl,
@@ -213,6 +222,40 @@ static int fastrpc_mmap_ioctl(struct fastrpc_file *fl,
 	int err = 0;
 
 	switch (ioctl_num) {
+	case FASTRPC_IOCTL_MEM_MAP:
+		if (!me->has_mem_map) {
+			dev_err(me->dev, "mem_map is not supported\n");
+			return -ENOTTY;
+		}
+		K_COPY_FROM_USER(err, 0, &p->mem_map, param,
+						sizeof(p->mem_map));
+		if (err)
+			return err;
+
+		VERIFY(err, 0 == (err = fastrpc_internal_mem_map(fl,
+						&p->mem_map)));
+		if (err)
+			return err;
+
+		K_COPY_TO_USER(err, 0, param, &p->mem_map, sizeof(p->mem_map));
+		if (err)
+			return err;
+		break;
+	case FASTRPC_IOCTL_MEM_UNMAP:
+		if (!me->has_mem_map) {
+			dev_err(me->dev, "mem_unmap is not supported\n");
+			return -ENOTTY;
+		}
+		K_COPY_FROM_USER(err, 0, &p->mem_unmap, param,
+						sizeof(p->mem_unmap));
+		if (err)
+			return err;
+
+		VERIFY(err, 0 == (err = fastrpc_internal_mem_unmap(fl,
+						&p->mem_unmap)));
+		if (err)
+			return err;
+		break;
 	case FASTRPC_IOCTL_MMAP:
 		if (!me->has_mmap) {
 			dev_err(me->dev, "mmap is not supported\n");
@@ -374,7 +417,7 @@ static int fastrpc_init_ioctl(struct fastrpc_ioctl_init_attrs *init,
 }
 
 static int check_invoke_supported(struct fastrpc_file *fl,
-		struct fastrpc_ioctl_invoke_perf *inv)
+		struct fastrpc_ioctl_invoke_async *inv)
 {
 	int err = 0;
 	struct fastrpc_apps *me = fl->apps;
@@ -405,6 +448,7 @@ static long fastrpc_ioctl(struct file *file, unsigned int ioctl_num,
 	p.inv.crc = NULL;
 	p.inv.perf_kernel = NULL;
 	p.inv.perf_dsp = NULL;
+	p.inv.job = NULL;
 
 	spin_lock(&fl->hlock);
 	if (fl->file_close == 1) {
@@ -444,6 +488,17 @@ static long fastrpc_ioctl(struct file *file, unsigned int ioctl_num,
 
 		err = fastrpc_internal_invoke(fl, fl->mode, &p.inv);
 		break;
+	case FASTRPC_IOCTL_INVOKE2:
+		K_COPY_FROM_USER(err, 0, &p.inv2, param,
+				sizeof(struct fastrpc_ioctl_invoke2));
+		if (err) {
+			err = -EFAULT;
+			goto bail;
+		}
+		err = fastrpc_internal_invoke2(fl, &p.inv2);
+		break;
+	case FASTRPC_IOCTL_MEM_MAP:
+	case FASTRPC_IOCTL_MEM_UNMAP:
 	case FASTRPC_IOCTL_MMAP:
 	case FASTRPC_IOCTL_MUNMAP:
 	case FASTRPC_IOCTL_MMAP_64:
@@ -517,7 +572,6 @@ static int fastrpc_release(struct inode *inode, struct file *file)
 	struct fastrpc_file *fl = (struct fastrpc_file *)file->private_data;
 
 	if (fl) {
-		debugfs_remove(fl->debugfs_file);
 		fastrpc_file_free(fl);
 		file->private_data = NULL;
 	}
@@ -552,7 +606,11 @@ static int recv_single(struct virt_msg_hdr *rsp, unsigned int len)
 	}
 	msg->rxbuf = (void *)rsp;
 
-	complete(&msg->work);
+	if (msg->ctx && msg->ctx->asyncjob.isasyncjob)
+		fastrpc_queue_completed_async_job(msg->ctx);
+	else
+		complete(&msg->work);
+
 	return 0;
 }
 
@@ -599,9 +657,7 @@ static int init_vqs(struct fastrpc_apps *me)
 	struct virtqueue *vqs[2];
 	static const char * const names[] = { "output", "input" };
 	vq_callback_t *cbs[] = { NULL, recv_done };
-	size_t total_buf_space;
-	void *bufs;
-	int err;
+	int err, i;
 
 	err = virtio_find_vqs(me->vdev, 2, vqs, cbs, names, NULL);
 	if (err)
@@ -610,28 +666,60 @@ static int init_vqs(struct fastrpc_apps *me)
 	virt_init_vq(&me->svq, vqs[0]);
 	virt_init_vq(&me->rvq, vqs[1]);
 
-	/* we expect symmetric tx/rx vrings */
-	WARN_ON(virtqueue_get_vring_size(me->rvq.vq) !=
-			virtqueue_get_vring_size(me->svq.vq));
-	me->num_bufs = virtqueue_get_vring_size(me->rvq.vq) * 2;
 
-	me->buf_size = MAX_FASTRPC_BUF_SIZE;
-	total_buf_space = me->num_bufs * me->buf_size;
-	me->order = get_order(total_buf_space);
-	bufs = (void *)__get_free_pages(GFP_KERNEL,
-				me->order);
-	if (!bufs) {
-		err = -ENOMEM;
+	/* we expect symmetric tx/rx vrings */
+	if (virtqueue_get_vring_size(me->rvq.vq) !=
+			virtqueue_get_vring_size(me->svq.vq)) {
+		dev_err(&me->vdev->dev, "tx/rx vring size does not match\n");
+			err = -EINVAL;
 		goto vqs_del;
 	}
 
-	/* half of the buffers is dedicated for RX */
-	me->rbufs = bufs;
+	me->num_bufs = virtqueue_get_vring_size(me->rvq.vq);
+	me->rbufs = kcalloc(me->num_bufs, sizeof(void *), GFP_KERNEL);
+	if (!me->rbufs) {
+		err = -ENOMEM;
+		goto vqs_del;
+	}
+	me->sbufs = kcalloc(me->num_bufs, sizeof(void *), GFP_KERNEL);
+	if (!me->sbufs) {
+		err = -ENOMEM;
+		kfree(me->rbufs);
+		goto vqs_del;
+	}
 
-	/* and half is dedicated for TX */
-	me->sbufs = bufs + total_buf_space / 2;
+	me->order = get_order(me->buf_size);
+
+	for (i = 0; i < me->num_bufs; i++) {
+		me->rbufs[i] = (void *)__get_free_pages(GFP_KERNEL, me->order);
+		if (!me->rbufs[i]) {
+			err = -ENOMEM;
+			goto rbuf_del;
+		}
+	}
+
+	for (i = 0; i < me->num_bufs; i++) {
+		me->sbufs[i] = (void *)__get_free_pages(GFP_KERNEL, me->order);
+		if (!me->sbufs[i]) {
+			err = -ENOMEM;
+			goto sbuf_del;
+		}
+	}
 	return 0;
 
+sbuf_del:
+	for (i = 0; i < me->num_bufs; i++) {
+		if (me->sbufs[i])
+			free_pages((unsigned long)me->sbufs[i], me->order);
+	}
+
+rbuf_del:
+	for (i = 0; i < me->num_bufs; i++) {
+		if (me->rbufs[i])
+			free_pages((unsigned long)me->rbufs[i], me->order);
+	}
+	kfree(me->sbufs);
+	kfree(me->rbufs);
 vqs_del:
 	me->vdev->config->del_vqs(me->vdev);
 	return err;
@@ -702,9 +790,28 @@ static int virt_fastrpc_probe(struct virtio_device *vdev)
 	if (virtio_has_feature(vdev, VIRTIO_FASTRPC_F_CONTROL))
 		me->has_control = true;
 
+	if (virtio_has_feature(vdev, VIRTIO_FASTRPC_F_MEM_MAP))
+		me->has_mem_map = true;
+
 	vdev->priv = me;
 	me->vdev = vdev;
 	me->dev = vdev->dev.parent;
+
+	if (virtio_has_feature(vdev, VIRTIO_FASTRPC_F_VQUEUE_SETTING)) {
+		virtio_cread(vdev, struct virtio_fastrpc_config, max_buf_size,
+				&config.max_buf_size);
+		if (config.max_buf_size > MAX_FASTRPC_BUF_SIZE) {
+			dev_err(&vdev->dev, "buffer size 0x%x is exceed to maximum limit 0x%x\n",
+					config.max_buf_size, MAX_FASTRPC_BUF_SIZE);
+			return -EINVAL;
+		}
+
+		me->buf_size = config.max_buf_size;
+		dev_info(&vdev->dev, "set buf_size to 0x%x\n", me->buf_size);
+	} else {
+		dev_info(&vdev->dev, "set buf_size to default value\n");
+		me->buf_size = DEF_FASTRPC_BUF_SIZE;
+	}
 
 	err = init_vqs(me);
 	if (err) {
@@ -712,7 +819,13 @@ static int virt_fastrpc_probe(struct virtio_device *vdev)
 		return err;
 	}
 
-	if (of_get_property(me->dev->of_node, "qcom,domain_num", NULL) != NULL) {
+	if (virtio_has_feature(vdev, VIRTIO_FASTRPC_F_DOMAIN_NUM)) {
+		virtio_cread(vdev, struct virtio_fastrpc_config, domain_num,
+				&config.domain_num);
+		dev_info(&vdev->dev, "get domain_num %d from config space\n",
+				config.domain_num);
+		me->num_channels = config.domain_num;
+	} else if (of_get_property(me->dev->of_node, "qcom,domain_num", NULL) != NULL) {
 		err = of_property_read_u32(me->dev->of_node, "qcom,domain_num",
 					&me->num_channels);
 		if (err) {
@@ -772,9 +885,9 @@ static int virt_fastrpc_probe(struct virtio_device *vdev)
 	virtio_device_ready(vdev);
 
 	/* set up the receive buffers */
-	for (i = 0; i < me->num_bufs / 2; i++) {
+	for (i = 0; i < me->num_bufs; i++) {
 		struct scatterlist sg;
-		void *cpu_addr = me->rbufs + i * me->buf_size;
+		void *cpu_addr = me->rbufs[i];
 
 		sg_init_one(&sg, cpu_addr, me->buf_size);
 		err = virtqueue_add_inbuf(me->rvq.vq, &sg, 1, cpu_addr,
@@ -813,6 +926,7 @@ alloc_channel_bail:
 static void virt_fastrpc_remove(struct virtio_device *vdev)
 {
 	struct fastrpc_apps *me = &gfa;
+	int i;
 
 	device_destroy(me->class, MKDEV(MAJOR(me->dev_no), MINOR_NUM_DEV));
 	device_destroy(me->class, MKDEV(MAJOR(me->dev_no),
@@ -825,7 +939,14 @@ static void virt_fastrpc_remove(struct virtio_device *vdev)
 	fastrpc_channel_deinit(me);
 	vdev->config->reset(vdev);
 	vdev->config->del_vqs(vdev);
-	free_pages((unsigned long)me->rbufs, me->order);
+
+	for (i = 0; i < me->num_bufs; i++)
+		free_pages((unsigned long)me->rbufs[i], me->order);
+	for (i = 0; i < me->num_bufs; i++)
+		free_pages((unsigned long)me->sbufs[i], me->order);
+
+	kfree(me->sbufs);
+	kfree(me->rbufs);
 }
 
 const struct virtio_device_id id_table[] = {
@@ -839,6 +960,9 @@ static unsigned int features[] = {
 	VIRTIO_FASTRPC_F_MMAP,
 	VIRTIO_FASTRPC_F_CONTROL,
 	VIRTIO_FASTRPC_F_VERSION,
+	VIRTIO_FASTRPC_F_DOMAIN_NUM,
+	VIRTIO_FASTRPC_F_VQUEUE_SETTING,
+	VIRTIO_FASTRPC_F_MEM_MAP,
 };
 
 static struct virtio_driver virtio_fastrpc_driver = {
