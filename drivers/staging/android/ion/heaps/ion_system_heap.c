@@ -3,6 +3,7 @@
  * ION Memory Allocator system heap exporter
  *
  * Copyright (C) 2011 Google, Inc.
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <asm/page.h>
@@ -226,8 +227,10 @@ static void ion_system_heap_destroy_pools(struct ion_page_pool **pools)
 	int i;
 
 	for (i = 0; i < NUM_ORDERS; i++)
-		if (pools[i])
+		if (pools[i]) {
 			ion_page_pool_destroy(pools[i]);
+			pools[i] = NULL;
+		}
 }
 
 static int ion_system_heap_create_pools(struct ion_page_pool **pools)
