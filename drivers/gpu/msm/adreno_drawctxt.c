@@ -589,8 +589,6 @@ int adreno_drawctxt_switch(struct adreno_device *adreno_dev,
 	if (drawctxt != NULL && kgsl_context_detached(&drawctxt->base))
 		return -ENOENT;
 
-	trace_adreno_drawctxt_switch(rb, drawctxt);
-
 	/* Get a refcount to the new instance */
 	if (drawctxt) {
 		if (!_kgsl_context_get(&drawctxt->base))
@@ -603,7 +601,7 @@ int adreno_drawctxt_switch(struct adreno_device *adreno_dev,
 	}
 	ret = adreno_ringbuffer_set_pt_ctx(rb, new_pt, drawctxt, flags);
 	if (ret)
-		return ret;
+		goto err;
 
 	if (rb->drawctxt_active) {
 		/* Wait for the timestamp to expire */
@@ -614,6 +612,13 @@ int adreno_drawctxt_switch(struct adreno_device *adreno_dev,
 		}
 	}
 
+	trace_adreno_drawctxt_switch(rb, drawctxt);
+
 	rb->drawctxt_active = drawctxt;
+
 	return 0;
+err:
+	if (drawctxt)
+		kgsl_context_put(&drawctxt->base);
+	return ret;
 }
