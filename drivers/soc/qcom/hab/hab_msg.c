@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022,2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include "hab.h"
 #include "hab_grantable.h"
@@ -132,24 +132,44 @@ void hab_msg_free(struct hab_message *message)
 
 int
 hab_msg_dequeue(struct virtual_channel *vchan, struct hab_message **msg,
-		int *rsize, unsigned int flags)
+		int *rsize, unsigned int timeout, unsigned int flags)
 {
 	struct hab_message *message = NULL;
-	int ret = 0;
+	/*
+	 * 1. When the user sets the Non-blocking flag and the rx_list is empty,
+	 *    or hab_rx_queue_empty is not empty, but due to the competition relationship,
+	 *    the rx_list is empty after the lock is obtained,
+	 *    and the value of ret in both cases is the default value.
+	 * 2. When the function calls API wait_event_*, wait_event_* returns due to timeout
+	 *    and the condition is not met, the value of ret is set to 0.
+	 * If the default value of ret is 0, we would have a hard time distinguishing
+	 * between the above two cases (or with more redundant code).
+	 * So we set the default value of ret to be -EAGAIN.
+	 * In this way, we can easily distinguish the above two cases.
+	 * This is what we expected to see.
+	 */
+	int ret = -EAGAIN;
 	int wait = !(flags & HABMM_SOCKET_RECV_FLAGS_NON_BLOCKING);
 	int interruptible = !(flags & HABMM_SOCKET_RECV_FLAGS_UNINTERRUPTIBLE);
+	int timeout_flag = flags & HABMM_SOCKET_RECV_FLAGS_TIMEOUT;
 	int irqs_disabled = irqs_disabled();
 
 	if (wait) {
+		/* we will wait forever if timeout_flag not set */
+		if (!timeout_flag)
+			timeout = UINT_MAX;
+
 		if (hab_rx_queue_empty(vchan)) {
 			if (interruptible)
-				ret = wait_event_interruptible(vchan->rx_queue,
+				ret = wait_event_interruptible_timeout(vchan->rx_queue,
 					!hab_rx_queue_empty(vchan) ||
-					vchan->otherend_closed);
+					vchan->otherend_closed,
+					msecs_to_jiffies(timeout));
 			else
-				wait_event(vchan->rx_queue,
+				ret = wait_event_timeout(vchan->rx_queue,
 					!hab_rx_queue_empty(vchan) ||
-					vchan->otherend_closed);
+					vchan->otherend_closed,
+					msecs_to_jiffies(timeout));
 		}
 	}
 
@@ -160,7 +180,7 @@ hab_msg_dequeue(struct virtual_channel *vchan, struct hab_message **msg,
 	 */
 	hab_spin_lock(&vchan->rx_lock, irqs_disabled);
 
-	if ((!ret || (ret == -ERESTARTSYS)) && !list_empty(&vchan->rx_list)) {
+	if (!list_empty(&vchan->rx_list)) {
 		message = list_first_entry(&vchan->rx_list,
 				struct hab_message, node);
 		if (message) {
@@ -173,14 +193,32 @@ hab_msg_dequeue(struct virtual_channel *vchan, struct hab_message **msg,
 				pr_err("vcid %x rcv buf too small %d < %zd\n",
 					   vchan->id, *rsize,
 					   message->sizebytes);
+				/*
+				 * Here we return the actual message size in RxQ instead of 0,
+				 * so that the hab client can re-receive the message with the
+				 * correct message size.
+				 */
 				*rsize = message->sizebytes;
 				message = NULL;
 				ret = -EOVERFLOW; /* come back again */
 			}
 		}
-	} else
-		/* no message received, retain the original status */
+	} else {
+		/* no message received */
 		*rsize = 0;
+
+		if (vchan->otherend_closed)
+			ret = -ENODEV;
+		else if (ret == -ERESTARTSYS)
+			ret = -EINTR;
+		else if (ret == 0) {
+			pr_info("timeout! vcid: %x\n", vchan->id);
+			ret = -ETIMEDOUT;
+		} else {
+			pr_debug("EAGAIN: ret = %d, flags = %x\n", ret, flags);
+			ret = -EAGAIN;
+		}
+	}
 
 	hab_spin_unlock(&vchan->rx_lock, irqs_disabled);
 
