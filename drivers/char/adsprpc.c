@@ -278,6 +278,8 @@ struct fastrpc_file {
 	struct fastrpc_apps *apps;
 	struct mutex map_mutex;
 	struct mutex internal_map_mutex;
+	/* Flag to indicate dynamic process creation status*/
+	bool in_process_create;
 };
 
 static struct fastrpc_apps gfa;
@@ -1654,6 +1656,17 @@ static int fastrpc_init_process(struct fastrpc_file *fl,
 			int filelen;
 			int pageslen;
 		} inbuf;
+
+		spin_lock(&fl->hlock);
+		if (fl->in_process_create) {
+			err = -EALREADY;
+			pr_err("Already in create init process\n");
+			spin_unlock(&fl->hlock);
+			return err;
+		}
+		fl->in_process_create = true;
+		spin_unlock(&fl->hlock);
+
 		inbuf.pgid = current->tgid;
 		inbuf.namelen = strlen(current->comm) + 1;
 		inbuf.filelen = init->filelen;
@@ -1730,6 +1743,11 @@ bail:
 		mutex_lock(&fl->map_mutex);
 		fastrpc_mmap_free(file);
 		mutex_unlock(&fl->map_mutex);
+	}
+	if (init->flags == FASTRPC_INIT_CREATE) {
+		spin_lock(&fl->hlock);
+		fl->in_process_create = false;
+		spin_unlock(&fl->hlock);
 	}
 	return err;
 }
@@ -2092,7 +2110,9 @@ static int fastrpc_file_free(struct fastrpc_file *fl)
 
 	if (!fl->sctx)
 		goto bail;
-
+	spin_lock(&fl->hlock);
+	fl->in_process_create = false;
+	spin_unlock(&fl->hlock);
 	(void)fastrpc_release_current_dsp_process(fl);
 	if (!IS_ERR_OR_NULL(fl->init_mem))
 		fastrpc_buf_free(fl->init_mem, 0);
@@ -2390,6 +2410,7 @@ static int fastrpc_device_open(struct inode *inode, struct file *filp)
 	fl->init_mem = NULL;
 	mutex_init(&fl->internal_map_mutex);
 	mutex_init(&fl->map_mutex);
+	fl->in_process_create = false;
 
 	VERIFY(err, !fastrpc_session_alloc(&me->channel[cid], &session));
 	if (err)
