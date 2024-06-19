@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __QCOM_SECURE_BUFFER_H__
@@ -38,6 +39,7 @@ enum vmid {
 	VMID_CP_SPSS_SP_SHARED = 0x22,
 	VMID_CP_SPSS_HLOS_SHARED = 0x24,
 	VMID_ADSP_HEAP = 0x25,
+	VMID_CP_CAMERA_ENCODE = 0x29,
 	VMID_CP_CDSP = 0x2A,
 	VMID_NAV = 0x2B,
 	VMID_LAST,
