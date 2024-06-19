@@ -1931,6 +1931,8 @@ int split_huge_page_to_list(struct page *page, struct list_head *list)
 {
 	struct anon_vma *anon_vma;
 	int ret = 1;
+	bool was_locked = false;
+	pmd_t _pmd;
 
 	BUG_ON(is_huge_zero_page(page));
 	BUG_ON(!PageAnon(page));
@@ -1946,6 +1948,33 @@ int split_huge_page_to_list(struct page *page, struct list_head *list)
 	if (!anon_vma)
 		goto out;
 	anon_vma_lock_write(anon_vma);
+	if (page) {
+		VM_WARN_ON_ONCE(!PageLocked(page));
+		was_locked = true;
+		if (page != pmd_page(*pmd))
+			goto out;
+	}
+
+repeat:
+		if (!page) {
+			page = pmd_page(*pmd);
+			if (unlikely(!trylock_page(page))) {
+				get_page(page);
+				_pmd = *pmd;
+				spin_unlock(ptl);
+				lock_page(page);
+				spin_lock(ptl);
+				if (unlikely(!pmd_same(*pmd, _pmd))) {
+					unlock_page(page);
+					put_page(page);
+					page = NULL;
+					goto repeat;
+				}
+				put_page(page);
+			}
+		}
+	if (!was_locked && page)
+		unlock_page(page);
 
 	ret = 0;
 	if (!PageCompound(page))
