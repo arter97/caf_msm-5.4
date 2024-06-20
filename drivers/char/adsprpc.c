@@ -260,6 +260,7 @@ struct fastrpc_mmap {
 	uintptr_t raddr;
 	int uncached;
 	bool is_filemap; /*flag to indicate map used in process init*/
+	unsigned int ctx_refs; /* Indicates reference count for context map */
 };
 
 struct fastrpc_file {
@@ -470,7 +471,7 @@ static int fastrpc_mmap_remove(struct fastrpc_file *fl, uintptr_t va,
 	hlist_for_each_entry_safe(map, n, &me->maps, hn) {
 		if (map->refs == 1 && map->raddr == va &&
 			map->raddr + map->len == va + len &&
-			/*Remove map if not used in process initialization*/
+			/* Remove map if not used in process initialization */
 			!map->is_filemap) {
 			match = map;
 			hlist_del_init(&map->hn);
@@ -482,9 +483,10 @@ static int fastrpc_mmap_remove(struct fastrpc_file *fl, uintptr_t va,
 		return 0;
 	}
 	hlist_for_each_entry_safe(map, n, &fl->maps, hn) {
-		if (map->refs == 1 && map->raddr == va &&
-			map->raddr + map->len == va + len &&
-			/*Remove map if not used in process initialization*/
+		/* Remove if only one reference map and no context map */
+		if (map->refs == 1 && !map->ctx_refs &&
+			map->raddr == va && map->raddr + map->len == va + len &&
+			/* Remove map if not used in process initialization */
 			!map->is_filemap) {
 			match = map;
 			hlist_del_init(&map->hn);
@@ -519,11 +521,11 @@ static void fastrpc_mmap_free(struct fastrpc_mmap *map)
 	}
 	if (map->flags == ADSP_MMAP_HEAP_ADDR) {
 		map->refs--;
-		if (!map->refs)
+		if (!map->refs && !map->ctx_refs)
 			hlist_del_init(&map->hn);
 	} else {
 		map->refs--;
-		if (!map->refs)
+		if (!map->refs && !map->ctx_refs)
 			hlist_del_init(&map->hn);
 	}
 	if (map->refs > 0)
@@ -606,6 +608,7 @@ static int fastrpc_mmap_create(struct fastrpc_file *fl, int fd, uintptr_t va,
 	map->fl = fl;
 	map->fd = fd;
 	map->is_filemap = false;
+	map->ctx_refs = 0;
 	if (mflags == ADSP_MMAP_HEAP_ADDR) {
 		DEFINE_DMA_ATTRS(rh_attrs);
 
@@ -984,8 +987,11 @@ static void context_free(struct smq_invoke_ctx *ctx)
 	hlist_del_init(&ctx->hn);
 	spin_unlock(&ctx->fl->hlock);
 	mutex_lock(&ctx->fl->map_mutex);
-	for (i = 0; i < nbufs; ++i)
+	for (i = 0; i < nbufs; ++i) {
+		if (ctx->maps[i] && ctx->maps[i]->ctx_refs)
+			ctx->maps[i]->ctx_refs--;
 		fastrpc_mmap_free(ctx->maps[i]);
+	}
 	mutex_unlock(&ctx->fl->map_mutex);
 	fastrpc_buf_free(ctx->buf, 1);
 	fastrpc_buf_free(ctx->lbuf, 1);
@@ -1130,6 +1136,8 @@ static int get_args(uint32_t kernel, struct smq_invoke_ctx *ctx)
 		if (ctx->fds[i])
 			fastrpc_mmap_create(ctx->fl, ctx->fds[i], buf, len,
 					    mflags, &ctx->maps[i]);
+		if(ctx->maps[i])
+			ctx->maps[i]->ctx_refs++;
 		mutex_unlock(&ctx->fl->map_mutex);
 		ipage += 1;
 	}
@@ -1322,6 +1330,8 @@ static int put_args(uint32_t kernel, struct smq_invoke_ctx *ctx,
 			if (err)
 				goto bail;
 		} else {
+			if (ctx->maps[i]->ctx_refs)
+				ctx->maps[i]->ctx_refs--;
 			mutex_lock(&ctx->fl->map_mutex);
 			fastrpc_mmap_free(ctx->maps[i]);
 			mutex_unlock(&ctx->fl->map_mutex);
