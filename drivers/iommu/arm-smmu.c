@@ -3,6 +3,7 @@
  * IOMMU API for ARM architected SMMU implementations.
  *
  * Copyright (C) 2013 ARM Limited
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Author: Will Deacon <will.deacon@arm.com>
  *
@@ -2775,22 +2776,38 @@ static int arm_smmu_assign_table(struct arm_smmu_domain *smmu_domain)
 	int ret = 0;
 	int dest_vmids[2] = {VMID_HLOS, smmu_domain->secure_vmid};
 	int dest_perms[2] = {PERM_READ | PERM_WRITE, PERM_READ};
+	int dest_vmids1[1] = {smmu_domain->secure_vmid};
+	int dest_perms1[1] = {PERM_READ};
 	int source_vmid = VMID_HLOS;
 	struct arm_smmu_pte_info *pte_info, *temp;
 
 	if (!arm_smmu_has_secure_vmid(smmu_domain))
 		return ret;
 
-	list_for_each_entry(pte_info, &smmu_domain->pte_info_list, entry) {
-		ret = hyp_assign_phys(virt_to_phys(pte_info->virt_addr),
-				      PAGE_SIZE, &source_vmid, 1,
-				      dest_vmids, dest_perms, 2);
+	if (smmu_domain->secure_vmid == VMID_CP_CAMERA_ENCODE) {
+		list_for_each_entry(pte_info, &smmu_domain->pte_info_list, entry) {
+			ret = hyp_assign_phys(virt_to_phys(pte_info->virt_addr),
+						PAGE_SIZE, &source_vmid, 1,
+						dest_vmids1, dest_perms1, 1);
 
-		if (ret == -EPROBE_DEFER)
-			return ret;
+			if (ret == -EPROBE_DEFER)
+				return ret;
 
-		if (WARN_ON(ret))
-			break;
+			if (WARN_ON(ret))
+				break;
+		}
+	} else {
+		list_for_each_entry(pte_info, &smmu_domain->pte_info_list, entry) {
+			ret = hyp_assign_phys(virt_to_phys(pte_info->virt_addr),
+					      PAGE_SIZE, &source_vmid, 1,
+					      dest_vmids, dest_perms, 2);
+
+			if (ret == -EPROBE_DEFER)
+				return ret;
+
+			if (WARN_ON(ret))
+				break;
+		}
 	}
 
 	list_for_each_entry_safe(pte_info, temp, &smmu_domain->pte_info_list,
@@ -2812,18 +2829,22 @@ static void arm_smmu_unassign_table(struct arm_smmu_domain *smmu_domain)
 	if (!arm_smmu_has_secure_vmid(smmu_domain))
 		return;
 
-	list_for_each_entry(pte_info, &smmu_domain->unassign_list, entry) {
-		ret = hyp_assign_phys(virt_to_phys(pte_info->virt_addr),
-				      PAGE_SIZE, source_vmlist, 2,
-				      &dest_vmids, &dest_perms, 1);
+	if (dest_vmids == VMID_HLOS)
+		pr_err("%s no scm call for HLOS only\n", __func__);
+	else {
+		list_for_each_entry(pte_info, &smmu_domain->unassign_list, entry) {
+			ret = hyp_assign_phys(virt_to_phys(pte_info->virt_addr),
+					      PAGE_SIZE, source_vmlist, 2,
+					      &dest_vmids, &dest_perms, 1);
 
-		if (ret == -EPROBE_DEFER)
-			return;
+			if (ret == -EPROBE_DEFER)
+				return;
 
-		if (WARN_ON(ret))
-			break;
-		free_pages((unsigned long)pte_info->virt_addr,
-			   get_order(pte_info->size));
+			if (WARN_ON(ret))
+				break;
+			free_pages((unsigned long)pte_info->virt_addr,
+				   get_order(pte_info->size));
+		}
 	}
 
 	list_for_each_entry_safe(pte_info, temp, &smmu_domain->unassign_list,
