@@ -2305,13 +2305,11 @@ static int _mmc_suspend(struct mmc_host *host, bool is_suspend)
 	unsigned int notify_type = is_suspend ? EXT_CSD_POWER_OFF_SHORT :
 					EXT_CSD_POWER_OFF_LONG;
 #if defined(CONFIG_SDC_QTI)
-	if (!host->partial_init_broken) {
-		err = mmc_suspend_clk_scaling(host);
-		if (err) {
-			pr_err("%s: %s: fail to suspend clock scaling (%d)\n",
-				mmc_hostname(host), __func__, err);
-			return err;
-		}
+	err = mmc_suspend_clk_scaling(host);
+	if (err) {
+		pr_err("%s: %s: fail to suspend clock scaling (%d)\n",
+			mmc_hostname(host), __func__, err);
+		return err;
 	}
 #endif
 	mmc_log_string(host, "Enter\n");
@@ -2331,8 +2329,7 @@ static int _mmc_suspend(struct mmc_host *host, bool is_suspend)
 #if defined(CONFIG_SDC_QTI)
 		memcpy(&host->cached_ios, &host->ios, sizeof(host->cached_ios));
 #endif
-		if (!host->partial_init_broken)
-			mmc_cache_card_ext_csd(host);
+		mmc_cache_card_ext_csd(host);
 	}
 	if (mmc_can_sleep(host->card))
 		err = mmc_sleepawake(host, true);
@@ -2443,12 +2440,8 @@ static int _mmc_resume(struct mmc_host *host)
 
 	if (mmc_can_sleep(host->card)) {
 		err = mmc_sleepawake(host, false);
-		if (!err) {
-			if (host->partial_init_broken)
-				err = mmc_init_card(host, host->card->ocr, host->card);
-			else
-				err = mmc_partial_init(host);
-		}
+		if (!err)
+			err = mmc_partial_init(host);
 		else
 			pr_err("%s: %s: awake failed (%d), fallback to full init\n",
 				mmc_hostname(host), __func__, err);
@@ -2465,12 +2458,10 @@ out:
 	mmc_release_host(host);
 
 #if defined(CONFIG_SDC_QTI)
-	if (!host->partial_init_broken) {
-		err = mmc_resume_clk_scaling(host);
-		if (err)
-			pr_err("%s: %s: fail to resume clock scaling (%d)\n",
-				mmc_hostname(host), __func__, err);
-	}
+	err = mmc_resume_clk_scaling(host);
+	if (err)
+		pr_err("%s: %s: fail to resume clock scaling (%d)\n",
+			mmc_hostname(host), __func__, err);
 out:
 #endif
 	mmc_log_string(host, "Exit err %d\n", err);
