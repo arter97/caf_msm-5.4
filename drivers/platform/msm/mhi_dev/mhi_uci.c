@@ -391,7 +391,6 @@ struct uci_client {
 	int (*read)(struct uci_client *h, int *bytes);
 	unsigned int tiocm;
 	unsigned int at_ctrl_mask;
-	int tre_len;
 };
 
 struct mhi_uci_ctxt_t {
@@ -1467,9 +1466,8 @@ static ssize_t mhi_uci_client_write(struct file *file,
 {
 	struct uci_client *uci_handle = NULL;
 	void *data_loc;
-	const char __user *cur_buf;
 	unsigned long memcpy_result;
-	int rc = 0, tre_len, cur_rc = 0, count_left, cur_txfr_len;
+	int rc;
 
 	if (!file || !buf || !count || !file->private_data) {
 		uci_log(UCI_DBG_DBG, "Invalid access to write\n");
@@ -1477,8 +1475,6 @@ static ssize_t mhi_uci_client_write(struct file *file,
 	}
 
 	uci_handle = file->private_data;
-	tre_len = uci_handle->tre_len;
-
 	if (!uci_handle->send || !uci_handle->out_handle) {
 		uci_log(UCI_DBG_DBG, "Invalid handle or send\n");
 		return -EINVAL;
@@ -1501,47 +1497,17 @@ static ssize_t mhi_uci_client_write(struct file *file,
 			count, uci_handle->out_chan_attr->max_packet_size);
 	}
 
-	cur_txfr_len = count;
+	data_loc = kmalloc(count, GFP_KERNEL);
+	if (!data_loc)
+		return -ENOMEM;
 
-	if (!tre_len)
-		uci_log(UCI_DBG_ERROR, "tre_len is 0, not updated yet\n");
-	else if (count > tre_len) {
-		uci_log(UCI_DBG_DBG, "Write req size (%d) > tre_len (%d)\n", count, tre_len);
-		cur_txfr_len = tre_len;
+	memcpy_result = copy_from_user(data_loc, buf, count);
+	if (memcpy_result) {
+		rc = -EFAULT;
+		goto error_memcpy;
 	}
 
-	count_left = count;
-	cur_buf = buf;
-
-	do {
-		data_loc = kmalloc(cur_txfr_len, GFP_KERNEL);
-		if (!data_loc) {
-			uci_log(UCI_DBG_ERROR, "Memory allocation failed\n");
-			return -ENOMEM;
-		}
-
-		memcpy_result = copy_from_user(data_loc, cur_buf, cur_txfr_len);
-		if (memcpy_result) {
-			uci_log(UCI_DBG_ERROR, "Mem copy failed\n");
-			rc = -EFAULT;
-			goto error_memcpy;
-		}
-
-		cur_rc = mhi_uci_send_packet(uci_handle, data_loc, cur_txfr_len);
-		if (cur_rc != cur_txfr_len) {
-			uci_log(UCI_DBG_ERROR,
-					"Send failed with error %d, after sending %d data\n",
-					cur_rc, rc);
-			rc = cur_rc;
-			goto error_memcpy;
-		}
-		rc += cur_rc;
-		cur_buf += cur_txfr_len;
-		count_left -= cur_txfr_len;
-
-		if (count_left < tre_len)
-			cur_txfr_len = count_left;
-	} while (count_left);
+	rc = mhi_uci_send_packet(uci_handle, data_loc, count);
 	if (rc == count)
 		return rc;
 
@@ -1557,7 +1523,7 @@ static ssize_t mhi_uci_client_write_iter(struct kiocb *iocb,
 	struct uci_client *uci_handle = NULL;
 	void *data_loc;
 	unsigned long memcpy_result;
-	int rc = 0, tre_len, cur_rc = 0, count_left, cur_txfr_len;
+	int rc;
 	struct file *file = iocb->ki_filp;
 	ssize_t count = iov_iter_count(buf);
 
@@ -1567,8 +1533,6 @@ static ssize_t mhi_uci_client_write_iter(struct kiocb *iocb,
 	}
 
 	uci_handle = file->private_data;
-	tre_len = uci_handle->tre_len;
-
 	if (!uci_handle->send || !uci_handle->out_handle) {
 		uci_log(UCI_DBG_DBG, "Invalid handle or send\n");
 		return -EINVAL;
@@ -1591,44 +1555,17 @@ static ssize_t mhi_uci_client_write_iter(struct kiocb *iocb,
 			count, uci_handle->out_chan_attr->max_packet_size);
 	}
 
-	cur_txfr_len = count;
+	data_loc = kmalloc(count, GFP_KERNEL);
+	if (!data_loc)
+		return -ENOMEM;
 
-	if (!tre_len)
-		uci_log(UCI_DBG_ERROR, "tre_len is 0, not updated yet\n");
-	else if (count > tre_len) {
-		uci_log(UCI_DBG_DBG, "Write req size (%d) > tre_len (%d)\n", count, tre_len);
-		cur_txfr_len = tre_len;
+	memcpy_result = copy_from_iter_full(data_loc, count, buf);
+	if (!memcpy_result) {
+		rc = -EFAULT;
+		goto error_memcpy;
 	}
 
-	count_left = count;
-
-	do {
-		data_loc = kmalloc(cur_txfr_len, GFP_KERNEL);
-		if (!data_loc) {
-			uci_log(UCI_DBG_ERROR, "Memory allocation failed\n");
-			return -ENOMEM;
-		}
-
-		memcpy_result = copy_from_iter_full(data_loc, cur_txfr_len, buf);
-		if (!memcpy_result) {
-			uci_log(UCI_DBG_ERROR, "Mem copy failed\n");
-			rc = -EFAULT;
-			goto error_memcpy;
-		}
-		cur_rc = mhi_uci_send_packet(uci_handle, data_loc, cur_txfr_len);
-		if (cur_rc != cur_txfr_len) {
-			uci_log(UCI_DBG_ERROR,
-					"Send failed with error %d, after sending %d data\n",
-					cur_rc, rc);
-			rc = cur_rc;
-			goto error_memcpy;
-		}
-		rc += cur_rc;
-		count_left -= cur_txfr_len;
-		if (count_left < tre_len)
-			cur_txfr_len = count_left;
-	} while (count_left);
-
+	rc = mhi_uci_send_packet(uci_handle, data_loc, count);
 	if (rc == count)
 		return rc;
 
@@ -1746,7 +1683,6 @@ static void uci_event_notifier(struct mhi_dev_client_cb_reason *reason)
 			uci_handle->in_chan);
 		if (reason->ch_id % 2) {
 			atomic_set(&uci_handle->write_data_ready, 1);
-			uci_handle->tre_len = uci_handle->out_handle->channel->tre_size;
 			wake_up(&uci_handle->write_wq);
 		} else {
 			atomic_set(&uci_handle->read_data_ready, 1);
