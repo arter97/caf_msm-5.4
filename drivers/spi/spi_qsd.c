@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2008-2018, 2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1274,9 +1274,12 @@ static u32 msm_spi_set_spi_io_control(struct msm_spi *dd,
 		 * immediately after last transfer by hw.
 		 */
 		if (!list_is_last(&dd->cur_transfer->transfer_list,
-				  &spi_master->cur_msg->transfers))
+				  &spi_master->cur_msg->transfers) && !dd->hw_ctrl_cs)
 			spi_ioc |= SPI_IO_C_MX_CS_MODE;
 	}
+
+	if (dd->hw_ctrl_cs && !(spi_ioc & SPI_IO_C_FORCE_CS))
+		spi_ioc |= SPI_IO_C_FORCE_CS;
 
 	if (spi_ioc != spi_ioc_orig)
 		writel_relaxed(spi_ioc, dd->base + SPI_IO_CONTROL);
@@ -1463,6 +1466,11 @@ transfer_end:
 	if (!dd->cur_transfer->cs_change && !dd->hw_ctrl_cs)
 		writel_relaxed(spi_ioc & ~SPI_IO_C_MX_CS_MODE,
 		       dd->base + SPI_IO_CONTROL);
+	else if (dd->hw_ctrl_cs && list_is_last(&dd->cur_transfer->transfer_list,
+			&spi_master->cur_msg->transfers))
+		writel_relaxed(spi_ioc & ~SPI_IO_C_FORCE_CS,
+			dd->base + SPI_IO_CONTROL);
+
 	return status;
 }
 
