@@ -387,6 +387,7 @@ static int mhi_fw_load_bhie(struct mhi_controller *mhi_cntrl,
 	void __iomem *base = mhi_cntrl->bhie;
 	rwlock_t *pm_lock = &mhi_cntrl->pm_lock;
 	u32 tx_status;
+	int ret;
 
 	read_lock_bh(pm_lock);
 	if (!MHI_REG_ACCESS_VALID(mhi_cntrl->pm_state)) {
@@ -421,7 +422,7 @@ static int mhi_fw_load_bhie(struct mhi_controller *mhi_cntrl,
 	MHI_CNTRL_LOG("Waiting for image transfer completion\n");
 
 	/* waiting for image download completion */
-	wait_event_timeout(mhi_cntrl->state_event,
+	ret = wait_event_timeout(mhi_cntrl->state_event,
 			   MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state) ||
 			   mhi_read_reg_field(mhi_cntrl, base,
 					      BHIE_TXVECSTATUS_OFFS,
@@ -430,10 +431,11 @@ static int mhi_fw_load_bhie(struct mhi_controller *mhi_cntrl,
 					      &tx_status) || tx_status,
 			   msecs_to_jiffies(mhi_cntrl->timeout_ms));
 
-	if (MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state))
+	if (MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state) ||
+		tx_status != BHIE_TXVECSTATUS_STATUS_XFER_COMPL)
 		return -EIO;
 
-	return (tx_status == BHIE_TXVECSTATUS_STATUS_XFER_COMPL) ? 0 : -EIO;
+	return (!ret) ? -ETIMEDOUT : 0;
 }
 
 static int mhi_fw_load_bhi(struct mhi_controller *mhi_cntrl,
