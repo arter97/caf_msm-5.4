@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include "hab.h"
 #include "hab_grantable.h"
@@ -90,7 +91,7 @@ struct export_desc_super *habmem_add_export(
 	idr_preload(GFP_KERNEL);
 	spin_lock(&vchan->pchan->expid_lock);
 	exp->export_id =
-		idr_alloc(&vchan->pchan->expid_idr, exp, 1, 0, GFP_NOWAIT);
+		idr_alloc_cyclic(&vchan->pchan->expid_idr, exp, 1, 0, GFP_NOWAIT);
 	spin_unlock(&vchan->pchan->expid_lock);
 	idr_preload_end();
 
@@ -253,6 +254,8 @@ int hab_mem_export(struct uhab_context *ctx,
 	if (!ctx || !param || !param->buffer || !param->sizebytes
 		|| ((param->sizebytes % PAGE_SIZE) != 0))
 		return -EINVAL;
+
+	param->exportid = 0;
 
 	vchan = hab_get_vchan_fromvcid(param->vcid, ctx, 0);
 	if (!vchan || !vchan->pchan) {
