@@ -149,4 +149,9 @@ source "drivers/net/wireless/cnss_utils/Kconfig"
 source "drivers/net/wireless/cnss_genl/Kconfig"
 source "drivers/net/wireless/cnss_prealloc/Kconfig"
 
+config QUECTEL_M2
+	tristate "PCIE M.2 B KEY QUECTEL LTE/5G"
+	help
+		Say Y here to support M.2.
+
 endif # WLAN
