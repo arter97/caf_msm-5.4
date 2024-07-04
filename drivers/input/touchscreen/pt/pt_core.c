@@ -12782,8 +12782,18 @@ static void pt_resume_work(struct work_struct *work)
 	struct pt_core_data *pt_data = container_of(work, struct pt_core_data,
 					resume_work);
 	int rc = 0;
+	u32 status = STARTUP_STATUS_START;
 
 	pt_debug(pt_data->dev, DL_INFO, "%s start ", __func__);
+
+	if (pt_data->mode != 2) {
+		rc = pt_enum_with_dut(pt_data, false, &status);
+	pt_debug(pt_data->dev, DL_INFO, "%s mode %x rc=%x status = %x cd->stat=%x", __func__,
+		 pt_data->mode, rc, status, pt_data->startup_status);
+	mutex_lock(&pt_data->system_lock);
+	pt_data->startup_status |= status;
+	mutex_unlock(&pt_data->system_lock);
+	}
 	if (pt_data->cpdata->flags & PT_CORE_FLAG_SKIP_RUNTIME)
 		return;
 
@@ -14915,7 +14925,8 @@ static int pt_device_exit(struct i2c_client *client)
 		pt_debug(dev, DL_INFO,"%s: Start pt_device_exit\n", __func__);
 
 		glink_pt_send_msg = &glink_touch_enter;
-		pt_debug(dev, DL_INFO, "[touch]glink_pt_send_msg = %0x\n", glink_pt_send_msg);
+		pt_debug(dev, DL_INFO, "[touch]glink_pt_send_msg = %0x\n",
+			*((int *)glink_pt_send_msg));
 		glink_touch_tx_msg(glink_pt_send_msg, TOUCH_MSG_SIZE);
 
 		if (active_panel)
@@ -14985,7 +14996,7 @@ static ssize_t pt_touch_offload_store(struct device *dev,
 
 	switch (input_data[0]) {
 	case 0:
-		pt_debug(dev, DL_ERROR, "%s: TTDL: Core Touch Offload OFF\n", __func__);
+		pt_debug(dev, DL_ERROR, "%s: TTDL: Core Touch Offload Enable\n", __func__);
 		cd->touch_offload = true;
 		rc = pt_device_exit(client);
 		if (rc)
@@ -14999,7 +15010,7 @@ static ssize_t pt_touch_offload_store(struct device *dev,
 	break;
 
 	case 1:
-		pt_debug(dev, DL_ERROR, "%s: TTDL: Core Touch Offload ON\n", __func__);
+		pt_debug(dev, DL_ERROR, "%s: TTDL: Core Touch Offload Disable\n", __func__);
 		rc = pt_device_entry(&client->dev, client->irq, PT_DATA_SIZE);
 		if (rc)
 			pt_debug(dev, DL_ERROR, "%s: Power on error detected rc=%d\n",
@@ -17591,7 +17602,7 @@ void glink_touch_pt_rx_msg(void *data, int len)
 			rc = -EINVAL;
 			goto err_ret;
 	}
-	pr_info("%s: TOUCH_RX_MSG End:\n", __func__);
+	pr_info("%s: TOUCH_RX_MSG End: %x\n", __func__, pt_slate_resp_ack);
 err_ret:
 return;
 }
@@ -18132,7 +18143,8 @@ int pt_device_entry(struct device *dev,
 		cd->cpdata  = pdata->core_pdata;
 
 		glink_pt_send_msg = &glink_touch_exit;
-		pt_debug(dev, DL_INFO, "[touch]glink_pt_send_msg = %d\n", glink_pt_send_msg);
+		pt_debug(dev, DL_INFO, "[touch]glink_pt_send_msg = 0x%X\n",
+			*((int *)glink_pt_send_msg));
 		glink_touch_tx_msg(glink_pt_send_msg, TOUCH_MSG_SIZE);
 
 		msleep(150);
@@ -18239,13 +18251,14 @@ int pt_device_entry(struct device *dev,
 
 			pm_runtime_put_sync(dev);
 
-#if defined(CONFIG_PANEL_NOTIFIER)
 		/* Setup active dsi panel */
 		active_panel = cd->cpdata->active_panel;
-
-
+#if defined(CONFIG_PANEL_NOTIFIER)
 		pt_debug(dev, DL_ERROR, "%s: Probe: Setup Panel Event notifier\n", __func__);
 		pt_setup_panel_event_notifier(cd);
+#elif defined(CONFIG_DRM)
+		pt_debug(dev, DL_ERROR, "%s: Probe: Setup DRM notifier\n", __func__);
+		pt_setup_drm_notifier(cd);
 #endif
 
 		mutex_lock(&cd->system_lock);
