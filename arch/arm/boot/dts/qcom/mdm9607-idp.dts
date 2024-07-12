@@ -1,0 +1,14 @@
+/*
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
+ */
+
+/dts-v1/;
+
+#include "mdm9607-idp.dtsi"
+/ {
+	model = "Qualcomm Technologies, Inc. MDM 9607 IDP";
+	compatible = "qcom,mdm9607-idp", "qcom,mdm9607", "qcom,idp";
+	qcom,board-id = <0x22 0>;
+};
