@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2014, 2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/uaccess.h>
 #include <linux/debugfs.h>
@@ -18,7 +19,7 @@ DEFINE_PER_CPU(u32[NUM_L1_CTRS], previous_l1_cnts);
 DEFINE_PER_CPU(u32, old_pid);
 DEFINE_PER_CPU(u32, hotplug_flag);
 
-#define USE_CPUHP_STATE CPUHP_AP_ONLINE
+#define USE_CPUHP_STATE CPUHP_AP_ONLINE_DYN
 
 static int tracectr_cpu_hotplug_coming_up(unsigned int cpu)
 {
