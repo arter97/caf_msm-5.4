@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only WITH Linux-syscall-note */
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef LINUX_SLATECOM_INTERFACE_H
 #define LINUX_SLATECOM_INTERFACE_H
@@ -41,8 +41,12 @@ enum slate_event_type {
 	SLATE_BEFORE_POWER_UP,
 	SLATE_AFTER_POWER_UP,
 	MODEM_BEFORE_POWER_DOWN,
+	MODEM_AFTER_POWER_DOWN,
+	MODEM_BEFORE_POWER_UP,
 	MODEM_AFTER_POWER_UP,
 	ADSP_BEFORE_POWER_DOWN,
+	ADSP_AFTER_POWER_DOWN,
+	ADSP_BEFORE_POWER_UP,
 	ADSP_AFTER_POWER_UP,
 	TWM_SLATE_AFTER_POWER_UP,
 	SLATE_DSP_ERROR,
