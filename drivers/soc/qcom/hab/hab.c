@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include "hab.h"
 
@@ -50,6 +51,8 @@ static struct hab_device hab_devices[] = {
 	HAB_DEVICE_CNSTR(DEVICE_XVM1_NAME, MM_XVM_1, 23),
 	HAB_DEVICE_CNSTR(DEVICE_XVM2_NAME, MM_XVM_2, 24),
 	HAB_DEVICE_CNSTR(DEVICE_XVM3_NAME, MM_XVM_3, 25),
+	HAB_DEVICE_CNSTR(DEVICE_EXT1_NAME, MM_VNW_1, 26),
+	HAB_DEVICE_CNSTR(DEVICE_EXT1_NAME, MM_EXT_1, 27),
 };
 
 struct hab_driver hab_driver = {
@@ -975,6 +978,24 @@ static int hab_generate_pchan(struct local_vmid *settings, int i, int j)
 		break;
 	case MM_XVM_START/100:
 		for (k = MM_XVM_START + 1; k < MM_XVM_END; k++) {
+			ret += hab_initialize_pchan_entry(
+					find_hab_device(k),
+					settings->self,
+					HABCFG_GET_VMID(settings, i),
+					HABCFG_GET_BE(settings, i, j));
+		}
+		break;
+	case MM_VNW_START/100:
+		for (k = MM_VNW_START + 1; k < MM_VNW_END; k++) {
+			ret += hab_initialize_pchan_entry(
+					find_hab_device(k),
+					settings->self,
+					HABCFG_GET_VMID(settings, i),
+					HABCFG_GET_BE(settings, i, j));
+		}
+		break;
+	case MM_EXT_START/100:
+		for (k = MM_EXT_START + 1; k < MM_EXT_END; k++) {
 			ret += hab_initialize_pchan_entry(
 					find_hab_device(k),
 					settings->self,
