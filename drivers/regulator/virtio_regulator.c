@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "%s: " fmt, __func__
@@ -414,6 +414,12 @@ static struct regulator_ops virtio_regulator_ops = {
 	.set_load		= virtio_regulator_set_load,
 };
 
+static const struct regulator_ops virtio_regulator_switch_ops = {
+	.enable   = virtio_regulator_enable,
+	.disable  = virtio_regulator_disable,
+	.is_enabled  = virtio_regulator_is_enabled,
+};
+
 static void virtio_regulator_isr(struct virtqueue *vq)
 {
 	struct virtio_regulator *vregulator = vq->vdev->priv;
@@ -501,9 +507,6 @@ static int virtio_regulator_init_reg(struct reg_virtio *reg)
 	if (init_data == NULL)
 		return -ENOMEM;
 
-	init_data->constraints.input_uV = init_data->constraints.max_uV;
-	init_data->constraints.valid_ops_mask |= REGULATOR_CHANGE_VOLTAGE;
-
 	if (init_data->constraints.min_uV == 0 &&
 	    init_data->constraints.max_uV == 0)
 		reg->rdesc.n_voltages = 0;
@@ -511,6 +514,13 @@ static int virtio_regulator_init_reg(struct reg_virtio *reg)
 		reg->rdesc.n_voltages = 1;
 	else
 		reg->rdesc.n_voltages = 2;
+
+	if (reg->rdesc.n_voltages == 0) {
+		reg->rdesc.ops = &virtio_regulator_switch_ops;
+	} else {
+		init_data->constraints.input_uV = init_data->constraints.max_uV;
+		init_data->constraints.valid_ops_mask |= REGULATOR_CHANGE_VOLTAGE;
+	}
 
 	reg_config.dev			= dev;
 	reg_config.init_data		= init_data;

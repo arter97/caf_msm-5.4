@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only WITH Linux-syscall-note */
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef _MSM_ION_IDS_H
 #define _MSM_ION_IDS_H
@@ -28,6 +29,8 @@
 #define ION_CP_MM_HEAP_ID		ION_BIT(9)
 #define ION_SECURE_HEAP_ID		ION_BIT(10)
 #define ION_SECURE_DISPLAY_HEAP_ID	ION_BIT(11)
+#define ION_VIDEO_HEAP_ID		ION_BIT(12)
+#define ION_NON_PIXEL_HEAP_ID		ION_BIT(13)
 #define ION_SPSS_HEAP_ID		ION_BIT(14)
 #define ION_SECURE_CARVEOUT_HEAP_ID	ION_BIT(15)
 #define ION_TUI_CARVEOUT_HEAP_ID	ION_BIT(16)

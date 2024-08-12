@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/cma.h>
@@ -2094,7 +2094,8 @@ retry:
 	return ret;
 }
 
-static void cnss_pci_power_off_mhi(struct cnss_pci_data *pci_priv)
+static void
+cnss_pci_power_off_mhi(struct cnss_pci_data *pci_priv, bool mhi_force_power_off)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 
@@ -2109,7 +2110,7 @@ static void cnss_pci_power_off_mhi(struct cnss_pci_data *pci_priv)
 	cnss_pci_set_mhi_state_bit(pci_priv, CNSS_MHI_RESUME);
 	cnss_pci_set_mhi_state_bit(pci_priv, CNSS_MHI_POWERING_OFF);
 
-	if (!pci_priv->pci_link_down_ind)
+	if (!pci_priv->pci_link_down_ind && !mhi_force_power_off)
 		cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_POWER_OFF);
 	else
 		cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_FORCE_POWER_OFF);
@@ -2712,6 +2713,7 @@ static int cnss_qca6290_powerup(struct cnss_pci_data *pci_priv)
 	int ret = 0;
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	unsigned int timeout;
+	bool mhi_force_power_off = false;
 	int retry = 0, sw_ctrl_gpio = plat_priv->pinctrl_info.sw_ctrl_gpio;
 
 	if (plat_priv->ramdump_info_v2.dump_data_valid) {
@@ -2763,11 +2765,17 @@ retry:
 		cnss_fatal_err("Failed to start MHI, err = %d\n", ret);
 		if (!test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state) &&
 		    !pci_priv->pci_link_down_ind && timeout) {
-			/* Start recovery directly for MHI start failures */
-			cnss_schedule_recovery(&pci_priv->pci_dev->dev,
-					       CNSS_REASON_DEFAULT);
+			if (test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state)) {
+				CNSS_ASSERT(0);
+				mhi_force_power_off = true;
+				goto stop_mhi;
+			} else {
+				/* Start recovery directly for MHI start failures */
+				cnss_schedule_recovery(&pci_priv->pci_dev->dev,
+						       CNSS_REASON_DEFAULT);
+			}
 		}
-		return 0;
+		goto stop_mhi;
 	}
 
 	if (test_bit(USE_CORE_ONLY_FW, &plat_priv->ctrl_params.quirks)) {
@@ -2795,7 +2803,7 @@ retry:
 
 stop_mhi:
 	cnss_pci_set_wlaon_pwr_ctrl(pci_priv, false, true, true);
-	cnss_pci_power_off_mhi(pci_priv);
+	cnss_pci_power_off_mhi(pci_priv, mhi_force_power_off);
 	cnss_suspend_pci_link(pci_priv);
 	cnss_pci_deinit_mhi(pci_priv);
 power_off:
@@ -2841,7 +2849,7 @@ static int cnss_qca6290_shutdown(struct cnss_pci_data *pci_priv)
 		do_force_wake = false;
 
 	cnss_pci_set_wlaon_pwr_ctrl(pci_priv, false, true, do_force_wake);
-	cnss_pci_power_off_mhi(pci_priv);
+	cnss_pci_power_off_mhi(pci_priv, false);
 	ret = cnss_suspend_pci_link(pci_priv);
 	if (ret)
 		cnss_pr_err("Failed to suspend PCI link, err = %d\n", ret);

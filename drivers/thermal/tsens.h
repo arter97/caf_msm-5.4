@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2017-2020, 2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __QCOM_TSENS_H__
@@ -46,6 +46,17 @@
 #define MIN_TEMP_DEF_OFFSET		0xFF
 
 #define TSENS_DRIVER_NAME                       "msm-tsens"
+
+#define TSENS_FEAT_OFFSET	20
+#define TSENS_CHIP_ID0		0x197
+#define TSENS_CHIP_ID1		0x198
+#define TSENS_CHIP_ID2		0x20e
+#define TSENS_CHIP_ID3		0x20f
+#define TSENS_FEAT_ID2		0x2
+#define TSENS_FEAT_ID3		0x3
+#define TSENS_FEAT_ID4		0x4
+#define TSENS_ELEVATE_DELTA	10000
+#define TSENS_ELEVATE_CPU_DELTA	5000
 
 enum tsens_trip_type {
 	TSENS_TRIP_CONFIGURABLE_HI = 4,
@@ -242,6 +253,7 @@ struct tsens_device {
 	int				ltvr_clear_temp_delta;
 	bool			tm_disable_on_suspend;
 	atomic_t			in_suspend;
+	bool				need_trip_update;
 	struct workqueue_struct		*tsens_reinit_work;
 	struct work_struct		therm_fwk_notify;
 	bool				tsens_reinit_wa;

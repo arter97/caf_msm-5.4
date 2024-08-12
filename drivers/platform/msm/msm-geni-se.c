@@ -1301,6 +1301,8 @@ int geni_se_resources_init(struct se_geni_rsc *rsc,
 	if (geni_se_dev->vectors == NULL)
 		return 0;
 
+	mutex_lock(&geni_se_dev->geni_dev_lock);
+
 	if (IS_ERR_OR_NULL(geni_se_dev->bus_bw)) {
 		geni_se_dev->bus_bw = icc_get(geni_se_dev->dev,
 					geni_se_dev->vectors[0].src,
@@ -1310,6 +1312,7 @@ int geni_se_resources_init(struct se_geni_rsc *rsc,
 				"%s: Error Get Path: (Core2x), %ld\n",
 				__func__, PTR_ERR(geni_se_dev->bus_bw));
 
+				mutex_unlock(&geni_se_dev->geni_dev_lock);
 				return geni_se_dev->bus_bw ?
 				PTR_ERR(geni_se_dev->bus_bw) : -ENOENT;
 		}
@@ -1330,6 +1333,7 @@ int geni_se_resources_init(struct se_geni_rsc *rsc,
 				icc_put(geni_se_dev->bus_bw);
 				geni_se_dev->bus_bw = NULL;
 
+				mutex_unlock(&geni_se_dev->geni_dev_lock);
 				return geni_se_dev->bus_bw_noc ?
 				PTR_ERR(geni_se_dev->bus_bw_noc) : -ENOENT;
 			}
@@ -1344,6 +1348,7 @@ int geni_se_resources_init(struct se_geni_rsc *rsc,
 		INIT_LIST_HEAD(&rsc->ib_list_noc);
 	}
 
+	mutex_unlock(&geni_se_dev->geni_dev_lock);
 	INIT_LIST_HEAD(&rsc->ab_list);
 	INIT_LIST_HEAD(&rsc->ib_list);
 
