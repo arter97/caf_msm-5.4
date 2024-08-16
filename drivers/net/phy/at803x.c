@@ -150,7 +150,11 @@
 #define QCA808X_MASTER_SLAVE_SEED_CFG		GENMASK(12, 2)
 #define QCA808X_MASTER_SLAVE_SEED_RANGE		0x32
 
+#define MASTER_SLAVE_STATE_UNKNOWN      1
 #define MASTER_SLAVE_STATE_ERR			4
+
+/* 1000BASE-T Status register */
+#define LPA_1000MSFAIL      0x8000  /* Master/Slave resolution failure */
 
 MODULE_DESCRIPTION("Atheros AR803x and QCA808X PHY driver");
 MODULE_AUTHOR("Matus Ujhelyi");
@@ -745,6 +749,8 @@ static int qca808x_config_init(struct phy_device *phydev)
 static int qca808x_read_status(struct phy_device *phydev)
 {
 	int ret;
+	int val;
+	int state = MASTER_SLAVE_STATE_UNKNOWN;
 
 	ret = phy_read_mmd(phydev, MDIO_MMD_AN, MDIO_AN_10GBT_STAT);
 	if (ret < 0)
@@ -774,7 +780,14 @@ static int qca808x_read_status(struct phy_device *phydev)
 	 * occurs.
 	 */
 	if (!phydev->link) {
-		if (phydev->master_slave_state == MASTER_SLAVE_STATE_ERR) {
+		val = phy_read(phydev, MII_STAT1000);
+
+		if (val >= 0) {
+			if (val & LPA_1000MSFAIL)
+				state = MASTER_SLAVE_STATE_ERR;
+		}
+
+		if (state == MASTER_SLAVE_STATE_ERR) {
 			qca808x_phy_ms_seed_enable(phydev, false);
 		} else {
 			qca808x_phy_ms_random_seed_set(phydev);
