@@ -1140,6 +1140,48 @@ static inline const char *exception_type_as_str(enum ipa_exception_type t)
 		"???";
 }
 
+/**
+ * Macro ipa_exception_type_pppoe
+ *
+ * This macro is for describing which field is to be looked at for
+ * exception path consideration.
+ *
+ * NOTE 1: The field implies an offset into the packet under
+ *         consideration.  This offset will be calculated on behalf of
+ *         the user of this API.
+ *
+ * NOTE 2: When exceptions are generated/sent in an ipa_exception
+ *         structure, they will considered to be from the upload
+ *         perspective. And when appropriate, a corresponding, and
+ *         perhaps inverted, downlink exception will be automatically
+ *         created on the callers behalf.  As an example: If a
+ *         FIELD_UDP_SRC_PORT is sent, an uplink exception will be
+ *         created for udp source port, and a corresponding
+ *         FIELD_UDP_DST_PORT will be automatically created for the
+ *         downlink.
+ */
+#define FIELD_IP_PROTOCOL_PPPOE (FIELD_ETHER_TYPE + 1)
+#define FIELD_TCP_SRC_PORT_PPPOE (FIELD_IP_PROTOCOL_PPPOE + 1)
+#define FIELD_TCP_DST_PORT_PPPOE (FIELD_TCP_SRC_PORT_PPPOE + 1)
+#define FIELD_UDP_SRC_PORT_PPPOE (FIELD_TCP_DST_PORT_PPPOE + 1)
+#define FIELD_UDP_DST_PORT_PPPOE (FIELD_UDP_SRC_PORT_PPPOE + 1)
+#define FIELD_ETHER_TYPE_PPPOE   (FIELD_UDP_DST_PORT_PPPOE + 1)
+#define FIELD_PPPOE_MAX	(FIELD_ETHER_TYPE_PPPOE + 1)
+
+/* Function to read PPPoE exception in string format */
+static inline const char *pppoe_exception_type_as_str(uint32_t t)
+{
+	return
+		(t == FIELD_IP_PROTOCOL_PPPOE)  ? "pppoe_ip_protocol"  :
+		(t == FIELD_TCP_SRC_PORT_PPPOE) ? "pppoe_tcp_src_port" :
+		(t == FIELD_TCP_DST_PORT_PPPOE) ? "pppoe_tcp_dst_port" :
+		(t == FIELD_UDP_SRC_PORT_PPPOE) ? "pppoe_udp_src_port" :
+		(t == FIELD_UDP_DST_PORT_PPPOE) ? "pppoe_udp_dst_port" :
+		(t == FIELD_ETHER_TYPE_PPPOE)   ? "pppoe_ether_type"   :
+		(t == FIELD_PPPOE_MAX)          ? "pppoe_max"          :
+		"???";
+}
+
 #define IP_TYPE_EXCEPTION(x) \
 	((x) == FIELD_IP_PROTOCOL  || \
 	  (x) == FIELD_TCP_SRC_PORT || \
@@ -1220,6 +1262,7 @@ struct ipa_field_val_equation_gen {
  * @payload_length: Payload length.
  * @ext_attrib_mask: Extended attributes.
  * @l2tp_udp_next_hdr: next header in L2TP tunneling
+ * @p_exception : exception to enable for mpls-pppoe
  * @field_val_equ: for finding a value at a particular offset
  */
 struct ipa_rule_attrib {
@@ -1265,7 +1308,7 @@ struct ipa_rule_attrib {
 	__u16 payload_length;
 	__u32 ext_attrib_mask;
 	__u8 l2tp_udp_next_hdr;
-	__u8 padding1;
+	__u8 p_exception;
 	struct ipa_field_val_equation_gen fld_val_eq;
 };
 
@@ -1731,7 +1774,7 @@ struct IpaDscpVlanPcpMap_t {
 	uint8_t  num_vlan;   /* indicate how many vlans valid vlan above */
 	uint8_t  num_s_vlan; /* indicate how many vlans valid in s_vlan below */
 	uint8_t  dscp_opt;   /* indicates if dscp is required or optional */
-	uint8_t  pad1; /* for alignment */
+	uint8_t  tunnel_id;  /* tunnel id */
 	/*
 	 * The same lookup scheme, using vlan[] above, is used for
 	 * generating the first index of mpls below; and in addition,
@@ -1750,8 +1793,8 @@ struct IpaDscpVlanPcpMap_t {
 	 * mpls_val_sorted is in ascending order, by mpls label values in mpls array
 	 * vlan_c and vlan_s are vlan id values that are corresponding to the mpls label
 	 */
-	uint16_t pad2; /* for alignment */
-	uint8_t  pad3; /* for alignment */
+	uint16_t del_add_vlan_id; /* vlan id to add or del */
+	uint8_t  is_vlan_to_del_add; /* whether to add or del vlan? */
 	uint8_t  num_mpls_val_sorted; /* num of elements in mpls_val_sorted */
 	uint32_t mpls_val_sorted[IPA_EoGRE_MAX_VLAN * IPA_GRE_MAX_S_VLAN];
 	uint16_t  vlan_c[IPA_EoGRE_MAX_VLAN * IPA_GRE_MAX_S_VLAN];
@@ -1825,7 +1868,7 @@ struct singletag_mux_mapping_table_t {
 	uint8_t mux_id;
 	/* flag if 1=>pkt_with_option_hdr 0=>pkt_without_option_hdr */
 	uint8_t is_v6_options_hdr_present;
-	uint16_t pad0; /*for alignment*/
+	uint16_t tunnel_id;/* tunnel_id */
 	uint32_t *tunnel_template_addr;
 } __packed;
 
@@ -1850,13 +1893,22 @@ struct doubletag_mux_mapping_table_t {
 /* max number of tunnel to support ie: per PDN two tunnel (2*8)*/
 #define MAX_TUNNEL_SUPPORT 16
 
-/* configuration table */
+/* @tunnel_protocols_config_table_t: Config tbl for uC
+ * @untagged_mapping_table : Store the untag tunnel info.
+ * @num_of_single_tag_configs : no of active tunnel in single tag config.
+ * @feature_mode: which tunnel feature is enabled.
+ * @tunnel_id: Which tunnel info receive from ipacm.
+ * @is_tunnel_id_to_del: whether tunnel to delete.
+ * @singletag_mux_mapping_table: Store tunnel info for active tunnels.
+ * @num_of_double_tag_configs: no of active tunnel in double tag config.
+ * @doubletag_mux_mapping_table: Store double tag tunnel info.
+ */
 struct tunnel_protocols_config_table_t {
 	struct untag_pkt_config_t untagged_mapping_table;
 	uint8_t num_of_single_tag_configs;
 	uint8_t feature_mode;
-	uint16_t pad1; /*for alignment*/
-	uint32_t pad2; /*for alignment*/
+	uint16_t tunnel_id;
+	uint32_t is_tunnel_id_to_del;
 	/* table for single tag pkt */
 	struct singletag_mux_mapping_table_t singletag_mux_mapping_table[MAX_TUNNEL_SUPPORT];
 	uint8_t num_of_double_tag_configs;
