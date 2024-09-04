@@ -7,6 +7,7 @@
 #include <net/sock.h>
 #include "bpf_service.h"
 #include <linux/bpf.h>
+#include <linux/rcupdate.h>
 #include "qrtr.h"
 
 /* qrtr filter (based on eBPF) related declarations */
@@ -34,6 +35,9 @@ static DEFINE_MUTEX(service_lookup_lock);
 
 /* variable to hold bpf filter object */
 static struct sk_filter __rcu *bpf_filter;
+
+/* mutex to lock when updating bpf_filter pointer */
+static DEFINE_MUTEX(bpf_filter_update_lock);
 
 /**
  * Add service information (service id & instance id) to lookup table
@@ -143,26 +147,35 @@ int qrtr_bpf_filter_attach(int ufd)
 	if (ufd < 0)
 		return -EINVAL;
 
-	/* return -EEXIST if ebpf filter is already attached */
-	if (bpf_filter)
-		return -EEXIST;
-
 	if (!(in_egroup_p(AID_VENDOR_QRTR) ||
 	      in_egroup_p(GLOBAL_ROOT_GID)))
 		return -EPERM;
 
-	prog = bpf_prog_get_type(ufd, BPF_PROG_TYPE_SOCKET_FILTER);
-	if (prog) {
-		pr_info("%s bpf filter with fd %d attached with qrtr\n",
-			__func__, ufd);
-		filter = kzalloc(sizeof(*bpf_filter), GFP_KERNEL);
-		if (!filter)
-			return -ENOMEM;
-		filter->prog = prog;
-		rcu_assign_pointer(bpf_filter, filter);
-	} else {
-		rc = -EFAULT;
+	mutex_lock(&bpf_filter_update_lock);
+	/* return -EEXIST if ebpf filter is already attached */
+	if (bpf_filter) {
+		rc = -EEXIST;
+		goto out;
 	}
+
+	prog = bpf_prog_get_type(ufd, BPF_PROG_TYPE_SOCKET_FILTER);
+	if (!prog) {
+		rc = -EFAULT;
+		goto out;
+	}
+	pr_info("%s bpf filter with fd %d attached with qrtr\n", __func__, ufd);
+
+	filter = kzalloc(sizeof(*bpf_filter), GFP_KERNEL);
+	if (!filter) {
+		rc = -ENOMEM;
+		bpf_prog_put(prog);
+		goto out;
+	}
+	filter->prog = prog;
+	rcu_assign_pointer(bpf_filter, filter);
+
+out:
+	mutex_unlock(&bpf_filter_update_lock);
 
 	return rc;
 }
@@ -172,22 +185,22 @@ EXPORT_SYMBOL(qrtr_bpf_filter_attach);
 int qrtr_bpf_filter_detach(void)
 {
 	struct sk_filter *filter = NULL;
-	int rc = -EFAULT;
 
-	rcu_read_lock();
-	filter = rcu_dereference(bpf_filter);
-	rcu_read_unlock();
+	mutex_lock(&bpf_filter_update_lock);
+	filter = rcu_replace_pointer(bpf_filter, NULL,
+			mutex_is_locked(&bpf_filter_update_lock));
+	mutex_unlock(&bpf_filter_update_lock);
 
-	if (filter && filter->prog) {
-		pr_info("%s bpf filter program detached\n",
-			__func__);
-		bpf_filter = NULL;
-		bpf_prog_put(filter->prog);
-		kfree(filter);
-		rc = 0;
-	}
+	synchronize_rcu();
+	if (!filter)
+		return -EFAULT;
 
-	return rc;
+	pr_info("%s bpf filter program detached\n", __func__);
+
+	bpf_prog_put(filter->prog);
+	kfree(filter);
+
+	return 0;
 }
 EXPORT_SYMBOL(qrtr_bpf_filter_detach);
 
@@ -206,6 +219,7 @@ int qrtr_run_bpf_filter(struct sk_buff *skb, u32 service_id, u32 instance_id,
 	kuid_t euid;
 	kgid_t egid;
 	uid_t kgid;
+	u32 status;
 	int i = 0;
 
 	/* populate filter argument with service & pkt type information */
@@ -243,7 +257,9 @@ int qrtr_run_bpf_filter(struct sk_buff *skb, u32 service_id, u32 instance_id,
 	}
 
 	/* Run bpf filter program if it is already attached */
-	if (bpf_filter) {
+	rcu_read_lock();
+	filter = rcu_dereference(bpf_filter);
+	if (filter) {
 		/**
 		 * Allocate dummy skb to pass required arguments to bpf
 		 * filter program
@@ -255,19 +271,12 @@ int qrtr_run_bpf_filter(struct sk_buff *skb, u32 service_id, u32 instance_id,
 			       BPF_DATA_SIZE);
 
 			/* execute eBPF filter here */
-			rcu_read_lock();
-			filter = rcu_dereference(bpf_filter);
-			if (filter) {
-				u32 status;
-				/**
-				 * Deny/grant permission based on return
-				 * value of the filter
-				 */
-				status = bpf_prog_run_save_cb(filter->prog,
-							      skb_bpf);
-				err = status ? 0 : -EPERM;
-			}
-			rcu_read_unlock();
+			status = bpf_prog_run_save_cb(filter->prog, skb_bpf);
+			/**
+			 * Deny/grant permission based on return
+			 * value of the filter
+			 */
+			err = status ? 0 : -EPERM;
 			kfree_skb(skb_bpf);
 			if (err) {
 				if (pkt_type == QRTR_TYPE_DATA)
@@ -281,6 +290,7 @@ int qrtr_run_bpf_filter(struct sk_buff *skb, u32 service_id, u32 instance_id,
 			}
 		}
 	}
+	rcu_read_unlock();
 
 	return err;
 }
