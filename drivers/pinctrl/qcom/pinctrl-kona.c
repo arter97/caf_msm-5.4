@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -1782,6 +1782,25 @@ static const int kona_reserved_gpios[] = {
 	-1
 };
 
+static const struct msm_gpio_wakeirq_map kona_pdc_map[] = {
+	{ 0, 79 }, { 1, 84 }, { 2, 80 }, { 3, 82 }, { 4, 107 },
+	{ 7, 43 }, { 11, 42 }, { 14, 44 }, { 15, 52 }, { 19, 67 },
+	{ 23, 68 }, { 24, 105 }, { 27, 92 }, { 28, 106 }, { 31, 69 },
+	{ 35, 70 }, { 39, 73 }, { 40, 108 }, { 43, 71 }, { 45, 72 },
+	{ 47, 83 }, { 51, 74 }, { 55, 77 }, { 59, 78 }, { 63, 75 },
+	{ 64, 81 }, { 65, 87 }, { 66, 88 }, { 67, 89 }, { 68, 54 },
+	{ 70, 85 }, { 77, 46 }, { 80, 90 }, { 81, 91 }, { 83, 97 },
+	{ 84, 98 }, { 86, 99 }, { 88, 101 }, { 89, 102 }, { 92, 103 },
+	{ 93, 104 }, { 100, 53 }, { 103, 47 }, { 104, 48 }, { 108, 49 },
+	{ 109, 94 }, { 110, 95 }, { 111, 96 }, { 112, 55 }, { 113, 56 },
+	{ 118, 50 }, { 121, 51 }, { 122, 57 }, { 123, 58 }, { 124, 45 },
+	{ 126, 59 }, { 128, 76 }, { 129, 86 }, { 132, 93 }, { 133, 65 },
+	{ 134, 66 }, { 136, 62 }, { 137, 63 }, { 138, 64 }, { 142, 60 },
+	{ 143, 61 }, { 147, 109 }, { 150, 110 }, { 157, 111 }, { 158, 112 },
+	{ 160, 113 }, { 162, 114 }, { 164, 115 }, { 166, 116 }, { 167, 117 },
+	{ 175, 118 }, { 177, 119 }, { 179, 120 },
+};
+
 static const struct msm_pinctrl_soc_data kona_pinctrl = {
 	.pins = kona_pins,
 	.npins = ARRAY_SIZE(kona_pins),
@@ -1793,6 +1812,8 @@ static const struct msm_pinctrl_soc_data kona_pinctrl = {
 	.qup_regs = kona_qup_regs,
 	.nqup_regs = ARRAY_SIZE(kona_qup_regs),
 	.reserved_gpios = kona_reserved_gpios,
+	.wakeirq_map = kona_pdc_map,
+	.nwakeirq_map = ARRAY_SIZE(kona_pdc_map),
 };
 
 static int kona_pinctrl_probe(struct platform_device *pdev)
