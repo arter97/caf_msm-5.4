@@ -37,7 +37,7 @@
 #define UFS_CE		10
 #define SDCC_CE		20
 #define QSEECOM_KEY_ID_EXISTS		-65
-
+#define QSEECOM_NEW_KEY_GENERATE    	1
 
 #define _INIT_ATTRIBUTE(_name, _mode) \
 	{ \
@@ -727,9 +727,6 @@ static int crypto_qti_ice_add_new_partition(struct ice_device *ice_dev,
 			goto out; /* Already in list, bail */
 	}
 
-	dev_info(ice_dev->pdev, "Adding %s\n",
-		new_volname);
-
 	/* Didn't find it, add new entry at the end */
 	elem = kzalloc(sizeof(struct ice_part_cfg), GFP_KERNEL);
 	if (!elem) {
@@ -779,6 +776,8 @@ static int crypto_qti_ice_add_new_partition(struct ice_device *ice_dev,
 	envp[0] = part_name;
 	envp[1] = NULL;
 	kobject_uevent_env(&elem->kobj, KOBJ_ADD, envp);
+
+	dev_info(ice_dev->pdev, "Adding %s successful\n", new_volname);
 out:
 	return rc;
 }
@@ -882,6 +881,8 @@ static ssize_t add_partition_store(struct device *dev,
 	//Check the qseecom_create_key_in_slot result
 	if (key_res) {
 		if (key_res == QSEECOM_KEY_ID_EXISTS) {
+			new_key_generated = false;
+		} else if (key_res == QSEECOM_NEW_KEY_GENERATE) {
 			new_key_generated = true;
 		} else {
 			dev_err(dev, "Failed to generate and set key!\n");
