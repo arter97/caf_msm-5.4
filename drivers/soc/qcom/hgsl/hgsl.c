@@ -537,9 +537,9 @@ static int db_send_msg(struct hgsl_priv  *priv,
 	cmds = (struct hgsl_db_cmds *)msg_req->ptr_data;
 	do {
 		hard_reset_req = hgsl_dbq_get_state_info((uint32_t *)dbq->vbase,
-		HGSL_DBQ_METADATA_COOPERATIVE_RESET,
-		HGSL_DBQ_CONTEXT_ANY,
-		HGSL_DBQ_HOST_TO_GVM_HARDRESET_REQ);
+			HGSL_DBQ_METADATA_COOPERATIVE_RESET,
+			HGSL_DBQ_CONTEXT_ANY,
+			HGSL_DBQ_HOST_TO_GVM_HARDRESET_REQ);
 
 		/* ensure read is done before comparison */
 		rmb();
@@ -585,6 +585,9 @@ static int db_send_msg(struct hgsl_priv  *priv,
 	dst = dbq->data.vaddr + (wptr << 2);
 	src = msg_req->ptr_data;
 	memcpy(dst, src, (move_dwords << 2));
+
+	/* ensure data is committed before update wptr */
+	dma_wmb();
 
 	wptr = (wptr + msg_size_align) % queue_size_dword;
 	hgsl_dbq_set_state_info((uint32_t *)dbq->vbase,
@@ -1860,8 +1863,8 @@ static int hgsl_ioctl_mem_alloc(struct file *filep, unsigned long arg)
 		}
 		mutex_lock(&priv->lock);
 		list_add(&mem_node->node, &priv->mem_allocated);
-		mutex_unlock(&priv->lock);
 		hgsl_trace_gpu_mem_total(priv, mem_node->memdesc.size64);
+		mutex_unlock(&priv->lock);
 	}
 
 out:
@@ -2033,9 +2036,8 @@ static int hgsl_ioctl_mem_map_smmu(struct file *filep, unsigned long arg)
 		}
 		mutex_lock(&priv->lock);
 		list_add(&mem_node->node, &priv->mem_mapped);
-		mutex_unlock(&priv->lock);
-
 		hgsl_trace_gpu_mem_total(priv, mem_node->memdesc.size64);
+		mutex_unlock(&priv->lock);
 	}
 
 out:
