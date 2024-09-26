@@ -894,6 +894,14 @@ int wiphy_register(struct wiphy *wiphy)
 		return -EINVAL;
 #endif
 
+	/*
+	 * Maximum AKMs allowed in NL80211_CMD_CONECT must be greater than
+	* NL80211_MAX_NR_AKM_SUITES to avoid issues with legacy userspace.
+	*/
+	if (WARN_ON(wiphy->max_num_akms_connect &&
+		     wiphy->max_num_akms_connect < NL80211_MAX_NR_AKM_SUITES))
+		return -EINVAL;
+
 	/* check and set up bitrates */
 	ieee80211_set_bitrate_flags(wiphy);
 

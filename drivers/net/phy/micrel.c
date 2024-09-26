@@ -872,7 +872,8 @@ static int ksz9031_read_status(struct phy_device *phydev)
 	if ((regval & 0xFF) == 0xFF) {
 		phy_init_hw(phydev);
 		phydev->link = 0;
-		if (phydev->drv->config_intr && phy_interrupt_is_valid(phydev))
+		if (phydev->drv->config_intr &&
+		    (phydev->irq == PHY_IGNORE_INTERRUPT || phy_interrupt_is_valid(phydev)))
 			phydev->drv->config_intr(phydev);
 		return genphy_config_aneg(phydev);
 	}
@@ -1309,6 +1310,7 @@ static struct phy_driver ksphy_driver[] = {
 	/* PHY_GBIT_FEATURES */
 	.driver_data	= &ksz9021_type,
 	.probe		= kszphy_probe,
+	.soft_reset	= genphy_soft_reset,
 	.config_init	= ksz9131_config_init,
 	.read_status	= genphy_read_status,
 	.ack_interrupt	= kszphy_ack_interrupt,
