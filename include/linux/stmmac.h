@@ -230,5 +230,8 @@ struct plat_stmmacenet_data {
 	void (*handlericompletion)(struct sk_buff *skb);
 	bool clks_suspended;
 	bool is_phy_off;
+	bool mdio_op_busy;
+	atomic_t phy_clks_suspended;
+	struct completion mdio_op;
 };
 #endif

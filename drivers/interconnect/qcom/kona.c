@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <asm/div64.h>
@@ -750,7 +750,7 @@ static struct qcom_icc_node mas_alc = {
 static struct qcom_icc_qosbox qnm_camnoc_hf_qos = {
 	.regs = icc_qnoc_qos_regs[ICC_QNOC_QOSGEN_TYPE_RPMH],
 	.num_ports = 2,
-	.offsets = { 0xC000, 0xC180, },
+	.offsets = { 0xC000, 0xC800, },
 	.config = &(struct qos_config) {
 		.prio = 0,
 		.urg_fwd = 1,
@@ -792,7 +792,7 @@ static struct qcom_icc_node qnm_camnoc_icp = {
 static struct qcom_icc_qosbox qnm_camnoc_sf_qos = {
 	.regs = icc_qnoc_qos_regs[ICC_QNOC_QOSGEN_TYPE_RPMH],
 	.num_ports = 2,
-	.offsets = { 0xA000, 0xA080, },
+	.offsets = { 0xA000, 0xA800, },
 	.config = &(struct qos_config) {
 		.prio = 0,
 		.urg_fwd = 1,

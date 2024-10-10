@@ -656,7 +656,6 @@ const struct nla_policy nl80211_policy[NUM_NL80211_ATTR] = {
 		.type = NLA_EXACT_LEN,
 		.len = sizeof(struct ieee80211_he_6ghz_capa),
 	},
-	[NL80211_ATTR_MAX_NUM_AKM_SUITES] = { .type = NLA_REJECT },
 };
 
 /* policy for the key attributes */
@@ -2575,10 +2574,6 @@ static int nl80211_send_wiphy(struct cfg80211_registered_device *rdev,
 		if (nl80211_put_tid_config_support(rdev, msg))
 			goto nla_put_failure;
 
-		if (nla_put_u16(msg, NL80211_ATTR_MAX_NUM_AKM_SUITES,
-				rdev->wiphy.max_num_akm_suites))
-			goto nla_put_failure;
-
 		/* done */
 		state->split_start = 0;
 		break;
@@ -3480,6 +3475,7 @@ static int nl80211_dump_interface(struct sk_buff *skb, struct netlink_callback *
 			if_idx++;
 		}
 
+		if_start = 0;
 		wp_idx++;
 	}
  out:
@@ -3655,6 +3651,8 @@ static int nl80211_set_interface(struct sk_buff *skb, struct genl_info *info)
 		struct wireless_dev *wdev = dev->ieee80211_ptr;
 
 		if (ntype != NL80211_IFTYPE_MESH_POINT)
+			return -EINVAL;
+		if (otype != NL80211_IFTYPE_MESH_POINT)
 			return -EINVAL;
 		if (netif_running(dev))
 			return -EBUSY;
@@ -9378,7 +9376,7 @@ static int nl80211_crypto_settings(struct cfg80211_registered_device *rdev,
 		if (len % sizeof(u32))
 			return -EINVAL;
 
-		if (settings->n_akm_suites > rdev->wiphy.max_num_akm_suites)
+		if (settings->n_akm_suites > NL80211_MAX_NR_AKM_SUITES)
 			return -EINVAL;
 
 		memcpy(settings->akm_suites, data, len);

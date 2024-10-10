@@ -1532,7 +1532,11 @@ static void qcom_ethqos_phy_suspend_clks(struct qcom_ethqos *ethqos)
 	if (priv->plat->phy_intr_en_extn_stm)
 		reinit_completion(&ethqos->clk_enable_done);
 
+	if (priv->plat->mdio_op_busy)
+		wait_for_completion(&priv->plat->mdio_op);
+
 	ethqos->clks_suspended = 1;
+	atomic_set(&priv->plat->phy_clks_suspended, 1);
 
 	ethqos_update_rgmii_clk_and_bus_cfg(ethqos, 0);
 
@@ -1820,6 +1824,7 @@ static void qcom_ethqos_phy_resume_clks(struct qcom_ethqos *ethqos)
 	else
 		ethqos_update_rgmii_clk_and_bus_cfg(ethqos, SPEED_10);
 
+	atomic_set(&priv->plat->phy_clks_suspended, 0);
 	ethqos->clks_suspended = 0;
 
 	if (priv->plat->phy_intr_en_extn_stm)
@@ -4507,6 +4512,8 @@ ethqos_phy_off_sysfs(ethqos);
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
 	place_marker("M - Ethernet probe end");
 #endif
+
+	atomic_set(&priv->plat->phy_clks_suspended, 0);
 
 #ifdef CONFIG_NET_L3_MASTER_DEV
 	if (ethqos->early_eth_enabled &&
