@@ -6001,6 +6001,13 @@ static int probe_vdd_rstr(struct device_node *node,
 		return -EFAULT;
 	}
 
+	/*
+	 * Monitor only this sensor if defined, otherwise monitor all tsens
+	 */
+	key = "qcom,vdd-restriction-sensor-id";
+	if (of_property_read_u32(node, key, &data->vdd_rstr_sensor_id))
+		data->vdd_rstr_sensor_id = MONITOR_ALL_TSENS;
+
 	rails = kzalloc(sizeof(struct rail) * rails_cnt,
 				GFP_KERNEL);
 	if (!rails) {
