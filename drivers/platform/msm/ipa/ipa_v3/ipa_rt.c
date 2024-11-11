@@ -1,4 +1,5 @@
 /* Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1193,6 +1194,7 @@ static int __ipa_finish_rt_rule_add(struct ipa3_rt_entry *entry, u32 *rule_hdl,
 	return 0;
 
 ipa_insert_failed:
+	tbl->rule_cnt--;
 	if (entry->hdr)
 		entry->hdr->ref_cnt--;
 	else if (entry->proc_ctx)
