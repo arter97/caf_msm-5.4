@@ -37,6 +37,9 @@
 #include <net/ip6_checksum.h>
 #endif
 #include <linux/msm-bus.h>
+#ifdef CONFIG_DEBUG_FS
+#include <linux/debugfs.h>
+#endif
 
 #include "emac.h"
 #include "emac_phy.h"
@@ -69,6 +72,11 @@
 #define EMAC_PINCTRL_STATE_MDIO_SLEEP  "emac_mdio_sleep"
 #define EMAC_PINCTRL_STATE_EPHY_ACTIVE "emac_ephy_active"
 #define EMAC_PINCTRL_STATE_EPHY_SLEEP  "emac_ephy_sleep"
+
+#ifdef CONFIG_DEBUG_FS
+#define REG_CHIP_CONFIG                  0x1f
+#define BT_BX_REG_SEL                    0x8000
+#endif
 
 struct emac_skb_cb {
 	u32           tpd_idx;
@@ -3039,6 +3047,156 @@ static int emac_pm_sys_resume(struct device *device)
 }
 #endif
 
+#ifdef CONFIG_DEBUG_FS
+static ssize_t phy_reg_read_dump(struct file *file, char __user *user_buf,
+		size_t count, loff_t *ppos)
+{
+	struct emac_adapter *adpt = file->private_data;
+	int phydata = 0;
+	int i = 0;
+	unsigned int len = 0, buf_len = 3000;
+	char *buf;
+	ssize_t ret_cnt;
+	int ccr;
+
+
+	if (!adpt || !adpt->mii_bus || !adpt->phydev) {
+		return -1;
+	}
+
+	buf = kzalloc(buf_len, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	len += scnprintf(buf + len, buf_len - len,
+			"\n************* PHY Reg dump *************\n");
+
+	for (i = 0; i < 32; i++) {
+		phydata = adpt->mii_bus->read(adpt->mii_bus, adpt->phydev->addr, i);
+		len += scnprintf(buf + len, buf_len - len,
+				"MII Register (%#x) = %#x\n",
+				i, phydata);
+	}
+	ccr = phy_read(adpt->phydev, REG_CHIP_CONFIG);
+	/* switch to SGMII/fiber page */
+	phy_write(adpt->phydev, REG_CHIP_CONFIG, ccr & ~BT_BX_REG_SEL);
+	len += scnprintf(buf + len, buf_len - len,
+		                        "\n fiber ************* PHY Reg dump *************\n");
+
+	for (i = 0; i < 32; i++) {
+		phydata = adpt->mii_bus->read(adpt->mii_bus, adpt->phydev->addr, i);
+		len += scnprintf(buf + len, buf_len - len,
+				"MII Register (%#x) = %#x\n",
+				i, phydata);
+	}
+
+	/* switch back to copper page */
+	phy_write(adpt->phydev, REG_CHIP_CONFIG, ccr | BT_BX_REG_SEL);
+	len += scnprintf(buf + len, buf_len - len,
+			"\n copper ************* PHY Reg dump *************\n");
+
+	for (i = 0; i < 32; i++) {
+		phydata = adpt->mii_bus->read(adpt->mii_bus, adpt->phydev->addr, i);
+		len += scnprintf(buf + len, buf_len - len,
+				"MII Register (%#x) = %#x\n",
+				i, phydata);
+	}
+
+	if (len > buf_len) {
+		len = buf_len;
+	}
+
+	ret_cnt = simple_read_from_buffer(user_buf, count, ppos, buf, len);
+	kfree(buf);
+	return ret_cnt;
+
+}
+
+static ssize_t phy_reg_write(struct file *file, const char __user *user_buf,
+		                size_t count, loff_t *ppos)
+{
+	struct emac_adapter *adpt = file->private_data;
+	unsigned long ret;
+	char in_buf[400];
+	unsigned int val;
+	unsigned int regnum, page;
+	int phydata;
+	int ccr;
+
+	ret = copy_from_user(in_buf, user_buf, count);
+	if (ret) {
+		return -1;
+	}
+
+	ret = sscanf(in_buf, "%x %x %x", &page, &regnum, &val);
+
+	if (!adpt || !adpt->mii_bus || !adpt->phydev) {
+		return -1;
+	}
+
+	ccr = phy_read(adpt->phydev, REG_CHIP_CONFIG);
+	if (page == 1) {
+		/* switch back to copper page */
+		phy_write(adpt->phydev, REG_CHIP_CONFIG, ccr | BT_BX_REG_SEL);
+		phydata = adpt->mii_bus->read(adpt->mii_bus,  adpt->phydev->addr, regnum);
+		return count;
+	} else if (page == 2) {
+		/* switch to SGMII/fiber page */
+		 phy_write(adpt->phydev, REG_CHIP_CONFIG, ccr & ~BT_BX_REG_SEL);
+		 phydata = adpt->mii_bus->read(adpt->mii_bus,  adpt->phydev->addr, regnum);
+		 return count;
+	}
+
+	phy_write(adpt->phydev, REG_CHIP_CONFIG, ccr | BT_BX_REG_SEL);
+	if (val >= 0 && regnum >= 0) {
+		pm_runtime_get_sync(adpt->netdev->dev.parent);
+		phydata = adpt->mii_bus->write(adpt->mii_bus,  adpt->phydev->addr, regnum, val);
+		pm_runtime_mark_last_busy(adpt->netdev->dev.parent);
+		pm_runtime_put_autosuspend(adpt->netdev->dev.parent);
+	} else {
+		pr_err("Invalid args");
+	}
+
+	return count;
+}
+
+static const struct file_operations fops_phy_reg_rw = {
+	.read = phy_reg_read_dump,
+	.write = phy_reg_write,
+	.open = simple_open,
+	.owner = THIS_MODULE,
+	.llseek = default_llseek,
+};
+
+/* Create debugfs nodes */
+static int emac_create_debugfs(struct emac_adapter *adpt)
+{
+	static struct dentry *phy_reg_rw;
+	char dir_name[32];
+
+	snprintf(dir_name, sizeof(dir_name), "%s%d", "eth", 0);
+
+	adpt->debugfs_dir = debugfs_create_dir(dir_name, NULL);
+	if (!adpt->debugfs_dir || IS_ERR(adpt->debugfs_dir)) {
+		pr_err("Can't create debugfs dir\n");
+		return -1;
+	}
+
+	phy_reg_rw = debugfs_create_file("phy_reg_rw", 0400,
+			adpt->debugfs_dir, adpt,
+			&fops_phy_reg_rw);
+	if (!phy_reg_rw || IS_ERR(phy_reg_rw)) {
+		pr_err("Can't create phy_reg_rw %d\n", (long)phy_reg_rw);
+		goto fail;
+	}
+
+	return 0;
+fail:
+	debugfs_remove_recursive(adpt->debugfs_dir);
+	return -1;
+}
+#endif
+
 /* Probe function */
 static int emac_probe(struct platform_device *pdev)
 {
@@ -3205,6 +3363,10 @@ static int emac_probe(struct platform_device *pdev)
 		pm_runtime_put_autosuspend(&pdev->dev);
 	}
 
+#ifdef CONFIG_DEBUG_FS
+	emac_create_debugfs(adpt);
+#endif
+
 	emac_dbg(adpt, probe, "HW ID %d.%d, HW version %d.%d.%d\n",
 		 hw->devid, hw->revid,
 		 (hw_ver & MAJOR_BMSK) >> MAJOR_SHFT,
@@ -3278,6 +3440,10 @@ static int emac_remove(struct platform_device *pdev)
 	emac_disable_clks(adpt);
 	emac_disable_regulator(adpt, EMAC_VREG1, EMAC_VREG5);
 	msm_emac_clk_path_teardown(adpt);
+
+#ifdef CONFIG_DEBUG_FS
+	debugfs_remove_recursive(adpt->debugfs_dir);
+#endif
 
 	if (!ACPI_COMPANION(&pdev->dev))
 		put_device(&adpt->phydev->dev);
