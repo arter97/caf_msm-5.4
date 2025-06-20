@@ -205,9 +205,9 @@ static int emac_set_pauseparam(struct net_device *netdev,
 
 	pm_runtime_get_sync(netdev->dev.parent);
 
-	if (!adpt->mac2mac_en &&
-		(phy->req_fc_mode != req_fc_mode) ||
-	    (phy->disable_fc_autoneg != disable_fc_autoneg)) {
+	if ((!adpt->mac2mac_en) &&
+	    ((phy->req_fc_mode != req_fc_mode) ||
+	     (phy->disable_fc_autoneg != disable_fc_autoneg))) {
 		phy->req_fc_mode	= req_fc_mode;
 		phy->disable_fc_autoneg	= disable_fc_autoneg;
 
