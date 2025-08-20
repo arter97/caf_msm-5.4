@@ -3237,6 +3237,7 @@ err_ldo_init:
 	    (ATH8035_PHY_ID == adpt->phydev->phy_id))
 		emac_disable_regulator(adpt, EMAC_VREG1, EMAC_VREG5);
 err_get_resource:
+	msm_emac_clk_path_teardown(adpt);
 	free_netdev(netdev);
 
 	return ret;
