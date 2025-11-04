@@ -9,6 +9,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+/* Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
 
 #ifndef DIAG_MASKS_H
 #define DIAG_MASKS_H
@@ -39,6 +43,13 @@ struct diag_msg_mask_t {
 	struct mutex lock;
 	uint32_t *ptr;
 };
+
+struct diag_log_config_get_req_t {
+	uint8_t cmd_code;
+	uint8_t padding[3];
+	uint32_t sub_cmd;
+	uint32_t equip_id;
+} __packed;
 
 struct diag_log_config_req_t {
 	uint8_t cmd_code;
