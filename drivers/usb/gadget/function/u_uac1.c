@@ -159,22 +159,19 @@ static int playback_prepare_params(struct gaudio_snd_dev *snd)
 
 	result = snd_pcm_kernel_ioctl(substream, SNDRV_PCM_IOCTL_DROP, NULL);
 	if (result < 0)
-		ERROR(snd->card,
-			"SNDRV_PCM_IOCTL_DROP failed: %d\n", (int)result);
+		pr_err("SNDRV_PCM_IOCTL_DROP failed: %d\n", (int)result);
 
 	result = snd_pcm_kernel_ioctl(substream,
 			SNDRV_PCM_IOCTL_HW_PARAMS, params);
 	if (result < 0) {
-		ERROR(snd->card,
-			"SNDRV_PCM_IOCTL_HW_PARAMS failed: %d\n", (int)result);
+		pr_err("SNDRV_PCM_IOCTL_HW_PARAMS failed: %d\n", (int)result);
 		kfree(params);
 		return result;
 	}
 
 	result = snd_pcm_kernel_ioctl(substream, SNDRV_PCM_IOCTL_PREPARE, NULL);
 	if (result < 0)
-		ERROR(snd->card,
-			"Preparing sound card failed: %d\n", (int)result);
+		pr_err("Preparing sound card failed: %d\n", (int)result);
 
 	/* Store the hardware parameters */
 	snd->access = params_access(params);
@@ -258,14 +255,12 @@ static int capture_prepare_params(struct gaudio_snd_dev *snd)
 
 	result = snd_pcm_kernel_ioctl(substream, SNDRV_PCM_IOCTL_DROP, NULL);
 	if (result < 0)
-		ERROR(snd->card,
-			"SNDRV_PCM_IOCTL_DROP failed: %d\n", (int)result);
+		pr_err("SNDRV_PCM_IOCTL_DROP failed: %d\n", (int)result);
 
 	result = snd_pcm_kernel_ioctl(substream,
 			SNDRV_PCM_IOCTL_HW_PARAMS, params);
 	if (result < 0) {
-		ERROR(snd->card,
-			"SNDRV_PCM_IOCTL_HW_PARAMS failed: %d\n", (int)result);
+		pr_err("SNDRV_PCM_IOCTL_HW_PARAMS failed: %d\n", (int)result);
 		kfree(params);
 		return result;
 	}
@@ -273,7 +268,7 @@ static int capture_prepare_params(struct gaudio_snd_dev *snd)
 	result = snd_pcm_kernel_ioctl(substream, SNDRV_PCM_IOCTL_PREPARE,
 					NULL);
 	if (result < 0)
-		ERROR(snd->card, "Preparing capture failed: %d\n", (int)result);
+		pr_err("Preparing capture failed: %d\n", (int)result);
 
 	/* Store the hardware parameters */
 	snd->access = params_access(params);
@@ -305,14 +300,12 @@ static int capture_prepare_params(struct gaudio_snd_dev *snd)
 	result = snd_pcm_kernel_ioctl(substream,
 			SNDRV_PCM_IOCTL_SW_PARAMS, swparams);
 	if (result < 0)
-		ERROR(snd->card,
-			"SNDRV_PCM_IOCTL_SW_PARAMS failed: %d\n", (int)result);
+		pr_err("SNDRV_PCM_IOCTL_SW_PARAMS failed: %d\n", (int)result);
 
 	kfree(swparams);
 	kfree(params);
 
-	INFO(snd->card,
-		"capture params: access %x, format %x, channels %d, rate %d\n",
+	pr_info("capture params: access %x, format %x, channels %d, rate %d\n",
 		snd->access, snd->format, snd->channels, snd->rate);
 
 	return result;
@@ -361,8 +354,7 @@ static int playback_default_hw_params(struct gaudio_snd_dev *snd)
 
 	kfree(params);
 
-	INFO(snd->card,
-		"Hardware params: access %x, format %x, channels %d, rate %d\n",
+	pr_info("Hardware params: access %x, format %x, channels %d, rate %d\n",
 		snd->access, snd->format, snd->channels, snd->rate);
 
 	return 0;
@@ -408,8 +400,7 @@ static int capture_default_hw_params(struct gaudio_snd_dev *snd)
 
 	kfree(params);
 
-	INFO(snd->card,
-		"capture params: access %x, format %x, channels %d, rate %d\n",
+	pr_info("capture params: access %x, format %x, channels %d, rate %d\n",
 		snd->access, snd->format, snd->channels, snd->rate);
 
 	return 0;
