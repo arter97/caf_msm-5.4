@@ -145,44 +145,47 @@
 		qcom,master-en = <1>;		/* Enable GPIO */
 		status = "okay";
 	};
-        /* MPP 2 configs for SMB358 interrupt line */
-        smb_stat {
-                smb_stat_default: smb_stat_default {
-                        pins = "mpp2";
-                        function = "digital";
-                        input-enable;
-                        power-source = <3>;
-                };
+	/* MPP 2 configs for SMB358 interrupt line */
+	mpp@a100 {
+		qcom,mode = <0>; /* Digital input */
+		qcom,vin-sel = <3>; /* 1.8V (L11) */
+		qcom,src-sel = <0>; /* QPNP_PIN_SEL_FUNC_CONSTANT */
+		qcom,pull = <1>; /* No Pull */
+		qcom,master-en = <1>; /*Enable GPIO*/
+		status = "ok";
         };
 };
 
 &i2c_4 {
        /* SMB358 charger configuration */
-       smb358_otg_vreg: smb358-charger@57 {
-               compatible = "qcom,smb358-charger";
-               regulator-name = "smb358_otg_vreg";
-               reg = <0x57>;
-               interrupt-parent = <&spmi_bus>;
-               interrupts = <0x0 0xa1 0x0>;    /* PMIC MPP 2 */
-               qcom,float-voltage-mv = <4200>;
-               qcom,irq-gpio = <&pm8019_mpps 2 0>;
-               qcom,chg-vadc = <&pm8019_vadc>;
-               qcom,batt-id-vref-uv = <1800000>;
-               qcom,batt-id-rpullup-kohm = <220>;
-       };
-};
-
-&soc {
-        extcon_usb: extcon_usb {
-                compatible = "linux,extcon-usb-gpio";
-                vbus-gpio =  <&pm8019_mpps 2 0>;
-                pinctrl-names = "default";
-                pinctrl-0 = <&smb_stat_default>;
-        };
+	smb358_otg_vreg: smb358-charger@57 {
+		compatible = "qcom,smb358-charger";
+		regulator-name = "smb358_otg_vreg";
+		reg = <0x57>;
+		interrupt-parent = <&spmi_bus>;
+		interrupts = <0x0 0xa1 0x0>;    /* PMIC MPP 2 */
+		qcom,float-voltage-mv = <4200>;
+		qcom,irq-gpio = <&pm8019_mpps 2 0>;
+		qcom,chg-vadc = <&pm8019_vadc>;
+		qcom,batt-id-vref-uv = <1800000>;
+		qcom,batt-id-rpullup-kohm = <220>;
+		status = "disabled";
+	};
 };
 
 &usb_otg {
-        extcon = <&extcon_usb>;
+	qcom,hsusb-otg-mode = <1>; /* Peripheral mode */
+};
+
+&soc {
+	usb_detect {
+		compatible = "qcom,gpio-usbdetect";
+		interrupt-parent = <&spmi_bus>;
+		interrupts = <0x0 0xA1 0x0>; /* PMD9607 MPP 2 */
+		interrupt-names = "vbus_det_irq";
+		qcom,gpio-mode-sel = <&pm8019_mpps 2 0>;
+
+	};
 };
 
 &sdhc_2 {
