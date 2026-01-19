@@ -1,14 +1,5 @@
 /* Copyright (c) 2002,2007-2017, The Linux Foundation. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #ifndef __KGSL_SHAREDMEM_H
 #define __KGSL_SHAREDMEM_H
@@ -82,7 +73,7 @@ int kgsl_sharedmem_page_alloc_user(struct kgsl_memdesc *memdesc,
  *
  * Returns the alignment requested, as power of 2 exponent.
  */
-static inline int
+static inline u32
 kgsl_memdesc_get_align(const struct kgsl_memdesc *memdesc)
 {
 	return MEMFLAGS(memdesc->flags, KGSL_MEMALIGN_MASK,

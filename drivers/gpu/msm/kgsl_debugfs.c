@@ -1,15 +1,5 @@
 /* Copyright (c) 2002,2008-2016,2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/module.h>
@@ -106,7 +96,7 @@ static const char *memtype_str(int memtype)
 
 static char get_alignflag(const struct kgsl_memdesc *m)
 {
-	int align = kgsl_memdesc_get_align(m);
+	u32 align = kgsl_memdesc_get_align(m);
 	if (align >= ilog2(SZ_1M))
 		return 'L';
 	else if (align >= ilog2(SZ_64K))
