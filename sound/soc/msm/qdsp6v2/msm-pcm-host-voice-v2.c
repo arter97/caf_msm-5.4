@@ -10,7 +10,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * Copyright (c) 2022,2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/init.h>
@@ -677,11 +677,6 @@ static void hpcm_copy_playback_data_from_queue(struct dai_data *dai_data,
 	if (dai_data->substream == NULL)
 		return;
 
-	if (len >= HPCM_MAX_VOC_PKT_SIZE) {
-		pr_err("%s: Playback data len %d is > HPCM_MAX_VOC_PKT_SIZE\n",
-			__func__, len);
-		return;
-	}
 
 	spin_lock_irqsave(&dai_data->dsp_lock, dsp_flags);
 
@@ -1116,10 +1111,10 @@ done:
 }
 
 static int msm_pcm_playback_copy(struct snd_pcm_substream *substream, int a,
-				 unsigned long hwoff, void __user *buf,
-				 unsigned long fbytes)
+			snd_pcm_uframes_t hwoff, void __user *buf, snd_pcm_uframes_t frames)
 {
 	int ret = 0;
+	int fbytes = 0;
 	struct hpcm_buf_node *buf_node = NULL;
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct hpcm_drv *prtd = runtime->private_data;
@@ -1132,6 +1127,8 @@ static int msm_pcm_playback_copy(struct snd_pcm_substream *substream, int a,
 		ret = -EINVAL;
 		goto done;
 	}
+
+	fbytes = frames_to_bytes(runtime, frames);
 
 	ret = wait_event_interruptible_timeout(dai_data->queue_wait,
 				(!list_empty(&dai_data->free_queue) ||
@@ -1168,10 +1165,11 @@ done:
 }
 
 static int msm_pcm_capture_copy(struct snd_pcm_substream *substream,
-				int channel, unsigned long hwoff,
-				void __user *buf, unsigned long fbytes)
+				int channel, snd_pcm_uframes_t hwoff, void __user *buf,
+						 snd_pcm_uframes_t frames)
 {
 	int ret = 0;
+	int fbytes = 0;
 	struct hpcm_buf_node *buf_node = NULL;
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct hpcm_drv *prtd = runtime->private_data;
@@ -1185,6 +1183,7 @@ static int msm_pcm_capture_copy(struct snd_pcm_substream *substream,
 		goto done;
 	}
 
+	fbytes = frames_to_bytes(runtime, frames);
 	ret = wait_event_interruptible_timeout(dai_data->queue_wait,
 				(!list_empty(&dai_data->filled_queue) ||
 				dai_data->state == HPCM_STOPPED),
@@ -1227,17 +1226,16 @@ done:
 }
 
 static int msm_pcm_copy(struct snd_pcm_substream *substream, int channel,
-			unsigned long hwoff, void __user *buf,
-			unsigned long fbytes)
+			snd_pcm_uframes_t hwoff, void __user *buf, snd_pcm_uframes_t frames)
 {
 	int ret = 0;
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
 		ret = msm_pcm_playback_copy(substream, channel,
-					    hwoff, buf, fbytes);
+					    hwoff, buf, frames);
 	else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
 		ret = msm_pcm_capture_copy(substream, channel,
-					   hwoff, buf, fbytes);
+					   hwoff, buf, frames);
 
 	return ret;
 }
