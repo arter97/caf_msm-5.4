@@ -2778,12 +2778,17 @@ static int emac_get_resources(struct platform_device *pdev,
 	}
 
 	/* Get pinctrl */
-	retval = msm_emac_pinctrl_init(adpt, &pdev->dev);
-	if (retval)
-		return retval;
+	if (!adpt->mac2mac_en) {
+		retval = msm_emac_pinctrl_init(adpt, &pdev->dev);
+		if (retval)
+			return retval;
 
-	adpt->gpio_on = msm_emac_request_pinctrl_on;
-	adpt->gpio_off = msm_emac_request_pinctrl_off;
+		adpt->gpio_on = msm_emac_request_pinctrl_on;
+		adpt->gpio_off = msm_emac_request_pinctrl_off;
+	} else {
+		adpt->gpio_on = NULL;
+		adpt->gpio_off = NULL;
+	}
 
 	/* get irqs */
 	for (i = 0; i < EMAC_IRQ_CNT; i++) {
@@ -3001,7 +3006,8 @@ static int emac_pm_suspend(struct device *device, bool wol_enable)
 				emac_wol_gpio_irq(adpt, true);
 		}
 	}
-	adpt->gpio_off(adpt, true, false);
+	if (adpt->gpio_off)
+		adpt->gpio_off(adpt, true, false);
 	msm_emac_clk_path_vote(adpt, EMAC_NO_PERF_VOTE);
 
 	adpt->suspend_called = 1;
@@ -3020,7 +3026,8 @@ static int emac_pm_resume(struct device *device)
 	struct emac_phy *phy = &adpt->phy;
 	int retval = 0, i;
 
-	adpt->gpio_on(adpt, true, false);
+	if (adpt->gpio_on)
+		adpt->gpio_on(adpt, true, false);
 	msm_emac_clk_path_vote(adpt, EMAC_MAX_PERF_VOTE);
 	emac_hw_reset_mac(hw);
 
@@ -3556,9 +3563,11 @@ static int emac_probe(struct platform_device *pdev)
 	emac_init_adapter(adpt);
 
 	/* Configure MDIO lines */
-	ret = adpt->gpio_on(adpt, true, true);
-	if (ret)
-		goto err_clk_init;
+	if (adpt->gpio_on) {
+		ret = adpt->gpio_on(adpt, true, true);
+		if (ret)
+			goto err_clk_init;
+	}
 
 	/* init external phy */
 	if (!adpt->mac2mac_en)
@@ -3654,7 +3663,8 @@ err_undo_napi:
 		put_device(&adpt->phydev->dev);
 	mdiobus_unregister(adpt->mii_bus);
 err_init_mdio_gpio:
-	adpt->gpio_off(adpt, true, true);
+	if (adpt->gpio_off)
+		adpt->gpio_off(adpt, true, true);
 err_clk_init:
 	if ((!adpt->mac2mac_en) &&
 	    ((ATH8030_PHY_ID == adpt->phydev->phy_id) ||
@@ -3713,7 +3723,8 @@ static int emac_remove(struct platform_device *pdev)
 	if (TEST_FLAG(hw, HW_PTP_CAP))
 		emac_ptp_remove(netdev);
 
-	adpt->gpio_off(adpt, true, true);
+	if (adpt->gpio_off)
+		adpt->gpio_off(adpt, true, true);
 	emac_disable_clks(adpt);
 	emac_disable_regulator(adpt, EMAC_VREG1, EMAC_VREG5);
 	msm_emac_clk_path_teardown(adpt);
