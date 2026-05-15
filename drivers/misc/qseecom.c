@@ -7490,8 +7490,6 @@ long qseecom_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 			mutex_unlock(&app_access_lock);
 			return -EINVAL;
 		}
-		/* Only one client allowed here at a time */
-		mutex_lock(&app_access_lock);
 		ret = __qseecom_bus_scaling_enable(data, &perf_enabled);
 		if (ret) {
 			mutex_unlock(&app_access_lock);
