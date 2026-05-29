@@ -2513,7 +2513,7 @@ void adm_copp_mfc_cfg(int port_id, int copp_idx, int dst_sample_rate)
 		pr_err("%s: unable to get channal map\n", __func__);
 		goto fail_cmd;
 	}
-	if (mfc_cfg.num_channels <= AUDPROC_MFC_OUT_CHANNELS_MAX) {
+	if (mfc_cfg.num_channels <= ARRAY_SIZE(mfc_cfg.channel_type)) {
 		for (i = 0; i < mfc_cfg.num_channels; i++)
 			mfc_cfg.channel_type[i] =
 			(uint16_t) open.dev_channel_mapping[i];
