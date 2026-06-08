@@ -1,4 +1,5 @@
 /* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -3241,7 +3242,7 @@ static int do_cx_phase_cond(void)
 			msm_thermal_info.cx_phase_hot_temp_hyst_degC))
 			dis_cnt++;
 	}
-	if (dis_cnt == max_tsens_num && curr_cx_band != MSM_WARM) {
+	if (dis_cnt == thresh[MSM_CX_PHASE_CTRL_HOT].thresh_ct && curr_cx_band != MSM_WARM) {
 		ret = send_temperature_band(MSM_CX_PHASE_CTRL, MSM_WARM);
 		if (!ret) {
 			pr_debug("band:WARM Temp:%ld\n", temp);
@@ -3363,7 +3364,7 @@ static int do_vdd_restriction(void)
 		} else if (temp > msm_thermal_info.vdd_rstr_temp_hyst_degC)
 			dis_cnt++;
 	}
-	if (dis_cnt == max_tsens_num) {
+	if (dis_cnt == thresh[MSM_VDD_RESTRICTION].thresh_ct) {
 		ret = vdd_restriction_apply_all(0);
 		if (ret) {
 			pr_err("Disable vdd rstr for all failed. err:%d\n",
