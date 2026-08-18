@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -11,8 +12,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/fs.h>
 #include <linux/mutex.h>
@@ -127,6 +126,7 @@ static int q6asm_memory_map_regions(struct audio_client *ac, int dir,
 				bool is_contiguous);
 static int q6asm_memory_unmap_regions(struct audio_client *ac, int dir);
 static void q6asm_reset_buf_state(struct audio_client *ac);
+static void q6asm_reset_buf_state_nowait(struct audio_client *ac);
 
 void *q6asm_mmap_apr_reg(void);
 
@@ -10817,6 +10817,10 @@ static int __q6asm_cmd_nowait(struct audio_client *ac, int cmd,
 		pr_debug("%s: CMD_PAUSE\n", __func__);
 		hdr.opcode = ASM_SESSION_CMD_PAUSE;
 		break;
+	case CMD_FLUSH:
+		pr_debug("%s: CMD_FLUSH\n", __func__);
+		hdr.opcode = ASM_STREAM_CMD_FLUSH;
+		break;
 	case CMD_EOS:
 		pr_debug("%s: CMD_EOS\n", __func__);
 		hdr.opcode = ASM_DATA_CMD_EOS;
@@ -10839,6 +10843,8 @@ static int __q6asm_cmd_nowait(struct audio_client *ac, int cmd,
 				__func__, hdr.opcode, rc);
 		goto fail_cmd;
 	}
+	if (cmd == CMD_FLUSH)
+		q6asm_reset_buf_state_nowait(ac);
 	return 0;
 fail_cmd:
 	return -EINVAL;
@@ -10977,6 +10983,30 @@ static void q6asm_reset_buf_state(struct audio_client *ac)
 			}
 		}
 		mutex_unlock(&ac->cmd_lock);
+	}
+}
+
+static void q6asm_reset_buf_state_nowait(struct audio_client *ac)
+{
+	int cnt = 0;
+	int loopcnt = 0;
+	int used;
+	struct audio_port_data *port = NULL;
+
+	if (ac->io_mode & SYNC_IO_MODE) {
+		used = (ac->io_mode & TUN_WRITE_IO_MODE ? 1 : 0);
+		for (loopcnt = 0; loopcnt <= OUT; loopcnt++) {
+			port = &ac->port[loopcnt];
+			cnt = port->max_buf_cnt - 1;
+			port->dsp_buf = 0;
+			port->cpu_buf = 0;
+			while (cnt >= 0) {
+				if (!port->buf)
+					continue;
+				port->buf[cnt].used = used;
+				cnt--;
+			}
+		}
 	}
 }
 
