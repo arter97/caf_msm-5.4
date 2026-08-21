@@ -9,7 +9,8 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * Copyright (c) 2022, 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * All rights reserved.
  */
 
 
@@ -635,12 +636,9 @@ static int msm_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 			ret = q6asm_cmd_nowait(prtd->audio_client, CMD_PAUSE);
 			break;
 		}
-		/* pending CMD_EOS isn't expected */
-		WARN_ON_ONCE(test_bit(CMD_EOS, &prtd->cmd_pending));
-		set_bit(CMD_EOS, &prtd->cmd_pending);
-		ret = q6asm_cmd_nowait(prtd->audio_client, CMD_EOS);
-		if (ret)
-			clear_bit(CMD_EOS, &prtd->cmd_pending);
+		ret = q6asm_cmd_nowait(prtd->audio_client, CMD_PAUSE);
+		if (!ret)
+			ret = q6asm_cmd_nowait(prtd->audio_client, CMD_FLUSH);
 		break;
 	case SNDRV_PCM_TRIGGER_SUSPEND:
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
